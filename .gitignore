@@ -41,6 +41,12 @@ logs/
 htmlcov/
 .coverage
 coverage.xml
+eval/prompt_optimization/runs/
+eval/prompt_optimization/gepa_logs/
+eval/prompt_optimization/gepa_direct_logs/
+eval/prompt_optimization/candidates/
+eval/prompt_optimization/optimized_program.json
+CoverUp.egg-info
 
 # Docker
 docker-compose.override.yml
@@ -58,3 +64,6 @@ out/
 # AI logs — tracked structure, ignored content
 .ai-log/*.jsonl
 .ai-log/archive/
+src/sample_repo
+coverup-log
+/eval/prompt_optimization_v2
