@@ -1,0 +1,122 @@
+from __future__ import annotations
+
+import json
+import os
+import shlex
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+# pytest.ExitCode.NO_TESTS_COLLECTED.  Keep this local instead of importing
+# pytest in the production coverage wrapper.
+_NO_TESTS_COLLECTED = 5
+
+
+def normalize_path(value: str | Path) -> str:
+    return str(value).replace("\\", "/").lower().lstrip("./")
+
+
+@dataclass(frozen=True)
+class SymbolCoverage:
+    source_file: str
+    symbol: str
+    covered_statements: int
+    num_statements: int
+    covered_branches: int
+    num_branches: int
+    executed_lines: tuple[int, ...]
+    missing_lines: tuple[int, ...]
+    executed_branches: tuple[tuple[int, int], ...]
+    missing_branches: tuple[tuple[int, int], ...]
+
+    @property
+    def statement_coverage(self) -> float:
+        return self.covered_statements / self.num_statements if self.num_statements else 1.0
+
+    @property
+    def branch_coverage(self) -> float:
+        return self.covered_branches / self.num_branches if self.num_branches else 1.0
+
+
+def load_report(path: Path) -> dict[str, Any]:
+    with path.open(encoding="utf-8") as file:
+        return json.load(file)
+
+
+def _find_file(report: dict[str, Any], source_file: str) -> tuple[str, dict[str, Any]]:
+    wanted = normalize_path(source_file)
+    matches = [
+        (name, value)
+        for name, value in report.get("files", {}).items()
+        if normalize_path(name) == wanted or normalize_path(name).endswith("/" + wanted)
+    ]
+    if not matches:
+        raise KeyError(f"Source file {source_file!r} is absent from the coverage report")
+    if len(matches) > 1:
+        raise KeyError(f"Source file {source_file!r} is ambiguous in the coverage report")
+    return matches[0]
+
+
+def symbol_coverage(report: dict[str, Any], source_file: str, symbol: str) -> SymbolCoverage:
+    report_name, file_data = _find_file(report, source_file)
+    functions = file_data.get("functions", {})
+    if symbol not in functions:
+        available = ", ".join(sorted(name for name in functions if name)[:20])
+        raise KeyError(f"Symbol {symbol!r} is absent from {report_name}; available: {available}")
+    data = functions[symbol]
+    summary = data["summary"]
+    return SymbolCoverage(
+        source_file=report_name,
+        symbol=symbol,
+        covered_statements=int(summary["covered_lines"]),
+        num_statements=int(summary["num_statements"]),
+        covered_branches=int(summary.get("covered_branches", 0)),
+        num_branches=int(summary.get("num_branches", 0)),
+        executed_lines=tuple(data.get("executed_lines", [])),
+        missing_lines=tuple(data.get("missing_lines", [])),
+        executed_branches=tuple(tuple(item) for item in data.get("executed_branches", [])),
+        missing_branches=tuple(tuple(item) for item in data.get("missing_branches", [])),
+    )
+
+
+def run_coverage(
+    *, project_root: Path, package_dir: Path, tests_dir: Path, output: Path,
+    pytest_args: str = "", env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    run_env = os.environ.copy()
+    run_env.update(env or {})
+    run_env["COVERAGE_FILE"] = str(output.with_suffix(".data").resolve())
+    run_cmd = [
+        sys.executable, "-m", "coverage", "run", "--branch",
+        f"--source={package_dir.resolve()}", "-m", "pytest", str(tests_dir.resolve()),
+        "--disable-warnings", "-q", *shlex.split(pytest_args, posix=os.name != "nt"),
+    ]
+    completed = subprocess.run(
+        run_cmd, cwd=project_root, env=run_env, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+    )
+    # A from-scratch CoverUp workspace can legitimately contain no accepted
+    # tests.  coverage.py still writes a data file with every file supplied by
+    # --source, which gives us the zero-covered symbol denominators required by
+    # GEPA.  Only pytest's dedicated "no tests" status is recoverable here;
+    # collection errors and failing tests must remain invalid evaluations.
+    if completed.returncode not in (0, _NO_TESTS_COLLECTED):
+        return completed
+    report = subprocess.run(
+        [sys.executable, "-m", "coverage", "json", "--pretty-print", "-o", str(output.resolve())],
+        cwd=project_root, env=run_env, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+    )
+    if report.returncode:
+        return report
+    if completed.returncode == _NO_TESTS_COLLECTED:
+        return subprocess.CompletedProcess(
+            args=completed.args,
+            returncode=0,
+            stdout=completed.stdout,
+            stderr=completed.stderr,
+        )
+    return completed
