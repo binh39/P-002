@@ -1,0 +1,10 @@
+{
+  "description": "Optimize AI prompts with an intuitive platform offering experiment management, prompt editing, performance comparison, and approval workflows for enhanced model efficiency.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
