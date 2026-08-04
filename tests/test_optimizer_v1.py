@@ -76,15 +76,15 @@ def test_composite_score_uses_documented_weights():
     result = harness_result()
 
     assert composite_score(result) == pytest.approx(
-        0.35 + 0.35 * 0.4 + 0.20 * 0.5 + 0.10 * 0.8
+        0.45 + 0.35 * 0.5 + 0.20 * 0.8
     )
 
 
 def test_simple_metric_executes_prediction(monkeypatch):
     captured = {}
 
-    def fake_run(module_path, test_code):
-        captured.update(module_path=module_path, test_code=test_code)
+    def fake_run(module_path, test_code, **kwargs):
+        captured.update(module_path=module_path, test_code=test_code, **kwargs)
         return harness_result()
 
     monkeypatch.setattr("optimizer.metrics.run_harness_on", fake_run)
@@ -96,6 +96,7 @@ def test_simple_metric_executes_prediction(monkeypatch):
 
     assert score == pytest.approx(composite_score(harness_result()))
     assert captured["module_path"] == "sample.py"
+    assert captured["run_mutation"] is False
 
 
 def test_tools_return_runtime_evidence(monkeypatch):

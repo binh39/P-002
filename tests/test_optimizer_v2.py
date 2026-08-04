@@ -6,12 +6,7 @@ import pytest
 from harness.models import HarnessResult
 from optimizer.dataset import build_v2_splits
 from optimizer.evaluation import evaluate_module
-from optimizer.gepa import (
-    MaxIterationsStopper,
-    compile_gepa,
-    gepa_metric,
-    result_feedback,
-)
+from optimizer.gepa import compile_gepa, gepa_metric, result_feedback
 from orchestration.graph import build_optimization_graph
 
 
@@ -36,20 +31,26 @@ def test_gepa_feedback_is_grounded_in_harness_result():
 
     assert "2/2 tests pass" in feedback
     assert "branch coverage 60%" in feedback
-    assert "mutation score 50%" in feedback
-    assert "[12]" in feedback
+    assert "mutation" not in feedback.lower()
 
 
 def test_gepa_metric_returns_score_and_feedback(monkeypatch):
-    monkeypatch.setattr("optimizer.gepa.run_harness_on", lambda *args: result())
+    captured = {}
+
+    def fake_run(*args, **kwargs):
+        captured.update(kwargs)
+        return result()
+
+    monkeypatch.setattr("optimizer.gepa.run_harness_on", fake_run)
 
     prediction = gepa_metric(
         SimpleNamespace(module_path="sample.py"),
         SimpleNamespace(test_code="def test_x(): assert True"),
     )
 
-    assert prediction.score == pytest.approx(0.725)
+    assert prediction.score == pytest.approx(0.82)
     assert "Statement coverage 80%" in prediction.feedback
+    assert captured["run_mutation"] is False
 
 
 def test_compile_gepa_never_receives_holdout(monkeypatch):
@@ -72,17 +73,13 @@ def test_compile_gepa_never_receives_holdout(monkeypatch):
         train,
         validation,
         reflection_lm=SimpleNamespace(),
-        max_iterations=15,
     )
 
     assert optimized == "optimized"
     assert len(captured["trainset"]) == 20
     assert len(captured["valset"]) == 10
     assert captured["settings"]["metric"] is gepa_metric
-    stopper = captured["settings"]["gepa_kwargs"]["stop_callbacks"][0]
-    assert isinstance(stopper, MaxIterationsStopper)
-    assert stopper(SimpleNamespace(i=13)) is False
-    assert stopper(SimpleNamespace(i=14)) is True
+    assert "gepa_kwargs" not in captured["settings"]
 
 
 def test_v2_dataset_has_fixed_disjoint_protocol():
@@ -99,10 +96,12 @@ def test_v2_dataset_has_fixed_disjoint_protocol():
 
 
 def test_evaluate_module_aggregates_common_harness(monkeypatch):
+    calls = []
     monkeypatch.setattr(
         "optimizer.evaluation.run_harness_on",
-        lambda *args: result(),
+        lambda *args, **kwargs: calls.append(kwargs) or result(),
     )
+
     def module(**kwargs):
         return SimpleNamespace(test_code="test")
     examples = [
@@ -120,6 +119,7 @@ def test_evaluate_module_aggregates_common_harness(monkeypatch):
     assert evaluation.build_rate == 1.0
     assert evaluation.branch_coverage == 0.6
     assert len(evaluation.per_example) == 2
+    assert all(call["run_mutation"] is False for call in calls)
 
 
 @pytest.mark.asyncio

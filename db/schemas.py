@@ -33,7 +33,6 @@ class CandidateCreate(BaseModel):
     pass_rate: float = Field(default=0.0, ge=0.0, le=1.0)
     statement_coverage: float = Field(default=0.0, ge=0.0, le=1.0)
     branch_coverage: float = Field(default=0.0, ge=0.0, le=1.0)
-    mutation_score: float = Field(default=0.0, ge=0.0, le=1.0)
     cost_usd: float = Field(default=0.0, ge=0.0)
     latency_seconds: float = Field(default=0.0, ge=0.0)
 

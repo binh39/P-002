@@ -86,8 +86,8 @@ def pareto_endpoint(
     candidates = [CandidateOut.model_validate(row).model_dump() for row in rows]
     frontier = compute_pareto_frontier(
         candidates,
-        maximize=["mutation_score"],
-        minimize=["cost_usd"],
+        maximize=["fitness_score"],
+        minimize=["latency_seconds"],
     )
     return [CandidateOut.model_validate(candidate) for candidate in frontier]
 

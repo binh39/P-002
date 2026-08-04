@@ -313,6 +313,38 @@ button:disabled {
   font: 11px var(--font-geist-mono);
 }
 
+.strategyComparison {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  min-height: 220px;
+  margin: 13px 0 20px;
+}
+
+.strategyCard {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.strategyCard.best {
+  border: 2px solid var(--orange);
+  box-shadow: 6px 6px 0 rgba(255, 107, 53, 0.16);
+}
+
+.strategyCard strong {
+  font-size: 18px;
+}
+
+.strategyCard span {
+  color: var(--muted);
+  font: 12px var(--font-geist-mono);
+}
+
 .chart {
   position: relative;
   min-height: 360px;

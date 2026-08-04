@@ -1,0 +1,59 @@
+# file: src\sample_repo\isort\isort\place.py:64-96
+# asked: {"lines": [64, 65, 66, 67, 68, 69, 70, 71, 73, 74, 75, 77, 78, 79, 80, 81, 82, 84, 85, 88, 90, 91, 92, 94, 96], "branches": [[70, 71], [70, 73], [77, 78], [77, 96], [79, 80], [79, 81], [81, 88], [81, 89], [89, 77], [89, 94]]}
+# gained: {"lines": [64, 67, 68, 69], "branches": []}
+
+import pytest
+from pathlib import Path
+from isort import sections
+from isort.settings import Config
+from unittest.mock import MagicMock
+from collections.abc import Iterable  # Importing Iterable
+
+# Mocking the _src_path function for testing
+def _src_path(name: str, config: Config, src_paths: Iterable[Path] | None=None, prefix: tuple[str, ...]=()) -> tuple[str, str] | None:
+    if src_paths is None:
+        src_paths = config.src_paths
+    root_module_name, *nested_module = name.split('.', 1)
+    new_prefix = (*prefix, root_module_name)
+    namespace = '.'.join(new_prefix)
+    for src_path in src_paths:
+        module_path = (src_path / root_module_name).resolve()
+        if not prefix and (not module_path.is_dir()) and (src_path.name == root_module_name):
+            module_path = src_path.resolve()
+        if nested_module and (namespace in config.namespace_packages or (config.auto_identify_namespace_packages and _is_namespace_package(module_path, config.supported_extensions))):
+            return _src_path(nested_module[0], config, (module_path,), new_prefix)
+        if _is_module(module_path) or _is_package(module_path) or _src_path_is_module(src_path, root_module_name):
+            return (sections.FIRSTPARTY, f'Found in one of the configured src_paths: {src_path}.')
+    return None
+
+# Mocking the helper functions
+def _is_namespace_package(module_path, supported_extensions):
+    return False
+
+def _is_module(module_path):
+    return False
+
+def _is_package(module_path):
+    return False
+
+def _src_path_is_module(src_path, root_module_name):
+    return False
+
+
+
+
+def test_src_path_with_module_found():
+    config = MagicMock()
+    config.src_paths = [Path('/some/path')]
+    
+    # Mocking the _is_module and _is_package functions
+    global _is_module, _is_package, _src_path_is_module
+    _is_module = MagicMock(return_value=True)
+    _is_package = MagicMock(return_value=False)
+    _src_path_is_module = MagicMock(return_value=False)
+    
+    result = _src_path('my_module', config, prefix=())
+    assert result is not None
+    assert result[0] == sections.FIRSTPARTY
+    assert 'Found in one of the configured src_paths' in result[1]
+

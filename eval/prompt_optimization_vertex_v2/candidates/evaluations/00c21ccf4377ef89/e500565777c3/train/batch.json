@@ -1,0 +1,4487 @@
+{
+  "prompt_digest": "00c21ccf4377ef89",
+  "evaluation_digest": "e500565777c3",
+  "replicate": 0,
+  "split": "train",
+  "workspace_kind": "candidate",
+  "run_id": "isort-train-batch-f1babcfd",
+  "generator_exit_code": 0,
+  "tests_workspace": "D:\\VinAI\\P-002\\eval\\prompt_optimization_vertex_v2\\workspaces\\tests_candidate_00c21ccf4377ef89-e500565777c3_train",
+  "results": [
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/deprecated/finders.py",
+        "symbol": "RequirementsFinder._get_files_from_dir_cached",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 0.9571428571428572,
+      "coverage": {
+        "score": 0.9571428571428572,
+        "statement_gain": 1.0,
+        "branch_gain": 0.9285714285714286,
+        "statement_coverage": 1.0,
+        "branch_coverage": 0.9285714285714286,
+        "covered_statements": 15,
+        "num_statements": 15,
+        "covered_branches": 13,
+        "num_branches": 14,
+        "gained_lines": [
+          301,
+          303,
+          304,
+          305,
+          306,
+          309,
+          310,
+          311,
+          316,
+          319,
+          320,
+          321,
+          322,
+          323,
+          325
+        ],
+        "gained_branches": [
+          [
+            303,
+            304
+          ],
+          [
+            303,
+            325
+          ],
+          [
+            304,
+            305
+          ],
+          [
+            304,
+            306
+          ],
+          [
+            309,
+            310
+          ],
+          [
+            309,
+            319
+          ],
+          [
+            310,
+            311
+          ],
+          [
+            310,
+            316
+          ],
+          [
+            319,
+            320
+          ],
+          [
+            320,
+            303
+          ],
+          [
+            320,
+            321
+          ],
+          [
+            321,
+            320
+          ],
+          [
+            321,
+            322
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [
+          [
+            319,
+            303
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 0.9571\nStatement gain: 15 newly covered; 0 remain.\nBranch gain: 13 newly covered; 1 remain.\nRemaining lines: []\nRemaining branches: [(319, 303)]\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/wrap_modes.py",
+        "symbol": "grid",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 0.9177777777777778,
+      "coverage": {
+        "score": 0.9177777777777778,
+        "statement_gain": 0.9444444444444444,
+        "branch_gain": 0.9,
+        "statement_coverage": 0.9444444444444444,
+        "branch_coverage": 0.9,
+        "covered_statements": 17,
+        "num_statements": 18,
+        "covered_branches": 9,
+        "num_branches": 10,
+        "gained_lines": [
+          49,
+          50,
+          52,
+          53,
+          54,
+          55,
+          61,
+          65,
+          66,
+          67,
+          68,
+          69,
+          72,
+          73,
+          82,
+          84,
+          85
+        ],
+        "gained_branches": [
+          [
+            49,
+            50
+          ],
+          [
+            49,
+            52
+          ],
+          [
+            53,
+            54
+          ],
+          [
+            53,
+            85
+          ],
+          [
+            61,
+            65
+          ],
+          [
+            61,
+            84
+          ],
+          [
+            66,
+            67
+          ],
+          [
+            66,
+            72
+          ],
+          [
+            68,
+            69
+          ]
+        ],
+        "remaining_lines": [
+          71
+        ],
+        "remaining_branches": [
+          [
+            68,
+            71
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 0.9178\nStatement gain: 17 newly covered; 1 remain.\nBranch gain: 9 newly covered; 1 remain.\nRemaining lines: [71]\nRemaining branches: [(68, 71)]\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/sorting.py",
+        "symbol": "section_key",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 0.8896103896103896,
+      "coverage": {
+        "score": 0.8896103896103896,
+        "statement_gain": 0.9285714285714286,
+        "branch_gain": 0.8636363636363636,
+        "statement_coverage": 0.9285714285714286,
+        "branch_coverage": 0.8636363636363636,
+        "covered_statements": 26,
+        "num_statements": 28,
+        "covered_branches": 19,
+        "num_branches": 22,
+        "gained_lines": [
+          59,
+          61,
+          66,
+          69,
+          70,
+          72,
+          73,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          86,
+          87,
+          88,
+          89,
+          90,
+          91,
+          92,
+          93,
+          94,
+          97,
+          98,
+          100
+        ],
+        "gained_branches": [
+          [
+            61,
+            66
+          ],
+          [
+            61,
+            69
+          ],
+          [
+            69,
+            70
+          ],
+          [
+            69,
+            72
+          ],
+          [
+            72,
+            73
+          ],
+          [
+            72,
+            75
+          ],
+          [
+            77,
+            78
+          ],
+          [
+            77,
+            80
+          ],
+          [
+            80,
+            81
+          ],
+          [
+            80,
+            86
+          ],
+          [
+            86,
+            87
+          ],
+          [
+            86,
+            97
+          ],
+          [
+            88,
+            89
+          ],
+          [
+            90,
+            91
+          ],
+          [
+            90,
+            92
+          ],
+          [
+            92,
+            93
+          ],
+          [
+            92,
+            94
+          ],
+          [
+            97,
+            98
+          ],
+          [
+            97,
+            100
+          ]
+        ],
+        "remaining_lines": [
+          95,
+          96
+        ],
+        "remaining_branches": [
+          [
+            88,
+            95
+          ],
+          [
+            95,
+            96
+          ],
+          [
+            95,
+            100
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 0.8896\nStatement gain: 26 newly covered; 2 remain.\nBranch gain: 19 newly covered; 3 remain.\nRemaining lines: [95, 96]\nRemaining branches: [(88, 95), (95, 96), (95, 100)]\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/main.py",
+        "symbol": "parse_args",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 27,
+        "num_statements": 27,
+        "covered_branches": 18,
+        "num_branches": 18,
+        "gained_lines": [
+          929,
+          930,
+          931,
+          932,
+          933,
+          934,
+          936,
+          937,
+          938,
+          939,
+          940,
+          941,
+          942,
+          943,
+          944,
+          945,
+          946,
+          947,
+          948,
+          949,
+          951,
+          952,
+          953,
+          954,
+          955,
+          957,
+          959
+        ],
+        "gained_branches": [
+          [
+            931,
+            932
+          ],
+          [
+            931,
+            936
+          ],
+          [
+            932,
+            931
+          ],
+          [
+            932,
+            933
+          ],
+          [
+            938,
+            939
+          ],
+          [
+            938,
+            940
+          ],
+          [
+            940,
+            941
+          ],
+          [
+            940,
+            943
+          ],
+          [
+            943,
+            944
+          ],
+          [
+            943,
+            946
+          ],
+          [
+            946,
+            947
+          ],
+          [
+            946,
+            952
+          ],
+          [
+            948,
+            949
+          ],
+          [
+            948,
+            951
+          ],
+          [
+            953,
+            954
+          ],
+          [
+            953,
+            959
+          ],
+          [
+            954,
+            955
+          ],
+          [
+            954,
+            957
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 1.0000\nStatement gain: 27 newly covered; 0 remain.\nBranch gain: 18 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/wrap.py",
+        "symbol": "line",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 0.6572450805008945,
+      "coverage": {
+        "score": 0.6572450805008945,
+        "statement_gain": 0.6046511627906976,
+        "branch_gain": 0.6923076923076923,
+        "statement_coverage": 0.6046511627906976,
+        "branch_coverage": 0.6923076923076923,
+        "covered_statements": 26,
+        "num_statements": 43,
+        "covered_branches": 18,
+        "num_branches": 26,
+        "gained_lines": [
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          84,
+          85,
+          98,
+          99,
+          102,
+          103,
+          104,
+          105,
+          107,
+          112,
+          113,
+          114,
+          139,
+          140,
+          141,
+          142,
+          144
+        ],
+        "gained_branches": [
+          [
+            74,
+            75
+          ],
+          [
+            74,
+            141
+          ],
+          [
+            77,
+            78
+          ],
+          [
+            77,
+            79
+          ],
+          [
+            79,
+            80
+          ],
+          [
+            79,
+            144
+          ],
+          [
+            81,
+            79
+          ],
+          [
+            81,
+            84
+          ],
+          [
+            85,
+            98
+          ],
+          [
+            99,
+            102
+          ],
+          [
+            99,
+            104
+          ],
+          [
+            104,
+            105
+          ],
+          [
+            104,
+            107
+          ],
+          [
+            112,
+            113
+          ],
+          [
+            112,
+            140
+          ],
+          [
+            113,
+            114
+          ],
+          [
+            141,
+            142
+          ],
+          [
+            141,
+            144
+          ]
+        ],
+        "remaining_lines": [
+          86,
+          95,
+          116,
+          118,
+          122,
+          124,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130,
+          134,
+          135,
+          136,
+          137,
+          138
+        ],
+        "remaining_branches": [
+          [
+            85,
+            86
+          ],
+          [
+            113,
+            116
+          ],
+          [
+            118,
+            122
+          ],
+          [
+            118,
+            124
+          ],
+          [
+            126,
+            127
+          ],
+          [
+            126,
+            130
+          ],
+          [
+            135,
+            136
+          ],
+          [
+            135,
+            138
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 0.6572\nStatement gain: 26 newly covered; 17 remain.\nBranch gain: 18 newly covered; 8 remain.\nRemaining lines: [86, 95, 116, 118, 122, 124, 125, 126, 127, 128, 129, 130, 134, 135, 136, 137, 138]\nRemaining branches: [(85, 86), (113, 116), (118, 122), (118, 124), (126, 127), (126, 130), (135, 136), (135, 138)]\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/wrap_modes.py",
+        "symbol": "vertical_prefix_from_module_import",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 17,
+        "num_statements": 17,
+        "covered_branches": 8,
+        "num_branches": 8,
+        "gained_lines": [
+          273,
+          274,
+          276,
+          277,
+          278,
+          280,
+          281,
+          282,
+          283,
+          284,
+          290,
+          294,
+          303,
+          304,
+          306,
+          307,
+          308
+        ],
+        "gained_branches": [
+          [
+            273,
+            274
+          ],
+          [
+            273,
+            276
+          ],
+          [
+            282,
+            283
+          ],
+          [
+            282,
+            306
+          ],
+          [
+            290,
+            294
+          ],
+          [
+            290,
+            304
+          ],
+          [
+            306,
+            307
+          ],
+          [
+            306,
+            308
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 1.0000\nStatement gain: 17 newly covered; 0 remain.\nBranch gain: 8 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/output.py",
+        "symbol": "_with_straight_imports",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 0.8907142857142858,
+      "coverage": {
+        "score": 0.8907142857142858,
+        "statement_gain": 0.9142857142857143,
+        "branch_gain": 0.875,
+        "statement_coverage": 0.9142857142857143,
+        "branch_coverage": 0.875,
+        "covered_statements": 32,
+        "num_statements": 35,
+        "covered_branches": 21,
+        "num_branches": 24,
+        "gained_lines": [
+          580,
+          582,
+          585,
+          586,
+          587,
+          589,
+          590,
+          592,
+          593,
+          594,
+          595,
+          596,
+          598,
+          599,
+          600,
+          602,
+          604,
+          606,
+          607,
+          611,
+          613,
+          615,
+          616,
+          619,
+          620,
+          621,
+          623,
+          628,
+          630,
+          631,
+          633,
+          643
+        ],
+        "gained_branches": [
+          [
+            585,
+            586
+          ],
+          [
+            585,
+            615
+          ],
+          [
+            586,
+            587
+          ],
+          [
+            586,
+            589
+          ],
+          [
+            592,
+            593
+          ],
+          [
+            592,
+            598
+          ],
+          [
+            593,
+            594
+          ],
+          [
+            593,
+            595
+          ],
+          [
+            595,
+            592
+          ],
+          [
+            595,
+            596
+          ],
+          [
+            599,
+            600
+          ],
+          [
+            599,
+            602
+          ],
+          [
+            606,
+            607
+          ],
+          [
+            606,
+            611
+          ],
+          [
+            615,
+            616
+          ],
+          [
+            615,
+            643
+          ],
+          [
+            616,
+            619
+          ],
+          [
+            620,
+            621
+          ],
+          [
+            620,
+            628
+          ],
+          [
+            621,
+            623
+          ],
+          [
+            631,
+            633
+          ]
+        ],
+        "remaining_lines": [
+          617,
+          622,
+          632
+        ],
+        "remaining_branches": [
+          [
+            616,
+            617
+          ],
+          [
+            621,
+            622
+          ],
+          [
+            631,
+            632
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 0.8907\nStatement gain: 32 newly covered; 3 remain.\nBranch gain: 21 newly covered; 3 remain.\nRemaining lines: [617, 622, 632]\nRemaining branches: [(616, 617), (621, 622), (631, 632)]\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/sorting.py",
+        "symbol": "module_key",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 25,
+        "num_statements": 25,
+        "covered_branches": 18,
+        "num_branches": 18,
+        "gained_lines": [
+          22,
+          23,
+          24,
+          25,
+          27,
+          28,
+          29,
+          31,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          45,
+          46,
+          47,
+          49,
+          54,
+          55
+        ],
+        "gained_branches": [
+          [
+            23,
+            24
+          ],
+          [
+            23,
+            27
+          ],
+          [
+            28,
+            29
+          ],
+          [
+            28,
+            31
+          ],
+          [
+            33,
+            34
+          ],
+          [
+            33,
+            46
+          ],
+          [
+            34,
+            35
+          ],
+          [
+            34,
+            36
+          ],
+          [
+            36,
+            37
+          ],
+          [
+            36,
+            38
+          ],
+          [
+            38,
+            39
+          ],
+          [
+            38,
+            40
+          ],
+          [
+            40,
+            41
+          ],
+          [
+            40,
+            42
+          ],
+          [
+            42,
+            43
+          ],
+          [
+            42,
+            45
+          ],
+          [
+            46,
+            47
+          ],
+          [
+            46,
+            49
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 1.0000\nStatement gain: 25 newly covered; 0 remain.\nBranch gain: 18 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/settings.py",
+        "symbol": "_Config.__post_init__",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 17,
+        "num_statements": 17,
+        "covered_branches": 12,
+        "num_branches": 12,
+        "gained_lines": [
+          243,
+          247,
+          248,
+          254,
+          255,
+          257,
+          258,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267,
+          268,
+          269,
+          270,
+          271
+        ],
+        "gained_branches": [
+          [
+            247,
+            248
+          ],
+          [
+            247,
+            254
+          ],
+          [
+            254,
+            255
+          ],
+          [
+            254,
+            257
+          ],
+          [
+            257,
+            258
+          ],
+          [
+            257,
+            262
+          ],
+          [
+            262,
+            263
+          ],
+          [
+            262,
+            265
+          ],
+          [
+            265,
+            266
+          ],
+          [
+            265,
+            270
+          ],
+          [
+            270,
+            -242
+          ],
+          [
+            270,
+            271
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 1.0000\nStatement gain: 17 newly covered; 0 remain.\nBranch gain: 12 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/wrap_modes.py",
+        "symbol": "noqa",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 12,
+        "num_statements": 12,
+        "covered_branches": 8,
+        "num_branches": 8,
+        "gained_lines": [
+          245,
+          246,
+          247,
+          248,
+          249,
+          253,
+          254,
+          255,
+          256,
+          258,
+          259,
+          260
+        ],
+        "gained_branches": [
+          [
+            248,
+            249
+          ],
+          [
+            248,
+            258
+          ],
+          [
+            249,
+            253
+          ],
+          [
+            249,
+            254
+          ],
+          [
+            254,
+            255
+          ],
+          [
+            254,
+            256
+          ],
+          [
+            258,
+            259
+          ],
+          [
+            258,
+            260
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 1.0000\nStatement gain: 12 newly covered; 0 remain.\nBranch gain: 8 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/parse.py",
+        "symbol": "import_type",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 9,
+        "num_statements": 9,
+        "covered_branches": 8,
+        "num_branches": 8,
+        "gained_lines": [
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63
+        ],
+        "gained_branches": [
+          [
+            55,
+            56
+          ],
+          [
+            55,
+            57
+          ],
+          [
+            57,
+            58
+          ],
+          [
+            57,
+            59
+          ],
+          [
+            59,
+            60
+          ],
+          [
+            59,
+            61
+          ],
+          [
+            61,
+            62
+          ],
+          [
+            61,
+            63
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 1.0000\nStatement gain: 9 newly covered; 0 remain.\nBranch gain: 8 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/settings.py",
+        "symbol": "Config.is_supported_filetype",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 0.0,
+      "coverage": {
+        "score": 0.0,
+        "statement_gain": 0.0,
+        "branch_gain": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "covered_statements": 0,
+        "num_statements": 19,
+        "covered_branches": 0,
+        "num_branches": 8,
+        "gained_lines": [],
+        "gained_branches": [],
+        "remaining_lines": [
+          519,
+          520,
+          521,
+          522,
+          523,
+          524,
+          527,
+          528,
+          530,
+          531,
+          532,
+          533,
+          534,
+          536,
+          537,
+          538,
+          539,
+          540,
+          541
+        ],
+        "remaining_branches": [
+          [
+            521,
+            522
+          ],
+          [
+            521,
+            523
+          ],
+          [
+            523,
+            524
+          ],
+          [
+            523,
+            527
+          ],
+          [
+            527,
+            528
+          ],
+          [
+            527,
+            530
+          ],
+          [
+            531,
+            532
+          ],
+          [
+            531,
+            536
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 0.0000\nStatement gain: 0 newly covered; 19 remain.\nBranch gain: 0 newly covered; 8 remain.\nRemaining lines: [519, 520, 521, 522, 523, 524, 527, 528, 530, 531, 532, 533, 534, 536, 537, 538, 539, 540, 541]\nRemaining branches: [(521, 522), (521, 523), (523, 524), (523, 527), (527, 528), (527, 530), (531, 532), (531, 536)]\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/wrap_modes.py",
+        "symbol": "hanging_indent",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 0.95,
+      "coverage": {
+        "score": 0.95,
+        "statement_gain": 1.0,
+        "branch_gain": 0.9166666666666666,
+        "statement_coverage": 1.0,
+        "branch_coverage": 0.9166666666666666,
+        "covered_statements": 20,
+        "num_statements": 20,
+        "covered_branches": 11,
+        "num_branches": 12,
+        "gained_lines": [
+          119,
+          120,
+          122,
+          124,
+          125,
+          127,
+          128,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          144,
+          146,
+          147,
+          153,
+          156,
+          157,
+          167
+        ],
+        "gained_branches": [
+          [
+            119,
+            120
+          ],
+          [
+            119,
+            122
+          ],
+          [
+            127,
+            128
+          ],
+          [
+            127,
+            135
+          ],
+          [
+            136,
+            137
+          ],
+          [
+            136,
+            146
+          ],
+          [
+            139,
+            140
+          ],
+          [
+            146,
+            147
+          ],
+          [
+            146,
+            167
+          ],
+          [
+            153,
+            156
+          ],
+          [
+            153,
+            157
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [
+          [
+            139,
+            144
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 0.9500\nStatement gain: 20 newly covered; 0 remain.\nBranch gain: 11 newly covered; 1 remain.\nRemaining lines: []\nRemaining branches: [(139, 144)]\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/deprecated/finders.py",
+        "symbol": "PathFinder.__init__",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 0.0,
+      "coverage": {
+        "score": 0.0,
+        "statement_gain": 0.0,
+        "branch_gain": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "covered_statements": 0,
+        "num_statements": 34,
+        "covered_branches": 0,
+        "num_branches": 32,
+        "gained_lines": [],
+        "gained_branches": [],
+        "remaining_lines": [
+          122,
+          125,
+          126,
+          127,
+          130,
+          131,
+          132,
+          133,
+          134,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          143,
+          144,
+          147,
+          148,
+          149,
+          150,
+          151,
+          152,
+          153,
+          154,
+          155,
+          158,
+          159,
+          160,
+          163,
+          164,
+          165
+        ],
+        "remaining_branches": [
+          [
+            131,
+            132
+          ],
+          [
+            131,
+            133
+          ],
+          [
+            134,
+            135
+          ],
+          [
+            134,
+            147
+          ],
+          [
+            136,
+            137
+          ],
+          [
+            136,
+            139
+          ],
+          [
+            137,
+            136
+          ],
+          [
+            137,
+            138
+          ],
+          [
+            139,
+            140
+          ],
+          [
+            139,
+            142
+          ],
+          [
+            140,
+            139
+          ],
+          [
+            140,
+            141
+          ],
+          [
+            142,
+            143
+          ],
+          [
+            142,
+            147
+          ],
+          [
+            143,
+            142
+          ],
+          [
+            143,
+            144
+          ],
+          [
+            148,
+            149
+          ],
+          [
+            148,
+            158
+          ],
+          [
+            150,
+            151
+          ],
+          [
+            150,
+            153
+          ],
+          [
+            151,
+            150
+          ],
+          [
+            151,
+            152
+          ],
+          [
+            153,
+            154
+          ],
+          [
+            153,
+            158
+          ],
+          [
+            154,
+            153
+          ],
+          [
+            154,
+            155
+          ],
+          [
+            159,
+            160
+          ],
+          [
+            159,
+            163
+          ],
+          [
+            163,
+            -121
+          ],
+          [
+            163,
+            164
+          ],
+          [
+            164,
+            163
+          ],
+          [
+            164,
+            165
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 0.0000\nStatement gain: 0 newly covered; 34 remain.\nBranch gain: 0 newly covered; 32 remain.\nRemaining lines: [122, 125, 126, 127, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 147, 148, 149, 150, 151, 152, 153, 154, 155, 158, 159, 160, 163, 164, 165]\nRemaining branches: [(131, 132), (131, 133), (134, 135), (134, 147), (136, 137), (136, 139), (137, 136), (137, 138), (139, 140), (139, 142), (140, 139), (140, 141), (142, 143), (142, 147), (143, 142), (143, 144), (148, 149), (148, 158), (150, 151), (150, 153), (151, 150), (151, 152), (153, 154), (153, 158), (154, 153), (154, 155), (159, 160), (159, 163), (163, -121), (163, 164), (164, 163), (164, 165)]\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/core.py",
+        "symbol": "process",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 0.6656543189906179,
+      "coverage": {
+        "score": 0.6656543189906179,
+        "statement_gain": 0.701067615658363,
+        "branch_gain": 0.6420454545454546,
+        "statement_coverage": 0.701067615658363,
+        "branch_coverage": 0.6420454545454546,
+        "covered_statements": 197,
+        "num_statements": 281,
+        "covered_branches": 113,
+        "num_branches": 176,
+        "gained_lines": [
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          91,
+          94,
+          95,
+          96,
+          97,
+          101,
+          102,
+          103,
+          104,
+          105,
+          106,
+          107,
+          108,
+          111,
+          117,
+          118,
+          119,
+          120,
+          122,
+          124,
+          126,
+          127,
+          128,
+          131,
+          132,
+          133,
+          134,
+          137,
+          138,
+          139,
+          140,
+          141,
+          150,
+          156,
+          157,
+          158,
+          160,
+          161,
+          162,
+          164,
+          165,
+          166,
+          167,
+          168,
+          169,
+          171,
+          172,
+          173,
+          174,
+          175,
+          176,
+          177,
+          180,
+          186,
+          192,
+          193,
+          198,
+          199,
+          201,
+          202,
+          203,
+          204,
+          206,
+          207,
+          209,
+          210,
+          211,
+          212,
+          214,
+          215,
+          216,
+          220,
+          221,
+          223,
+          225,
+          226,
+          227,
+          228,
+          230,
+          232,
+          236,
+          237,
+          238,
+          239,
+          240,
+          241,
+          242,
+          243,
+          244,
+          275,
+          286,
+          288,
+          295,
+          296,
+          297,
+          298,
+          299,
+          302,
+          308,
+          309,
+          311,
+          312,
+          314,
+          315,
+          317,
+          324,
+          325,
+          327,
+          328,
+          340,
+          355,
+          360,
+          362,
+          364,
+          365,
+          373,
+          374,
+          384,
+          385,
+          386,
+          388,
+          389,
+          395,
+          396,
+          403,
+          404,
+          405,
+          406,
+          410,
+          411,
+          412,
+          415,
+          416,
+          417,
+          419,
+          424,
+          425,
+          427,
+          433,
+          434,
+          441,
+          447,
+          448,
+          451,
+          456,
+          460,
+          461,
+          462,
+          464,
+          465,
+          467,
+          468,
+          477,
+          478,
+          479,
+          480,
+          483,
+          484,
+          486,
+          487,
+          488,
+          490
+        ],
+        "gained_branches": [
+          [
+            82,
+            83
+          ],
+          [
+            82,
+            126
+          ],
+          [
+            86,
+            87
+          ],
+          [
+            86,
+            124
+          ],
+          [
+            87,
+            88
+          ],
+          [
+            87,
+            91
+          ],
+          [
+            88,
+            89
+          ],
+          [
+            88,
+            90
+          ],
+          [
+            91,
+            94
+          ],
+          [
+            91,
+            122
+          ],
+          [
+            94,
+            95
+          ],
+          [
+            94,
+            96
+          ],
+          [
+            96,
+            97
+          ],
+          [
+            96,
+            120
+          ],
+          [
+            97,
+            101
+          ],
+          [
+            104,
+            105
+          ],
+          [
+            104,
+            107
+          ],
+          [
+            126,
+            127
+          ],
+          [
+            126,
+            486
+          ],
+          [
+            127,
+            128
+          ],
+          [
+            127,
+            160
+          ],
+          [
+            128,
+            131
+          ],
+          [
+            134,
+            137
+          ],
+          [
+            137,
+            138
+          ],
+          [
+            137,
+            364
+          ],
+          [
+            138,
+            139
+          ],
+          [
+            157,
+            158
+          ],
+          [
+            161,
+            162
+          ],
+          [
+            161,
+            164
+          ],
+          [
+            164,
+            165
+          ],
+          [
+            164,
+            171
+          ],
+          [
+            165,
+            164
+          ],
+          [
+            165,
+            166
+          ],
+          [
+            166,
+            167
+          ],
+          [
+            166,
+            168
+          ],
+          [
+            171,
+            172
+          ],
+          [
+            172,
+            173
+          ],
+          [
+            172,
+            174
+          ],
+          [
+            174,
+            175
+          ],
+          [
+            174,
+            176
+          ],
+          [
+            176,
+            177
+          ],
+          [
+            176,
+            186
+          ],
+          [
+            186,
+            192
+          ],
+          [
+            186,
+            193
+          ],
+          [
+            193,
+            198
+          ],
+          [
+            193,
+            201
+          ],
+          [
+            202,
+            203
+          ],
+          [
+            202,
+            225
+          ],
+          [
+            204,
+            206
+          ],
+          [
+            206,
+            207
+          ],
+          [
+            206,
+            225
+          ],
+          [
+            207,
+            209
+          ],
+          [
+            209,
+            210
+          ],
+          [
+            209,
+            214
+          ],
+          [
+            210,
+            211
+          ],
+          [
+            210,
+            223
+          ],
+          [
+            212,
+            223
+          ],
+          [
+            214,
+            215
+          ],
+          [
+            214,
+            221
+          ],
+          [
+            216,
+            220
+          ],
+          [
+            221,
+            223
+          ],
+          [
+            226,
+            227
+          ],
+          [
+            226,
+            364
+          ],
+          [
+            227,
+            228
+          ],
+          [
+            227,
+            230
+          ],
+          [
+            228,
+            364
+          ],
+          [
+            230,
+            232
+          ],
+          [
+            232,
+            236
+          ],
+          [
+            236,
+            237
+          ],
+          [
+            236,
+            244
+          ],
+          [
+            244,
+            275
+          ],
+          [
+            275,
+            286
+          ],
+          [
+            286,
+            288
+          ],
+          [
+            288,
+            295
+          ],
+          [
+            295,
+            296
+          ],
+          [
+            295,
+            362
+          ],
+          [
+            299,
+            302
+          ],
+          [
+            299,
+            317
+          ],
+          [
+            302,
+            308
+          ],
+          [
+            308,
+            309
+          ],
+          [
+            311,
+            312
+          ],
+          [
+            311,
+            314
+          ],
+          [
+            317,
+            324
+          ],
+          [
+            328,
+            340
+          ],
+          [
+            340,
+            355
+          ],
+          [
+            355,
+            360
+          ],
+          [
+            364,
+            126
+          ],
+          [
+            364,
+            365
+          ],
+          [
+            365,
+            373
+          ],
+          [
+            386,
+            388
+          ],
+          [
+            395,
+            396
+          ],
+          [
+            395,
+            464
+          ],
+          [
+            396,
+            403
+          ],
+          [
+            403,
+            404
+          ],
+          [
+            406,
+            410
+          ],
+          [
+            412,
+            415
+          ],
+          [
+            419,
+            424
+          ],
+          [
+            433,
+            434
+          ],
+          [
+            434,
+            441
+          ],
+          [
+            448,
+            451
+          ],
+          [
+            451,
+            456
+          ],
+          [
+            456,
+            460
+          ],
+          [
+            467,
+            468
+          ],
+          [
+            468,
+            477
+          ],
+          [
+            477,
+            126
+          ],
+          [
+            477,
+            478
+          ],
+          [
+            478,
+            126
+          ],
+          [
+            478,
+            479
+          ],
+          [
+            480,
+            483
+          ],
+          [
+            486,
+            487
+          ],
+          [
+            486,
+            490
+          ],
+          [
+            487,
+            488
+          ],
+          [
+            487,
+            490
+          ]
+        ],
+        "remaining_lines": [
+          98,
+          99,
+          100,
+          129,
+          135,
+          205,
+          208,
+          213,
+          217,
+          218,
+          222,
+          229,
+          231,
+          233,
+          234,
+          235,
+          245,
+          246,
+          255,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267,
+          268,
+          269,
+          270,
+          271,
+          273,
+          274,
+          279,
+          280,
+          281,
+          282,
+          284,
+          285,
+          287,
+          294,
+          303,
+          304,
+          305,
+          306,
+          321,
+          322,
+          338,
+          345,
+          346,
+          347,
+          348,
+          349,
+          350,
+          351,
+          353,
+          356,
+          357,
+          359,
+          366,
+          367,
+          368,
+          369,
+          370,
+          371,
+          387,
+          397,
+          400,
+          401,
+          407,
+          420,
+          435,
+          449,
+          452,
+          453,
+          454,
+          457,
+          458,
+          469,
+          470,
+          471,
+          472,
+          474,
+          475,
+          481
+        ],
+        "remaining_branches": [
+          [
+            97,
+            98
+          ],
+          [
+            128,
+            129
+          ],
+          [
+            134,
+            135
+          ],
+          [
+            138,
+            141
+          ],
+          [
+            157,
+            364
+          ],
+          [
+            171,
+            186
+          ],
+          [
+            204,
+            205
+          ],
+          [
+            207,
+            208
+          ],
+          [
+            212,
+            213
+          ],
+          [
+            216,
+            217
+          ],
+          [
+            221,
+            222
+          ],
+          [
+            228,
+            229
+          ],
+          [
+            230,
+            231
+          ],
+          [
+            232,
+            233
+          ],
+          [
+            244,
+            245
+          ],
+          [
+            245,
+            246
+          ],
+          [
+            245,
+            273
+          ],
+          [
+            261,
+            262
+          ],
+          [
+            261,
+            264
+          ],
+          [
+            265,
+            266
+          ],
+          [
+            265,
+            267
+          ],
+          [
+            275,
+            279
+          ],
+          [
+            279,
+            280
+          ],
+          [
+            279,
+            284
+          ],
+          [
+            286,
+            287
+          ],
+          [
+            288,
+            294
+          ],
+          [
+            302,
+            303
+          ],
+          [
+            303,
+            299
+          ],
+          [
+            303,
+            304
+          ],
+          [
+            308,
+            299
+          ],
+          [
+            317,
+            321
+          ],
+          [
+            328,
+            338
+          ],
+          [
+            340,
+            345
+          ],
+          [
+            346,
+            347
+          ],
+          [
+            346,
+            353
+          ],
+          [
+            355,
+            356
+          ],
+          [
+            356,
+            357
+          ],
+          [
+            356,
+            359
+          ],
+          [
+            365,
+            366
+          ],
+          [
+            366,
+            367
+          ],
+          [
+            366,
+            369
+          ],
+          [
+            369,
+            370
+          ],
+          [
+            369,
+            371
+          ],
+          [
+            386,
+            387
+          ],
+          [
+            396,
+            397
+          ],
+          [
+            403,
+            406
+          ],
+          [
+            406,
+            407
+          ],
+          [
+            412,
+            419
+          ],
+          [
+            419,
+            420
+          ],
+          [
+            433,
+            451
+          ],
+          [
+            434,
+            435
+          ],
+          [
+            448,
+            449
+          ],
+          [
+            451,
+            452
+          ],
+          [
+            453,
+            454
+          ],
+          [
+            453,
+            456
+          ],
+          [
+            456,
+            457
+          ],
+          [
+            467,
+            126
+          ],
+          [
+            468,
+            469
+          ],
+          [
+            469,
+            470
+          ],
+          [
+            469,
+            477
+          ],
+          [
+            471,
+            472
+          ],
+          [
+            471,
+            474
+          ],
+          [
+            480,
+            481
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 0.6657\nStatement gain: 197 newly covered; 84 remain.\nBranch gain: 113 newly covered; 63 remain.\nRemaining lines: [98, 99, 100, 129, 135, 205, 208, 213, 217, 218, 222, 229, 231, 233, 234, 235, 245, 246, 255, 261, 262, 263, 264, 265, 266, 267, 268, 269, 270, 271, 273, 274, 279, 280, 281, 282, 284, 285, 287, 294, 303, 304, 305, 306, 321, 322, 338, 345, 346, 347, 348, 349, 350, 351, 353, 356, 357, 359, 366, 367, 368, 369, 370, 371, 387, 397, 400, 401, 407, 420, 435, 449, 452, 453, 454, 457, 458, 469, 470, 471, 472, 474, 475, 481]\nRemaining branches: [(97, 98), (128, 129), (134, 135), (138, 141), (157, 364), (171, 186), (204, 205), (207, 208), (212, 213), (216, 217), (221, 222), (228, 229), (230, 231), (232, 233), (244, 245), (245, 246), (245, 273), (261, 262), (261, 264), (265, 266), (265, 267), (275, 279), (279, 280), (279, 284), (286, 287), (288, 294), (302, 303), (303, 299), (303, 304), (308, 299), (317, 321), (328, 338), (340, 345), (346, 347), (346, 353), (355, 356), (356, 357), (356, 359), (365, 366), (366, 367), (366, 369), (369, 370), (369, 371), (386, 387), (396, 397), (403, 406), (406, 407), (412, 419), (419, 420), (433, 451), (434, 435), (448, 449), (451, 452), (453, 454), (453, 456), (456, 457), (467, 126), (468, 469), (469, 470), (469, 477), (471, 472), (471, 474), (480, 481)]\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/api.py",
+        "symbol": "_config",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 0.6857142857142857,
+      "coverage": {
+        "score": 0.6857142857142857,
+        "statement_gain": 0.7142857142857143,
+        "branch_gain": 0.6666666666666666,
+        "statement_coverage": 0.7142857142857143,
+        "branch_coverage": 0.6666666666666666,
+        "covered_statements": 5,
+        "num_statements": 7,
+        "covered_branches": 4,
+        "num_branches": 6,
+        "gained_lines": [
+          644,
+          651,
+          652,
+          658,
+          660
+        ],
+        "gained_branches": [
+          [
+            644,
+            651
+          ],
+          [
+            651,
+            652
+          ],
+          [
+            651,
+            660
+          ],
+          [
+            652,
+            658
+          ]
+        ],
+        "remaining_lines": [
+          649,
+          653
+        ],
+        "remaining_branches": [
+          [
+            644,
+            649
+          ],
+          [
+            652,
+            653
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 0.6857\nStatement gain: 5 newly covered; 2 remain.\nBranch gain: 4 newly covered; 2 remain.\nRemaining lines: [649, 653]\nRemaining branches: [(644, 649), (652, 653)]\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/api.py",
+        "symbol": "find_imports_in_stream",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 17,
+        "num_statements": 17,
+        "covered_branches": 14,
+        "num_branches": 14,
+        "gained_lines": [
+          556,
+          557,
+          560,
+          561,
+          563,
+          564,
+          565,
+          566,
+          567,
+          568,
+          569,
+          570,
+          571,
+          572,
+          574,
+          575,
+          576
+        ],
+        "gained_branches": [
+          [
+            560,
+            561
+          ],
+          [
+            560,
+            563
+          ],
+          [
+            564,
+            -537
+          ],
+          [
+            564,
+            565
+          ],
+          [
+            565,
+            566
+          ],
+          [
+            565,
+            567
+          ],
+          [
+            567,
+            568
+          ],
+          [
+            567,
+            569
+          ],
+          [
+            569,
+            570
+          ],
+          [
+            569,
+            571
+          ],
+          [
+            571,
+            572
+          ],
+          [
+            574,
+            564
+          ],
+          [
+            574,
+            575
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 1.0000\nStatement gain: 17 newly covered; 0 remain.\nBranch gain: 13 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/settings.py",
+        "symbol": "Config.is_skipped",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 0.4306451612903226,
+      "coverage": {
+        "score": 0.4306451612903226,
+        "statement_gain": 0.45161290322580644,
+        "branch_gain": 0.4166666666666667,
+        "statement_coverage": 0.45161290322580644,
+        "branch_coverage": 0.4166666666666667,
+        "covered_statements": 14,
+        "num_statements": 31,
+        "covered_branches": 10,
+        "num_branches": 24,
+        "gained_lines": [
+          582,
+          583,
+          587,
+          589,
+          590,
+          593,
+          594,
+          599,
+          600,
+          601,
+          603,
+          605,
+          609,
+          610
+        ],
+        "gained_branches": [
+          [
+            582,
+            583
+          ],
+          [
+            590,
+            593
+          ],
+          [
+            593,
+            594
+          ],
+          [
+            593,
+            599
+          ],
+          [
+            594,
+            593
+          ],
+          [
+            600,
+            601
+          ],
+          [
+            600,
+            605
+          ],
+          [
+            601,
+            603
+          ],
+          [
+            605,
+            609
+          ],
+          [
+            609,
+            610
+          ]
+        ],
+        "remaining_lines": [
+          585,
+          591,
+          597,
+          602,
+          606,
+          607,
+          612,
+          616,
+          618,
+          619,
+          620,
+          621,
+          622,
+          624,
+          628,
+          633,
+          635
+        ],
+        "remaining_branches": [
+          [
+            582,
+            585
+          ],
+          [
+            590,
+            591
+          ],
+          [
+            594,
+            597
+          ],
+          [
+            601,
+            602
+          ],
+          [
+            605,
+            606
+          ],
+          [
+            606,
+            605
+          ],
+          [
+            606,
+            607
+          ],
+          [
+            609,
+            612
+          ],
+          [
+            619,
+            620
+          ],
+          [
+            619,
+            624
+          ],
+          [
+            620,
+            619
+          ],
+          [
+            620,
+            621
+          ],
+          [
+            628,
+            633
+          ],
+          [
+            628,
+            635
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 0.4306\nStatement gain: 14 newly covered; 17 remain.\nBranch gain: 10 newly covered; 14 remain.\nRemaining lines: [585, 591, 597, 602, 606, 607, 612, 616, 618, 619, 620, 621, 622, 624, 628, 633, 635]\nRemaining branches: [(582, 585), (590, 591), (594, 597), (601, 602), (605, 606), (606, 605), (606, 607), (609, 612), (619, 620), (619, 624), (620, 619), (620, 621), (628, 633), (628, 635)]\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/main.py",
+        "symbol": "_preconvert",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 9,
+        "num_statements": 9,
+        "covered_branches": 8,
+        "num_branches": 8,
+        "gained_lines": [
+          964,
+          965,
+          966,
+          967,
+          968,
+          969,
+          970,
+          971,
+          972
+        ],
+        "gained_branches": [
+          [
+            964,
+            965
+          ],
+          [
+            964,
+            966
+          ],
+          [
+            966,
+            967
+          ],
+          [
+            966,
+            968
+          ],
+          [
+            968,
+            969
+          ],
+          [
+            968,
+            970
+          ],
+          [
+            970,
+            971
+          ],
+          [
+            970,
+            972
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 1.0000\nStatement gain: 9 newly covered; 0 remain.\nBranch gain: 8 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/hooks.py",
+        "symbol": "git_hook",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 0.9571428571428572,
+      "coverage": {
+        "score": 0.9571428571428572,
+        "statement_gain": 1.0,
+        "branch_gain": 0.9285714285714286,
+        "statement_coverage": 1.0,
+        "branch_coverage": 0.9285714285714286,
+        "covered_statements": 20,
+        "num_statements": 20,
+        "covered_branches": 13,
+        "num_branches": 14,
+        "gained_lines": [
+          62,
+          63,
+          64,
+          65,
+          66,
+          68,
+          69,
+          70,
+          72,
+          73,
+          77,
+          78,
+          80,
+          81,
+          83,
+          84,
+          87,
+          88,
+          89,
+          93
+        ],
+        "gained_branches": [
+          [
+            63,
+            64
+          ],
+          [
+            63,
+            65
+          ],
+          [
+            65,
+            66
+          ],
+          [
+            65,
+            68
+          ],
+          [
+            69,
+            70
+          ],
+          [
+            69,
+            72
+          ],
+          [
+            77,
+            78
+          ],
+          [
+            77,
+            93
+          ],
+          [
+            78,
+            77
+          ],
+          [
+            78,
+            80
+          ],
+          [
+            84,
+            87
+          ],
+          [
+            88,
+            77
+          ],
+          [
+            88,
+            89
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [
+          [
+            84,
+            77
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 0.9571\nStatement gain: 20 newly covered; 0 remain.\nBranch gain: 13 newly covered; 1 remain.\nRemaining lines: []\nRemaining branches: [(84, 77)]\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/main.py",
+        "symbol": "identify_imports_main",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 23,
+        "num_statements": 23,
+        "covered_branches": 10,
+        "num_branches": 10,
+        "gained_lines": [
+          978,
+          982,
+          985,
+          992,
+          993,
+          1000,
+          1001,
+          1007,
+          1015,
+          1023,
+          1032,
+          1034,
+          1035,
+          1036,
+          1043,
+          1050,
+          1051,
+          1052,
+          1053,
+          1054,
+          1055,
+          1056,
+          1058
+        ],
+        "gained_branches": [
+          [
+            1035,
+            1036
+          ],
+          [
+            1035,
+            1043
+          ],
+          [
+            1050,
+            -975
+          ],
+          [
+            1050,
+            1051
+          ],
+          [
+            1051,
+            1052
+          ],
+          [
+            1051,
+            1053
+          ],
+          [
+            1053,
+            1054
+          ],
+          [
+            1053,
+            1055
+          ],
+          [
+            1055,
+            1056
+          ],
+          [
+            1055,
+            1058
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 1.0000\nStatement gain: 23 newly covered; 0 remain.\nBranch gain: 10 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/literal.py",
+        "symbol": "assignment",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 20,
+        "num_statements": 20,
+        "covered_branches": 8,
+        "num_branches": 8,
+        "gained_lines": [
+          43,
+          44,
+          45,
+          46,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          59,
+          60,
+          61,
+          63,
+          64,
+          65,
+          66,
+          70,
+          71
+        ],
+        "gained_branches": [
+          [
+            43,
+            44
+          ],
+          [
+            43,
+            45
+          ],
+          [
+            45,
+            46
+          ],
+          [
+            45,
+            51
+          ],
+          [
+            60,
+            61
+          ],
+          [
+            60,
+            63
+          ],
+          [
+            65,
+            66
+          ],
+          [
+            65,
+            70
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 1.0000\nStatement gain: 20 newly covered; 0 remain.\nBranch gain: 8 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/files.py",
+        "symbol": "find",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 0.24523809523809523,
+      "coverage": {
+        "score": 0.24523809523809523,
+        "statement_gain": 0.23809523809523808,
+        "branch_gain": 0.25,
+        "statement_coverage": 0.23809523809523808,
+        "branch_coverage": 0.25,
+        "covered_statements": 5,
+        "num_statements": 21,
+        "covered_branches": 4,
+        "num_branches": 16,
+        "gained_lines": [
+          12,
+          14,
+          15,
+          38,
+          41
+        ],
+        "gained_branches": [
+          [
+            14,
+            -8
+          ],
+          [
+            14,
+            15
+          ],
+          [
+            15,
+            38
+          ],
+          [
+            38,
+            41
+          ]
+        ],
+        "remaining_lines": [
+          16,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          29,
+          31,
+          32,
+          33,
+          34,
+          35,
+          37,
+          39
+        ],
+        "remaining_branches": [
+          [
+            15,
+            16
+          ],
+          [
+            16,
+            14
+          ],
+          [
+            16,
+            19
+          ],
+          [
+            20,
+            21
+          ],
+          [
+            20,
+            31
+          ],
+          [
+            31,
+            16
+          ],
+          [
+            31,
+            32
+          ],
+          [
+            33,
+            31
+          ],
+          [
+            33,
+            34
+          ],
+          [
+            34,
+            35
+          ],
+          [
+            34,
+            37
+          ],
+          [
+            38,
+            39
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 0.2452\nStatement gain: 5 newly covered; 16 remain.\nBranch gain: 4 newly covered; 12 remain.\nRemaining lines: [16, 19, 20, 21, 22, 23, 24, 25, 29, 31, 32, 33, 34, 35, 37, 39]\nRemaining branches: [(15, 16), (16, 14), (16, 19), (20, 21), (20, 31), (31, 16), (31, 32), (33, 31), (33, 34), (34, 35), (34, 37), (38, 39)]\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/parse.py",
+        "symbol": "file_contents",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 0.6707942636514065,
+      "coverage": {
+        "score": 0.6707942636514065,
+        "statement_gain": 0.6938775510204082,
+        "branch_gain": 0.6554054054054054,
+        "statement_coverage": 0.6938775510204082,
+        "branch_coverage": 0.6688311688311688,
+        "covered_statements": 170,
+        "num_statements": 245,
+        "covered_branches": 103,
+        "num_branches": 154,
+        "gained_lines": [
+          146,
+          147,
+          148,
+          149,
+          151,
+          152,
+          153,
+          158,
+          160,
+          162,
+          163,
+          164,
+          168,
+          169,
+          171,
+          172,
+          173,
+          180,
+          182,
+          183,
+          184,
+          185,
+          186,
+          187,
+          188,
+          189,
+          193,
+          200,
+          201,
+          202,
+          203,
+          204,
+          209,
+          213,
+          214,
+          223,
+          228,
+          229,
+          257,
+          258,
+          261,
+          262,
+          263,
+          265,
+          266,
+          267,
+          268,
+          269,
+          270,
+          271,
+          273,
+          274,
+          275,
+          276,
+          277,
+          278,
+          279,
+          282,
+          283,
+          284,
+          285,
+          286,
+          287,
+          288,
+          289,
+          295,
+          296,
+          297,
+          299,
+          300,
+          301,
+          302,
+          303,
+          307,
+          339,
+          340,
+          347,
+          352,
+          354,
+          356,
+          361,
+          365,
+          370,
+          371,
+          373,
+          374,
+          378,
+          383,
+          384,
+          385,
+          386,
+          387,
+          388,
+          389,
+          390,
+          391,
+          392,
+          393,
+          394,
+          395,
+          396,
+          397,
+          398,
+          399,
+          400,
+          402,
+          403,
+          405,
+          406,
+          407,
+          414,
+          415,
+          416,
+          418,
+          419,
+          421,
+          422,
+          427,
+          430,
+          437,
+          439,
+          440,
+          441,
+          442,
+          443,
+          445,
+          449,
+          456,
+          459,
+          460,
+          461,
+          462,
+          463,
+          466,
+          467,
+          468,
+          483,
+          486,
+          487,
+          488,
+          509,
+          510,
+          519,
+          522,
+          527,
+          529,
+          533,
+          534,
+          538,
+          539,
+          540,
+          549,
+          552,
+          553,
+          556,
+          557,
+          560,
+          561,
+          562,
+          564,
+          565,
+          568,
+          569,
+          574,
+          576,
+          577,
+          579,
+          582,
+          584,
+          586
+        ],
+        "gained_branches": [
+          [
+            148,
+            149
+          ],
+          [
+            148,
+            151
+          ],
+          [
+            153,
+            158
+          ],
+          [
+            171,
+            172
+          ],
+          [
+            171,
+            173
+          ],
+          [
+            185,
+            186
+          ],
+          [
+            185,
+            584
+          ],
+          [
+            193,
+            200
+          ],
+          [
+            200,
+            201
+          ],
+          [
+            200,
+            204
+          ],
+          [
+            204,
+            209
+          ],
+          [
+            209,
+            213
+          ],
+          [
+            214,
+            223
+          ],
+          [
+            214,
+            257
+          ],
+          [
+            223,
+            228
+          ],
+          [
+            229,
+            257
+          ],
+          [
+            258,
+            261
+          ],
+          [
+            262,
+            263
+          ],
+          [
+            262,
+            265
+          ],
+          [
+            265,
+            185
+          ],
+          [
+            265,
+            266
+          ],
+          [
+            269,
+            270
+          ],
+          [
+            269,
+            273
+          ],
+          [
+            273,
+            274
+          ],
+          [
+            273,
+            275
+          ],
+          [
+            279,
+            282
+          ],
+          [
+            282,
+            283
+          ],
+          [
+            282,
+            299
+          ],
+          [
+            283,
+            284
+          ],
+          [
+            283,
+            354
+          ],
+          [
+            286,
+            287
+          ],
+          [
+            286,
+            288
+          ],
+          [
+            289,
+            295
+          ],
+          [
+            289,
+            296
+          ],
+          [
+            299,
+            300
+          ],
+          [
+            299,
+            354
+          ],
+          [
+            303,
+            307
+          ],
+          [
+            307,
+            339
+          ],
+          [
+            340,
+            347
+          ],
+          [
+            347,
+            352
+          ],
+          [
+            354,
+            356
+          ],
+          [
+            354,
+            378
+          ],
+          [
+            361,
+            365
+          ],
+          [
+            365,
+            370
+          ],
+          [
+            387,
+            388
+          ],
+          [
+            387,
+            439
+          ],
+          [
+            389,
+            390
+          ],
+          [
+            389,
+            439
+          ],
+          [
+            392,
+            393
+          ],
+          [
+            392,
+            414
+          ],
+          [
+            400,
+            402
+          ],
+          [
+            402,
+            403
+          ],
+          [
+            407,
+            421
+          ],
+          [
+            416,
+            418
+          ],
+          [
+            418,
+            419
+          ],
+          [
+            421,
+            422
+          ],
+          [
+            421,
+            437
+          ],
+          [
+            422,
+            427
+          ],
+          [
+            427,
+            430
+          ],
+          [
+            439,
+            440
+          ],
+          [
+            439,
+            529
+          ],
+          [
+            442,
+            443
+          ],
+          [
+            442,
+            445
+          ],
+          [
+            445,
+            449
+          ],
+          [
+            449,
+            456
+          ],
+          [
+            456,
+            459
+          ],
+          [
+            460,
+            461
+          ],
+          [
+            460,
+            468
+          ],
+          [
+            462,
+            460
+          ],
+          [
+            462,
+            463
+          ],
+          [
+            466,
+            467
+          ],
+          [
+            468,
+            483
+          ],
+          [
+            483,
+            486
+          ],
+          [
+            486,
+            487
+          ],
+          [
+            509,
+            510
+          ],
+          [
+            519,
+            522
+          ],
+          [
+            522,
+            265
+          ],
+          [
+            522,
+            527
+          ],
+          [
+            529,
+            533
+          ],
+          [
+            533,
+            265
+          ],
+          [
+            533,
+            534
+          ],
+          [
+            534,
+            538
+          ],
+          [
+            538,
+            539
+          ],
+          [
+            538,
+            560
+          ],
+          [
+            540,
+            549
+          ],
+          [
+            540,
+            556
+          ],
+          [
+            552,
+            553
+          ],
+          [
+            556,
+            557
+          ],
+          [
+            556,
+            560
+          ],
+          [
+            561,
+            562
+          ],
+          [
+            561,
+            564
+          ],
+          [
+            564,
+            565
+          ],
+          [
+            564,
+            568
+          ],
+          [
+            568,
+            569
+          ],
+          [
+            568,
+            576
+          ],
+          [
+            576,
+            577
+          ],
+          [
+            576,
+            579
+          ]
+        ],
+        "remaining_lines": [
+          154,
+          156,
+          196,
+          197,
+          198,
+          205,
+          206,
+          207,
+          210,
+          211,
+          224,
+          225,
+          226,
+          234,
+          236,
+          237,
+          238,
+          239,
+          244,
+          247,
+          248,
+          250,
+          252,
+          253,
+          255,
+          259,
+          280,
+          304,
+          312,
+          313,
+          319,
+          320,
+          321,
+          323,
+          324,
+          325,
+          326,
+          327,
+          328,
+          329,
+          335,
+          336,
+          337,
+          346,
+          350,
+          362,
+          363,
+          366,
+          367,
+          401,
+          408,
+          411,
+          412,
+          417,
+          423,
+          434,
+          446,
+          450,
+          457,
+          474,
+          477,
+          478,
+          481,
+          484,
+          497,
+          500,
+          501,
+          503,
+          514,
+          520,
+          530,
+          531,
+          535,
+          536,
+          555
+        ],
+        "remaining_branches": [
+          [
+            153,
+            154
+          ],
+          [
+            193,
+            196
+          ],
+          [
+            204,
+            205
+          ],
+          [
+            209,
+            210
+          ],
+          [
+            223,
+            224
+          ],
+          [
+            225,
+            226
+          ],
+          [
+            225,
+            257
+          ],
+          [
+            229,
+            234
+          ],
+          [
+            237,
+            238
+          ],
+          [
+            237,
+            257
+          ],
+          [
+            239,
+            244
+          ],
+          [
+            239,
+            250
+          ],
+          [
+            244,
+            247
+          ],
+          [
+            244,
+            252
+          ],
+          [
+            252,
+            253
+          ],
+          [
+            252,
+            255
+          ],
+          [
+            258,
+            259
+          ],
+          [
+            279,
+            280
+          ],
+          [
+            303,
+            304
+          ],
+          [
+            307,
+            312
+          ],
+          [
+            313,
+            319
+          ],
+          [
+            313,
+            320
+          ],
+          [
+            323,
+            324
+          ],
+          [
+            323,
+            339
+          ],
+          [
+            326,
+            327
+          ],
+          [
+            326,
+            328
+          ],
+          [
+            329,
+            335
+          ],
+          [
+            329,
+            336
+          ],
+          [
+            340,
+            346
+          ],
+          [
+            347,
+            350
+          ],
+          [
+            361,
+            362
+          ],
+          [
+            365,
+            366
+          ],
+          [
+            400,
+            401
+          ],
+          [
+            407,
+            408
+          ],
+          [
+            416,
+            417
+          ],
+          [
+            418,
+            421
+          ],
+          [
+            422,
+            423
+          ],
+          [
+            427,
+            434
+          ],
+          [
+            445,
+            446
+          ],
+          [
+            449,
+            450
+          ],
+          [
+            456,
+            457
+          ],
+          [
+            468,
+            474
+          ],
+          [
+            483,
+            484
+          ],
+          [
+            486,
+            509
+          ],
+          [
+            500,
+            501
+          ],
+          [
+            500,
+            503
+          ],
+          [
+            509,
+            514
+          ],
+          [
+            519,
+            520
+          ],
+          [
+            529,
+            530
+          ],
+          [
+            534,
+            535
+          ],
+          [
+            552,
+            555
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 0.6708\nStatement gain: 170 newly covered; 75 remain.\nBranch gain: 97 newly covered; 51 remain.\nRemaining lines: [154, 156, 196, 197, 198, 205, 206, 207, 210, 211, 224, 225, 226, 234, 236, 237, 238, 239, 244, 247, 248, 250, 252, 253, 255, 259, 280, 304, 312, 313, 319, 320, 321, 323, 324, 325, 326, 327, 328, 329, 335, 336, 337, 346, 350, 362, 363, 366, 367, 401, 408, 411, 412, 417, 423, 434, 446, 450, 457, 474, 477, 478, 481, 484, 497, 500, 501, 503, 514, 520, 530, 531, 535, 536, 555]\nRemaining branches: [(153, 154), (193, 196), (204, 205), (209, 210), (223, 224), (225, 226), (225, 257), (229, 234), (237, 238), (237, 257), (239, 244), (239, 250), (244, 247), (244, 252), (252, 253), (252, 255), (258, 259), (279, 280), (303, 304), (307, 312), (313, 319), (313, 320), (323, 324), (323, 339), (326, 327), (326, 328), (329, 335), (329, 336), (340, 346), (347, 350), (361, 362), (365, 366), (400, 401), (407, 408), (416, 417), (418, 421), (422, 423), (427, 434), (445, 446), (449, 450), (456, 457), (468, 474), (483, 484), (486, 509), (500, 501), (500, 503), (509, 514), (519, 520), (529, 530), (534, 535), (552, 555)]\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    },
+    {
+      "prompt_digest": "00c21ccf4377ef89",
+      "evaluation_digest": "e500565777c3",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/settings.py",
+        "symbol": "Config.sorting_function",
+        "split": "train"
+      },
+      "run_id": "isort-train-batch-f1babcfd",
+      "score": 0.9400000000000001,
+      "coverage": {
+        "score": 0.9400000000000001,
+        "statement_gain": 1.0,
+        "branch_gain": 0.9,
+        "statement_coverage": 1.0,
+        "branch_coverage": 0.9,
+        "covered_statements": 14,
+        "num_statements": 14,
+        "covered_branches": 9,
+        "num_branches": 10,
+        "gained_lines": [
+          695,
+          696,
+          698,
+          699,
+          700,
+          701,
+          703,
+          704,
+          705,
+          706,
+          707,
+          708,
+          710,
+          712
+        ],
+        "gained_branches": [
+          [
+            695,
+            696
+          ],
+          [
+            695,
+            698
+          ],
+          [
+            698,
+            699
+          ],
+          [
+            698,
+            700
+          ],
+          [
+            700,
+            701
+          ],
+          [
+            700,
+            703
+          ],
+          [
+            704,
+            705
+          ],
+          [
+            704,
+            710
+          ],
+          [
+            706,
+            707
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [
+          [
+            706,
+            704
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 0.9400\nStatement gain: 14 newly covered; 0 remain.\nBranch gain: 9 newly covered; 1 remain.\nRemaining lines: []\nRemaining branches: [(706, 704)]\nTarget each remaining branch with a distinct input and a meaningful assertion."
+    }
+  ],
+  "aggregate": {
+    "score": 0.7100234720592218,
+    "statement_coverage": 0.7318768619662364,
+    "branch_coverage": 0.6954545454545454,
+    "covered_statements": 737,
+    "num_statements": 1007,
+    "covered_branches": 459,
+    "num_branches": 660
+  }
+}

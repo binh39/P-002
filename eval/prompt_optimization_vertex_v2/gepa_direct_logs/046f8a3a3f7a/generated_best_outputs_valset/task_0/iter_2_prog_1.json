@@ -1,0 +1,13 @@
+{
+    "target": {
+        "project": "isort",
+        "source_file": "isort/api.py",
+        "symbol": "sort_stream",
+        "split": "validation"
+    },
+    "weighted_score": 0.6049450549450549,
+    "raw_symbol_score": 0.9414473684210527,
+    "replicate_scores": [
+        0.9414473684210527
+    ]
+}

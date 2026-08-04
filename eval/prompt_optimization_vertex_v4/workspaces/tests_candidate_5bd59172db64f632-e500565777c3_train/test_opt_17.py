@@ -1,0 +1,31 @@
+# file: src\sample_repo\isort\isort\files.py:8-41
+# asked: {"lines": [8, 9, 10, 12, 14, 15, 16, 17, 19, 20, 21, 22, 23, 24, 25, 27, 28, 29, 31, 32, 33, 34, 35, 37, 38, 39, 41], "branches": [[14, 0], [14, 15], [15, 16], [15, 38], [16, 14], [16, 19], [20, 21], [20, 31], [23, 24], [23, 27], [27, 28], [27, 29], [31, 16], [31, 32], [33, 31], [33, 34], [34, 35], [34, 37], [38, 39], [38, 41]]}
+# gained: {"lines": [8], "branches": []}
+
+import os
+from pathlib import Path
+from isort.files import find
+from isort.settings import Config
+
+
+
+
+def test_find_symlink_visited_dirs(tmp_path: Path):
+    # Setup directory structure to test resolved_path in visited_dirs (symlink loop or alias)
+    real_dir = tmp_path / "real_dir"
+    real_dir.mkdir()
+    (real_dir / "test.py").write_text("pass")
+
+    sym_dir = tmp_path / "sym_dir"
+    try:
+        os.symlink(real_dir, sym_dir, target_is_directory=True)
+    except OSError:
+        # If symlinks are not supported on the OS (e.g. Windows without admin privileges), skip or pass
+        return
+
+    config = Config(follow_links=True)
+    skipped: list[str] = []
+    broken: list[str] = []
+
+    results = list(find([str(sym_dir)], config, skipped, broken))
+    assert len(results) >= 1

@@ -590,6 +590,23 @@ python -m src.optimization.cli `
   --prompt eval/prompt_optimization/prompts/gpt_v2_baseline.json `
   --max-metric-calls 50
 
+## UI strategy contract
+
+The web experiment uses exactly two strategies:
+
+1. `coverup`: the unchanged three-component bundle from
+   `eval/prompt_optimization/prompts/gpt_v2_baseline.json`.
+2. `gepa`: the bundle produced by optimizing those same three components.
+
+The baseline path is fixed in the UI. GEPA stops only when the configured
+metric-call budget is exhausted or its built-in stopping logic fires; the UI
+does not impose a fixed iteration count.
+The UI evaluates both strategies on the same validation targets and does not
+include zero-shot, static SymPrompt, or BootstrapFewShot in this comparison.
+The active score uses valid test execution, statement coverage, and branch
+coverage. Mutation testing is not run and mutation score is not exposed by the
+experiment API or UI.
+
 
 ## Không được xóa
   python -m src.optimization.cli `

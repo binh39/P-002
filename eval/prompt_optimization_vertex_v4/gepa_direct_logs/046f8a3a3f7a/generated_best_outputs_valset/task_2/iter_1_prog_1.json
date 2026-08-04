@@ -1,0 +1,13 @@
+{
+    "target": {
+        "project": "isort",
+        "source_file": "isort/settings.py",
+        "symbol": "_get_config_data",
+        "split": "validation"
+    },
+    "weighted_score": 1.4087912087912087,
+    "raw_symbol_score": 0.915878787878788,
+    "replicate_scores": [
+        0.915878787878788
+    ]
+}

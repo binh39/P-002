@@ -1,0 +1,13 @@
+{
+    "target": {
+        "project": "isort",
+        "source_file": "isort/sorting.py",
+        "symbol": "module_key",
+        "split": "train"
+    },
+    "weighted_score": 0.6573530739369866,
+    "raw_symbol_score": 1.0,
+    "replicate_scores": [
+        1.0
+    ]
+}

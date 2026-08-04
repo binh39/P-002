@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Generator
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
@@ -15,6 +18,9 @@ from db.models import PromptStatus
 from db.schemas import CandidateCreate, ExperimentCreate
 from harness.models import HarnessResult
 from src.main import app
+from src.optimization.models import SymbolTarget
+from src.optimization.prompts import PromptBundle
+from src.services.experiments import execute_experiment
 
 
 @pytest_asyncio.fixture
@@ -42,7 +48,7 @@ async def database(tmp_path):
 def experiment_payload():
     return {
         "name": "isort optimization",
-        "baseline_prompt": "Write focused pytest tests.",
+        "baseline_prompt": "eval/prompt_optimization/prompts/gpt_v2_baseline.json",
         "module_path": "src/sample_repo/isort/isort",
         "dataset_path": "eval/prompt_optimization/datasets/isort_symbols.jsonl",
         "source_root": "src/sample_repo/isort",
@@ -76,6 +82,86 @@ async def test_experiment_api_create_list_and_schedule(
     assert scheduled == [experiment["id"]]
 
 
+def test_ui_experiment_compares_coverup_bundle_with_gepa(
+    database,
+    monkeypatch,
+):
+    with database() as session:
+        experiment = create_experiment(
+            session,
+            ExperimentCreate.model_validate(experiment_payload()),
+        )
+        experiment_id = experiment.id
+
+    baseline = PromptBundle.load(
+        Path("eval/prompt_optimization/prompts/gpt_v2_baseline.json")
+    )
+    optimized_bundle = PromptBundle(
+        initial=baseline.initial + "\nPrefer boundary cases.",
+        error=baseline.error,
+        missing_coverage=baseline.missing_coverage,
+    )
+    target = SymbolTarget("isort", "isort/api.py", "sort_file", "validation")
+    captured = {}
+
+    monkeypatch.setattr("src.services.experiments.SessionLocal", database)
+    monkeypatch.setattr(
+        "src.services.experiments.resolve_model_provider",
+        lambda: SimpleNamespace(
+            generation_model="openai/gpt-4o-mini",
+            optimization_model="openai/gpt-4o-mini",
+        ),
+    )
+    monkeypatch.setattr("src.services.experiments.dspy.LM", lambda *a, **k: object())
+    monkeypatch.setattr("src.services.experiments.PromptBundle.save", lambda *a: None)
+    monkeypatch.setattr(
+        "src.services.experiments.load_targets",
+        lambda path, split: [
+            SymbolTarget("isort", "isort/api.py", "sort_file", split)
+        ],
+    )
+
+    def fake_optimize(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(best_bundle=optimized_bundle)
+
+    def fake_evaluate(runner, targets, bundle, *args, **kwargs):
+        score = 0.4 if bundle == baseline else 0.8
+        return {
+            "aggregate": {
+                "score": score,
+                "statement_coverage": score,
+                "branch_coverage": score,
+            },
+            "results": [
+                {
+                    "target": target.__dict__,
+                    "coverage": {"valid": True},
+                    "score": score,
+                }
+            ],
+        }
+
+    monkeypatch.setattr("src.services.experiments.optimize", fake_optimize)
+    monkeypatch.setattr(
+        "src.services.experiments.evaluate_bundle_repeated", fake_evaluate
+    )
+
+    execute_experiment(experiment_id)
+
+    assert captured["baseline"] == baseline
+    assert captured["max_metric_calls"] == 300
+    assert "max_iterations" not in captured
+    with database() as session:
+        stored = session.get(type(experiment), experiment_id)
+        assert stored.status == PromptStatus.IN_REVIEW
+        candidates = list(stored.candidates)
+        assert len(candidates) == 2
+        payloads = [json.loads(candidate.prompt_text) for candidate in candidates]
+        assert [payload["strategy"] for payload in payloads] == ["coverup", "gepa"]
+        assert [candidate.fitness_score for candidate in candidates] == [0.4, 0.8]
+
+
 @pytest.mark.asyncio
 async def test_candidate_approval_is_persisted_once(client, database):
     with database() as session:
@@ -89,7 +175,6 @@ async def test_candidate_approval_is_persisted_once(client, database):
             CandidateCreate(
                 prompt_text="candidate",
                 fitness_score=0.7,
-                mutation_score=0.6,
             ),
         )
         candidate_id = candidate.id
@@ -123,8 +208,8 @@ async def test_pareto_endpoint_returns_only_nondominated_candidates(client, data
             experiment.id,
             CandidateCreate(
                 prompt_text="dominated",
-                mutation_score=0.4,
-                cost_usd=1.0,
+                fitness_score=0.4,
+                latency_seconds=10.0,
             ),
         )
         best = create_candidate(
@@ -132,8 +217,8 @@ async def test_pareto_endpoint_returns_only_nondominated_candidates(client, data
             experiment.id,
             CandidateCreate(
                 prompt_text="frontier",
-                mutation_score=0.8,
-                cost_usd=0.5,
+                fitness_score=0.8,
+                latency_seconds=5.0,
             ),
         )
 
@@ -145,18 +230,18 @@ async def test_pareto_endpoint_returns_only_nondominated_candidates(client, data
 
 def test_pareto_keeps_tradeoff_points():
     candidates = [
-        {"id": "cheap", "mutation": 0.6, "cost": 0.1},
-        {"id": "strong", "mutation": 0.9, "cost": 1.0},
-        {"id": "dominated", "mutation": 0.5, "cost": 1.5},
+        {"id": "fast", "coverage": 0.6, "latency": 0.1},
+        {"id": "strong", "coverage": 0.9, "latency": 1.0},
+        {"id": "dominated", "coverage": 0.5, "latency": 1.5},
     ]
 
     frontier = compute_pareto_frontier(
         candidates,
-        maximize=["mutation"],
-        minimize=["cost"],
+        maximize=["coverage"],
+        minimize=["latency"],
     )
 
-    assert {candidate["id"] for candidate in frontier} == {"cheap", "strong"}
+    assert {candidate["id"] for candidate in frontier} == {"fast", "strong"}
 
 
 def test_explanation_calls_out_measured_regression():
@@ -186,4 +271,5 @@ def test_explanation_calls_out_measured_regression():
     explanation = generate_explanation(baseline, candidate)
 
     assert "Pass rate: 100% → 50% (-50%)" in explanation
-    assert "Regression—new surviving mutant lines: [20]" in explanation
+    assert "Branch coverage" in explanation
+    assert "Mutation" not in explanation

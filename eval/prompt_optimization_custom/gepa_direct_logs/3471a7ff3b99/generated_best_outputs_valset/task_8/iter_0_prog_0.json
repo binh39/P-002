@@ -1,0 +1,13 @@
+{
+    "target": {
+        "project": "isort",
+        "source_file": "isort/parse.py",
+        "symbol": "skip_line",
+        "split": "validation"
+    },
+    "weighted_score": 0.5604395604395604,
+    "raw_symbol_score": 0.8932806324110671,
+    "replicate_scores": [
+        0.8932806324110671
+    ]
+}

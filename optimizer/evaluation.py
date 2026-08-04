@@ -14,7 +14,6 @@ class ModuleEvaluation:
     pass_rate: float
     statement_coverage: float
     branch_coverage: float
-    mutation_score: float
     latency_seconds: float
     per_example: list[dict[str, Any]]
 
@@ -36,15 +35,10 @@ def evaluate_module(module: Any, examples: Sequence[Any]) -> ModuleEvaluation:
             existing_tests=example.existing_tests,
             coverage_feedback=example.coverage_feedback,
         )
-        harness_kwargs: dict[str, Any] = {}
-        if mutation_target := getattr(example, "source_path", None):
-            harness_kwargs["mutation_target"] = mutation_target
-        if mutation_symbol := getattr(example, "symbol", None):
-            harness_kwargs["mutation_symbol"] = mutation_symbol
         result = run_harness_on(
             example.module_path,
             prediction.test_code,
-            **harness_kwargs,
+            run_mutation=False,
         )
         rows.append(
             {
@@ -62,7 +56,6 @@ def evaluate_module(module: Any, examples: Sequence[Any]) -> ModuleEvaluation:
         pass_rate=mean("pass_rate"),
         statement_coverage=mean("statement_coverage"),
         branch_coverage=mean("branch_coverage"),
-        mutation_score=mean("mutation_score"),
         latency_seconds=time.monotonic() - started,
         per_example=rows,
     )

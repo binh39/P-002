@@ -21,7 +21,6 @@ type Candidate = {
   pass_rate: number;
   statement_coverage: number;
   branch_coverage: number;
-  mutation_score: number;
   cost_usd: number;
   latency_seconds: number;
   status: string;
@@ -30,7 +29,7 @@ type Candidate = {
 const initialForm = {
   name: "isort prompt optimization",
   baseline_prompt:
-    "Generate focused, deterministic pytest tests for uncovered execution paths.",
+    "eval/prompt_optimization/prompts/gpt_v2_baseline.json",
   module_path: "src/sample_repo/isort/isort",
   dataset_path: "eval/prompt_optimization/datasets/isort_symbols.jsonl",
   source_root: "src/sample_repo/isort",
@@ -44,6 +43,10 @@ function percent(value: number) {
 function signedPercent(value: number) {
   const rounded = Math.round(value * 100);
   return `${rounded >= 0 ? "+" : ""}${rounded}%`;
+}
+
+function strategyName(candidate: Candidate) {
+  return candidate.generation === 0 ? "CoverUp baseline" : "GEPA optimized";
 }
 
 export default function Home() {
@@ -73,14 +76,11 @@ export default function Home() {
   const regressionMetrics = useMemo(() => {
     if (!best || !baseline || best.id === baseline.id) return [];
     return [
-      ["Pass rate", best.pass_rate - baseline.pass_rate],
+      ["Valid targets", best.pass_rate - baseline.pass_rate],
       ["Statement coverage", best.statement_coverage - baseline.statement_coverage],
       ["Branch coverage", best.branch_coverage - baseline.branch_coverage],
-      ["Mutation score", best.mutation_score - baseline.mutation_score],
     ].filter(([, delta]) => Number(delta) < 0);
   }, [best, baseline]);
-  const maxCost = Math.max(0.01, ...candidates.map((item) => item.cost_usd));
-
   async function request<T>(path: string, options?: RequestInit): Promise<T> {
     const response = await fetch(`${API_BASE}${path}`, {
       ...options,
@@ -151,7 +151,7 @@ export default function Home() {
         method: "POST",
         body: JSON.stringify({ reviewer_id: reviewer, comment }),
       });
-      setMessage("Candidate approved and recorded in the review log.");
+      setMessage("Strategy approved and recorded in the review log.");
       await refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to approve.");
@@ -175,17 +175,17 @@ export default function Home() {
 
       <section className="hero">
         <div>
-          <p className="kicker">GEPA × PYTEST × MUTATION TESTING</p>
-          <h2>Move prompts from intuition to evidence.</h2>
+          <p className="kicker">COVERUP BASELINE × GEPA OPTIMIZATION</p>
+          <h2>Compare one baseline with one optimized strategy.</h2>
           <p className="heroCopy">
-            Create a controlled experiment, inspect the Pareto trade-off, and
-            approve only candidates that survive runtime checks.
+            Run the fixed CoverUp prompt bundle, compare it with the GEPA-optimized
+            bundle, and approve only a strategy supported by execution evidence.
           </p>
         </div>
         <div className="heroStats" aria-label="Experiment summary">
-          <div><strong>{candidates.length}</strong><span>Candidates</span></div>
-          <div><strong>{best ? percent(best.mutation_score) : "—"}</strong><span>Best mutation</span></div>
-          <div><strong>${best?.cost_usd.toFixed(3) ?? "—"}</strong><span>Best cost</span></div>
+          <div><strong>{candidates.length}</strong><span>Strategies</span></div>
+          <div><strong>{best ? percent(best.fitness_score) : "—"}</strong><span>Best score</span></div>
+          <div><strong>{best ? percent(best.branch_coverage) : "—"}</strong><span>Best branch</span></div>
         </div>
       </section>
 
@@ -205,15 +205,8 @@ export default function Home() {
               />
             </label>
             <label>
-              Baseline prompt
-              <textarea
-                value={form.baseline_prompt}
-                onChange={(event) =>
-                  setForm({ ...form, baseline_prompt: event.target.value })
-                }
-                rows={5}
-                required
-              />
+              CoverUp baseline prompt file
+              <input value={form.baseline_prompt} readOnly required />
             </label>
             <div className="fieldGrid">
               <label>
@@ -227,17 +220,8 @@ export default function Home() {
                 />
               </label>
               <label>
-                Budget (USD)
-                <input
-                  type="number"
-                  min="0.1"
-                  step="0.1"
-                  value={form.budget_limit}
-                  onChange={(event) =>
-                    setForm({ ...form, budget_limit: Number(event.target.value) })
-                  }
-                  required
-                />
+                GEPA metric-call budget
+                <input value="300" readOnly />
               </label>
             </div>
             <details>
@@ -291,26 +275,24 @@ export default function Home() {
           </div>
 
           <div className="paretoHeading">
-            <div><p>PARETO VIEW</p><h4>Mutation score vs. cost</h4></div>
-            <span>{candidates.length} points</span>
+            <div><p>STRATEGY COMPARISON</p><h4>CoverUp baseline vs. GEPA</h4></div>
+            <span>{candidates.length}/2 strategies</span>
           </div>
-          <div className="chart" aria-label="Candidate Pareto scatter plot">
-            <span className="axisY">MUTATION</span>
-            <span className="axisX">COST →</span>
+          <div className="strategyComparison" aria-label="CoverUp and GEPA comparison">
             {candidates.map((candidate) => (
-              <button
-                className={`plotPoint ${candidate.id === best?.id ? "best" : ""}`}
+              <article
+                className={candidate.id === best?.id ? "strategyCard best" : "strategyCard"}
                 key={candidate.id}
-                style={{
-                  left: `${8 + (candidate.cost_usd / maxCost) * 82}%`,
-                  bottom: `${8 + candidate.mutation_score * 78}%`,
-                }}
-                title={`Gen ${candidate.generation}: ${percent(candidate.mutation_score)} mutation, $${candidate.cost_usd.toFixed(3)}`}
-                aria-label={`Generation ${candidate.generation}, mutation ${percent(candidate.mutation_score)}, cost $${candidate.cost_usd.toFixed(3)}`}
-              />
+              >
+                <strong>{strategyName(candidate)}</strong>
+                <span>Score {percent(candidate.fitness_score)}</span>
+                <span>Statements {percent(candidate.statement_coverage)}</span>
+                <span>Branches {percent(candidate.branch_coverage)}</span>
+                <span>Valid targets {percent(candidate.pass_rate)}</span>
+              </article>
             ))}
             {!candidates.length && (
-              <p className="emptyChart">Candidate measurements appear here.</p>
+              <p className="emptyChart">The two strategy measurements appear here.</p>
             )}
           </div>
         </section>
@@ -319,17 +301,16 @@ export default function Home() {
       <section className="panel reviewPanel">
         <div className="panelHeading">
           <span>03</span>
-          <div><p>HUMAN GATE</p><h3>Review strongest candidate</h3></div>
+          <div><p>HUMAN GATE</p><h3>Review strongest strategy</h3></div>
         </div>
         {best ? (
           <div className="reviewGrid">
             <div className="metricRail">
               {[
                 ["Fitness", best.fitness_score],
-                ["Pass rate", best.pass_rate],
+                ["Valid targets", best.pass_rate],
                 ["Statements", best.statement_coverage],
                 ["Branches", best.branch_coverage],
-                ["Mutation", best.mutation_score],
               ].map(([label, value]) => (
                 <div key={String(label)}>
                   <span>{label}</span>
@@ -339,13 +320,11 @@ export default function Home() {
                       {signedPercent(
                         Number(value) -
                           Number(
-                            label === "Pass rate"
+                            label === "Valid targets"
                               ? baseline.pass_rate
                               : label === "Statements"
                                 ? baseline.statement_coverage
-                                : label === "Branches"
-                                  ? baseline.branch_coverage
-                                  : baseline.mutation_score,
+                                : baseline.branch_coverage,
                           ),
                       )}{" "}
                       vs baseline
@@ -354,7 +333,10 @@ export default function Home() {
                 </div>
               ))}
             </div>
-            <pre>{best.prompt_text}</pre>
+            <div>
+              <h4>{strategyName(best)}</h4>
+              <pre>{best.prompt_text}</pre>
+            </div>
             <div className="approval">
               <div
                 className={`regressionAudit ${
@@ -385,14 +367,14 @@ export default function Home() {
                 <textarea rows={4} value={comment} onChange={(event) => setComment(event.target.value)} />
               </label>
               <button className="approve" disabled={busy || best.status === "APPROVED"} onClick={approve}>
-                {best.status === "APPROVED" ? "Approved" : "Approve candidate"}
+                {best.status === "APPROVED" ? "Approved" : "Approve strategy"}
               </button>
               <p>Approval is always explicit; no candidate deploys itself.</p>
             </div>
           </div>
         ) : (
           <div className="emptyState">
-            <strong>No candidate selected.</strong>
+            <strong>No strategy selected.</strong>
             <span>Run an experiment and refresh the workspace to begin review.</span>
           </div>
         )}

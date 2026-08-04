@@ -1,0 +1,45 @@
+# file: src\sample_repo\isort\isort\main.py:928-959
+# asked: {"lines": [928, 929, 930, 931, 932, 933, 934, 936, 937, 938, 939, 940, 941, 942, 943, 944, 945, 946, 947, 948, 949, 951, 952, 953, 954, 955, 957, 959], "branches": [[931, 932], [931, 936], [932, 931], [932, 933], [938, 939], [938, 940], [940, 941], [940, 943], [943, 944], [943, 946], [946, 947], [946, 952], [948, 949], [948, 951], [953, 954], [953, 959], [954, 955], [954, 957]]}
+# gained: {"lines": [928, 929, 930, 931, 932, 933, 934, 936, 937, 938, 939, 940, 941, 942, 943, 944, 945, 946, 947, 948, 949, 951, 952, 953, 954, 955, 957, 959], "branches": [[931, 932], [931, 936], [932, 931], [932, 933], [938, 939], [938, 940], [940, 941], [940, 943], [943, 944], [943, 946], [946, 947], [946, 952], [948, 949], [948, 951], [953, 954], [953, 959], [954, 955], [954, 957]]}
+
+import pytest
+from isort.main import parse_args, DEPRECATED_SINGLE_DASH_ARGS
+from isort.wrap_modes import WrapModes
+
+def test_parse_args_basic():
+    args = parse_args([])
+    assert isinstance(args, dict)
+
+def test_parse_args_deprecated():
+    # Pick a deprecated arg that acts as a flag or provide an argument value for it if it takes one.
+    # For instance, find one that doesn't expect an argument, or pass a value alongside it.
+    # Let's find a flag-like deprecated argument, or test with a specific one like "-ac" (which is --add-comments / action store_true or similar).
+    # Alternatively, supply a value if needed, e.g., ["-le", "\n"].
+    res = parse_args(["-ac"])
+    assert "remapped_deprecated_args" in res
+
+def test_parse_args_dont_order_by_type():
+    res = parse_args(["--dont-order-by-type"])
+    assert res.get("order_by_type") is False
+    assert "dont_order_by_type" not in res
+
+def test_parse_args_dont_follow_links():
+    res = parse_args(["--dont-follow-links"])
+    assert res.get("follow_links") is False
+    assert "dont_follow_links" not in res
+
+def test_parse_args_dont_float_to_top_else():
+    res = parse_args(["--dont-float-to-top"])
+    assert res.get("float_to_top") is False
+
+def test_parse_args_dont_float_to_top_exit():
+    with pytest.raises(SystemExit):
+        parse_args(["--float-to-top", "--dont-float-to-top"])
+
+def test_parse_args_multi_line_output_digit():
+    res = parse_args(["-m", "3"])
+    assert res.get("multi_line_output") == WrapModes.VERTICAL_HANGING_INDENT
+
+def test_parse_args_multi_line_output_name():
+    res = parse_args(["-m", "VERTICAL_HANGING_INDENT"])
+    assert res.get("multi_line_output") == WrapModes.VERTICAL_HANGING_INDENT

@@ -1,0 +1,76 @@
+# file: src\sample_repo\isort\isort\files.py:8-41
+# asked: {"lines": [8, 9, 10, 12, 14, 15, 16, 17, 19, 20, 21, 22, 23, 24, 25, 27, 28, 29, 31, 32, 33, 34, 35, 37, 38, 39, 41], "branches": [[14, 0], [14, 15], [15, 16], [15, 38], [16, 14], [16, 19], [20, 21], [20, 31], [23, 24], [23, 27], [27, 28], [27, 29], [31, 16], [31, 32], [33, 31], [33, 34], [34, 35], [34, 37], [38, 39], [38, 41]]}
+# gained: {"lines": [8, 12, 14, 15, 16, 17, 19, 20, 21, 22, 23, 24, 25, 27, 29, 31, 32, 33, 34, 35, 37, 38, 39, 41], "branches": [[14, 0], [14, 15], [15, 16], [15, 38], [16, 14], [16, 19], [20, 21], [20, 31], [23, 24], [23, 27], [27, 29], [31, 16], [31, 32], [33, 31], [33, 34], [34, 35], [34, 37], [38, 39], [38, 41]]}
+
+from pathlib import Path
+import os
+import tempfile
+import pytest
+
+from isort.files import find
+from isort.settings import Config
+
+
+def test_find_directory_and_file_cases():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir).resolve()
+        
+        supported_file = tmp_path / "supported.py"
+        supported_file.write_text("print(1)")
+        
+        skipped_file = tmp_path / "skipped_file.py"
+        skipped_file.write_text("print(2)")
+        
+        sub_dir = tmp_path / "sub_dir"
+        sub_dir.mkdir()
+        
+        skipped_dir = sub_dir / "skipped_dir"
+        skipped_dir.mkdir()
+        (skipped_dir / "file.py").write_text("print(3)")
+        
+        normal_sub = sub_dir / "normal_sub"
+        normal_sub.mkdir()
+        supported_sub = normal_sub / "supported_sub.py"
+        supported_sub.write_text("print(4)")
+        
+        unsupported_file = normal_sub / "unsupported.txt"
+        unsupported_file.write_text("text")
+
+        config = Config(
+            skip=[str(skipped_file.name), str(skipped_dir.name)],
+            settings_path=str(tmp_path),
+        )
+
+        skipped = []
+        broken = []
+
+        paths = [str(tmp_path), str(tmp_path / "non_existent.py"), str(supported_file)]
+
+        results = list(find(paths, config, skipped, broken))
+
+        assert str(supported_file) in results
+        assert str(supported_sub) in results
+        assert str(tmp_path / "non_existent.py") in broken
+        assert any("skipped_file.py" in s for s in skipped)
+        assert any("skipped_dir" in s for s in skipped)
+
+
+def test_find_symlink_visited_dirs():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir).resolve()
+        real_dir = tmp_path / "real"
+        real_dir.mkdir()
+        (real_dir / "test.py").write_text("print(1)")
+
+        link_dir = tmp_path / "link"
+        try:
+            os.symlink(real_dir, link_dir, target_is_directory=True)
+        except OSError:
+            pytest.skip("Symlinks not supported on this platform/environment")
+
+        config = Config(follow_links=True)
+        skipped = []
+        broken = []
+
+        results = list(find([str(tmp_path)], config, skipped, broken))
+        assert len([r for r in results if "test.py" in r]) == 1

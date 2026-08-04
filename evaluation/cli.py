@@ -115,7 +115,6 @@ def _build_generator(
             reflection_lm=lm,
             auto="light",
             log_dir=str(args.gepa_log_dir),
-            max_iterations=args.gepa_max_iterations,
         )
 
     compile_latency = time.monotonic() - started
@@ -154,7 +153,6 @@ def _run(args: argparse.Namespace) -> None:
         f"{evaluation.name}: build={evaluation.build_rate:.1%}, "
         f"pass={evaluation.pass_rate:.1%}, "
         f"branch={evaluation.branch_coverage:.1%}, "
-        f"mutation={evaluation.mutation_score:.1%}, "
         f"cost=${evaluation.cost_usd:.4f}, "
         f"latency={evaluation.latency_seconds:.2f}s"
     )
@@ -200,12 +198,6 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("eval/v_final/gepa_logs"),
     )
-    run.add_argument(
-        "--gepa-max-iterations",
-        type=int,
-        default=15,
-        help="Stop GEPA after this many completed search iterations.",
-    )
     coverup = run.add_mutually_exclusive_group()
     coverup.add_argument("--coverup-manifest", type=Path)
     coverup.add_argument("--coverup-tests-dir", type=Path)
@@ -235,8 +227,6 @@ def main() -> None:
     if args.command == "run":
         if args.max_iters < 1:
             raise ValueError("--max-iters must be at least 1")
-        if args.gepa_max_iterations < 1:
-            raise ValueError("--gepa-max-iterations must be at least 1")
         _require_source_upload_consent(args)
         args.results_dir.mkdir(parents=True, exist_ok=True)
     args.handler(args)

@@ -112,8 +112,14 @@ class CoverUpExperimentRunner:
         if workspace_kind not in workspace_prefixes:
             raise ValueError(f"Unsupported workspace kind: {workspace_kind!r}")
         source_tests = self.config.tests_dir.resolve()
+        workspace_root = (
+            self.config.workspace_root.resolve()
+            if self.config.workspace_root is not None
+            else source_tests.parent
+        )
+        workspace_root.mkdir(parents=True, exist_ok=True)
         work_tests = (
-            source_tests.parent
+            workspace_root
             / f"{workspace_prefixes[workspace_kind]}_{safe_candidate_id}_{safe_split}"
         )
         if work_tests.exists():

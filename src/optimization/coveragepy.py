@@ -5,6 +5,7 @@ import os
 import shlex
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -89,34 +90,41 @@ def run_coverage(
     run_env = os.environ.copy()
     run_env.update(env or {})
     run_env["COVERAGE_FILE"] = str(output.with_suffix(".data").resolve())
-    run_cmd = [
-        sys.executable, "-m", "coverage", "run", "--branch",
-        f"--source={package_dir.resolve()}", "-m", "pytest", str(tests_dir.resolve()),
-        "--disable-warnings", "-q", *shlex.split(pytest_args, posix=os.name != "nt"),
-    ]
-    completed = subprocess.run(
-        run_cmd, cwd=project_root, env=run_env, text=True,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
-    )
-    # A from-scratch CoverUp workspace can legitimately contain no accepted
-    # tests.  coverage.py still writes a data file with every file supplied by
-    # --source, which gives us the zero-covered symbol denominators required by
-    # GEPA.  Only pytest's dedicated "no tests" status is recoverable here;
-    # collection errors and failing tests must remain invalid evaluations.
-    if completed.returncode not in (0, _NO_TESTS_COLLECTED):
-        return completed
-    report = subprocess.run(
-        [sys.executable, "-m", "coverage", "json", "--pretty-print", "-o", str(output.resolve())],
-        cwd=project_root, env=run_env, text=True,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
-    )
-    if report.returncode:
-        return report
-    if completed.returncode == _NO_TESTS_COLLECTED:
-        return subprocess.CompletedProcess(
-            args=completed.args,
-            returncode=0,
-            stdout=completed.stdout,
-            stderr=completed.stderr,
+    # This coverage pass runs after CoverUp has generated tests.  It must also
+    # override pytest.ini's shared --basetemp setting; otherwise concurrent
+    # CoverUp workers can leave the final suite measurement with Windows file
+    # locking errors in .pytest_tmp.
+    with tempfile.TemporaryDirectory(prefix="testgen_pytest_") as tmp:
+        pytest_basetemp = Path(tmp) / "pytest"
+        run_cmd = [
+            sys.executable, "-m", "coverage", "run", "--branch",
+            f"--source={package_dir.resolve()}", "-m", "pytest", str(tests_dir.resolve()),
+            "--disable-warnings", "-q", *shlex.split(pytest_args, posix=os.name != "nt"),
+            "--basetemp", str(pytest_basetemp),
+        ]
+        completed = subprocess.run(
+            run_cmd, cwd=project_root, env=run_env, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
         )
-    return completed
+        # A from-scratch CoverUp workspace can legitimately contain no accepted
+        # tests.  coverage.py still writes a data file with every file supplied by
+        # --source, which gives us the zero-covered symbol denominators required by
+        # GEPA.  Only pytest's dedicated "no tests" status is recoverable here;
+        # collection errors and failing tests must remain invalid evaluations.
+        if completed.returncode not in (0, _NO_TESTS_COLLECTED):
+            return completed
+        report = subprocess.run(
+            [sys.executable, "-m", "coverage", "json", "--pretty-print", "-o", str(output.resolve())],
+            cwd=project_root, env=run_env, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+        )
+        if report.returncode:
+            return report
+        if completed.returncode == _NO_TESTS_COLLECTED:
+            return subprocess.CompletedProcess(
+                args=completed.args,
+                returncode=0,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+            )
+        return completed

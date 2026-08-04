@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
+from typing import Any
 
 import dspy
 
@@ -9,82 +11,171 @@ from db.base import SessionLocal
 from db.crud import create_candidate, get_experiment, set_experiment_status
 from db.models import PromptStatus
 from db.schemas import CandidateCreate
-from optimizer.dataset import build_v2_splits
-from optimizer.evaluation import ModuleEvaluation, evaluate_module
-from orchestration.graph import build_optimization_graph
+from src.optimization.dataset import load_targets
+from src.optimization.gepa import evaluate_bundle_repeated, optimize
+from src.optimization.models import ExperimentConfig
+from src.optimization.prompts import PromptBundle
 from src.optimization.provider import resolve_model_provider
+from src.optimization.runner import CoverUpExperimentRunner
+
+DEFAULT_BASELINE_PROMPT = Path(
+    "eval/prompt_optimization/prompts/gpt_v2_baseline.json"
+)
+GEPA_MAX_METRIC_CALLS = 300
 
 
-def _candidate_payload(
-    prompt_text: str,
+def _project_path(project_root: Path, value: str | Path) -> Path:
+    path = Path(value)
+    resolved = (path if path.is_absolute() else project_root / path).resolve()
+    if not resolved.is_relative_to(project_root):
+        raise ValueError(f"Experiment path must stay inside the project: {value}")
+    return resolved
+
+
+def _valid_target_rate(results: list[dict[str, Any]]) -> float:
+    if not results:
+        return 0.0
+    valid = sum(
+        1
+        for result in results
+        if result.get("coverage") is not None
+        and result["coverage"].get("valid") is not False
+    )
+    return valid / len(results)
+
+
+def _strategy_payload(
+    strategy: str,
+    bundle: PromptBundle,
     generation: int,
-    evaluation: ModuleEvaluation,
+    evaluation: dict[str, Any],
     *,
+    latency_seconds: float = 0.0,
     parent_id: str | None = None,
 ) -> CandidateCreate:
-    fitness = (
-        0.35 * evaluation.pass_rate
-        + 0.35 * evaluation.mutation_score
-        + 0.20 * evaluation.branch_coverage
-        + 0.10 * evaluation.statement_coverage
-    )
+    aggregate = evaluation["aggregate"]
     return CandidateCreate(
         parent_id=parent_id,
         generation=generation,
-        prompt_text=prompt_text,
-        fitness_score=fitness,
-        pass_rate=evaluation.pass_rate,
-        statement_coverage=evaluation.statement_coverage,
-        branch_coverage=evaluation.branch_coverage,
-        mutation_score=evaluation.mutation_score,
-        latency_seconds=evaluation.latency_seconds,
+        prompt_text=json.dumps(
+            {"strategy": strategy, "prompt_bundle": bundle.as_candidate()},
+            indent=2,
+            ensure_ascii=False,
+        ),
+        fitness_score=float(aggregate["score"]),
+        pass_rate=_valid_target_rate(evaluation["results"]),
+        statement_coverage=float(aggregate["statement_coverage"]),
+        branch_coverage=float(aggregate["branch_coverage"]),
+        cost_usd=0.0,
+        latency_seconds=latency_seconds,
     )
 
 
 def execute_experiment(experiment_id: str) -> None:
-    """Background worker entry point used by the v3 API."""
+    """Compare the fixed CoverUp prompt bundle with its GEPA-optimized bundle."""
     session = SessionLocal()
     try:
         experiment = get_experiment(session, experiment_id)
         if experiment is None:
             return
         set_experiment_status(session, experiment, PromptStatus.OPTIMIZED)
-        train, validation, _holdout = build_v2_splits(
-            experiment.dataset_path,
-            experiment.source_root,
-            harness_module_path=experiment.module_path,
+
+        project_root = Path.cwd().resolve()
+        baseline_path = _project_path(project_root, experiment.baseline_prompt)
+        expected_baseline = (project_root / DEFAULT_BASELINE_PROMPT).resolve()
+        if baseline_path != expected_baseline:
+            raise ValueError(
+                "The UI experiment baseline must be "
+                f"{DEFAULT_BASELINE_PROMPT.as_posix()}"
+            )
+        baseline = PromptBundle.load(baseline_path)
+
+        dataset_path = _project_path(project_root, experiment.dataset_path)
+        package_dir = _project_path(project_root, experiment.module_path)
+        source_root = _project_path(project_root, experiment.source_root)
+        tests_dir = source_root / "tests"
+        for label, path in (
+            ("baseline prompt", baseline_path),
+            ("dataset", dataset_path),
+            ("package", package_dir),
+            ("tests", tests_dir),
+        ):
+            if not path.exists():
+                raise FileNotFoundError(f"The {label} path does not exist: {path}")
+
+        artifacts = project_root / "eval" / "dspy_gepa" / experiment.id
+        runner = CoverUpExperimentRunner(
+            ExperimentConfig(
+                project_root=project_root,
+                package_dir=package_dir,
+                tests_dir=tests_dir,
+                artifacts_dir=artifacts,
+                workspace_root=project_root / ".pytest_tmp" / experiment.id,
+                coverup_model=resolve_model_provider().generation_model,
+                max_attempts=3,
+                repeat_tests=2,
+                max_concurrency=10,
+            )
         )
+        train = load_targets(dataset_path, "train")
+        validation = load_targets(dataset_path, "validation")
+        if not train or not validation:
+            raise ValueError("GEPA requires non-empty train and validation splits")
+
         provider = resolve_model_provider()
-        lm = dspy.LM(provider.optimization_model)
-        dspy.configure(lm=lm)
-        state = build_optimization_graph().invoke(
-            {
-                "experiment_id": experiment.id,
-                "module_path": experiment.module_path,
-                "trainset": train,
-                "valset": validation,
-                "budget_limit_usd": experiment.budget_limit,
-                "reflection_lm": lm,
-                "baseline_prompt": experiment.baseline_prompt,
-                "gepa_log_dir": str(Path("eval") / "dspy_gepa" / experiment.id),
-            }
+        reflection_lm = dspy.LM(
+            provider.optimization_model,
+            max_tokens=8192,
+            temperature=0.7,
         )
-        baseline_evaluation = evaluate_module(state["baseline_module"], validation)
-        optimized_evaluation = evaluate_module(state["optimized_module"], validation)
-        baseline = create_candidate(
+        started = time.monotonic()
+        optimized = optimize(
+            runner=runner,
+            train_targets=train,
+            validation_targets=validation,
+            baseline=baseline,
+            reflection_lm=reflection_lm,
+            artifacts_dir=artifacts,
+            auto=None,
+            max_metric_calls=GEPA_MAX_METRIC_CALLS,
+        )
+        optimization_latency = time.monotonic() - started
+
+        optimized_path = artifacts / "prompts" / "gepa_optimized.json"
+        optimized.best_bundle.save(optimized_path)
+        baseline_evaluation = evaluate_bundle_repeated(
+            runner,
+            validation,
+            baseline,
+            artifacts / "candidates",
+            split="validation",
+            workspace_kind="baseline",
+        )
+        optimized_evaluation = evaluate_bundle_repeated(
+            runner,
+            validation,
+            optimized.best_bundle,
+            artifacts / "candidates",
+            split="validation",
+            workspace_kind="candidate",
+            reference_results=baseline_evaluation["results"],
+        )
+
+        coverup = create_candidate(
             session,
             experiment.id,
-            _candidate_payload(experiment.baseline_prompt, 0, baseline_evaluation),
+            _strategy_payload("coverup", baseline, 0, baseline_evaluation),
         )
-        optimized_state = state["optimized_module"].dump_state()
         create_candidate(
             session,
             experiment.id,
-            _candidate_payload(
-                json.dumps(optimized_state, ensure_ascii=False, default=str),
+            _strategy_payload(
+                "gepa",
+                optimized.best_bundle,
                 1,
                 optimized_evaluation,
-                parent_id=baseline.id,
+                latency_seconds=optimization_latency,
+                parent_id=coverup.id,
             ),
         )
         set_experiment_status(session, experiment, PromptStatus.IN_REVIEW)

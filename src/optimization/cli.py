@@ -138,11 +138,13 @@ def make_runner(args: argparse.Namespace) -> CoverUpExperimentRunner:
         raise ValueError("--rate-limit must be at least 1")
     root = args.project_root.resolve()
     provider = resolve_model_provider()
+    artifacts_dir = _resolve(root, args.artifacts_dir)
     config = ExperimentConfig(
         project_root=root,
         package_dir=_resolve(root, args.package_dir),
         tests_dir=_resolve(root, args.tests_dir),
-        artifacts_dir=_resolve(root, args.artifacts_dir),
+        artifacts_dir=artifacts_dir,
+        workspace_root=artifacts_dir / "workspaces",
         coverup_model=provider.generation_model,
         max_attempts=args.max_attempts,
         repeat_tests=args.repeat_tests,

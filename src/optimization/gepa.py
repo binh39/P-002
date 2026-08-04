@@ -856,7 +856,11 @@ def optimize(
         )
         adapter._remember_reference_units(baseline_preflight["results"])
     run_digest = _optimization_run_digest(
-        runner, baseline, train_targets, validation_targets, evaluation_replicates
+        runner,
+        baseline,
+        train_targets,
+        validation_targets,
+        evaluation_replicates,
     )
     result = gepa_core.optimize(
         seed_candidate=baseline.as_candidate(),

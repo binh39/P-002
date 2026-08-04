@@ -1,0 +1,13 @@
+{
+    "target": {
+        "project": "isort",
+        "source_file": "isort/output.py",
+        "symbol": "_with_from_imports",
+        "split": "validation"
+    },
+    "weighted_score": 1.5873626373626373,
+    "raw_symbol_score": 0.5958139534883722,
+    "replicate_scores": [
+        0.5958139534883722
+    ]
+}

@@ -1,0 +1,13 @@
+{
+    "target": {
+        "project": "isort",
+        "source_file": "isort/wrap.py",
+        "symbol": "import_statement",
+        "split": "validation"
+    },
+    "weighted_score": 0.17362637362637362,
+    "raw_symbol_score": 0.41600000000000004,
+    "replicate_scores": [
+        0.41600000000000004
+    ]
+}

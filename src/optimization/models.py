@@ -25,6 +25,7 @@ class ExperimentConfig:
     tests_dir: Path
     artifacts_dir: Path
     coverup_model: str
+    workspace_root: Path | None = None
     prompt_template_file: Path | None = None
     max_attempts: int = 3
     repeat_tests: int = 2

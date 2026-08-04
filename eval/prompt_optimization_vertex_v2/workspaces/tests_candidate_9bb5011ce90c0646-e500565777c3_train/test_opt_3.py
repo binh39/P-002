@@ -1,0 +1,132 @@
+# file: src\sample_repo\isort\isort\core.py:32-490
+# asked: {"lines": [32, 33, 34, 35, 36, 37, 38, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 111, 112, 113, 114, 115, 117, 118, 119, 120, 122, 124, 126, 127, 128, 129, 131, 132, 133, 134, 135, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 148, 150, 151, 152, 153, 154, 156, 157, 158, 160, 161, 162, 164, 165, 166, 167, 168, 169, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 187, 188, 189, 190, 192, 193, 194, 195, 196, 198, 199, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 220, 221, 222, 223, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 253, 255, 256, 257, 258, 259, 261, 262, 263, 264, 265, 266, 267, 268, 269, 270, 271, 273, 274, 276, 277, 279, 280, 281, 282, 284, 285, 286, 287, 288, 289, 290, 291, 292, 294, 295, 296, 297, 298, 299, 300, 302, 303, 304, 305, 306, 308, 309, 311, 312, 314, 315, 318, 319, 321, 322, 324, 325, 327, 329, 330, 331, 332, 334, 335, 338, 340, 341, 342, 343, 345, 346, 347, 348, 349, 350, 351, 353, 355, 356, 357, 359, 360, 362, 364, 365, 366, 367, 368, 369, 370, 371, 373, 375, 376, 377, 378, 379, 380, 381, 382, 384, 385, 386, 387, 388, 389, 391, 392, 393, 395, 396, 397, 398, 400, 401, 403, 404, 405, 406, 407, 410, 411, 412, 413, 414, 415, 416, 417, 419, 420, 421, 424, 425, 427, 428, 429, 430, 431, 433, 434, 435, 436, 437, 438, 441, 442, 443, 444, 445, 447, 448, 449, 451, 452, 453, 454, 456, 457, 458, 460, 461, 462, 464, 465, 467, 468, 469, 470, 471, 472, 474, 475, 477, 478, 479, 480, 481, 483, 484, 486, 487, 488, 490], "branches": [[82, 83], [82, 126], [86, 87], [86, 124], [87, 88], [87, 91], [88, 89], [88, 90], [91, 94], [91, 122], [94, 95], [94, 96], [96, 97], [96, 120], [97, 98], [97, 101], [104, 105], [104, 107], [126, 127], [126, 486], [127, 128], [127, 160], [128, 129], [128, 131], [134, 135], [134, 137], [137, 138], [137, 364], [138, 139], [138, 141], [157, 158], [157, 364], [161, 162], [161, 164], [164, 165], [164, 171], [165, 164], [165, 166], [166, 167], [166, 168], [171, 172], [171, 186], [172, 173], [172, 174], [174, 175], [174, 176], [176, 177], [176, 186], [186, 192], [186, 193], [193, 198], [193, 201], [202, 203], [202, 225], [204, 205], [204, 206], [206, 207], [206, 225], [207, 208], [207, 209], [209, 210], [209, 214], [210, 211], [210, 223], [212, 213], [212, 223], [214, 215], [214, 221], [216, 217], [216, 220], [221, 222], [221, 223], [226, 227], [226, 364], [227, 228], [227, 230], [228, 229], [228, 364], [230, 231], [230, 232], [232, 233], [232, 236], [236, 237], [236, 244], [244, 245], [244, 275], [245, 246], [245, 273], [261, 262], [261, 264], [265, 266], [265, 267], [275, 279], [275, 286], [279, 280], [279, 284], [286, 287], [286, 288], [288, 294], [288, 295], [295, 296], [295, 362], [299, 302], [299, 317], [302, 303], [302, 308], [303, 299], [303, 304], [308, 299], [308, 309], [311, 312], [311, 314], [317, 321], [317, 324], [328, 338], [328, 340], [340, 345], [340, 355], [346, 347], [346, 353], [355, 356], [355, 360], [356, 357], [356, 359], [364, 126], [364, 365], [365, 366], [365, 373], [366, 367], [366, 369], [369, 370], [369, 371], [374, 384], [374, 391], [386, 387], [386, 388], [391, 392], [391, 395], [395, 396], [395, 464], [396, 397], [396, 403], [403, 404], [403, 406], [406, 407], [406, 410], [412, 415], [412, 419], [419, 420], [419, 424], [433, 434], [433, 451], [434, 435], [434, 441], [448, 449], [448, 451], [451, 452], [451, 456], [453, 454], [453, 456], [456, 457], [456, 460], [467, 126], [467, 468], [468, 469], [468, 477], [469, 470], [469, 477], [471, 472], [471, 474], [477, 126], [477, 478], [478, 126], [478, 479], [480, 481], [480, 483], [486, 487], [486, 490], [487, 488], [487, 490]]}
+# gained: {"lines": [32, 35, 36, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 94, 95, 96, 97, 101, 102, 103, 104, 105, 106, 107, 108, 109, 111, 112, 113, 114, 115, 117, 118, 119, 120, 122, 124, 126, 127, 128, 131, 132, 133, 134, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 148, 150, 151, 152, 153, 154, 156, 157, 158, 160, 161, 162, 164, 165, 166, 167, 168, 169, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 187, 188, 189, 190, 192, 193, 194, 198, 199, 201, 202, 203, 204, 206, 207, 209, 210, 211, 212, 214, 215, 216, 220, 221, 223, 225, 226, 227, 228, 230, 232, 236, 237, 238, 239, 240, 241, 242, 243, 244, 276, 277, 286, 288, 289, 295, 296, 297, 298, 299, 300, 302, 303, 304, 305, 306, 308, 309, 311, 312, 314, 315, 318, 319, 321, 322, 324, 325, 327, 329, 330, 331, 332, 334, 338, 340, 341, 345, 346, 353, 355, 360, 362, 364, 365, 373, 375, 376, 377, 378, 379, 380, 391, 395, 396, 397, 398, 400, 401, 403, 404, 405, 406, 410, 411, 412, 413, 414, 415, 416, 417, 419, 424, 425, 427, 428, 429, 430, 431, 433, 434, 441, 442, 443, 444, 445, 447, 448, 451, 456, 460, 461, 462, 464, 465, 467, 468, 477, 478, 479, 480, 483, 484, 486, 487, 488, 490], "branches": [[82, 83], [82, 126], [86, 87], [86, 124], [87, 88], [87, 91], [88, 89], [88, 90], [91, 94], [91, 122], [94, 95], [94, 96], [96, 97], [96, 120], [97, 101], [104, 105], [104, 107], [126, 127], [126, 486], [127, 128], [127, 160], [128, 131], [134, 137], [137, 138], [137, 364], [138, 139], [157, 158], [161, 162], [161, 164], [164, 165], [164, 171], [165, 164], [165, 166], [166, 167], [166, 168], [171, 172], [172, 173], [172, 174], [174, 175], [174, 176], [176, 177], [176, 186], [186, 192], [186, 193], [193, 198], [193, 201], [202, 203], [202, 225], [204, 206], [206, 207], [206, 225], [207, 209], [209, 210], [209, 214], [210, 211], [210, 223], [212, 223], [214, 215], [214, 221], [216, 220], [221, 223], [226, 227], [226, 364], [227, 228], [227, 230], [228, 364], [230, 232], [232, 236], [236, 237], [236, 244], [244, 275], [275, 286], [286, 288], [288, 295], [295, 296], [295, 362], [299, 302], [299, 317], [302, 303], [302, 308], [303, 299], [303, 304], [308, 309], [311, 312], [311, 314], [317, 321], [317, 324], [328, 338], [328, 340], [340, 345], [340, 355], [346, 353], [355, 360], [364, 126], [364, 365], [365, 373], [374, 391], [391, 395], [395, 396], [395, 464], [396, 397], [396, 403], [403, 404], [406, 410], [412, 415], [419, 424], [433, 434], [434, 441], [448, 451], [451, 456], [456, 460], [467, 468], [468, 477], [477, 126], [477, 478], [478, 126], [478, 479], [480, 483], [486, 487], [486, 490], [487, 488], [487, 490]]}
+
+import pytest
+from io import StringIO
+from isort.core import process
+from isort.settings import Config
+from isort.exceptions import ExistingSyntaxErrors, FileSkipComment
+
+
+def test_process_basic_sorting():
+    input_content = "import z\nimport a\n"
+    input_stream = StringIO(input_content)
+    output_stream = StringIO()
+    
+    changed = process(input_stream, output_stream, extension="py", config=Config())
+    assert changed is True
+    assert "import a" in output_stream.getvalue()
+
+
+def test_process_float_to_top_and_split():
+    input_content = "# isort: off\nimport os\n# isort: on\nimport sys\nimport os\n# isort: split\n"
+    input_stream = StringIO(input_content)
+    output_stream = StringIO()
+    config = Config(float_to_top=True)
+    
+    changed = process(input_stream, output_stream, config=config)
+    assert isinstance(changed, bool)
+
+
+def test_process_file_skip_comment_raise():
+    input_content = "# isort: skip_file\nimport a\n"
+    input_stream = StringIO(input_content)
+    output_stream = StringIO()
+    
+    with pytest.raises(FileSkipComment):
+        process(input_stream, output_stream, raise_on_skip=True)
+
+
+def test_process_file_skip_comment_no_raise():
+    input_content = "# isort: skip_file\nimport a\n"
+    input_stream = StringIO(input_content)
+    output_stream = StringIO()
+    
+    changed = process(input_stream, output_stream, raise_on_skip=False)
+    assert changed is False
+
+
+def test_process_dont_add_imports():
+    input_content = "# isort: dont-add-imports\nimport a\n"
+    input_stream = StringIO(input_content)
+    output_stream = StringIO()
+    config = Config(add_imports=["import b"])
+    
+    process(input_stream, output_stream, config=config)
+
+
+def test_process_dont_add_specific_import():
+    input_content = "# isort: dont-add-import: import b\nimport a\n"
+    input_stream = StringIO(input_content)
+    output_stream = StringIO()
+    config = Config(add_imports=["import b", "import c"])
+    
+    process(input_stream, output_stream, config=config)
+
+
+def test_process_code_sorting_comments():
+    input_content = "# isort: astr\n1 + 1\n"
+    input_stream = StringIO(input_content)
+    output_stream = StringIO()
+    
+    process(input_stream, output_stream)
+
+
+def test_process_sort_reexports():
+    input_content = "__all__ = ['b', 'a']\n"
+    input_stream = StringIO(input_content)
+    output_stream = StringIO()
+    config = Config(sort_reexports=True)
+    
+    process(input_stream, output_stream, config=config)
+
+
+def test_process_parenthesis_unclosed():
+    input_content = "from a import (\n    b\n"
+    input_stream = StringIO(input_content)
+    output_stream = StringIO()
+    
+    with pytest.raises(ExistingSyntaxErrors):
+        process(input_stream, output_stream)
+
+
+def test_process_multiline_import_backslash():
+    input_content = "import a \\\n    b\n"
+    input_stream = StringIO(input_content)
+    output_stream = StringIO()
+    
+    process(input_stream, output_stream)
+
+
+def test_process_from_import_without_import_keyword():
+    input_content = "from a\n"
+    input_stream = StringIO(input_content)
+    output_stream = StringIO()
+    
+    process(input_stream, output_stream)
+
+
+def test_process_cimports():
+    input_content = "cimport a\n"
+    input_stream = StringIO(input_content)
+    output_stream = StringIO()
+    
+    process(input_stream, output_stream)
+
+
+def test_process_yield_and_raise():
+    input_content = "def f():\n    yield \\\n        1\n    raise \\\n        ValueError()\n"
+    input_stream = StringIO(input_content)
+    output_stream = StringIO()
+    
+    process(input_stream, output_stream)
+
+
+def test_process_only_modified_verbose():
+    input_content = "import z\nimport a\n"
+    input_stream = StringIO(input_content)
+    output_stream = StringIO()
+    config = Config(only_modified=True, verbose=True)
+    
+    process(input_stream, output_stream, config=config)

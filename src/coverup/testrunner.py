@@ -24,15 +24,22 @@ async def measure_test_coverage(*, test: str, tests_dir: Path, pytest_args='',
 
         with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as j:
             try:
-                # -qq to cut down on tokens
-                command = [sys.executable, '-X', 'utf8', '-m', 'slipcover',  *(('--branch',) if branch_coverage else ()),
-                           '--json', '--out', j.name,
-                           '-m', 'pytest', *pytest_args.split(),
-                           # Report every failure in the generated module so one
-                           # LLM repair turn can fix all bad assertions.
-                           '-qq', '--disable-warnings', test_name]
+                # Each asynchronous worker must have an isolated pytest base
+                # directory.  A project-level ``--basetemp=.pytest_tmp`` in
+                # pytest.ini otherwise makes concurrent workers delete each
+                # other's temporary files on Windows.
+                with tempfile.TemporaryDirectory(prefix="coverup_pytest_") as tmp:
+                    pytest_basetemp = Path(tmp) / "pytest"
+                    # -qq to cut down on tokens
+                    command = [sys.executable, '-X', 'utf8', '-m', 'slipcover',  *(('--branch',) if branch_coverage else ()),
+                               '--json', '--out', j.name,
+                               '-m', 'pytest', *pytest_args.split(),
+                               '--basetemp', str(pytest_basetemp),
+                               # Report every failure in the generated module so one
+                               # LLM repair turn can fix all bad assertions.
+                               '-qq', '--disable-warnings', test_name]
 
-                p = await subprocess_run(command, check=True, timeout=120)
+                    p = await subprocess_run(command, check=True, timeout=120)
 
                 if log_write:
                     log_write(str(p.stdout, 'UTF-8', errors='ignore'))
@@ -60,17 +67,22 @@ def measure_suite_coverage(*, tests_dir: Path, source_dir: T.Optional[Path], pyt
 
     with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as j:
         try:
-            command = [sys.executable,
-                     '-X', 'utf8',
-                     '-m', 'slipcover',
-                         *(('--source', source_dir) if source_dir else ()),
-                         *(('--branch',) if branch_coverage else ()),
-                         '--json', '--out', j.name,
-                     '-m', 'pytest', *pytest_args.split(),
-                         '--disable-warnings', '-x', tests_dir]
+            # Keep suite coverage isolated from all concurrent generated-test
+            # subprocesses as well as pytest.ini's shared --basetemp setting.
+            with tempfile.TemporaryDirectory(prefix="coverup_pytest_") as tmp:
+                pytest_basetemp = Path(tmp) / "pytest"
+                command = [sys.executable,
+                         '-X', 'utf8',
+                         '-m', 'slipcover',
+                             *(('--source', source_dir) if source_dir else ()),
+                             *(('--branch',) if branch_coverage else ()),
+                             '--json', '--out', j.name,
+                         '-m', 'pytest', *pytest_args.split(),
+                             '--basetemp', str(pytest_basetemp),
+                             '--disable-warnings', '-x', tests_dir]
 
-            if trace: trace(command)
-            p = subprocess.run(command, check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                if trace: trace(command)
+                p = subprocess.run(command, check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             if p.returncode not in (pytest.ExitCode.OK, pytest.ExitCode.NO_TESTS_COLLECTED):
                 if trace: trace(f"tests rc={p.returncode}\n" + str(p.stdout, 'utf-8'))
                 p.check_returncode()

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.optimization.cli import _top_isort_targets, should_promote
+from src.optimization.cli import _top_isort_targets, make_runner, parser, should_promote
 from src.optimization.coveragepy import (
     SymbolCoverage,
     load_report,
@@ -55,6 +55,38 @@ def test_openai_provider_defaults_to_gpt_4o_mini():
     assert config.provider == "openai"
     assert config.generation_model == "openai/gpt-4o-mini"
     assert config.optimization_model == "openai/gpt-4o-mini"
+
+
+def test_cli_isolates_temporary_workspaces_inside_artifacts(tmp_path, monkeypatch):
+    package = tmp_path / "package"
+    tests = tmp_path / "tests"
+    package.mkdir()
+    tests.mkdir()
+    monkeypatch.setattr(
+        "src.optimization.cli.resolve_model_provider",
+        lambda: SimpleNamespace(generation_model="openai/gpt-4o-mini"),
+    )
+    args = parser().parse_args(
+        [
+            "--project-root",
+            str(tmp_path),
+            "--package-dir",
+            "package",
+            "--tests-dir",
+            "tests",
+            "--artifacts-dir",
+            "artifacts",
+            "evaluate",
+            "--dataset",
+            "dataset.jsonl",
+            "--prompt",
+            "prompt.json",
+        ]
+    )
+
+    runner = make_runner(args)
+
+    assert runner.config.workspace_root == tmp_path / "artifacts" / "workspaces"
 
 
 def test_openai_provider_is_inferred_from_api_key():
@@ -121,6 +153,10 @@ async def test_coverup_draft_runner_reports_all_failures(tmp_path, monkeypatch):
         captured["command"].index("pytest") + 1:
     ]
     assert "-x" not in pytest_args
+    assert "--basetemp" in pytest_args
+    basetemp = Path(pytest_args[pytest_args.index("--basetemp") + 1])
+    assert basetemp.name == "pytest"
+    assert basetemp.parent.name.startswith("coverup_pytest_")
 
 
 def test_coverup_salvages_passing_top_level_tests(monkeypatch):
@@ -266,6 +302,11 @@ def test_run_coverage_exports_zero_coverage_when_pytest_collects_no_tests(
     assert completed.stdout == "no tests ran"
     assert output.is_file()
     assert len(calls) == 2
+    pytest_command = calls[0]
+    assert "--basetemp" in pytest_command
+    basetemp = Path(pytest_command[pytest_command.index("--basetemp") + 1])
+    assert basetemp.name == "pytest"
+    assert basetemp.parent.name.startswith("testgen_pytest_")
 
 
 def test_run_coverage_does_not_mask_real_pytest_failures(tmp_path, monkeypatch):
@@ -861,6 +902,7 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
     )
 
     assert captured["seed_candidate"] == baseline.as_candidate()
+    assert "stop_callbacks" not in captured
     assert result.best_bundle == baseline
 
 

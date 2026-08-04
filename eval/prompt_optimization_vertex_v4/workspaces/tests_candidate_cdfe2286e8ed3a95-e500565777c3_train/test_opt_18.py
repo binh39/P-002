@@ -1,0 +1,61 @@
+# file: src\sample_repo\isort\isort\files.py:8-41
+# asked: {"lines": [8, 9, 10, 12, 14, 15, 16, 17, 19, 20, 21, 22, 23, 24, 25, 27, 28, 29, 31, 32, 33, 34, 35, 37, 38, 39, 41], "branches": [[14, 0], [14, 15], [15, 16], [15, 38], [16, 14], [16, 19], [20, 21], [20, 31], [23, 24], [23, 27], [27, 28], [27, 29], [31, 16], [31, 32], [33, 31], [33, 34], [34, 35], [34, 37], [38, 39], [38, 41]]}
+# gained: {"lines": [8, 12, 14, 15, 16, 17, 19, 20, 21, 22, 23, 27, 29, 31, 32, 33, 34, 35, 37, 38, 39, 41], "branches": [[14, 0], [14, 15], [15, 16], [15, 38], [16, 14], [16, 19], [20, 21], [20, 31], [23, 27], [27, 29], [31, 16], [31, 32], [33, 31], [33, 34], [34, 35], [34, 37], [38, 39], [38, 41]]}
+
+import os
+from pathlib import Path
+from isort.files import find
+from isort.settings import Config
+
+
+def test_find_directory_handling(tmp_path: Path):
+    skipped_dir = tmp_path / "skipped_dir"
+    skipped_dir.mkdir()
+    (skipped_dir / "sub.py").write_text("print(1)")
+
+    normal_dir = tmp_path / "normal_dir"
+    normal_dir.mkdir()
+    py_file = normal_dir / "test.py"
+    py_file.write_text("print(2)")
+    txt_file = normal_dir / "ignore.txt"
+    txt_file.write_text("hello")
+
+    direct_file = tmp_path / "file.py"
+    direct_file.write_text("print(3)")
+
+    broken_path = tmp_path / "nonexistent"
+
+    # Use basename or skip matching name in `is_skipped`
+    config = Config(skip=["skipped_dir"], directory=str(tmp_path))
+    skipped: list[str] = []
+    broken: list[str] = []
+
+    paths = [
+        str(normal_dir),
+        str(skipped_dir),
+        str(broken_path),
+        str(direct_file),
+    ]
+
+    results = list(find(paths, config, skipped, broken))
+
+    assert str(py_file) in results
+    assert str(direct_file) in results
+    assert len(skipped) > 0
+    assert str(broken_path) in broken
+
+
+def test_find_file_skipped_and_visited_dirs(tmp_path: Path):
+    sub_dir = tmp_path / "sub"
+    sub_dir.mkdir()
+    supported_file = sub_dir / "script.py"
+    supported_file.write_text("x = 1")
+
+    config = Config(skip=["script.py"], directory=str(tmp_path))
+    skipped: list[str] = []
+    broken: list[str] = []
+
+    results = list(find([str(tmp_path)], config, skipped, broken))
+
+    assert len(skipped) > 0
+    assert str(supported_file) not in results

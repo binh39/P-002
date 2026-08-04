@@ -29,9 +29,9 @@ test("server-renders the TestGen product shell", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>TestGen Optimization Lab<\/title>/i);
-  assert.match(html, /Move prompts from intuition to evidence\./);
+  assert.match(html, /Compare one baseline with one optimized strategy\./);
   assert.match(html, /Create experiment/);
-  assert.match(html, /Mutation score vs\. cost/);
+  assert.match(html, /CoverUp baseline vs\. GEPA/);
   assert.match(html, /HUMAN GATE/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/);
 });
@@ -45,7 +45,10 @@ test("product source connects all required API workflows", async () => {
 
   assert.match(page, /\/experiments/);
   assert.match(page, /\/candidates\/\$\{best\.id\}\/approve/);
-  assert.match(page, /aria-label="Candidate Pareto scatter plot"/);
+  assert.match(page, /aria-label="CoverUp and GEPA comparison"/);
+  assert.match(page, /gpt_v2_baseline\.json/);
+  assert.match(page, /GEPA metric-call budget/);
+  assert.doesNotMatch(page, /mutation_score|Mutation score/);
   assert.match(page, /Regression audit/);
   assert.match(layout, /\/og\.png/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
