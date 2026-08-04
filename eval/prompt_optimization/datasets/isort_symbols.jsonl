@@ -1,45 +1,110 @@
-{"project":"isort","source_file":"isort/deprecated/finders.py","symbol":"RequirementsFinder._get_files_from_dir_cached","split":"train"}
-{"project":"isort","source_file":"isort/wrap_modes.py","symbol":"grid","split":"train"}
-{"project":"isort","source_file":"isort/sorting.py","symbol":"section_key","split":"train"}
-{"project":"isort","source_file":"isort/main.py","symbol":"parse_args","split":"train"}
-{"project":"isort","source_file":"isort/wrap.py","symbol":"line","split":"train"}
-{"project":"isort","source_file":"isort/wrap_modes.py","symbol":"vertical_prefix_from_module_import","split":"train"}
-{"project":"isort","source_file":"isort/output.py","symbol":"_with_straight_imports","split":"train"}
-{"project":"isort","source_file":"isort/sorting.py","symbol":"module_key","split":"train"}
-{"project":"isort","source_file":"isort/settings.py","symbol":"_Config.__post_init__","split":"train"}
-{"project":"isort","source_file":"isort/wrap_modes.py","symbol":"noqa","split":"train"}
-{"project":"isort","source_file":"isort/parse.py","symbol":"import_type","split":"train"}
-{"project":"isort","source_file":"isort/settings.py","symbol":"Config.is_supported_filetype","split":"train"}
-{"project":"isort","source_file":"isort/wrap_modes.py","symbol":"hanging_indent","split":"train"}
-{"project":"isort","source_file":"isort/deprecated/finders.py","symbol":"PathFinder.__init__","split":"train"}
-{"project":"isort","source_file":"isort/core.py","symbol":"process","split":"train"}
-{"project":"isort","source_file":"isort/api.py","symbol":"_config","split":"train"}
-{"project":"isort","source_file":"isort/api.py","symbol":"find_imports_in_stream","split":"train"}
-{"project":"isort","source_file":"isort/settings.py","symbol":"Config.is_skipped","split":"train"}
-{"project":"isort","source_file":"isort/main.py","symbol":"_preconvert","split":"train"}
-{"project":"isort","source_file":"isort/hooks.py","symbol":"git_hook","split":"train"}
-{"project":"isort","source_file":"isort/main.py","symbol":"identify_imports_main","split":"train"}
-{"project":"isort","source_file":"isort/literal.py","symbol":"assignment","split":"train"}
-{"project":"isort","source_file":"isort/files.py","symbol":"find","split":"train"}
-{"project":"isort","source_file":"isort/parse.py","symbol":"file_contents","split":"train"}
-{"project":"isort","source_file":"isort/settings.py","symbol":"Config.sorting_function","split":"train"}
-{"project":"isort","source_file":"isort/api.py","symbol":"sort_stream","split":"validation"}
-{"project":"isort","source_file":"isort/place.py","symbol":"_src_path","split":"validation"}
-{"project":"isort","source_file":"isort/settings.py","symbol":"_get_config_data","split":"validation"}
-{"project":"isort","source_file":"isort/place.py","symbol":"_is_namespace_package","split":"validation"}
-{"project":"isort","source_file":"isort/wrap.py","symbol":"import_statement","split":"validation"}
-{"project":"isort","source_file":"isort/comments.py","symbol":"add_to_line","split":"validation"}
-{"project":"isort","source_file":"isort/output.py","symbol":"_with_from_imports","split":"validation"}
-{"project":"isort","source_file":"isort/output.py","symbol":"sorted_imports","split":"validation"}
-{"project":"isort","source_file":"isort/parse.py","symbol":"skip_line","split":"validation"}
-{"project":"isort","source_file":"isort/api.py","symbol":"check_stream","split":"validation"}
-{"project":"isort","source_file":"isort/settings.py","symbol":"find_all_configs","split":"test"}
-{"project":"isort","source_file":"isort/settings.py","symbol":"_find_config","split":"test"}
-{"project":"isort","source_file":"isort/identify.py","symbol":"imports","split":"test"}
-{"project":"isort","source_file":"isort/deprecated/finders.py","symbol":"ReqsBaseFinder.find","split":"test"}
-{"project":"isort","source_file":"isort/main.py","symbol":"main","split":"test"}
-{"project":"isort","source_file":"isort/settings.py","symbol":"Config.__init__","split":"test"}
-{"project":"isort","source_file":"isort/wrap_modes.py","symbol":"hanging_indent_with_parentheses","split":"test"}
-{"project":"isort","source_file":"isort/wrap_modes.py","symbol":"_vertical_grid_common","split":"test"}
-{"project":"isort","source_file":"isort/api.py","symbol":"sort_file","split":"test"}
-{"project":"isort","source_file":"isort/deprecated/finders.py","symbol":"PathFinder.find","split":"test"}
+{"project": "isort", "source_file": "isort/main.py", "symbol": "sort_imports", "split": "train"}
+{"project": "isort", "source_file": "isort/parse.py", "symbol": "normalize_line", "split": "train"}
+{"project": "isort", "source_file": "isort/comments.py", "symbol": "parse", "split": "train"}
+{"project": "isort", "source_file": "isort/core.py", "symbol": "_indented_config", "split": "train"}
+{"project": "isort", "source_file": "isort/core.py", "symbol": "process", "split": "train"}
+{"project": "isort", "source_file": "isort/format.py", "symbol": "format_simplified", "split": "train"}
+{"project": "isort", "source_file": "isort/api.py", "symbol": "_config", "split": "train"}
+{"project": "isort", "source_file": "isort/literal.py", "symbol": "assignments", "split": "train"}
+{"project": "isort", "source_file": "isort/settings.py", "symbol": "_Config.__post_init__", "split": "train"}
+{"project": "isort", "source_file": "isort/core.py", "symbol": "_has_changed", "split": "train"}
+{"project": "isort", "source_file": "isort/api.py", "symbol": "find_imports_in_stream", "split": "train"}
+{"project": "isort", "source_file": "isort/format.py", "symbol": "format_natural", "split": "train"}
+{"project": "isort", "source_file": "isort/parse.py", "symbol": "skip_line", "split": "train"}
+{"project": "isort", "source_file": "isort/place.py", "symbol": "_known_pattern", "split": "train"}
+{"project": "isort", "source_file": "isort/api.py", "symbol": "find_imports_in_file", "split": "train"}
+{"project": "isort", "source_file": "isort/main.py", "symbol": "_preconvert", "split": "train"}
+{"project": "isort", "source_file": "isort/place.py", "symbol": "_is_namespace_package", "split": "train"}
+{"project": "isort", "source_file": "isort/wrap_modes.py", "symbol": "_vertical_grid_common", "split": "train"}
+{"project": "isort", "source_file": "isort/identify.py", "symbol": "Import.statement", "split": "train"}
+{"project": "isort", "source_file": "isort/settings.py", "symbol": "Config.skips", "split": "train"}
+{"project": "isort", "source_file": "isort/output.py", "symbol": "sorted_imports", "split": "train"}
+{"project": "isort", "source_file": "isort/format.py", "symbol": "create_terminal_printer", "split": "train"}
+{"project": "isort", "source_file": "isort/parse.py", "symbol": "file_contents", "split": "train"}
+{"project": "isort", "source_file": "isort/settings.py", "symbol": "Config._check_folder_git_ls_files", "split": "train"}
+{"project": "isort", "source_file": "isort/io.py", "symbol": "File.detect_encoding", "split": "train"}
+{"project": "isort", "source_file": "isort/literal.py", "symbol": "assignment", "split": "train"}
+{"project": "isort", "source_file": "isort/wrap.py", "symbol": "line", "split": "train"}
+{"project": "isort", "source_file": "isort/wrap_modes.py", "symbol": "_hanging_indent_end_line", "split": "train"}
+{"project": "isort", "source_file": "isort/deprecated/finders.py", "symbol": "ReqsBaseFinder.find", "split": "train"}
+{"project": "isort", "source_file": "isort/deprecated/finders.py", "symbol": "ReqsBaseFinder._normalize_name", "split": "train"}
+{"project": "isort", "source_file": "isort/sorting.py", "symbol": "module_key", "split": "train"}
+{"project": "isort", "source_file": "isort/settings.py", "symbol": "Config._parse_known_pattern", "split": "train"}
+{"project": "isort", "source_file": "isort/deprecated/finders.py", "symbol": "ReqsBaseFinder._load_mapping", "split": "train"}
+{"project": "isort", "source_file": "isort/parse.py", "symbol": "_infer_line_separator", "split": "train"}
+{"project": "isort", "source_file": "isort/deprecated/finders.py", "symbol": "ReqsBaseFinder._get_parents", "split": "train"}
+{"project": "isort", "source_file": "isort/deprecated/finders.py", "symbol": "PathFinder.find", "split": "train"}
+{"project": "isort", "source_file": "isort/settings.py", "symbol": "_get_str_to_type_converter", "split": "train"}
+{"project": "isort", "source_file": "isort/settings.py", "symbol": "Config.is_supported_filetype", "split": "train"}
+{"project": "isort", "source_file": "isort/settings.py", "symbol": "Config.known_patterns", "split": "train"}
+{"project": "isort", "source_file": "isort/deprecated/finders.py", "symbol": "KnownPatternFinder.__init__", "split": "train"}
+{"project": "isort", "source_file": "isort/deprecated/finders.py", "symbol": "KnownPatternFinder._parse_known_pattern", "split": "train"}
+{"project": "isort", "source_file": "isort/utils.py", "symbol": "TrieNode.__init__", "split": "train"}
+{"project": "isort", "source_file": "isort/wrap_modes.py", "symbol": "vertical_hanging_indent_bracket", "split": "train"}
+{"project": "isort", "source_file": "isort/api.py", "symbol": "sort_code_string", "split": "train"}
+{"project": "isort", "source_file": "isort/api.py", "symbol": "_file_output_stream_context", "split": "train"}
+{"project": "isort", "source_file": "isort/utils.py", "symbol": "Trie.insert", "split": "train"}
+{"project": "isort", "source_file": "isort/utils.py", "symbol": "Trie.search", "split": "train"}
+{"project": "isort", "source_file": "isort/deprecated/finders.py", "symbol": "ReqsBaseFinder._load_names", "split": "train"}
+{"project": "isort", "source_file": "isort/wrap_modes.py", "symbol": "grid", "split": "train"}
+{"project": "isort", "source_file": "isort/hooks.py", "symbol": "git_hook", "split": "train"}
+{"project": "isort", "source_file": "isort/deprecated/finders.py", "symbol": "FindersManager.find", "split": "validation"}
+{"project": "isort", "source_file": "isort/setuptools_commands.py", "symbol": "ISortCommand.initialize_options", "split": "validation"}
+{"project": "isort", "source_file": "isort/wrap_modes.py", "symbol": "hanging_indent_with_parentheses", "split": "validation"}
+{"project": "isort", "source_file": "isort/parse.py", "symbol": "import_type", "split": "validation"}
+{"project": "isort", "source_file": "isort/place.py", "symbol": "_src_path", "split": "validation"}
+{"project": "isort", "source_file": "isort/setuptools_commands.py", "symbol": "ISortCommand.run", "split": "validation"}
+{"project": "isort", "source_file": "isort/format.py", "symbol": "ColoramaPrinter.diff_line", "split": "validation"}
+{"project": "isort", "source_file": "isort/settings.py", "symbol": "Config.__init__", "split": "validation"}
+{"project": "isort", "source_file": "isort/wrap_modes.py", "symbol": "vertical_prefix_from_module_import", "split": "validation"}
+{"project": "isort", "source_file": "isort/place.py", "symbol": "_local", "split": "validation"}
+{"project": "isort", "source_file": "isort/parse.py", "symbol": "strip_syntax", "split": "validation"}
+{"project": "isort", "source_file": "isort/api.py", "symbol": "check_stream", "split": "validation"}
+{"project": "isort", "source_file": "isort/sorting.py", "symbol": "naturally", "split": "validation"}
+{"project": "isort", "source_file": "isort/api.py", "symbol": "check_file", "split": "validation"}
+{"project": "isort", "source_file": "isort/wrap_modes.py", "symbol": "hanging_indent", "split": "validation"}
+{"project": "isort", "source_file": "isort/sorting.py", "symbol": "section_key", "split": "validation"}
+{"project": "isort", "source_file": "isort/deprecated/finders.py", "symbol": "RequirementsFinder._get_files_from_dir_cached", "split": "validation"}
+{"project": "isort", "source_file": "isort/wrap_modes.py", "symbol": "noqa", "split": "validation"}
+{"project": "isort", "source_file": "isort/settings.py", "symbol": "Config.skip_globs", "split": "validation"}
+{"project": "isort", "source_file": "isort/files.py", "symbol": "find", "split": "validation"}
+{"project": "isort", "source_file": "isort/deprecated/finders.py", "symbol": "LocalFinder.find", "split": "validation"}
+{"project": "isort", "source_file": "isort/settings.py", "symbol": "find_all_configs", "split": "validation"}
+{"project": "isort", "source_file": "isort/api.py", "symbol": "sort_stream", "split": "validation"}
+{"project": "isort", "source_file": "isort/io.py", "symbol": "File.read", "split": "validation"}
+{"project": "isort", "source_file": "isort/output.py", "symbol": "_with_from_imports", "split": "validation"}
+{"project": "isort", "source_file": "isort/settings.py", "symbol": "Config.section_comments_end", "split": "validation"}
+{"project": "isort", "source_file": "isort/deprecated/finders.py", "symbol": "RequirementsFinder._get_names_cached", "split": "validation"}
+{"project": "isort", "source_file": "isort/format.py", "symbol": "ColoramaPrinter.__init__", "split": "validation"}
+{"project": "isort", "source_file": "isort/output.py", "symbol": "_with_star_comments", "split": "validation"}
+{"project": "isort", "source_file": "isort/wrap_modes.py", "symbol": "vertical", "split": "validation"}
+{"project": "isort", "source_file": "isort/settings.py", "symbol": "_as_list", "split": "test"}
+{"project": "isort", "source_file": "isort/io.py", "symbol": "File._open", "split": "test"}
+{"project": "isort", "source_file": "isort/deprecated/finders.py", "symbol": "chdir", "split": "test"}
+{"project": "isort", "source_file": "isort/output.py", "symbol": "_normalize_empty_lines", "split": "test"}
+{"project": "isort", "source_file": "isort/main.py", "symbol": "identify_imports_main", "split": "test"}
+{"project": "isort", "source_file": "isort/main.py", "symbol": "parse_args", "split": "test"}
+{"project": "isort", "source_file": "isort/format.py", "symbol": "show_unified_diff", "split": "test"}
+{"project": "isort", "source_file": "isort/main.py", "symbol": "_build_arg_parser", "split": "test"}
+{"project": "isort", "source_file": "isort/deprecated/finders.py", "symbol": "KnownPatternFinder.find", "split": "test"}
+{"project": "isort", "source_file": "isort/setuptools_commands.py", "symbol": "ISortCommand.distribution_files", "split": "test"}
+{"project": "isort", "source_file": "isort/format.py", "symbol": "ColoramaPrinter.style_text", "split": "test"}
+{"project": "isort", "source_file": "isort/settings.py", "symbol": "Config.sorting_function", "split": "test"}
+{"project": "isort", "source_file": "isort/deprecated/finders.py", "symbol": "PathFinder.__init__", "split": "test"}
+{"project": "isort", "source_file": "isort/deprecated/finders.py", "symbol": "ForcedSeparateFinder.find", "split": "test"}
+{"project": "isort", "source_file": "isort/place.py", "symbol": "_forced_separate", "split": "test"}
+{"project": "isort", "source_file": "isort/output.py", "symbol": "_with_straight_imports", "split": "test"}
+{"project": "isort", "source_file": "isort/main.py", "symbol": "main", "split": "test"}
+{"project": "isort", "source_file": "isort/wrap.py", "symbol": "import_statement", "split": "test"}
+{"project": "isort", "source_file": "isort/output.py", "symbol": "_ensure_newline_before_comment", "split": "test"}
+{"project": "isort", "source_file": "isort/settings.py", "symbol": "_get_config_data", "split": "test"}
+{"project": "isort", "source_file": "isort/deprecated/finders.py", "symbol": "ReqsBaseFinder.__init__", "split": "test"}
+{"project": "isort", "source_file": "isort/deprecated/finders.py", "symbol": "FindersManager.__init__", "split": "test"}
+{"project": "isort", "source_file": "isort/settings.py", "symbol": "Config.is_skipped", "split": "test"}
+{"project": "isort", "source_file": "isort/deprecated/finders.py", "symbol": "ReqsBaseFinder._get_files", "split": "test"}
+{"project": "isort", "source_file": "isort/api.py", "symbol": "sort_file", "split": "test"}
+{"project": "isort", "source_file": "isort/identify.py", "symbol": "imports", "split": "test"}
+{"project": "isort", "source_file": "isort/settings.py", "symbol": "Config.section_comments", "split": "test"}
+{"project": "isort", "source_file": "isort/format.py", "symbol": "ask_whether_to_apply_changes_to_file", "split": "test"}
+{"project": "isort", "source_file": "isort/settings.py", "symbol": "_find_config", "split": "test"}
+{"project": "isort", "source_file": "isort/comments.py", "symbol": "add_to_line", "split": "test"}

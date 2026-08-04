@@ -50,6 +50,7 @@ class RunRecord:
     feedback: str = ""
     stdout_file: str = ""
     coverup_log_file: str = ""
+    attempt_trace_file: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -60,6 +61,7 @@ class BatchTargetResult:
     target: SymbolTarget
     score: dict[str, Any] | None = None
     feedback: str = ""
+    attempt_traces: list[dict[str, Any]] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -81,6 +83,7 @@ class BatchRunRecord:
     coverage_after: str | None = None
     stdout_file: str = ""
     coverup_log_file: str = ""
+    attempt_trace_file: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)

@@ -37,6 +37,33 @@ def _zero_coverage_like(coverage: SymbolCoverage) -> SymbolCoverage:
     )
 
 
+def _load_attempt_traces(path: Path) -> list[dict]:
+    """Load CoverUp's append-only trace, tolerating one incomplete final line."""
+    if not path.is_file():
+        return []
+    traces = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            traces.append(value)
+    return traces
+
+
+def _traces_for_target(traces: list[dict], target: SymbolTarget) -> list[dict]:
+    wanted_file = target.source_file.replace("\\", "/").lower()
+    result = []
+    for trace in traces:
+        source_file = str(trace.get("source_file", "")).replace("\\", "/").lower()
+        symbols = {str(trace.get("symbol", "")), str(trace.get("name", ""))}
+        same_file = source_file.endswith(wanted_file) or wanted_file.endswith(source_file)
+        if source_file and same_file and target.symbol in symbols:
+            result.append(trace)
+    return result
+
+
 class CoverUpExperimentRunner:
     """Evaluate one prompt on one symbol in an isolated copy of the test suite."""
 
@@ -71,6 +98,7 @@ class CoverUpExperimentRunner:
             feedback=result.feedback,
             stdout_file=batch.stdout_file,
             coverup_log_file=batch.coverup_log_file,
+            attempt_trace_file=batch.attempt_trace_file,
         )
 
     def evaluate_batch(
@@ -111,10 +139,12 @@ class CoverUpExperimentRunner:
         }
         if workspace_kind not in workspace_prefixes:
             raise ValueError(f"Unsupported workspace kind: {workspace_kind!r}")
-        source_tests = self.config.tests_dir.resolve()
+        generated_tests_root = (
+            self.config.artifacts_dir.resolve() / "generated_tests" / safe_split
+        )
         work_tests = (
-            source_tests.parent
-            / f"{workspace_prefixes[workspace_kind]}_{safe_candidate_id}_{safe_split}"
+            generated_tests_root
+            / f"{workspace_prefixes[workspace_kind]}_{safe_candidate_id}"
         )
         if work_tests.exists():
             if any(work_tests.iterdir()):
@@ -138,8 +168,24 @@ class CoverUpExperimentRunner:
         after_json = run_dir / "coverage_after.json"
         stdout_file = run_dir / "coverup.stdout.log"
         coverup_log = run_dir / "coverup.log"
+        attempt_trace = run_dir / "attempt_trace.jsonl"
+        target_spec = run_dir / "target_spec.json"
         prompt_copy = run_dir / "prompt.json"
         shutil.copy2(prompt_template.resolve(), prompt_copy)
+        target_spec.write_text(
+            json.dumps(
+                [
+                    {
+                        "source_file": target.source_file,
+                        "symbol": target.symbol,
+                    }
+                    for target in targets
+                ],
+                indent=2,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
 
         environment = os.environ.copy()
         src_dir = self.config.project_root.resolve() / "src"
@@ -152,12 +198,14 @@ class CoverUpExperimentRunner:
             "--package-dir", str(self.config.package_dir.resolve()),
             "--tests-dir", str(work_tests),
             "--target-symbols", ",".join(symbols),
+            "--target-spec-file", str(target_spec),
             "--prompt", "gpt-v2",
             "--prompt-template-file", str(prompt_copy),
             "--model", self.config.coverup_model,
             "--max-attempts", str(self.config.max_attempts),
             "--prefix", "opt",
             "--log-file", str(coverup_log),
+            "--trace-file", str(attempt_trace),
             "--no-checkpoint",
         ]
         if self.config.repeat_tests:
@@ -189,6 +237,7 @@ class CoverUpExperimentRunner:
             for path in work_tests.glob("test_opt_*.py")
             if path.name not in before_tests
         )
+        attempt_traces = _load_attempt_traces(attempt_trace)
 
         results: list[BatchTargetResult] = []
         after = run_coverage(
@@ -204,7 +253,11 @@ class CoverUpExperimentRunner:
                 "Score: 0. The generated test suite failed under coverage.py:\n"
                 f"{after.stdout[-4000:]}"
             )
-            results = [BatchTargetResult(target=target, feedback=feedback) for target in targets]
+            results = [BatchTargetResult(
+                target=target,
+                feedback=feedback,
+                attempt_traces=_traces_for_target(attempt_traces, target),
+            ) for target in targets]
         else:
             report = load_report(after_json)
             for target in targets:
@@ -214,6 +267,7 @@ class CoverUpExperimentRunner:
                     results.append(BatchTargetResult(
                         target=target,
                         feedback=f"Score: 0. Coverage lookup failed: {exc}",
+                        attempt_traces=_traces_for_target(attempt_traces, target),
                     ))
                     continue
                 before_cov = _zero_coverage_like(after_cov)
@@ -230,6 +284,7 @@ class CoverUpExperimentRunner:
                     feedback=build_feedback(
                         metric_result, coverup_exit_code=completed.returncode
                     ),
+                    attempt_traces=_traces_for_target(attempt_traces, target),
                 ))
 
         record = BatchRunRecord(
@@ -247,6 +302,9 @@ class CoverUpExperimentRunner:
             coverage_after=str(after_json.relative_to(run_dir)) if after_json.exists() else None,
             stdout_file=str(stdout_file.relative_to(run_dir)),
             coverup_log_file=str(coverup_log.relative_to(run_dir)),
+            attempt_trace_file=(
+                str(attempt_trace.relative_to(run_dir)) if attempt_trace.exists() else ""
+            ),
         )
         (run_dir / "record.json").write_text(
             json.dumps(record.as_dict(), indent=2, ensure_ascii=False), encoding="utf-8"

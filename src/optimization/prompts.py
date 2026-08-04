@@ -9,12 +9,13 @@ from pathlib import Path
 class PromptBundle:
     initial: str
     error: str | None = None
-    missing_coverage: str | None = None
 
     @classmethod
     def load(cls, path: Path) -> PromptBundle:
         with path.open(encoding="utf-8") as file:
-            return cls(**json.load(file))
+            values = json.load(file)
+        # Select active fields explicitly so legacy prompt keys are harmless.
+        return cls(initial=values["initial"], error=values.get("error"))
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -23,12 +24,11 @@ class PromptBundle:
 
     def as_candidate(self) -> dict[str, str]:
         """Return the direct GEPA component mapping for this prompt bundle."""
-        if self.error is None or self.missing_coverage is None:
-            raise ValueError("A GEPA candidate requires all three CoverUp prompts")
+        if self.error is None:
+            raise ValueError("A GEPA candidate requires initial and error prompts")
         return {
             "initial": self.initial,
             "error": self.error,
-            "missing_coverage": self.missing_coverage,
         }
 
     @classmethod
@@ -37,13 +37,12 @@ class PromptBundle:
         return cls(
             initial=candidate.get("initial", ""),
             error=candidate.get("error", ""),
-            missing_coverage=candidate.get("missing_coverage", ""),
         )
 
 
 BASELINE_INITIAL = """You are an expert Python test-driven developer.
 The code below, extracted from {filename}, does not achieve full coverage:
-when tested, {missing_coverage} not execute.
+when tested, {coverage_targets} not execute.
 Create new pytest test functions that execute all missing lines and branches. Each test must
 be correct, deterministic, contain meaningful assertions, and clean up all modified state.
 Use the get_info tool function as necessary. Always return an entire Python test module.
@@ -61,17 +60,8 @@ Respond only with Python code enclosed in a python markdown code block.
 
 {error}"""
 
-BASELINE_MISSING_COVERAGE = """The proposed test still does not execute these targets:
-{missing_coverage}
-
-Modify or rewrite the complete test module so it exercises every remaining line and branch.
-Use a distinct input for each uncovered branch and add meaningful assertions for the observed behavior.
-Use get_info when necessary. Respond only with Python code enclosed in a python markdown code block."""
-
-
 def baseline_bundle() -> PromptBundle:
     return PromptBundle(
         initial=BASELINE_INITIAL,
         error=BASELINE_ERROR,
-        missing_coverage=BASELINE_MISSING_COVERAGE,
     )

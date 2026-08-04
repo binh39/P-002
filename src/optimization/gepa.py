@@ -6,6 +6,7 @@ import json
 import re
 import threading
 from collections.abc import Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -17,18 +18,15 @@ from .models import SymbolTarget
 from .prompts import PromptBundle
 from .runner import CoverUpExperimentRunner
 
-INITIAL_PLACEHOLDERS = ("{filename}", "{missing_coverage}", "{source_excerpt}")
+INITIAL_PLACEHOLDERS = ("{filename}", "{coverage_targets}", "{source_excerpt}")
 ERROR_PLACEHOLDERS = ("{error}",)
-MISSING_COVERAGE_PLACEHOLDERS = ("{missing_coverage}",)
 COMPONENT_PLACEHOLDERS = {
     "initial": INITIAL_PLACEHOLDERS,
     "error": ERROR_PLACEHOLDERS,
-    "missing_coverage": MISSING_COVERAGE_PLACEHOLDERS,
 }
 COMPONENT_ROLES = {
     "initial": "Generate the first complete pytest module from source and missing coverage.",
     "error": "Repair a complete pytest module after an execution or collection error.",
-    "missing_coverage": "Revise a passing test module to cover the remaining lines and branches.",
 }
 AUTO_METRIC_BUDGETS = {"light": 120, "medium": 300, "heavy": 600}
 
@@ -51,7 +49,7 @@ def validate_template(
     try:
         template.format(
             filename="x.py",
-            missing_coverage="line 1",
+            coverage_targets="line 1",
             source_excerpt="def f(): pass",
             error="pytest failed",
         )
@@ -64,11 +62,6 @@ def validate_bundle(bundle: PromptBundle) -> str | None:
     templates = (
         ("initial", bundle.initial, INITIAL_PLACEHOLDERS),
         ("error", bundle.error or "", ERROR_PLACEHOLDERS),
-        (
-            "missing_coverage",
-            bundle.missing_coverage or "",
-            MISSING_COVERAGE_PLACEHOLDERS,
-        ),
     )
     for name, template, placeholders in templates:
         if error := validate_template(template, placeholders):
@@ -78,7 +71,7 @@ def validate_bundle(bundle: PromptBundle) -> str | None:
 
 def bundle_digest(bundle: PromptBundle) -> str:
     serialized = "\n---PROMPT---\n".join(
-        (bundle.initial, bundle.error or "", bundle.missing_coverage or "")
+        (bundle.initial, bundle.error or "")
     )
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
 
@@ -117,10 +110,10 @@ def _evaluation_digest(
                     path.read_bytes()
                 ).hexdigest()
     payload = {
-        # Schema 6 records zero-coverage batches when CoverUp accepts no tests.
-        # Older caches incorrectly treated pytest's NO_TESTS_COLLECTED status as
-        # an unusable evaluation and omitted all symbol denominators.
-        "cache_schema": 6,
+        # Schema 9 evaluates every symbol in an isolated workspace rooted under
+        # the artifacts directory. Older caches either leak coverage across
+        # examples or point at sibling test directories outside the run tree.
+        "cache_schema": 9,
         "config": config_values,
         "targets": [_target_identity(target) for target in targets],
         "sources": source_hashes,
@@ -151,7 +144,9 @@ def evaluate_bundle_cached(
     for result in batch["results"]:
         if _result_identity(result) == wanted:
             return result
-    raise KeyError(f"Target {wanted!r} is absent from cached batch {batch['run_id']}")
+    raise KeyError(
+        f"Target {wanted!r} is absent from cached batch {batch.get('run_ids', [])}"
+    )
 
 
 def evaluate_bundle_batch_cached(
@@ -164,7 +159,7 @@ def evaluate_bundle_batch_cached(
     workspace_kind: str = "candidate",
     replicate: int = 0,
 ) -> dict:
-    """Evaluate all targets in one split with one CoverUp call and cache the batch."""
+    """Evaluate a split with one isolated CoverUp workspace per target and cache it."""
     if not targets:
         raise ValueError("Batch evaluation requires at least one target")
     if replicate < 0:
@@ -213,15 +208,36 @@ def evaluate_bundle_batch_cached(
         run_candidate_id = f"{digest}-{evaluation_digest}"
         if replicate:
             run_candidate_id += f"-r{replicate}"
-        record = runner.evaluate_batch(
-            targets,
-            candidate,
-            candidate_id=run_candidate_id,
-            split=split,
-            workspace_kind=workspace_kind,
+        def evaluate_target(target: SymbolTarget) -> Any:
+            identity = json.dumps(_target_identity(target), ensure_ascii=True)
+            target_digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:10]
+            return runner.evaluate_batch(
+                [target],
+                candidate,
+                candidate_id=f"{run_candidate_id}-{target_digest}",
+                split=split,
+                workspace_kind=workspace_kind,
+            )
+
+        configured_concurrency = int(
+            getattr(getattr(runner, "config", None), "max_concurrency", 1) or 1
         )
+        # A configured rate limit is process-local in CoverUp. Running several
+        # subprocesses would multiply it, so preserve the requested global cap.
+        max_workers = 1 if getattr(getattr(runner, "config", None), "rate_limit", None) else max(
+            1, min(configured_concurrency, len(targets))
+        )
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            records = list(executor.map(evaluate_target, targets))
+
         results = []
-        for target_result in record.results:
+        for record in records:
+            if len(record.results) != 1:
+                raise RuntimeError(
+                    "Isolated target evaluation returned an unexpected result count: "
+                    f"{len(record.results)}"
+                )
+            target_result = record.results[0]
             target = target_result.target
             results.append({
                 "prompt_digest": digest,
@@ -235,6 +251,7 @@ def evaluate_bundle_batch_cached(
                 ),
                 "coverage": target_result.score,
                 "feedback": target_result.feedback,
+                "attempt_traces": getattr(target_result, "attempt_traces", []),
             })
         batch = {
             "prompt_digest": digest,
@@ -242,9 +259,11 @@ def evaluate_bundle_batch_cached(
             "replicate": replicate,
             "split": split,
             "workspace_kind": workspace_kind,
-            "run_id": record.run_id,
-            "generator_exit_code": int(getattr(record, "exit_code", 0) or 0),
-            "tests_workspace": record.tests_workspace,
+            "run_ids": [record.run_id for record in records],
+            "generator_exit_codes": [
+                int(getattr(record, "exit_code", 0) or 0) for record in records
+            ],
+            "tests_workspaces": [record.tests_workspace for record in records],
             "results": results,
         }
         batch["aggregate"] = aggregate_coverage_score(results)
@@ -268,6 +287,49 @@ def _result_identity(result: dict) -> tuple[str, str, str, str]:
 
 def _mean(values: Sequence[float]) -> float:
     return sum(values) / len(values) if values else 0.0
+
+
+def _clip_text(value: Any, limit: int, *, keep_tail: bool = False) -> str:
+    text = str(value or "")
+    if len(text) <= limit:
+        return text
+    marker = f"\n... [truncated {len(text) - limit} characters] ...\n"
+    available = max(0, limit - len(marker))
+    return marker + text[-available:] if keep_tail else text[:available] + marker
+
+
+def _compact_component_attempts(
+    attempts: Sequence[Mapping[str, Any]], component: str,
+) -> list[dict[str, Any]]:
+    """Keep concise causal evidence instead of sending entire pytest transcripts."""
+    matching = [attempt for attempt in attempts if attempt.get("component") == component]
+    compact = []
+    for attempt in matching[-2:]:
+        row = {
+            key: attempt[key]
+            for key in (
+                "attempt", "replicate", "component", "outcome", "next_component",
+                "finish_reason", "missing_imports", "gained_lines", "gained_branches",
+                "remaining_lines", "remaining_branches",
+            )
+            if key in attempt
+        }
+        if "prompt_input" in attempt:
+            row["prompt_input"] = _clip_text(
+                attempt["prompt_input"], 8_000, keep_tail=True
+            )
+        if "generated_test" in attempt:
+            row["generated_test"] = _clip_text(attempt["generated_test"], 12_000)
+        if "execution_error" in attempt:
+            row["execution_error"] = _clip_text(
+                attempt["execution_error"], 8_000, keep_tail=True
+            )
+        if "assistant_response" in attempt:
+            row["assistant_response"] = _clip_text(
+                attempt["assistant_response"], 4_000
+            )
+        compact.append(row)
+    return compact
 
 
 def evaluate_bundle_repeated(
@@ -348,8 +410,14 @@ def evaluate_bundle_repeated(
         "split": split,
         "workspace_kind": workspace_kind,
         "replicates": replicates,
-        "run_ids": [batch["run_id"] for batch in batches],
-        "tests_workspaces": [batch["tests_workspace"] for batch in batches],
+        "run_ids": [
+            run_id for batch in batches for run_id in batch.get("run_ids", [])
+        ],
+        "tests_workspaces": [
+            workspace
+            for batch in batches
+            for workspace in batch.get("tests_workspaces", [])
+        ],
         "results": merged_results,
         "aggregate": aggregate,
         "batches": batches,
@@ -587,13 +655,22 @@ class CoverUpPromptAdapter:
             })
             if trajectories is not None:
                 worst = min(samples, key=lambda item: float(item["score"]))
+                attempt_traces = [
+                    {**attempt, "replicate": replicate}
+                    for replicate, sample in enumerate(samples)
+                    for attempt in sample.get("attempt_traces", [])
+                ]
                 trajectories.append({
                     "target": target.__dict__,
                     "score": raw_score,
                     "weighted_score": score,
                     "replicate_scores": raw_scores,
-                    "feedback": worst["feedback"],
+                    "feedback": "\n\n".join(
+                        f"Replicate {replicate}:\n{sample['feedback']}"
+                        for replicate, sample in enumerate(samples)
+                    ),
                     "coverage": worst.get("coverage"),
+                    "attempt_traces": attempt_traces,
                     "source_context": _source_context(
                         self.runner, target, worst.get("coverage")
                     ),
@@ -621,6 +698,20 @@ class CoverUpPromptAdapter:
         ] or list(trajectories)
         for component in components_to_update:
             placeholders = COMPONENT_PLACEHOLDERS[component]
+            has_structured_traces = any(
+                trajectory.get("attempt_traces") for trajectory in weak_trajectories
+            )
+            component_trajectories = [
+                trajectory for trajectory in weak_trajectories
+                if any(
+                    attempt.get("component") == component
+                    for attempt in trajectory.get("attempt_traces", [])
+                )
+            ]
+            # Compatibility for custom runners that predate trace schema 7. Real
+            # traced runs never borrow evidence from an unexercised component.
+            if not has_structured_traces:
+                component_trajectories = weak_trajectories
             result[component] = [
                 {
                     "Inputs": {
@@ -631,20 +722,25 @@ class CoverUpPromptAdapter:
                             f"{trajectory['target']['source_file']}::"
                             f"{trajectory['target']['symbol']}"
                         ),
-                        "source_context": trajectory["source_context"],
+                        "source_context": _clip_text(
+                            trajectory["source_context"], 12_000
+                        ),
                     },
                     "Generated Outputs": {
                         "symbol_score": trajectory["score"],
                         "replicate_scores": trajectory.get("replicate_scores", []),
                         "candidate_component_chars": len(candidate[component]),
+                        "component_attempts": _compact_component_attempts(
+                            trajectory.get("attempt_traces", []), component
+                        ),
                     },
                     "Feedback": (
-                        f"{trajectory['feedback']}\n"
+                        f"{_clip_text(trajectory['feedback'], 6_000, keep_tail=True)}\n"
                         "Infer a reusable prompting improvement from this failure. "
                         "Do not embed project-specific names or line numbers in the template."
                     ),
                 }
-                for trajectory in weak_trajectories
+                for trajectory in component_trajectories
             ]
         return result
 
@@ -680,8 +776,12 @@ class CoverUpPromptAdapter:
         proposals: dict[str, str] = {}
         for component in components_to_update:
             current = candidate[component]
+            evidence_rows = list(reflective_dataset.get(component, []))
+            if not evidence_rows:
+                proposals[component] = current
+                continue
             evidence = json.dumps(
-                list(reflective_dataset.get(component, [])),
+                evidence_rows,
                 indent=2,
                 ensure_ascii=False,
             )
@@ -741,7 +841,7 @@ def _optimization_run_digest(
     evaluation_replicates: int,
 ) -> str:
     payload = {
-        "optimizer_schema": 6,
+        "optimizer_schema": 8,
         "baseline": baseline.as_candidate(),
         "train": [_target_identity(target) for target in train_targets],
         "validation": [_target_identity(target) for target in validation_targets],
@@ -816,7 +916,7 @@ def optimize(
     max_metric_calls: int | None = None,
     evaluation_replicates: int = 1,
 ) -> PromptOptimizationResult:
-    """Optimize the actual three prompt templates with the baseline as candidate zero."""
+    """Optimize the initial and error prompt components."""
     if error := validate_bundle(baseline):
         raise ValueError(f"Invalid baseline prompt bundle: {error}")
     if not train_targets or not validation_targets:
@@ -867,13 +967,16 @@ def optimize(
         candidate_selection_strategy="pareto",
         frontier_type="hybrid",
         skip_perfect_score=False,
-        reflection_minibatch_size=min(3, len(train_targets)),
+        reflection_minibatch_size=min(8, len(train_targets)),
         module_selector="round_robin",
         use_merge=True,
         max_merge_invocations=5,
         max_metric_calls=max_metric_calls,
         run_dir=str(artifacts_dir / "gepa_direct_logs" / run_digest),
-        cache_evaluation=True,
+        # The adapter already caches whole isolated-split evaluations. GEPA's
+        # per-example cache uses integer ids shared by its train and validation
+        # ListDataLoaders, which can otherwise reuse a train score as validation.
+        cache_evaluation=False,
         track_best_outputs=True,
         display_progress_bar=True,
         seed=7,
