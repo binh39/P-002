@@ -1,0 +1,13 @@
+{
+    "target": {
+        "project": "isort",
+        "source_file": "isort/comments.py",
+        "symbol": "add_to_line",
+        "split": "validation"
+    },
+    "weighted_score": 0.23296703296703297,
+    "raw_symbol_score": 1.0,
+    "replicate_scores": [
+        1.0
+    ]
+}

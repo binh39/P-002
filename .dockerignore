@@ -5,9 +5,12 @@
 __pycache__
 *.pyc
 .pytest_cache
+.pytest_tmp
+.pytest_tmp_*
 .ruff_cache
 docs/
 presentation/
+frontend/
 eval/
 *.md
 !requirements.txt

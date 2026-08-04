@@ -1,0 +1,13 @@
+{
+    "target": {
+        "project": "isort",
+        "source_file": "isort/place.py",
+        "symbol": "_is_namespace_package",
+        "split": "validation"
+    },
+    "weighted_score": 0.2120879120879121,
+    "raw_symbol_score": 0.8166666666666667,
+    "replicate_scores": [
+        0.8166666666666667
+    ]
+}

@@ -113,8 +113,20 @@ class Chatter:
         self._functions: dict[str, dict[str, T.Any]] = dict()
         self._max_func_calls_per_chat = 50
         self._extra_request_pars: dict[str, T.Any] | None = None
-        # Increase token limit for function calling models
-        self._default_max_tokens = 30000
+        # Keep CoverUp's larger response allowance where supported, but never
+        # exceed the selected model's advertised output limit.
+        model_info = (
+            litellm.model_cost.get(model)
+            or litellm.model_cost.get(model.split("/", 1)[-1])
+            or {}
+        )
+        advertised_limit = (
+            model_info.get("max_output_tokens")
+            or model_info.get("max_tokens")
+        )
+        self._default_max_tokens = min(
+            30000, int(advertised_limit)
+        ) if advertised_limit else 30000
 
     @staticmethod
     def _validate_model(model) -> None:

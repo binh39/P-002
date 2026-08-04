@@ -88,19 +88,31 @@ gepa==0.0.27
 litellm[google]>=1.94.0
 ```
 
-Gemini được cấu hình giống CoverUp qua `.env`:
+Provider và model được cấu hình tập trung qua `.env`. Để dùng OpenAI:
 
 ```dotenv
-COVERUP_MODEL=vertex_ai/gemini-3.6-flash
-OPTIMIZE_MODEL=vertex_ai/gemini-3.6-flash
+LLM_PROVIDER=openai
+LLM_MODEL=gpt-4o-mini
+OPENAI_API_KEY=<your-openai-api-key>
+```
+
+Pipeline chuẩn hóa model thành `openai/gpt-4o-mini` cho LiteLLM, rồi dùng cùng
+model để sinh/sửa unit test và để GEPA reflection đề xuất ba prompt template mới.
+API key chỉ được đọc từ environment và không được truyền trên command line.
+Nếu không khai báo `LLM_PROVIDER` và `LLM_MODEL`, chỉ cần có `OPENAI_API_KEY`
+thì pipeline và CoverUp cũng tự chọn `openai/gpt-4o-mini`.
+
+Để chuyển lại Vertex AI:
+
+```dotenv
+LLM_PROVIDER=vertex_ai
+LLM_MODEL=gemini-3.6-flash
 VERTEXAI_PROJECT=<google-cloud-project>
 VERTEXAI_LOCATION=global
 ```
 
-`COVERUP_MODEL` sinh và sửa unit test. `OPTIMIZE_MODEL` đọc score/feedback và
-reflection để đề xuất ba prompt template mới. Hai biến có thể trỏ tới hai model
-khác nhau. Optimization CLI chỉ đọc hai model từ `.env` và không nhận model qua
-command line, nhờ đó mỗi run có một nguồn cấu hình duy nhất.
+Cấu hình cũ `COVERUP_MODEL` và `OPTIMIZE_MODEL` vẫn hoạt động khi
+`LLM_PROVIDER` chưa được khai báo.
 
 Vertex AI dùng Application Default Credentials. Cần đăng nhập ADC trước khi chạy
 evaluate hoặc optimize có gọi LLM.

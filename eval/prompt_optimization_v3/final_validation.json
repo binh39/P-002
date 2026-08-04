@@ -1,0 +1,4368 @@
+{
+  "mean_score": 0.4599540856589425,
+  "baseline_mean_score": 0.4599540856589425,
+  "optimized_mean_score": 0.4599540856589425,
+  "baseline_aggregate_coverage": {
+    "branch_coverage": 0.44339622641509435,
+    "covered_branches": 141.0,
+    "covered_statements": 255.0,
+    "num_branches": 318.0,
+    "num_statements": 526.0,
+    "score": 0.4599540856589425,
+    "statement_coverage": 0.4847908745247148
+  },
+  "optimized_aggregate_coverage": {
+    "branch_coverage": 0.44339622641509435,
+    "covered_branches": 141.0,
+    "covered_statements": 255.0,
+    "num_branches": 318.0,
+    "num_statements": 526.0,
+    "score": 0.4599540856589425,
+    "statement_coverage": 0.4847908745247148
+  },
+  "absolute_gain": 0.0,
+  "promoted": false,
+  "final_split": "test",
+  "used_locked_holdout": true,
+  "evaluation_replicates": 1,
+  "prompt": "D:\\VinAI\\P-002\\eval\\prompt_optimization_v3\\prompts\\gepa_proposed.json",
+  "production_prompt": "D:\\VinAI\\P-002\\eval\\prompt_optimization_v3\\prompts\\gepa_optimized.json",
+  "baseline_prompt": "D:\\VinAI\\P-002\\eval\\prompt_optimization\\prompts\\gpt_v2_baseline.json",
+  "baseline_tests_workspaces": [
+    "D:\\VinAI\\P-002\\src\\sample_repo\\isort\\tests_base_line_70bf98e239d3e2a5-5fc1a96cfab9_test"
+  ],
+  "baseline_run_ids": [
+    "isort-test-batch-40c28cd1"
+  ],
+  "run_ids": [
+    "isort-test-batch-40c28cd1"
+  ],
+  "tests_workspaces": [
+    "D:\\VinAI\\P-002\\src\\sample_repo\\isort\\tests_base_line_70bf98e239d3e2a5-5fc1a96cfab9_test"
+  ],
+  "baseline_results": [
+    {
+      "prompt_digest": "70bf98e239d3e2a5",
+      "evaluation_digest": "5fc1a96cfab9",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/settings.py",
+        "symbol": "find_all_configs",
+        "split": "test"
+      },
+      "run_id": "isort-test-batch-40c28cd1",
+      "score": 0.0,
+      "coverage": {
+        "score": 0.0,
+        "statement_gain": 0.0,
+        "branch_gain": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "covered_statements": 0.0,
+        "num_statements": 14.0,
+        "covered_branches": 0.0,
+        "num_branches": 8.0,
+        "gained_lines": [],
+        "gained_branches": [],
+        "remaining_lines": [
+          795,
+          797,
+          798,
+          799,
+          800,
+          802,
+          803,
+          806,
+          807,
+          811,
+          813,
+          814,
+          815,
+          817
+        ],
+        "remaining_branches": [
+          [
+            797,
+            798
+          ],
+          [
+            797,
+            817
+          ],
+          [
+            798,
+            797
+          ],
+          [
+            798,
+            799
+          ],
+          [
+            800,
+            798
+          ],
+          [
+            800,
+            802
+          ],
+          [
+            813,
+            798
+          ],
+          [
+            813,
+            814
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 0.0000\nStatement gain: 0 newly covered; 14 remain.\nBranch gain: 0 newly covered; 8 remain.\nRemaining lines: [795, 797, 798, 799, 800, 802, 803, 806, 807, 811, 813, 814, 815, 817]\nRemaining branches: [(797, 798), (797, 817), (798, 797), (798, 799), (800, 798), (800, 802), (813, 798), (813, 814)]\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "replicate_scores": [
+        0.0
+      ]
+    },
+    {
+      "prompt_digest": "70bf98e239d3e2a5",
+      "evaluation_digest": "5fc1a96cfab9",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/settings.py",
+        "symbol": "_find_config",
+        "split": "test"
+      },
+      "run_id": "isort-test-batch-40c28cd1",
+      "score": 0.6220779220779221,
+      "coverage": {
+        "score": 0.6220779220779221,
+        "statement_gain": 0.5909090909090909,
+        "branch_gain": 0.6428571428571429,
+        "statement_coverage": 0.5909090909090909,
+        "branch_coverage": 0.6428571428571429,
+        "covered_statements": 13.0,
+        "num_statements": 22.0,
+        "covered_branches": 9.0,
+        "num_branches": 14.0,
+        "gained_lines": [
+          755,
+          756,
+          757,
+          758,
+          759,
+          760,
+          775,
+          776,
+          777,
+          779,
+          780,
+          781,
+          786
+        ],
+        "gained_branches": [
+          [
+            757,
+            758
+          ],
+          [
+            758,
+            759
+          ],
+          [
+            758,
+            775
+          ],
+          [
+            760,
+            758
+          ],
+          [
+            775,
+            776
+          ],
+          [
+            775,
+            779
+          ],
+          [
+            776,
+            775
+          ],
+          [
+            776,
+            777
+          ],
+          [
+            780,
+            781
+          ]
+        ],
+        "remaining_lines": [
+          762,
+          763,
+          766,
+          767,
+          771,
+          772,
+          773,
+          783,
+          784
+        ],
+        "remaining_branches": [
+          [
+            757,
+            786
+          ],
+          [
+            760,
+            762
+          ],
+          [
+            772,
+            758
+          ],
+          [
+            772,
+            773
+          ],
+          [
+            780,
+            783
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 0.6221\nStatement gain: 13 newly covered; 9 remain.\nBranch gain: 9 newly covered; 5 remain.\nRemaining lines: [762, 763, 766, 767, 771, 772, 773, 783, 784]\nRemaining branches: [(757, 786), (760, 762), (772, 758), (772, 773), (780, 783)]\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "replicate_scores": [
+        0.6220779220779221
+      ]
+    },
+    {
+      "prompt_digest": "70bf98e239d3e2a5",
+      "evaluation_digest": "5fc1a96cfab9",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/identify.py",
+        "symbol": "imports",
+        "split": "test"
+      },
+      "run_id": "isort-test-batch-40c28cd1",
+      "score": 0.6668235294117648,
+      "coverage": {
+        "score": 0.6668235294117648,
+        "statement_gain": 0.6470588235294118,
+        "branch_gain": 0.68,
+        "statement_coverage": 0.6470588235294118,
+        "branch_coverage": 0.68,
+        "covered_statements": 66.0,
+        "num_statements": 102.0,
+        "covered_branches": 34.0,
+        "num_branches": 50.0,
+        "gained_lines": [
+          51,
+          53,
+          54,
+          55,
+          59,
+          61,
+          64,
+          65,
+          83,
+          84,
+          85,
+          86,
+          88,
+          89,
+          90,
+          91,
+          92,
+          93,
+          97,
+          98,
+          101,
+          105,
+          113,
+          114,
+          115,
+          116,
+          120,
+          121,
+          123,
+          152,
+          153,
+          158,
+          160,
+          161,
+          165,
+          170,
+          171,
+          172,
+          173,
+          174,
+          175,
+          176,
+          177,
+          178,
+          179,
+          180,
+          181,
+          182,
+          183,
+          184,
+          185,
+          188,
+          191,
+          192,
+          193,
+          194,
+          195,
+          196,
+          199,
+          201,
+          202,
+          203,
+          204,
+          205,
+          207,
+          208
+        ],
+        "gained_branches": [
+          [
+            54,
+            -44
+          ],
+          [
+            54,
+            55
+          ],
+          [
+            59,
+            61
+          ],
+          [
+            61,
+            64
+          ],
+          [
+            65,
+            83
+          ],
+          [
+            85,
+            86
+          ],
+          [
+            85,
+            88
+          ],
+          [
+            88,
+            54
+          ],
+          [
+            88,
+            89
+          ],
+          [
+            90,
+            91
+          ],
+          [
+            90,
+            92
+          ],
+          [
+            113,
+            114
+          ],
+          [
+            113,
+            123
+          ],
+          [
+            114,
+            115
+          ],
+          [
+            114,
+            152
+          ],
+          [
+            123,
+            152
+          ],
+          [
+            152,
+            153
+          ],
+          [
+            152,
+            165
+          ],
+          [
+            172,
+            173
+          ],
+          [
+            172,
+            201
+          ],
+          [
+            173,
+            174
+          ],
+          [
+            173,
+            201
+          ],
+          [
+            176,
+            177
+          ],
+          [
+            176,
+            191
+          ],
+          [
+            185,
+            188
+          ],
+          [
+            196,
+            199
+          ],
+          [
+            201,
+            88
+          ],
+          [
+            201,
+            202
+          ],
+          [
+            202,
+            203
+          ],
+          [
+            202,
+            207
+          ],
+          [
+            204,
+            88
+          ],
+          [
+            204,
+            205
+          ],
+          [
+            207,
+            88
+          ],
+          [
+            207,
+            208
+          ]
+        ],
+        "remaining_lines": [
+          60,
+          62,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          80,
+          117,
+          118,
+          124,
+          125,
+          126,
+          127,
+          129,
+          132,
+          133,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          143,
+          146,
+          148,
+          186,
+          197
+        ],
+        "remaining_branches": [
+          [
+            59,
+            60
+          ],
+          [
+            61,
+            62
+          ],
+          [
+            65,
+            66
+          ],
+          [
+            66,
+            67
+          ],
+          [
+            66,
+            74
+          ],
+          [
+            67,
+            68
+          ],
+          [
+            67,
+            74
+          ],
+          [
+            123,
+            124
+          ],
+          [
+            132,
+            133
+          ],
+          [
+            132,
+            143
+          ],
+          [
+            135,
+            123
+          ],
+          [
+            135,
+            136
+          ],
+          [
+            143,
+            146
+          ],
+          [
+            143,
+            148
+          ],
+          [
+            185,
+            186
+          ],
+          [
+            196,
+            197
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 0.6668\nStatement gain: 66 newly covered; 36 remain.\nBranch gain: 34 newly covered; 16 remain.\nRemaining lines: [60, 62, 66, 67, 68, 69, 70, 71, 73, 74, 75, 76, 77, 78, 80, 117, 118, 124, 125, 126, 127, 129, 132, 133, 135, 136, 137, 138, 139, 140, 141, 143, 146, 148, 186, 197]\nRemaining branches: [(59, 60), (61, 62), (65, 66), (66, 67), (66, 74), (67, 68), (67, 74), (123, 124), (132, 133), (132, 143), (135, 123), (135, 136), (143, 146), (143, 148), (185, 186), (196, 197)]\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "replicate_scores": [
+        0.6668235294117648
+      ]
+    },
+    {
+      "prompt_digest": "70bf98e239d3e2a5",
+      "evaluation_digest": "5fc1a96cfab9",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/deprecated/finders.py",
+        "symbol": "ReqsBaseFinder.find",
+        "split": "test"
+      },
+      "run_id": "isort-test-batch-40c28cd1",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 10.0,
+        "num_statements": 10.0,
+        "covered_branches": 8.0,
+        "num_branches": 8.0,
+        "gained_lines": [
+          276,
+          277,
+          279,
+          280,
+          281,
+          282,
+          284,
+          285,
+          286,
+          287
+        ],
+        "gained_branches": [
+          [
+            276,
+            277
+          ],
+          [
+            276,
+            279
+          ],
+          [
+            281,
+            282
+          ],
+          [
+            281,
+            284
+          ],
+          [
+            284,
+            285
+          ],
+          [
+            284,
+            287
+          ],
+          [
+            285,
+            284
+          ],
+          [
+            285,
+            286
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 1.0000\nStatement gain: 10 newly covered; 0 remain.\nBranch gain: 8 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "replicate_scores": [
+        1.0
+      ]
+    },
+    {
+      "prompt_digest": "70bf98e239d3e2a5",
+      "evaluation_digest": "5fc1a96cfab9",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/main.py",
+        "symbol": "main",
+        "split": "test"
+      },
+      "run_id": "isort-test-batch-40c28cd1",
+      "score": 0.4357656731757451,
+      "coverage": {
+        "score": 0.4357656731757451,
+        "statement_gain": 0.5179856115107914,
+        "branch_gain": 0.38095238095238093,
+        "statement_coverage": 0.5179856115107914,
+        "branch_coverage": 0.38095238095238093,
+        "covered_statements": 72.0,
+        "num_statements": 139.0,
+        "covered_branches": 32.0,
+        "num_branches": 84.0,
+        "gained_lines": [
+          1062,
+          1063,
+          1067,
+          1068,
+          1069,
+          1072,
+          1073,
+          1077,
+          1079,
+          1085,
+          1086,
+          1087,
+          1088,
+          1089,
+          1091,
+          1092,
+          1097,
+          1098,
+          1100,
+          1101,
+          1102,
+          1103,
+          1104,
+          1105,
+          1106,
+          1107,
+          1108,
+          1109,
+          1110,
+          1111,
+          1112,
+          1113,
+          1114,
+          1116,
+          1117,
+          1120,
+          1125,
+          1126,
+          1129,
+          1158,
+          1159,
+          1162,
+          1163,
+          1164,
+          1166,
+          1172,
+          1173,
+          1175,
+          1184,
+          1185,
+          1189,
+          1190,
+          1191,
+          1192,
+          1195,
+          1214,
+          1229,
+          1230,
+          1231,
+          1249,
+          1250,
+          1260,
+          1261,
+          1262,
+          1267,
+          1269,
+          1270,
+          1271,
+          1274,
+          1293,
+          1296,
+          1297
+        ],
+        "gained_branches": [
+          [
+            1063,
+            1067
+          ],
+          [
+            1069,
+            1072
+          ],
+          [
+            1072,
+            1073
+          ],
+          [
+            1072,
+            1079
+          ],
+          [
+            1073,
+            1077
+          ],
+          [
+            1079,
+            1085
+          ],
+          [
+            1086,
+            1087
+          ],
+          [
+            1086,
+            1091
+          ],
+          [
+            1088,
+            1089
+          ],
+          [
+            1091,
+            1092
+          ],
+          [
+            1097,
+            1098
+          ],
+          [
+            1097,
+            1100
+          ],
+          [
+            1117,
+            1120
+          ],
+          [
+            1120,
+            1125
+          ],
+          [
+            1126,
+            1129
+          ],
+          [
+            1129,
+            1158
+          ],
+          [
+            1158,
+            1159
+          ],
+          [
+            1158,
+            1166
+          ],
+          [
+            1166,
+            1172
+          ],
+          [
+            1175,
+            1184
+          ],
+          [
+            1185,
+            1189
+          ],
+          [
+            1192,
+            1195
+          ],
+          [
+            1195,
+            1214
+          ],
+          [
+            1231,
+            1249
+          ],
+          [
+            1250,
+            1260
+          ],
+          [
+            1261,
+            1262
+          ],
+          [
+            1262,
+            1267
+          ],
+          [
+            1269,
+            1270
+          ],
+          [
+            1271,
+            1274
+          ],
+          [
+            1274,
+            1293
+          ],
+          [
+            1293,
+            1296
+          ],
+          [
+            1296,
+            1297
+          ]
+        ],
+        "remaining_lines": [
+          1064,
+          1065,
+          1070,
+          1074,
+          1075,
+          1080,
+          1081,
+          1082,
+          1083,
+          1090,
+          1118,
+          1121,
+          1127,
+          1128,
+          1130,
+          1131,
+          1132,
+          1134,
+          1135,
+          1136,
+          1144,
+          1146,
+          1147,
+          1156,
+          1157,
+          1167,
+          1170,
+          1171,
+          1176,
+          1177,
+          1178,
+          1179,
+          1181,
+          1182,
+          1186,
+          1187,
+          1188,
+          1193,
+          1196,
+          1198,
+          1199,
+          1232,
+          1234,
+          1235,
+          1236,
+          1237,
+          1242,
+          1243,
+          1245,
+          1247,
+          1251,
+          1252,
+          1253,
+          1258,
+          1263,
+          1264,
+          1272,
+          1275,
+          1276,
+          1281,
+          1282,
+          1287,
+          1294,
+          1299,
+          1300,
+          1303,
+          1304
+        ],
+        "remaining_branches": [
+          [
+            1063,
+            1064
+          ],
+          [
+            1069,
+            1070
+          ],
+          [
+            1073,
+            1074
+          ],
+          [
+            1079,
+            1080
+          ],
+          [
+            1082,
+            1083
+          ],
+          [
+            1082,
+            1085
+          ],
+          [
+            1088,
+            1090
+          ],
+          [
+            1091,
+            1100
+          ],
+          [
+            1117,
+            1118
+          ],
+          [
+            1120,
+            1121
+          ],
+          [
+            1126,
+            1127
+          ],
+          [
+            1129,
+            1130
+          ],
+          [
+            1131,
+            1132
+          ],
+          [
+            1131,
+            1134
+          ],
+          [
+            1135,
+            1136
+          ],
+          [
+            1135,
+            1146
+          ],
+          [
+            1166,
+            1167
+          ],
+          [
+            1175,
+            1176
+          ],
+          [
+            1177,
+            1178
+          ],
+          [
+            1177,
+            1182
+          ],
+          [
+            1178,
+            1179
+          ],
+          [
+            1178,
+            1181
+          ],
+          [
+            1185,
+            1186
+          ],
+          [
+            1186,
+            1187
+          ],
+          [
+            1186,
+            1188
+          ],
+          [
+            1192,
+            1193
+          ],
+          [
+            1195,
+            1196
+          ],
+          [
+            1231,
+            1232
+          ],
+          [
+            1235,
+            1236
+          ],
+          [
+            1235,
+            1237
+          ],
+          [
+            1242,
+            1243
+          ],
+          [
+            1242,
+            1245
+          ],
+          [
+            1250,
+            1251
+          ],
+          [
+            1251,
+            1252
+          ],
+          [
+            1251,
+            1258
+          ],
+          [
+            1252,
+            1253
+          ],
+          [
+            1252,
+            1258
+          ],
+          [
+            1261,
+            1269
+          ],
+          [
+            1262,
+            1263
+          ],
+          [
+            1263,
+            1264
+          ],
+          [
+            1263,
+            1267
+          ],
+          [
+            1269,
+            1271
+          ],
+          [
+            1271,
+            1272
+          ],
+          [
+            1274,
+            1275
+          ],
+          [
+            1275,
+            1276
+          ],
+          [
+            1275,
+            1281
+          ],
+          [
+            1281,
+            1282
+          ],
+          [
+            1281,
+            1287
+          ],
+          [
+            1293,
+            1294
+          ],
+          [
+            1296,
+            1299
+          ],
+          [
+            1299,
+            -1061
+          ],
+          [
+            1299,
+            1300
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 0.4358\nStatement gain: 72 newly covered; 67 remain.\nBranch gain: 32 newly covered; 52 remain.\nRemaining lines: [1064, 1065, 1070, 1074, 1075, 1080, 1081, 1082, 1083, 1090, 1118, 1121, 1127, 1128, 1130, 1131, 1132, 1134, 1135, 1136, 1144, 1146, 1147, 1156, 1157, 1167, 1170, 1171, 1176, 1177, 1178, 1179, 1181, 1182, 1186, 1187, 1188, 1193, 1196, 1198, 1199, 1232, 1234, 1235, 1236, 1237, 1242, 1243, 1245, 1247, 1251, 1252, 1253, 1258, 1263, 1264, 1272, 1275, 1276, 1281, 1282, 1287, 1294, 1299, 1300, 1303, 1304]\nRemaining branches: [(1063, 1064), (1069, 1070), (1073, 1074), (1079, 1080), (1082, 1083), (1082, 1085), (1088, 1090), (1091, 1100), (1117, 1118), (1120, 1121), (1126, 1127), (1129, 1130), (1131, 1132), (1131, 1134), (1135, 1136), (1135, 1146), (1166, 1167), (1175, 1176), (1177, 1178), (1177, 1182), (1178, 1179), (1178, 1181), (1185, 1186), (1186, 1187), (1186, 1188), (1192, 1193), (1195, 1196), (1231, 1232), (1235, 1236), (1235, 1237), (1242, 1243), (1242, 1245), (1250, 1251), (1251, 1252), (1251, 1258), (1252, 1253), (1252, 1258), (1261, 1269), (1262, 1263), (1263, 1264), (1263, 1267), (1269, 1271), (1271, 1272), (1274, 1275), (1275, 1276), (1275, 1281), (1281, 1282), (1281, 1287), (1293, 1294), (1296, 1299), (1299, -1061), (1299, 1300)]\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "replicate_scores": [
+        0.4357656731757451
+      ]
+    },
+    {
+      "prompt_digest": "70bf98e239d3e2a5",
+      "evaluation_digest": "5fc1a96cfab9",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/settings.py",
+        "symbol": "Config.__init__",
+        "split": "test"
+      },
+      "run_id": "isort-test-batch-40c28cd1",
+      "score": 0.4681704260651629,
+      "coverage": {
+        "score": 0.4681704260651629,
+        "statement_gain": 0.5037593984962406,
+        "branch_gain": 0.4444444444444444,
+        "statement_coverage": 0.5037593984962406,
+        "branch_coverage": 0.4444444444444444,
+        "covered_statements": 67.0,
+        "num_statements": 133.0,
+        "covered_branches": 40.0,
+        "num_branches": 90.0,
+        "gained_lines": [
+          291,
+          292,
+          293,
+          294,
+          295,
+          296,
+          298,
+          314,
+          316,
+          320,
+          335,
+          336,
+          337,
+          339,
+          340,
+          342,
+          343,
+          345,
+          346,
+          347,
+          348,
+          349,
+          352,
+          353,
+          359,
+          361,
+          362,
+          363,
+          365,
+          366,
+          376,
+          377,
+          378,
+          379,
+          381,
+          415,
+          417,
+          421,
+          422,
+          423,
+          425,
+          427,
+          440,
+          441,
+          447,
+          448,
+          449,
+          450,
+          463,
+          464,
+          469,
+          473,
+          474,
+          475,
+          477,
+          480,
+          492,
+          494,
+          498,
+          503,
+          504,
+          507,
+          508,
+          509,
+          513,
+          514,
+          516
+        ],
+        "gained_branches": [
+          [
+            298,
+            314
+          ],
+          [
+            320,
+            335
+          ],
+          [
+            335,
+            336
+          ],
+          [
+            335,
+            342
+          ],
+          [
+            336,
+            337
+          ],
+          [
+            336,
+            339
+          ],
+          [
+            347,
+            348
+          ],
+          [
+            347,
+            359
+          ],
+          [
+            348,
+            349
+          ],
+          [
+            349,
+            352
+          ],
+          [
+            352,
+            353
+          ],
+          [
+            359,
+            361
+          ],
+          [
+            361,
+            362
+          ],
+          [
+            361,
+            365
+          ],
+          [
+            366,
+            376
+          ],
+          [
+            379,
+            381
+          ],
+          [
+            379,
+            427
+          ],
+          [
+            381,
+            415
+          ],
+          [
+            415,
+            417
+          ],
+          [
+            417,
+            421
+          ],
+          [
+            422,
+            423
+          ],
+          [
+            422,
+            425
+          ],
+          [
+            427,
+            440
+          ],
+          [
+            440,
+            441
+          ],
+          [
+            449,
+            450
+          ],
+          [
+            463,
+            464
+          ],
+          [
+            463,
+            473
+          ],
+          [
+            464,
+            469
+          ],
+          [
+            480,
+            492
+          ],
+          [
+            492,
+            494
+          ],
+          [
+            494,
+            498
+          ],
+          [
+            498,
+            503
+          ],
+          [
+            504,
+            507
+          ],
+          [
+            504,
+            513
+          ],
+          [
+            507,
+            504
+          ],
+          [
+            507,
+            508
+          ],
+          [
+            508,
+            507
+          ],
+          [
+            508,
+            509
+          ],
+          [
+            513,
+            514
+          ],
+          [
+            513,
+            516
+          ]
+        ],
+        "remaining_lines": [
+          299,
+          300,
+          301,
+          302,
+          303,
+          304,
+          305,
+          306,
+          307,
+          308,
+          309,
+          321,
+          325,
+          326,
+          327,
+          350,
+          355,
+          356,
+          357,
+          360,
+          367,
+          368,
+          369,
+          371,
+          372,
+          373,
+          374,
+          388,
+          389,
+          390,
+          391,
+          392,
+          393,
+          394,
+          403,
+          405,
+          406,
+          407,
+          416,
+          418,
+          428,
+          429,
+          431,
+          432,
+          433,
+          452,
+          453,
+          454,
+          457,
+          458,
+          459,
+          461,
+          465,
+          466,
+          467,
+          481,
+          482,
+          483,
+          484,
+          493,
+          495,
+          496,
+          497,
+          499,
+          500,
+          501
+        ],
+        "remaining_branches": [
+          [
+            298,
+            299
+          ],
+          [
+            320,
+            321
+          ],
+          [
+            326,
+            327
+          ],
+          [
+            326,
+            345
+          ],
+          [
+            348,
+            352
+          ],
+          [
+            349,
+            350
+          ],
+          [
+            352,
+            355
+          ],
+          [
+            359,
+            360
+          ],
+          [
+            366,
+            367
+          ],
+          [
+            368,
+            369
+          ],
+          [
+            368,
+            371
+          ],
+          [
+            372,
+            373
+          ],
+          [
+            372,
+            374
+          ],
+          [
+            381,
+            388
+          ],
+          [
+            391,
+            392
+          ],
+          [
+            391,
+            405
+          ],
+          [
+            393,
+            394
+          ],
+          [
+            393,
+            403
+          ],
+          [
+            406,
+            407
+          ],
+          [
+            406,
+            415
+          ],
+          [
+            415,
+            416
+          ],
+          [
+            417,
+            418
+          ],
+          [
+            427,
+            428
+          ],
+          [
+            428,
+            429
+          ],
+          [
+            428,
+            431
+          ],
+          [
+            431,
+            427
+          ],
+          [
+            431,
+            432
+          ],
+          [
+            440,
+            447
+          ],
+          [
+            449,
+            452
+          ],
+          [
+            453,
+            454
+          ],
+          [
+            453,
+            461
+          ],
+          [
+            457,
+            453
+          ],
+          [
+            457,
+            458
+          ],
+          [
+            458,
+            457
+          ],
+          [
+            458,
+            459
+          ],
+          [
+            464,
+            465
+          ],
+          [
+            465,
+            464
+          ],
+          [
+            465,
+            466
+          ],
+          [
+            480,
+            481
+          ],
+          [
+            481,
+            482
+          ],
+          [
+            481,
+            483
+          ],
+          [
+            483,
+            484
+          ],
+          [
+            483,
+            492
+          ],
+          [
+            492,
+            493
+          ],
+          [
+            494,
+            495
+          ],
+          [
+            495,
+            496
+          ],
+          [
+            495,
+            497
+          ],
+          [
+            498,
+            499
+          ],
+          [
+            499,
+            500
+          ],
+          [
+            499,
+            501
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 0.4682\nStatement gain: 67 newly covered; 66 remain.\nBranch gain: 40 newly covered; 50 remain.\nRemaining lines: [299, 300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 321, 325, 326, 327, 350, 355, 356, 357, 360, 367, 368, 369, 371, 372, 373, 374, 388, 389, 390, 391, 392, 393, 394, 403, 405, 406, 407, 416, 418, 428, 429, 431, 432, 433, 452, 453, 454, 457, 458, 459, 461, 465, 466, 467, 481, 482, 483, 484, 493, 495, 496, 497, 499, 500, 501]\nRemaining branches: [(298, 299), (320, 321), (326, 327), (326, 345), (348, 352), (349, 350), (352, 355), (359, 360), (366, 367), (368, 369), (368, 371), (372, 373), (372, 374), (381, 388), (391, 392), (391, 405), (393, 394), (393, 403), (406, 407), (406, 415), (415, 416), (417, 418), (427, 428), (428, 429), (428, 431), (431, 427), (431, 432), (440, 447), (449, 452), (453, 454), (453, 461), (457, 453), (457, 458), (458, 457), (458, 459), (464, 465), (465, 464), (465, 466), (480, 481), (481, 482), (481, 483), (483, 484), (483, 492), (492, 493), (494, 495), (495, 496), (495, 497), (498, 499), (499, 500), (499, 501)]\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "replicate_scores": [
+        0.4681704260651629
+      ]
+    },
+    {
+      "prompt_digest": "70bf98e239d3e2a5",
+      "evaluation_digest": "5fc1a96cfab9",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/wrap_modes.py",
+        "symbol": "hanging_indent_with_parentheses",
+        "split": "test"
+      },
+      "run_id": "isort-test-batch-40c28cd1",
+      "score": 0.5105263157894737,
+      "coverage": {
+        "score": 0.5105263157894737,
+        "statement_gain": 0.5263157894736842,
+        "branch_gain": 0.5,
+        "statement_coverage": 0.5263157894736842,
+        "branch_coverage": 0.5,
+        "covered_statements": 10.0,
+        "num_statements": 19.0,
+        "covered_branches": 4.0,
+        "num_branches": 8.0,
+        "gained_lines": [
+          313,
+          314,
+          316,
+          318,
+          319,
+          320,
+          322,
+          333,
+          334,
+          364
+        ],
+        "gained_branches": [
+          [
+            313,
+            314
+          ],
+          [
+            313,
+            316
+          ],
+          [
+            322,
+            333
+          ],
+          [
+            334,
+            364
+          ]
+        ],
+        "remaining_lines": [
+          323,
+          332,
+          335,
+          345,
+          351,
+          352,
+          353,
+          362,
+          363
+        ],
+        "remaining_branches": [
+          [
+            322,
+            323
+          ],
+          [
+            334,
+            335
+          ],
+          [
+            352,
+            353
+          ],
+          [
+            352,
+            363
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 0.5105\nStatement gain: 10 newly covered; 9 remain.\nBranch gain: 4 newly covered; 4 remain.\nRemaining lines: [323, 332, 335, 345, 351, 352, 353, 362, 363]\nRemaining branches: [(322, 323), (334, 335), (352, 353), (352, 363)]\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "replicate_scores": [
+        0.5105263157894737
+      ]
+    },
+    {
+      "prompt_digest": "70bf98e239d3e2a5",
+      "evaluation_digest": "5fc1a96cfab9",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/wrap_modes.py",
+        "symbol": "_vertical_grid_common",
+        "split": "test"
+      },
+      "run_id": "isort-test-batch-40c28cd1",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 17.0,
+        "num_statements": 17.0,
+        "covered_branches": 12.0,
+        "num_branches": 12.0,
+        "gained_lines": [
+          187,
+          188,
+          190,
+          201,
+          202,
+          203,
+          204,
+          205,
+          207,
+          208,
+          210,
+          211,
+          212,
+          216,
+          217,
+          218,
+          219
+        ],
+        "gained_branches": [
+          [
+            187,
+            188
+          ],
+          [
+            187,
+            190
+          ],
+          [
+            201,
+            202
+          ],
+          [
+            201,
+            217
+          ],
+          [
+            205,
+            207
+          ],
+          [
+            205,
+            208
+          ],
+          [
+            208,
+            210
+          ],
+          [
+            208,
+            211
+          ],
+          [
+            211,
+            212
+          ],
+          [
+            211,
+            216
+          ],
+          [
+            217,
+            218
+          ],
+          [
+            217,
+            219
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 1.0000\nStatement gain: 17 newly covered; 0 remain.\nBranch gain: 12 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "replicate_scores": [
+        1.0
+      ]
+    },
+    {
+      "prompt_digest": "70bf98e239d3e2a5",
+      "evaluation_digest": "5fc1a96cfab9",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/api.py",
+        "symbol": "sort_file",
+        "split": "test"
+      },
+      "run_id": "isort-test-batch-40c28cd1",
+      "score": 0.0,
+      "coverage": {
+        "score": 0.0,
+        "statement_gain": 0.0,
+        "branch_gain": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.06666666666666667,
+        "covered_statements": 0.0,
+        "num_statements": 52.0,
+        "covered_branches": 2.0,
+        "num_branches": 30.0,
+        "gained_lines": [],
+        "gained_branches": [],
+        "remaining_lines": [
+          400,
+          402,
+          403,
+          404,
+          405,
+          406,
+          407,
+          409,
+          411,
+          412,
+          413,
+          414,
+          415,
+          416,
+          417,
+          426,
+          427,
+          428,
+          429,
+          431,
+          434,
+          435,
+          443,
+          444,
+          445,
+          446,
+          447,
+          456,
+          462,
+          463,
+          464,
+          465,
+          466,
+          467,
+          468,
+          469,
+          470,
+          471,
+          472,
+          473,
+          475,
+          476,
+          477,
+          479,
+          487,
+          488,
+          489,
+          490,
+          497,
+          499,
+          500,
+          507
+        ],
+        "remaining_branches": [
+          [
+            402,
+            403
+          ],
+          [
+            402,
+            411
+          ],
+          [
+            404,
+            405
+          ],
+          [
+            404,
+            411
+          ],
+          [
+            406,
+            407
+          ],
+          [
+            406,
+            409
+          ],
+          [
+            416,
+            417
+          ],
+          [
+            416,
+            426
+          ],
+          [
+            426,
+            427
+          ],
+          [
+            426,
+            479
+          ],
+          [
+            428,
+            429
+          ],
+          [
+            428,
+            431
+          ],
+          [
+            444,
+            445
+          ],
+          [
+            444,
+            468
+          ],
+          [
+            445,
+            446
+          ],
+          [
+            445,
+            463
+          ],
+          [
+            456,
+            462
+          ],
+          [
+            456,
+            463
+          ],
+          [
+            464,
+            465
+          ],
+          [
+            464,
+            468
+          ],
+          [
+            468,
+            469
+          ],
+          [
+            468,
+            475
+          ],
+          [
+            469,
+            470
+          ],
+          [
+            469,
+            472
+          ],
+          [
+            472,
+            473
+          ],
+          [
+            472,
+            475
+          ],
+          [
+            487,
+            488
+          ],
+          [
+            487,
+            497
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 0.0000\nStatement gain: 0 newly covered; 52 remain.\nBranch gain: 0 newly covered; 28 remain.\nRemaining lines: [400, 402, 403, 404, 405, 406, 407, 409, 411, 412, 413, 414, 415, 416, 417, 426, 427, 428, 429, 431, 434, 435, 443, 444, 445, 446, 447, 456, 462, 463, 464, 465, 466, 467, 468, 469, 470, 471, 472, 473, 475, 476, 477, 479, 487, 488, 489, 490, 497, 499, 500, 507]\nRemaining branches: [(402, 403), (402, 411), (404, 405), (404, 411), (406, 407), (406, 409), (416, 417), (416, 426), (426, 427), (426, 479), (428, 429), (428, 431), (444, 445), (444, 468), (445, 446), (445, 463), (456, 462), (456, 463), (464, 465), (464, 468), (468, 469), (468, 475), (469, 470), (469, 472), (472, 473), (472, 475), (487, 488), (487, 497)]\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "replicate_scores": [
+        0.0
+      ]
+    },
+    {
+      "prompt_digest": "70bf98e239d3e2a5",
+      "evaluation_digest": "5fc1a96cfab9",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/deprecated/finders.py",
+        "symbol": "PathFinder.find",
+        "split": "test"
+      },
+      "run_id": "isort-test-batch-40c28cd1",
+      "score": 0.0,
+      "coverage": {
+        "score": 0.0,
+        "statement_gain": 0.0,
+        "branch_gain": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "covered_statements": 0.0,
+        "num_statements": 18.0,
+        "covered_branches": 0.0,
+        "num_branches": 14.0,
+        "gained_lines": [],
+        "gained_branches": [],
+        "remaining_lines": [
+          168,
+          169,
+          170,
+          171,
+          179,
+          180,
+          181,
+          186,
+          187,
+          188,
+          189,
+          190,
+          191,
+          192,
+          193,
+          195,
+          198,
+          199
+        ],
+        "remaining_branches": [
+          [
+            168,
+            169
+          ],
+          [
+            168,
+            199
+          ],
+          [
+            180,
+            168
+          ],
+          [
+            180,
+            181
+          ],
+          [
+            181,
+            186
+          ],
+          [
+            181,
+            187
+          ],
+          [
+            187,
+            188
+          ],
+          [
+            187,
+            189
+          ],
+          [
+            189,
+            190
+          ],
+          [
+            189,
+            191
+          ],
+          [
+            191,
+            192
+          ],
+          [
+            191,
+            195
+          ],
+          [
+            192,
+            191
+          ],
+          [
+            192,
+            193
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 0.0000\nStatement gain: 0 newly covered; 18 remain.\nBranch gain: 0 newly covered; 14 remain.\nRemaining lines: [168, 169, 170, 171, 179, 180, 181, 186, 187, 188, 189, 190, 191, 192, 193, 195, 198, 199]\nRemaining branches: [(168, 169), (168, 199), (180, 168), (180, 181), (181, 186), (181, 187), (187, 188), (187, 189), (189, 190), (189, 191), (191, 192), (191, 195), (192, 191), (192, 193)]\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "replicate_scores": [
+        0.0
+      ]
+    }
+  ],
+  "results": [
+    {
+      "prompt_digest": "70bf98e239d3e2a5",
+      "evaluation_digest": "5fc1a96cfab9",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/settings.py",
+        "symbol": "find_all_configs",
+        "split": "test"
+      },
+      "run_id": "isort-test-batch-40c28cd1",
+      "score": 0.0,
+      "coverage": {
+        "score": 0.0,
+        "statement_gain": 0.0,
+        "branch_gain": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "covered_statements": 0.0,
+        "num_statements": 14.0,
+        "covered_branches": 0.0,
+        "num_branches": 8.0,
+        "gained_lines": [],
+        "gained_branches": [],
+        "remaining_lines": [
+          795,
+          797,
+          798,
+          799,
+          800,
+          802,
+          803,
+          806,
+          807,
+          811,
+          813,
+          814,
+          815,
+          817
+        ],
+        "remaining_branches": [
+          [
+            797,
+            798
+          ],
+          [
+            797,
+            817
+          ],
+          [
+            798,
+            797
+          ],
+          [
+            798,
+            799
+          ],
+          [
+            800,
+            798
+          ],
+          [
+            800,
+            802
+          ],
+          [
+            813,
+            798
+          ],
+          [
+            813,
+            814
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 0.0000\nStatement gain: 0 newly covered; 14 remain.\nBranch gain: 0 newly covered; 8 remain.\nRemaining lines: [795, 797, 798, 799, 800, 802, 803, 806, 807, 811, 813, 814, 815, 817]\nRemaining branches: [(797, 798), (797, 817), (798, 797), (798, 799), (800, 798), (800, 802), (813, 798), (813, 814)]\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "replicate_scores": [
+        0.0
+      ]
+    },
+    {
+      "prompt_digest": "70bf98e239d3e2a5",
+      "evaluation_digest": "5fc1a96cfab9",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/settings.py",
+        "symbol": "_find_config",
+        "split": "test"
+      },
+      "run_id": "isort-test-batch-40c28cd1",
+      "score": 0.6220779220779221,
+      "coverage": {
+        "score": 0.6220779220779221,
+        "statement_gain": 0.5909090909090909,
+        "branch_gain": 0.6428571428571429,
+        "statement_coverage": 0.5909090909090909,
+        "branch_coverage": 0.6428571428571429,
+        "covered_statements": 13.0,
+        "num_statements": 22.0,
+        "covered_branches": 9.0,
+        "num_branches": 14.0,
+        "gained_lines": [
+          755,
+          756,
+          757,
+          758,
+          759,
+          760,
+          775,
+          776,
+          777,
+          779,
+          780,
+          781,
+          786
+        ],
+        "gained_branches": [
+          [
+            757,
+            758
+          ],
+          [
+            758,
+            759
+          ],
+          [
+            758,
+            775
+          ],
+          [
+            760,
+            758
+          ],
+          [
+            775,
+            776
+          ],
+          [
+            775,
+            779
+          ],
+          [
+            776,
+            775
+          ],
+          [
+            776,
+            777
+          ],
+          [
+            780,
+            781
+          ]
+        ],
+        "remaining_lines": [
+          762,
+          763,
+          766,
+          767,
+          771,
+          772,
+          773,
+          783,
+          784
+        ],
+        "remaining_branches": [
+          [
+            757,
+            786
+          ],
+          [
+            760,
+            762
+          ],
+          [
+            772,
+            758
+          ],
+          [
+            772,
+            773
+          ],
+          [
+            780,
+            783
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 0.6221\nStatement gain: 13 newly covered; 9 remain.\nBranch gain: 9 newly covered; 5 remain.\nRemaining lines: [762, 763, 766, 767, 771, 772, 773, 783, 784]\nRemaining branches: [(757, 786), (760, 762), (772, 758), (772, 773), (780, 783)]\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "replicate_scores": [
+        0.6220779220779221
+      ]
+    },
+    {
+      "prompt_digest": "70bf98e239d3e2a5",
+      "evaluation_digest": "5fc1a96cfab9",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/identify.py",
+        "symbol": "imports",
+        "split": "test"
+      },
+      "run_id": "isort-test-batch-40c28cd1",
+      "score": 0.6668235294117648,
+      "coverage": {
+        "score": 0.6668235294117648,
+        "statement_gain": 0.6470588235294118,
+        "branch_gain": 0.68,
+        "statement_coverage": 0.6470588235294118,
+        "branch_coverage": 0.68,
+        "covered_statements": 66.0,
+        "num_statements": 102.0,
+        "covered_branches": 34.0,
+        "num_branches": 50.0,
+        "gained_lines": [
+          51,
+          53,
+          54,
+          55,
+          59,
+          61,
+          64,
+          65,
+          83,
+          84,
+          85,
+          86,
+          88,
+          89,
+          90,
+          91,
+          92,
+          93,
+          97,
+          98,
+          101,
+          105,
+          113,
+          114,
+          115,
+          116,
+          120,
+          121,
+          123,
+          152,
+          153,
+          158,
+          160,
+          161,
+          165,
+          170,
+          171,
+          172,
+          173,
+          174,
+          175,
+          176,
+          177,
+          178,
+          179,
+          180,
+          181,
+          182,
+          183,
+          184,
+          185,
+          188,
+          191,
+          192,
+          193,
+          194,
+          195,
+          196,
+          199,
+          201,
+          202,
+          203,
+          204,
+          205,
+          207,
+          208
+        ],
+        "gained_branches": [
+          [
+            54,
+            -44
+          ],
+          [
+            54,
+            55
+          ],
+          [
+            59,
+            61
+          ],
+          [
+            61,
+            64
+          ],
+          [
+            65,
+            83
+          ],
+          [
+            85,
+            86
+          ],
+          [
+            85,
+            88
+          ],
+          [
+            88,
+            54
+          ],
+          [
+            88,
+            89
+          ],
+          [
+            90,
+            91
+          ],
+          [
+            90,
+            92
+          ],
+          [
+            113,
+            114
+          ],
+          [
+            113,
+            123
+          ],
+          [
+            114,
+            115
+          ],
+          [
+            114,
+            152
+          ],
+          [
+            123,
+            152
+          ],
+          [
+            152,
+            153
+          ],
+          [
+            152,
+            165
+          ],
+          [
+            172,
+            173
+          ],
+          [
+            172,
+            201
+          ],
+          [
+            173,
+            174
+          ],
+          [
+            173,
+            201
+          ],
+          [
+            176,
+            177
+          ],
+          [
+            176,
+            191
+          ],
+          [
+            185,
+            188
+          ],
+          [
+            196,
+            199
+          ],
+          [
+            201,
+            88
+          ],
+          [
+            201,
+            202
+          ],
+          [
+            202,
+            203
+          ],
+          [
+            202,
+            207
+          ],
+          [
+            204,
+            88
+          ],
+          [
+            204,
+            205
+          ],
+          [
+            207,
+            88
+          ],
+          [
+            207,
+            208
+          ]
+        ],
+        "remaining_lines": [
+          60,
+          62,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          80,
+          117,
+          118,
+          124,
+          125,
+          126,
+          127,
+          129,
+          132,
+          133,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          143,
+          146,
+          148,
+          186,
+          197
+        ],
+        "remaining_branches": [
+          [
+            59,
+            60
+          ],
+          [
+            61,
+            62
+          ],
+          [
+            65,
+            66
+          ],
+          [
+            66,
+            67
+          ],
+          [
+            66,
+            74
+          ],
+          [
+            67,
+            68
+          ],
+          [
+            67,
+            74
+          ],
+          [
+            123,
+            124
+          ],
+          [
+            132,
+            133
+          ],
+          [
+            132,
+            143
+          ],
+          [
+            135,
+            123
+          ],
+          [
+            135,
+            136
+          ],
+          [
+            143,
+            146
+          ],
+          [
+            143,
+            148
+          ],
+          [
+            185,
+            186
+          ],
+          [
+            196,
+            197
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 0.6668\nStatement gain: 66 newly covered; 36 remain.\nBranch gain: 34 newly covered; 16 remain.\nRemaining lines: [60, 62, 66, 67, 68, 69, 70, 71, 73, 74, 75, 76, 77, 78, 80, 117, 118, 124, 125, 126, 127, 129, 132, 133, 135, 136, 137, 138, 139, 140, 141, 143, 146, 148, 186, 197]\nRemaining branches: [(59, 60), (61, 62), (65, 66), (66, 67), (66, 74), (67, 68), (67, 74), (123, 124), (132, 133), (132, 143), (135, 123), (135, 136), (143, 146), (143, 148), (185, 186), (196, 197)]\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "replicate_scores": [
+        0.6668235294117648
+      ]
+    },
+    {
+      "prompt_digest": "70bf98e239d3e2a5",
+      "evaluation_digest": "5fc1a96cfab9",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/deprecated/finders.py",
+        "symbol": "ReqsBaseFinder.find",
+        "split": "test"
+      },
+      "run_id": "isort-test-batch-40c28cd1",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 10.0,
+        "num_statements": 10.0,
+        "covered_branches": 8.0,
+        "num_branches": 8.0,
+        "gained_lines": [
+          276,
+          277,
+          279,
+          280,
+          281,
+          282,
+          284,
+          285,
+          286,
+          287
+        ],
+        "gained_branches": [
+          [
+            276,
+            277
+          ],
+          [
+            276,
+            279
+          ],
+          [
+            281,
+            282
+          ],
+          [
+            281,
+            284
+          ],
+          [
+            284,
+            285
+          ],
+          [
+            284,
+            287
+          ],
+          [
+            285,
+            284
+          ],
+          [
+            285,
+            286
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 1.0000\nStatement gain: 10 newly covered; 0 remain.\nBranch gain: 8 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "replicate_scores": [
+        1.0
+      ]
+    },
+    {
+      "prompt_digest": "70bf98e239d3e2a5",
+      "evaluation_digest": "5fc1a96cfab9",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/main.py",
+        "symbol": "main",
+        "split": "test"
+      },
+      "run_id": "isort-test-batch-40c28cd1",
+      "score": 0.4357656731757451,
+      "coverage": {
+        "score": 0.4357656731757451,
+        "statement_gain": 0.5179856115107914,
+        "branch_gain": 0.38095238095238093,
+        "statement_coverage": 0.5179856115107914,
+        "branch_coverage": 0.38095238095238093,
+        "covered_statements": 72.0,
+        "num_statements": 139.0,
+        "covered_branches": 32.0,
+        "num_branches": 84.0,
+        "gained_lines": [
+          1062,
+          1063,
+          1067,
+          1068,
+          1069,
+          1072,
+          1073,
+          1077,
+          1079,
+          1085,
+          1086,
+          1087,
+          1088,
+          1089,
+          1091,
+          1092,
+          1097,
+          1098,
+          1100,
+          1101,
+          1102,
+          1103,
+          1104,
+          1105,
+          1106,
+          1107,
+          1108,
+          1109,
+          1110,
+          1111,
+          1112,
+          1113,
+          1114,
+          1116,
+          1117,
+          1120,
+          1125,
+          1126,
+          1129,
+          1158,
+          1159,
+          1162,
+          1163,
+          1164,
+          1166,
+          1172,
+          1173,
+          1175,
+          1184,
+          1185,
+          1189,
+          1190,
+          1191,
+          1192,
+          1195,
+          1214,
+          1229,
+          1230,
+          1231,
+          1249,
+          1250,
+          1260,
+          1261,
+          1262,
+          1267,
+          1269,
+          1270,
+          1271,
+          1274,
+          1293,
+          1296,
+          1297
+        ],
+        "gained_branches": [
+          [
+            1063,
+            1067
+          ],
+          [
+            1069,
+            1072
+          ],
+          [
+            1072,
+            1073
+          ],
+          [
+            1072,
+            1079
+          ],
+          [
+            1073,
+            1077
+          ],
+          [
+            1079,
+            1085
+          ],
+          [
+            1086,
+            1087
+          ],
+          [
+            1086,
+            1091
+          ],
+          [
+            1088,
+            1089
+          ],
+          [
+            1091,
+            1092
+          ],
+          [
+            1097,
+            1098
+          ],
+          [
+            1097,
+            1100
+          ],
+          [
+            1117,
+            1120
+          ],
+          [
+            1120,
+            1125
+          ],
+          [
+            1126,
+            1129
+          ],
+          [
+            1129,
+            1158
+          ],
+          [
+            1158,
+            1159
+          ],
+          [
+            1158,
+            1166
+          ],
+          [
+            1166,
+            1172
+          ],
+          [
+            1175,
+            1184
+          ],
+          [
+            1185,
+            1189
+          ],
+          [
+            1192,
+            1195
+          ],
+          [
+            1195,
+            1214
+          ],
+          [
+            1231,
+            1249
+          ],
+          [
+            1250,
+            1260
+          ],
+          [
+            1261,
+            1262
+          ],
+          [
+            1262,
+            1267
+          ],
+          [
+            1269,
+            1270
+          ],
+          [
+            1271,
+            1274
+          ],
+          [
+            1274,
+            1293
+          ],
+          [
+            1293,
+            1296
+          ],
+          [
+            1296,
+            1297
+          ]
+        ],
+        "remaining_lines": [
+          1064,
+          1065,
+          1070,
+          1074,
+          1075,
+          1080,
+          1081,
+          1082,
+          1083,
+          1090,
+          1118,
+          1121,
+          1127,
+          1128,
+          1130,
+          1131,
+          1132,
+          1134,
+          1135,
+          1136,
+          1144,
+          1146,
+          1147,
+          1156,
+          1157,
+          1167,
+          1170,
+          1171,
+          1176,
+          1177,
+          1178,
+          1179,
+          1181,
+          1182,
+          1186,
+          1187,
+          1188,
+          1193,
+          1196,
+          1198,
+          1199,
+          1232,
+          1234,
+          1235,
+          1236,
+          1237,
+          1242,
+          1243,
+          1245,
+          1247,
+          1251,
+          1252,
+          1253,
+          1258,
+          1263,
+          1264,
+          1272,
+          1275,
+          1276,
+          1281,
+          1282,
+          1287,
+          1294,
+          1299,
+          1300,
+          1303,
+          1304
+        ],
+        "remaining_branches": [
+          [
+            1063,
+            1064
+          ],
+          [
+            1069,
+            1070
+          ],
+          [
+            1073,
+            1074
+          ],
+          [
+            1079,
+            1080
+          ],
+          [
+            1082,
+            1083
+          ],
+          [
+            1082,
+            1085
+          ],
+          [
+            1088,
+            1090
+          ],
+          [
+            1091,
+            1100
+          ],
+          [
+            1117,
+            1118
+          ],
+          [
+            1120,
+            1121
+          ],
+          [
+            1126,
+            1127
+          ],
+          [
+            1129,
+            1130
+          ],
+          [
+            1131,
+            1132
+          ],
+          [
+            1131,
+            1134
+          ],
+          [
+            1135,
+            1136
+          ],
+          [
+            1135,
+            1146
+          ],
+          [
+            1166,
+            1167
+          ],
+          [
+            1175,
+            1176
+          ],
+          [
+            1177,
+            1178
+          ],
+          [
+            1177,
+            1182
+          ],
+          [
+            1178,
+            1179
+          ],
+          [
+            1178,
+            1181
+          ],
+          [
+            1185,
+            1186
+          ],
+          [
+            1186,
+            1187
+          ],
+          [
+            1186,
+            1188
+          ],
+          [
+            1192,
+            1193
+          ],
+          [
+            1195,
+            1196
+          ],
+          [
+            1231,
+            1232
+          ],
+          [
+            1235,
+            1236
+          ],
+          [
+            1235,
+            1237
+          ],
+          [
+            1242,
+            1243
+          ],
+          [
+            1242,
+            1245
+          ],
+          [
+            1250,
+            1251
+          ],
+          [
+            1251,
+            1252
+          ],
+          [
+            1251,
+            1258
+          ],
+          [
+            1252,
+            1253
+          ],
+          [
+            1252,
+            1258
+          ],
+          [
+            1261,
+            1269
+          ],
+          [
+            1262,
+            1263
+          ],
+          [
+            1263,
+            1264
+          ],
+          [
+            1263,
+            1267
+          ],
+          [
+            1269,
+            1271
+          ],
+          [
+            1271,
+            1272
+          ],
+          [
+            1274,
+            1275
+          ],
+          [
+            1275,
+            1276
+          ],
+          [
+            1275,
+            1281
+          ],
+          [
+            1281,
+            1282
+          ],
+          [
+            1281,
+            1287
+          ],
+          [
+            1293,
+            1294
+          ],
+          [
+            1296,
+            1299
+          ],
+          [
+            1299,
+            -1061
+          ],
+          [
+            1299,
+            1300
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 0.4358\nStatement gain: 72 newly covered; 67 remain.\nBranch gain: 32 newly covered; 52 remain.\nRemaining lines: [1064, 1065, 1070, 1074, 1075, 1080, 1081, 1082, 1083, 1090, 1118, 1121, 1127, 1128, 1130, 1131, 1132, 1134, 1135, 1136, 1144, 1146, 1147, 1156, 1157, 1167, 1170, 1171, 1176, 1177, 1178, 1179, 1181, 1182, 1186, 1187, 1188, 1193, 1196, 1198, 1199, 1232, 1234, 1235, 1236, 1237, 1242, 1243, 1245, 1247, 1251, 1252, 1253, 1258, 1263, 1264, 1272, 1275, 1276, 1281, 1282, 1287, 1294, 1299, 1300, 1303, 1304]\nRemaining branches: [(1063, 1064), (1069, 1070), (1073, 1074), (1079, 1080), (1082, 1083), (1082, 1085), (1088, 1090), (1091, 1100), (1117, 1118), (1120, 1121), (1126, 1127), (1129, 1130), (1131, 1132), (1131, 1134), (1135, 1136), (1135, 1146), (1166, 1167), (1175, 1176), (1177, 1178), (1177, 1182), (1178, 1179), (1178, 1181), (1185, 1186), (1186, 1187), (1186, 1188), (1192, 1193), (1195, 1196), (1231, 1232), (1235, 1236), (1235, 1237), (1242, 1243), (1242, 1245), (1250, 1251), (1251, 1252), (1251, 1258), (1252, 1253), (1252, 1258), (1261, 1269), (1262, 1263), (1263, 1264), (1263, 1267), (1269, 1271), (1271, 1272), (1274, 1275), (1275, 1276), (1275, 1281), (1281, 1282), (1281, 1287), (1293, 1294), (1296, 1299), (1299, -1061), (1299, 1300)]\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "replicate_scores": [
+        0.4357656731757451
+      ]
+    },
+    {
+      "prompt_digest": "70bf98e239d3e2a5",
+      "evaluation_digest": "5fc1a96cfab9",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/settings.py",
+        "symbol": "Config.__init__",
+        "split": "test"
+      },
+      "run_id": "isort-test-batch-40c28cd1",
+      "score": 0.4681704260651629,
+      "coverage": {
+        "score": 0.4681704260651629,
+        "statement_gain": 0.5037593984962406,
+        "branch_gain": 0.4444444444444444,
+        "statement_coverage": 0.5037593984962406,
+        "branch_coverage": 0.4444444444444444,
+        "covered_statements": 67.0,
+        "num_statements": 133.0,
+        "covered_branches": 40.0,
+        "num_branches": 90.0,
+        "gained_lines": [
+          291,
+          292,
+          293,
+          294,
+          295,
+          296,
+          298,
+          314,
+          316,
+          320,
+          335,
+          336,
+          337,
+          339,
+          340,
+          342,
+          343,
+          345,
+          346,
+          347,
+          348,
+          349,
+          352,
+          353,
+          359,
+          361,
+          362,
+          363,
+          365,
+          366,
+          376,
+          377,
+          378,
+          379,
+          381,
+          415,
+          417,
+          421,
+          422,
+          423,
+          425,
+          427,
+          440,
+          441,
+          447,
+          448,
+          449,
+          450,
+          463,
+          464,
+          469,
+          473,
+          474,
+          475,
+          477,
+          480,
+          492,
+          494,
+          498,
+          503,
+          504,
+          507,
+          508,
+          509,
+          513,
+          514,
+          516
+        ],
+        "gained_branches": [
+          [
+            298,
+            314
+          ],
+          [
+            320,
+            335
+          ],
+          [
+            335,
+            336
+          ],
+          [
+            335,
+            342
+          ],
+          [
+            336,
+            337
+          ],
+          [
+            336,
+            339
+          ],
+          [
+            347,
+            348
+          ],
+          [
+            347,
+            359
+          ],
+          [
+            348,
+            349
+          ],
+          [
+            349,
+            352
+          ],
+          [
+            352,
+            353
+          ],
+          [
+            359,
+            361
+          ],
+          [
+            361,
+            362
+          ],
+          [
+            361,
+            365
+          ],
+          [
+            366,
+            376
+          ],
+          [
+            379,
+            381
+          ],
+          [
+            379,
+            427
+          ],
+          [
+            381,
+            415
+          ],
+          [
+            415,
+            417
+          ],
+          [
+            417,
+            421
+          ],
+          [
+            422,
+            423
+          ],
+          [
+            422,
+            425
+          ],
+          [
+            427,
+            440
+          ],
+          [
+            440,
+            441
+          ],
+          [
+            449,
+            450
+          ],
+          [
+            463,
+            464
+          ],
+          [
+            463,
+            473
+          ],
+          [
+            464,
+            469
+          ],
+          [
+            480,
+            492
+          ],
+          [
+            492,
+            494
+          ],
+          [
+            494,
+            498
+          ],
+          [
+            498,
+            503
+          ],
+          [
+            504,
+            507
+          ],
+          [
+            504,
+            513
+          ],
+          [
+            507,
+            504
+          ],
+          [
+            507,
+            508
+          ],
+          [
+            508,
+            507
+          ],
+          [
+            508,
+            509
+          ],
+          [
+            513,
+            514
+          ],
+          [
+            513,
+            516
+          ]
+        ],
+        "remaining_lines": [
+          299,
+          300,
+          301,
+          302,
+          303,
+          304,
+          305,
+          306,
+          307,
+          308,
+          309,
+          321,
+          325,
+          326,
+          327,
+          350,
+          355,
+          356,
+          357,
+          360,
+          367,
+          368,
+          369,
+          371,
+          372,
+          373,
+          374,
+          388,
+          389,
+          390,
+          391,
+          392,
+          393,
+          394,
+          403,
+          405,
+          406,
+          407,
+          416,
+          418,
+          428,
+          429,
+          431,
+          432,
+          433,
+          452,
+          453,
+          454,
+          457,
+          458,
+          459,
+          461,
+          465,
+          466,
+          467,
+          481,
+          482,
+          483,
+          484,
+          493,
+          495,
+          496,
+          497,
+          499,
+          500,
+          501
+        ],
+        "remaining_branches": [
+          [
+            298,
+            299
+          ],
+          [
+            320,
+            321
+          ],
+          [
+            326,
+            327
+          ],
+          [
+            326,
+            345
+          ],
+          [
+            348,
+            352
+          ],
+          [
+            349,
+            350
+          ],
+          [
+            352,
+            355
+          ],
+          [
+            359,
+            360
+          ],
+          [
+            366,
+            367
+          ],
+          [
+            368,
+            369
+          ],
+          [
+            368,
+            371
+          ],
+          [
+            372,
+            373
+          ],
+          [
+            372,
+            374
+          ],
+          [
+            381,
+            388
+          ],
+          [
+            391,
+            392
+          ],
+          [
+            391,
+            405
+          ],
+          [
+            393,
+            394
+          ],
+          [
+            393,
+            403
+          ],
+          [
+            406,
+            407
+          ],
+          [
+            406,
+            415
+          ],
+          [
+            415,
+            416
+          ],
+          [
+            417,
+            418
+          ],
+          [
+            427,
+            428
+          ],
+          [
+            428,
+            429
+          ],
+          [
+            428,
+            431
+          ],
+          [
+            431,
+            427
+          ],
+          [
+            431,
+            432
+          ],
+          [
+            440,
+            447
+          ],
+          [
+            449,
+            452
+          ],
+          [
+            453,
+            454
+          ],
+          [
+            453,
+            461
+          ],
+          [
+            457,
+            453
+          ],
+          [
+            457,
+            458
+          ],
+          [
+            458,
+            457
+          ],
+          [
+            458,
+            459
+          ],
+          [
+            464,
+            465
+          ],
+          [
+            465,
+            464
+          ],
+          [
+            465,
+            466
+          ],
+          [
+            480,
+            481
+          ],
+          [
+            481,
+            482
+          ],
+          [
+            481,
+            483
+          ],
+          [
+            483,
+            484
+          ],
+          [
+            483,
+            492
+          ],
+          [
+            492,
+            493
+          ],
+          [
+            494,
+            495
+          ],
+          [
+            495,
+            496
+          ],
+          [
+            495,
+            497
+          ],
+          [
+            498,
+            499
+          ],
+          [
+            499,
+            500
+          ],
+          [
+            499,
+            501
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 0.4682\nStatement gain: 67 newly covered; 66 remain.\nBranch gain: 40 newly covered; 50 remain.\nRemaining lines: [299, 300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 321, 325, 326, 327, 350, 355, 356, 357, 360, 367, 368, 369, 371, 372, 373, 374, 388, 389, 390, 391, 392, 393, 394, 403, 405, 406, 407, 416, 418, 428, 429, 431, 432, 433, 452, 453, 454, 457, 458, 459, 461, 465, 466, 467, 481, 482, 483, 484, 493, 495, 496, 497, 499, 500, 501]\nRemaining branches: [(298, 299), (320, 321), (326, 327), (326, 345), (348, 352), (349, 350), (352, 355), (359, 360), (366, 367), (368, 369), (368, 371), (372, 373), (372, 374), (381, 388), (391, 392), (391, 405), (393, 394), (393, 403), (406, 407), (406, 415), (415, 416), (417, 418), (427, 428), (428, 429), (428, 431), (431, 427), (431, 432), (440, 447), (449, 452), (453, 454), (453, 461), (457, 453), (457, 458), (458, 457), (458, 459), (464, 465), (465, 464), (465, 466), (480, 481), (481, 482), (481, 483), (483, 484), (483, 492), (492, 493), (494, 495), (495, 496), (495, 497), (498, 499), (499, 500), (499, 501)]\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "replicate_scores": [
+        0.4681704260651629
+      ]
+    },
+    {
+      "prompt_digest": "70bf98e239d3e2a5",
+      "evaluation_digest": "5fc1a96cfab9",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/wrap_modes.py",
+        "symbol": "hanging_indent_with_parentheses",
+        "split": "test"
+      },
+      "run_id": "isort-test-batch-40c28cd1",
+      "score": 0.5105263157894737,
+      "coverage": {
+        "score": 0.5105263157894737,
+        "statement_gain": 0.5263157894736842,
+        "branch_gain": 0.5,
+        "statement_coverage": 0.5263157894736842,
+        "branch_coverage": 0.5,
+        "covered_statements": 10.0,
+        "num_statements": 19.0,
+        "covered_branches": 4.0,
+        "num_branches": 8.0,
+        "gained_lines": [
+          313,
+          314,
+          316,
+          318,
+          319,
+          320,
+          322,
+          333,
+          334,
+          364
+        ],
+        "gained_branches": [
+          [
+            313,
+            314
+          ],
+          [
+            313,
+            316
+          ],
+          [
+            322,
+            333
+          ],
+          [
+            334,
+            364
+          ]
+        ],
+        "remaining_lines": [
+          323,
+          332,
+          335,
+          345,
+          351,
+          352,
+          353,
+          362,
+          363
+        ],
+        "remaining_branches": [
+          [
+            322,
+            323
+          ],
+          [
+            334,
+            335
+          ],
+          [
+            352,
+            353
+          ],
+          [
+            352,
+            363
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 0.5105\nStatement gain: 10 newly covered; 9 remain.\nBranch gain: 4 newly covered; 4 remain.\nRemaining lines: [323, 332, 335, 345, 351, 352, 353, 362, 363]\nRemaining branches: [(322, 323), (334, 335), (352, 353), (352, 363)]\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "replicate_scores": [
+        0.5105263157894737
+      ]
+    },
+    {
+      "prompt_digest": "70bf98e239d3e2a5",
+      "evaluation_digest": "5fc1a96cfab9",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/wrap_modes.py",
+        "symbol": "_vertical_grid_common",
+        "split": "test"
+      },
+      "run_id": "isort-test-batch-40c28cd1",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 17.0,
+        "num_statements": 17.0,
+        "covered_branches": 12.0,
+        "num_branches": 12.0,
+        "gained_lines": [
+          187,
+          188,
+          190,
+          201,
+          202,
+          203,
+          204,
+          205,
+          207,
+          208,
+          210,
+          211,
+          212,
+          216,
+          217,
+          218,
+          219
+        ],
+        "gained_branches": [
+          [
+            187,
+            188
+          ],
+          [
+            187,
+            190
+          ],
+          [
+            201,
+            202
+          ],
+          [
+            201,
+            217
+          ],
+          [
+            205,
+            207
+          ],
+          [
+            205,
+            208
+          ],
+          [
+            208,
+            210
+          ],
+          [
+            208,
+            211
+          ],
+          [
+            211,
+            212
+          ],
+          [
+            211,
+            216
+          ],
+          [
+            217,
+            218
+          ],
+          [
+            217,
+            219
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 1.0000\nStatement gain: 17 newly covered; 0 remain.\nBranch gain: 12 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "replicate_scores": [
+        1.0
+      ]
+    },
+    {
+      "prompt_digest": "70bf98e239d3e2a5",
+      "evaluation_digest": "5fc1a96cfab9",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/api.py",
+        "symbol": "sort_file",
+        "split": "test"
+      },
+      "run_id": "isort-test-batch-40c28cd1",
+      "score": 0.0,
+      "coverage": {
+        "score": 0.0,
+        "statement_gain": 0.0,
+        "branch_gain": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.06666666666666667,
+        "covered_statements": 0.0,
+        "num_statements": 52.0,
+        "covered_branches": 2.0,
+        "num_branches": 30.0,
+        "gained_lines": [],
+        "gained_branches": [],
+        "remaining_lines": [
+          400,
+          402,
+          403,
+          404,
+          405,
+          406,
+          407,
+          409,
+          411,
+          412,
+          413,
+          414,
+          415,
+          416,
+          417,
+          426,
+          427,
+          428,
+          429,
+          431,
+          434,
+          435,
+          443,
+          444,
+          445,
+          446,
+          447,
+          456,
+          462,
+          463,
+          464,
+          465,
+          466,
+          467,
+          468,
+          469,
+          470,
+          471,
+          472,
+          473,
+          475,
+          476,
+          477,
+          479,
+          487,
+          488,
+          489,
+          490,
+          497,
+          499,
+          500,
+          507
+        ],
+        "remaining_branches": [
+          [
+            402,
+            403
+          ],
+          [
+            402,
+            411
+          ],
+          [
+            404,
+            405
+          ],
+          [
+            404,
+            411
+          ],
+          [
+            406,
+            407
+          ],
+          [
+            406,
+            409
+          ],
+          [
+            416,
+            417
+          ],
+          [
+            416,
+            426
+          ],
+          [
+            426,
+            427
+          ],
+          [
+            426,
+            479
+          ],
+          [
+            428,
+            429
+          ],
+          [
+            428,
+            431
+          ],
+          [
+            444,
+            445
+          ],
+          [
+            444,
+            468
+          ],
+          [
+            445,
+            446
+          ],
+          [
+            445,
+            463
+          ],
+          [
+            456,
+            462
+          ],
+          [
+            456,
+            463
+          ],
+          [
+            464,
+            465
+          ],
+          [
+            464,
+            468
+          ],
+          [
+            468,
+            469
+          ],
+          [
+            468,
+            475
+          ],
+          [
+            469,
+            470
+          ],
+          [
+            469,
+            472
+          ],
+          [
+            472,
+            473
+          ],
+          [
+            472,
+            475
+          ],
+          [
+            487,
+            488
+          ],
+          [
+            487,
+            497
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 0.0000\nStatement gain: 0 newly covered; 52 remain.\nBranch gain: 0 newly covered; 28 remain.\nRemaining lines: [400, 402, 403, 404, 405, 406, 407, 409, 411, 412, 413, 414, 415, 416, 417, 426, 427, 428, 429, 431, 434, 435, 443, 444, 445, 446, 447, 456, 462, 463, 464, 465, 466, 467, 468, 469, 470, 471, 472, 473, 475, 476, 477, 479, 487, 488, 489, 490, 497, 499, 500, 507]\nRemaining branches: [(402, 403), (402, 411), (404, 405), (404, 411), (406, 407), (406, 409), (416, 417), (416, 426), (426, 427), (426, 479), (428, 429), (428, 431), (444, 445), (444, 468), (445, 446), (445, 463), (456, 462), (456, 463), (464, 465), (464, 468), (468, 469), (468, 475), (469, 470), (469, 472), (472, 473), (472, 475), (487, 488), (487, 497)]\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "replicate_scores": [
+        0.0
+      ]
+    },
+    {
+      "prompt_digest": "70bf98e239d3e2a5",
+      "evaluation_digest": "5fc1a96cfab9",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/deprecated/finders.py",
+        "symbol": "PathFinder.find",
+        "split": "test"
+      },
+      "run_id": "isort-test-batch-40c28cd1",
+      "score": 0.0,
+      "coverage": {
+        "score": 0.0,
+        "statement_gain": 0.0,
+        "branch_gain": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "covered_statements": 0.0,
+        "num_statements": 18.0,
+        "covered_branches": 0.0,
+        "num_branches": 14.0,
+        "gained_lines": [],
+        "gained_branches": [],
+        "remaining_lines": [
+          168,
+          169,
+          170,
+          171,
+          179,
+          180,
+          181,
+          186,
+          187,
+          188,
+          189,
+          190,
+          191,
+          192,
+          193,
+          195,
+          198,
+          199
+        ],
+        "remaining_branches": [
+          [
+            168,
+            169
+          ],
+          [
+            168,
+            199
+          ],
+          [
+            180,
+            168
+          ],
+          [
+            180,
+            181
+          ],
+          [
+            181,
+            186
+          ],
+          [
+            181,
+            187
+          ],
+          [
+            187,
+            188
+          ],
+          [
+            187,
+            189
+          ],
+          [
+            189,
+            190
+          ],
+          [
+            189,
+            191
+          ],
+          [
+            191,
+            192
+          ],
+          [
+            191,
+            195
+          ],
+          [
+            192,
+            191
+          ],
+          [
+            192,
+            193
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 0.0000\nStatement gain: 0 newly covered; 18 remain.\nBranch gain: 0 newly covered; 14 remain.\nRemaining lines: [168, 169, 170, 171, 179, 180, 181, 186, 187, 188, 189, 190, 191, 192, 193, 195, 198, 199]\nRemaining branches: [(168, 169), (168, 199), (180, 168), (180, 181), (181, 186), (181, 187), (187, 188), (187, 189), (189, 190), (189, 191), (191, 192), (191, 195), (192, 191), (192, 193)]\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "replicate_scores": [
+        0.0
+      ]
+    }
+  ],
+  "existing_baseline_reference": null
+}

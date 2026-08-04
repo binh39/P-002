@@ -1,0 +1,193 @@
+{
+  "name": "gepa",
+  "build_rate": 0.8,
+  "pass_rate": 0.35,
+  "statement_coverage": 0.4841666666666667,
+  "branch_coverage": 0.44000000000000006,
+  "mutation_score": 0.1,
+  "cost_usd": 0.5757550499999999,
+  "latency_seconds": 2622.2490000000034,
+  "holdout_digest": "9e351f2c9da37d43",
+  "per_example": [
+    {
+      "example_id": "isort/setuptools_commands.py::ISortCommand.distribution_files",
+      "result": {
+        "build_ok": true,
+        "build_error": "",
+        "num_tests": 5,
+        "num_passed": 0,
+        "pass_rate": 0.0,
+        "statement_coverage": 0.2,
+        "branch_coverage": 0.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 8.06300000000192
+      },
+      "test_code": "import pytest\nfrom isort.setuptools_commands import ISortCommand\n\nclass MockDistribution:\n    def __init__(self, packages=None, py_modules=None, package_dir=None):\n        self.packages = packages or []\n        self.py_modules = py_modules or []\n        self.package_dir = package_dir or {}\n\n@pytest.fixture\ndef isort_command():\n    return ISortCommand()\n\ndef test_distribution_files_with_packages(isort_command):\n    isort_command.distribution = MockDistribution(\n        packages=[\"pkg1\", \"pkg2\"],\n        package_dir={\"pkg1\": \"src/pkg1\", \"pkg2\": \"src/pkg2\"}\n    )\n    expected = [\"src/pkg1\", \"src/pkg2\", \"setup.py\"]\n    assert list(isort_command.distribution_files()) == expected\n\ndef test_distribution_files_with_package_dirs_default(isort_command):\n    isort_command.distribution = MockDistribution(\n        packages=[\"pkg1\"],\n        package_dir={}\n    )\n    expected = [\"pkg1\", \"setup.py\"]\n    assert list(isort_command.distribution_files()) == expected\n\ndef test_distribution_files_with_empty_packages(isort_command):\n    isort_command.distribution = MockDistribution(\n        packages=[],\n        py_modules=[\"module1\", \"module2\"]\n    )\n    expected = [\"module1.py\", \"module2.py\", \"setup.py\"]\n    assert list(isort_command.distribution_files()) == expected\n\ndef test_distribution_files_with_py_modules(isort_command):\n    isort_command.distribution = MockDistribution(\n        py_modules=[\"module1\", \"module2\"]\n    )\n    expected = [\"module1.py\", \"module2.py\", \"setup.py\"]\n    assert list(isort_command.distribution_files()) == expected\n\ndef test_distribution_files_with_packages_and_py_modules(isort_command):\n    isort_command.distribution = MockDistribution(\n        packages=[\"pkg1\"],\n        py_modules=[\"module1\"],\n        package_dir={\"pkg1\": \"src/pkg1\"}\n    )\n    expected = [\"src/pkg1\", \"module1.py\", \"setup.py\"]\n    assert list(isort_command.distribution_files()) == expected\n",
+      "cost_usd": 0.002849400000000002,
+      "latency_seconds": 35.79700000000594
+    },
+    {
+      "example_id": "isort/_vendored/tomli/_parser.py::Flags.is_",
+      "result": {
+        "build_ok": true,
+        "build_error": "",
+        "num_tests": 5,
+        "num_passed": 1,
+        "pass_rate": 0.2,
+        "statement_coverage": 0.5,
+        "branch_coverage": 0.4,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 9.139999999999418
+      },
+      "test_code": "import pytest\nfrom isort._vendored.tomli._parser import Flags  # Adjust the import as necessary\n\ndef test_is_with_valid_key_and_flag():\n    flags = Flags()\n    flags._flags = {\n        'level1': {\n            'nested': {\n                'level2': {\n                    'flags': [1, 2],\n                    'recursive_flags': [3]\n                }\n            }\n        }\n    }\n    assert flags.is_(['level1', 'level2'], 1) is True\n    assert flags.is_(['level1', 'level2'], 3) is True\n    assert flags.is_(['level1', 'level2'], 4) is False\n\ndef test_is_with_missing_keys():\n    flags = Flags()\n    flags._flags = {\n        'level1': {\n            'nested': {}\n        }\n    }\n    assert flags.is_(['level1', 'level2'], 1) is False\n\ndef test_is_with_empty_key():\n    flags = Flags()\n    assert flags.is_(None, 1) is False\n\ndef test_is_with_nested_flags():\n    flags = Flags()\n    flags._flags = {\n        'level1': {\n            'nested': {\n                'level2': {\n                    'flags': [],\n                    'recursive_flags': [3]\n                }\n            }\n        }\n    }\n    assert flags.is_(['level1', 'level2'], 3) is True\n    assert flags.is_(['level1', 'level2'], 1) is False\n\ndef test_is_with_nonexistent_nested():\n    flags = Flags()\n    flags._flags = {\n        'level1': {\n            'nested': {\n                'level2': {\n                    'flags': [1],\n                    'recursive_flags': []\n                }\n            }\n        }\n    }\n    assert flags.is_(['level1', 'level2', 'level3'], 1) is False\n",
+      "cost_usd": 0.00400709999999993,
+      "latency_seconds": 47.03100000000268
+    },
+    {
+      "example_id": "isort/deprecated/finders.py::ReqsBaseFinder._get_files",
+      "result": {
+        "build_ok": true,
+        "build_error": "",
+        "num_tests": 5,
+        "num_passed": 0,
+        "pass_rate": 0.0,
+        "statement_coverage": 0.16666666666666666,
+        "branch_coverage": 0.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 7.26600000000326
+      },
+      "test_code": "import os\nimport pytest\nfrom unittest.mock import patch, MagicMock\nfrom isort.deprecated.finders import ReqsBaseFinder\n\n\n@pytest.fixture\ndef temp_file(tmp_path):\n    \"\"\"Create a temporary requirements file.\"\"\"\n    req_file = tmp_path / \"requirements.txt\"\n    req_file.write_text(\"package1\\npackage2\\n\")\n    return str(req_file)\n\n\n@pytest.fixture\ndef temp_dir_with_requirements(tmp_path):\n    \"\"\"Create a temporary directory with multiple requirement files.\"\"\"\n    req_file_1 = tmp_path / \"requirements.txt\"\n    req_file_2 = tmp_path / \"requirements_dev.txt\"\n    req_file_1.write_text(\"package1\\npackage2\\n\")\n    req_file_2.write_text(\"package3\\npackage4\\n\")\n    return str(tmp_path)\n\n\n@pytest.fixture\ndef empty_temp_dir(tmp_path):\n    \"\"\"Create an empty temporary directory.\"\"\"\n    return str(tmp_path)\n\n\n@pytest.fixture\ndef no_requirements_dir(tmp_path):\n    \"\"\"Create a directory that does not contain any requirements files.\"\"\"\n    return str(tmp_path)\n\n\ndef test_get_files_with_file_path(temp_file):\n    finder = ReqsBaseFinder()\n    finder.path = temp_file\n    files = list(finder._get_files())\n    assert files == [temp_file]\n\n\ndef test_get_files_with_directory(temp_dir_with_requirements):\n    finder = ReqsBaseFinder()\n    finder.path = temp_dir_with_requirements\n    files = list(finder._get_files())\n    expected_files = [\n        os.path.join(temp_dir_with_requirements, \"requirements.txt\"),\n        os.path.join(temp_dir_with_requirements, \"requirements_dev.txt\")\n    ]\n    assert sorted(files) == sorted(expected_files)\n\n\ndef test_get_files_with_empty_directory(empty_temp_dir):\n    finder = ReqsBaseFinder()\n    finder.path = empty_temp_dir\n    files = list(finder._get_files())\n    assert files == []\n\n\ndef test_get_files_invalid_path():\n    finder = ReqsBaseFinder()\n    finder.path = \"invalid_path\"\n    \n    with pytest.raises(FileNotFoundError):\n        list(finder._get_files())\n\n\ndef test_get_files_no_requirements(no_requirements_dir):\n    finder = ReqsBaseFinder()\n    finder.path = no_requirements_dir\n    files = list(finder._get_files())\n    assert files == []\n",
+      "cost_usd": 0.002777400000000041,
+      "latency_seconds": 34.68800000000192
+    },
+    {
+      "example_id": "isort/_vendored/tomli/_parser.py::parse_key_part",
+      "result": {
+        "build_ok": true,
+        "build_error": "",
+        "num_tests": 5,
+        "num_passed": 4,
+        "pass_rate": 0.8,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 7.125
+      },
+      "test_code": "import pytest\nfrom isort._vendored.tomli._parser import parse_key_part\n\nBARE_KEY_CHARS = set(\"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_\")\n\ndef test_parse_key_part_with_bare_key_chars():\n    src = \"abc\"\n    pos = 0\n    expected_pos = 3\n    expected_key = \"abc\"\n    actual_pos, actual_key = parse_key_part(src, pos)\n    assert actual_pos == expected_pos\n    assert actual_key == expected_key\n\ndef test_parse_key_part_with_single_quote():\n    src = \"'key'\"\n    pos = 0\n    expected_pos = 5\n    expected_key = \"key\"\n    actual_pos, actual_key = parse_key_part(src, pos)\n    assert actual_pos == expected_pos\n    assert actual_key == expected_key\n\ndef test_parse_key_part_with_double_quote():\n    src = \"\\\"key\\\"\"\n    pos = 0\n    expected_pos = 5\n    expected_key = \"key\"\n    actual_pos, actual_key = parse_key_part(src, pos)\n    assert actual_pos == expected_pos\n    assert actual_key == expected_key\n\ndef test_parse_key_part_invalid_character():\n    src = \"@invalid\"\n    pos = 0\n    with pytest.raises(ValueError, match=\"Invalid initial character for a key part\"):\n        parse_key_part(src, pos)\n\ndef test_parse_key_part_out_of_bounds():\n    src = \"\"\n    pos = 0\n    expected_pos = 0\n    expected_key = \"\"\n    actual_pos, actual_key = parse_key_part(src, pos)\n    assert actual_pos == expected_pos\n    assert actual_key == expected_key\n",
+      "cost_usd": 0.0025927500000000325,
+      "latency_seconds": 30.968000000000757
+    },
+    {
+      "example_id": "isort/main.py::sort_imports",
+      "result": {
+        "build_ok": false,
+        "build_error": "ImportError while importing test module '/app/input/test_generated_550aaff3.py'.\nHint: make sure your test modules/packages have valid Python names.\nTraceback:\n/usr/local/lib/python3.11/importlib/__init__.py:126: in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntest_generated_550aaff3.py:5: in <module>\n    from isort import Config, SortAttempt\nE   ImportError: cannot import name 'SortAttempt' from 'isort' (/app/input/isort/__init__.py)",
+        "num_tests": 0,
+        "num_passed": 0,
+        "pass_rate": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 2.5
+      },
+      "test_code": "import pytest\nfrom unittest.mock import patch, MagicMock\nfrom isort.main import sort_imports\nfrom isort.exceptions import FileSkipped, UnsupportedEncoding, ISortError\nfrom isort import Config, SortAttempt\n\n# Mock config\nmock_config = MagicMock(spec=Config)\n\ndef test_sort_imports_check_pass():\n    with patch('isort.main.api.check_file', return_value=True):\n        result = sort_imports(\"test_file.py\", mock_config, check=True)\n        assert result == SortAttempt(incorrectly_sorted=False, skipped=False, success=True)\n\ndef test_sort_imports_check_fail():\n    with patch('isort.main.api.check_file', side_effect=FileSkipped):\n        result = sort_imports(\"test_file_with_unsorted_imports.py\", mock_config, check=True)\n        assert result == SortAttempt(incorrectly_sorted=True, skipped=False, success=True)\n\ndef test_sort_imports_sort():\n    with patch('isort.main.api.sort_file', return_value=True):\n        result = sort_imports(\"test_file.py\", mock_config, ask_to_apply=False, write_to_stdout=False)\n        assert result == SortAttempt(incorrectly_sorted=False, skipped=False, success=True)\n\ndef test_sort_imports_file_skipped():\n    with patch('isort.main.api.sort_file', side_effect=FileSkipped):\n        result = sort_imports(\"skipped_file.py\", mock_config)\n        assert result == SortAttempt(incorrectly_sorted=False, skipped=True, success=True)\n\ndef test_sort_imports_os_error():\n    with patch('isort.main.api.sort_file', side_effect=OSError):\n        result = sort_imports(\"invalid_path/file.py\", mock_config)\n        assert result is None\n\ndef test_sort_imports_value_error():\n    with patch('isort.main.api.sort_file', side_effect=ValueError):\n        result = sort_imports(\"test_file.py\", mock_config)\n        assert result is None\n\ndef test_sort_imports_unsupported_encoding():\n    mock_config.verbose = True\n    with patch('isort.main.api.sort_file', side_effect=UnsupportedEncoding):\n        result = sort_imports(\"unsupported_encoding_file.py\", mock_config)\n        assert result == SortAttempt(incorrectly_sorted=False, skipped=False, success=False)\n\ndef test_sort_imports_isort_error():\n    with patch('isort.main.api.sort_file', side_effect=ISortError('Error occurred')):\n        with pytest.raises(SystemExit):\n            sort_imports(\"test_file.py\", mock_config)\n",
+      "cost_usd": 0.0024206999999999423,
+      "latency_seconds": 26.547000000005937
+    },
+    {
+      "example_id": "isort/deprecated/finders.py::KnownPatternFinder.__init__",
+      "result": {
+        "build_ok": true,
+        "build_error": "",
+        "num_tests": 4,
+        "num_passed": 2,
+        "pass_rate": 0.5,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 6.436999999998079
+      },
+      "test_code": "import pytest\nimport re\nfrom isort.deprecated.finders import KnownPatternFinder\nfrom types import SimpleNamespace\n\n# Dummy Config class for testing purposes\nclass Config:\n    def __init__(self, sections, known_other=None, **kwargs):\n        self.sections = sections\n        self.known_other = known_other or {}\n        for key, value in kwargs.items():\n            setattr(self, key, value)\n\n# Tests\ndef test_known_patterns_initialization():\n    config = Config(\n        sections=[\"section1\", \"section2\"],\n        known_section1=[\"pattern1\", \"pattern2\"],\n        known_section2=[\"pattern3\"]\n    )\n    finder = KnownPatternFinder(config)\n    expected_patterns = [\n        (re.compile(\"^pattern1$\"), \"section1\"),\n        (re.compile(\"^pattern2$\"), \"section1\"),\n        (re.compile(\"^pattern3$\"), \"section2\"),\n    ]\n    assert finder.known_patterns == expected_patterns\n\ndef test_known_patterns_empty_config():\n    config = Config(sections=[], known_other={})\n    finder = KnownPatternFinder(config)\n    assert finder.known_patterns == []\n\ndef test_known_patterns_with_wildcards():\n    config = Config(\n        sections=[\"section3\"],\n        known_section3=[\"*pattern*\"]\n    )\n    finder = KnownPatternFinder(config)\n    expected_patterns = [\n        (re.compile(\"^.*pattern.*$\"), \"section3\"),\n    ]\n    assert finder.known_patterns == expected_patterns\n\ndef test_known_patterns_malformed_patterns():\n    config = Config(\n        sections=[\"section4\"],\n        known_section4=[\"?pattern?\"]\n    )\n    finder = KnownPatternFinder(config)\n    expected_patterns = [\n        (re.compile(\"^.pattern.$\"), \"section4\"),\n    ]\n    assert finder.known_patterns == expected_patterns\n",
+      "cost_usd": 0.0030349499999999807,
+      "latency_seconds": 33.75
+    },
+    {
+      "example_id": "isort/format.py::format_simplified",
+      "result": {
+        "build_ok": true,
+        "build_error": "",
+        "num_tests": 5,
+        "num_passed": 5,
+        "pass_rate": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "mutation_score": 1.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 30.20300000000134
+      },
+      "test_code": "import pytest\nfrom isort.format import format_simplified\n\ndef test_format_simplified_from_import():\n    assert format_simplified(\"from module import function\") == \"module.function\"\n\ndef test_format_simplified_import():\n    assert format_simplified(\"import module\") == \"module\"\n\ndef test_format_simplified_stripper():\n    assert format_simplified(\"   from module import function   \") == \"module.function\"\n\ndef test_format_simplified_empty():\n    assert format_simplified(\"\") == \"\"\n\ndef test_format_simplified_no_change():\n    assert format_simplified(\"some random text\") == \"some random text\"\n",
+      "cost_usd": 0.001963200000000054,
+      "latency_seconds": 48.35899999999674
+    },
+    {
+      "example_id": "isort/_vendored/tomli/_parser.py::parse_key",
+      "result": {
+        "build_ok": true,
+        "build_error": "",
+        "num_tests": 7,
+        "num_passed": 0,
+        "pass_rate": 0.0,
+        "statement_coverage": 0.875,
+        "branch_coverage": 1.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 7.780999999995402
+      },
+      "test_code": "import pytest\nfrom isort._vendored.tomli._parser import parse_key\n\ndef test_parse_key_valid_single_key():\n    src = \"key_name = value\"\n    pos = 0\n    expected = (1, [\"key_name\"])\n    assert parse_key(src, pos) == expected\n\ndef test_parse_key_valid_nested_keys():\n    src = \"key.sub_key.another_key = value\"\n    pos = 0\n    expected = (23, [\"key\", \"sub_key\", \"another_key\"])\n    assert parse_key(src, pos) == expected\n\ndef test_parse_key_with_leading_spaces():\n    src = \"    key_name = value\"\n    pos = 4\n    expected = (5, [\"key_name\"])\n    assert parse_key(src, pos) == expected\n\ndef test_parse_key_with_trailing_spaces():\n    src = \"key_name     = value\"\n    pos = 0\n    expected = (10, [\"key_name\"])\n    assert parse_key(src, pos) == expected\n\ndef test_parse_key_edge_case_empty():\n    src = \"\"\n    pos = 0\n    with pytest.raises(IndexError):\n        parse_key(src, pos)\n\ndef test_parse_key_edge_case_missing_key_part():\n    src = \"key..key_sub = value\"\n    pos = 0\n    expected = (4, [\"key\", \"key_sub\"])\n    assert parse_key(src, pos) == expected\n\ndef test_parse_key_edge_case_only_dots():\n    src = \"... = value\"\n    pos = 0\n    with pytest.raises(IndexError):\n        parse_key(src, pos)\n",
+      "cost_usd": 0.002720100000000003,
+      "latency_seconds": 53.09399999999732
+    },
+    {
+      "example_id": "isort/_vendored/tomli/_re.py::match_to_datetime",
+      "result": {
+        "build_ok": false,
+        "build_error": "ImportError while importing test module '/app/input/test_generated_57df0999.py'.\nHint: make sure your test modules/packages have valid Python names.\nTraceback:\n/usr/local/lib/python3.11/importlib/__init__.py:126: in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntest_generated_57df0999.py:4: in <module>\n    from your_module import match_to_datetime  # replace 'your_module' with the actual module name\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE   ModuleNotFoundError: No module named 'your_module'",
+        "num_tests": 0,
+        "num_passed": 0,
+        "pass_rate": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 1.0159999999959837
+      },
+      "test_code": "import pytest\nimport re\nfrom datetime import datetime, date, timezone\nfrom your_module import match_to_datetime  # replace 'your_module' with the actual module name\n\n\ndef generate_match(groups):\n    \"\"\"Helper function to create a mock re.Match object.\"\"\"\n    match = re.Match()\n    match.groups = lambda: groups\n    return match\n\n\ndef test_match_to_datetime_with_date():\n    match = generate_match((\"2023\", \"3\", \"28\", None, None, None, None, None, None, None, None))\n    assert match_to_datetime(match) == date(2023, 3, 28)\n\n\ndef test_match_to_datetime_with_datetime():\n    match = generate_match((\"2023\", \"3\", \"28\", \"15\", \"30\", \"0\", None, None, None, None, None))\n    assert match_to_datetime(match) == datetime(2023, 3, 28, 15, 30, 0)\n\n\ndef test_match_to_datetime_with_time_zone_offset():\n    match = generate_match((\"2023\", \"3\", \"28\", \"15\", \"30\", \"0\", None, None, \"+\", \"0\", \"0\"))\n    assert match_to_datetime(match) == datetime(2023, 3, 28, 15, 30, 0, tzinfo=timezone.utc)\n\n\ndef test_match_to_datetime_invalid_date():\n    match = generate_match((\"2023\", \"13\", \"28\", None, None, None, None, None, None, None, None))\n    with pytest.raises(ValueError):\n        match_to_datetime(match)\n\n\ndef test_match_to_datetime_no_time():\n    match = generate_match((\"2023\", \"3\", \"28\", None, None, None, None, None, None, None, None))\n    assert match_to_datetime(match) == date(2023, 3, 28)\n\n\ndef test_match_to_datetime_with_empty_string():\n    match = generate_match((\"\", \"\", \"\", \"\", \"\", \"\", \"\", \"\", \"\", \"\", \"\"))\n    with pytest.raises(ValueError):\n        match_to_datetime(match)\n",
+      "cost_usd": 0.0026486999999999483,
+      "latency_seconds": 28.718999999997322
+    },
+    {
+      "example_id": "isort/format.py::ask_whether_to_apply_changes_to_file",
+      "result": {
+        "build_ok": true,
+        "build_error": "",
+        "num_tests": 5,
+        "num_passed": 5,
+        "pass_rate": 1.0,
+        "statement_coverage": 0.1,
+        "branch_coverage": 0.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 38.921999999991385
+      },
+      "test_code": "import sys\nimport pytest\nfrom unittest.mock import patch\nfrom isort import format\n\n\ndef ask_whether_to_apply_changes_to_file(file_path: str) -> bool:\n    answer = None\n    while answer not in (\"yes\", \"y\", \"no\", \"n\", \"quit\", \"q\"):\n        answer = input(f\"Apply suggested changes to '{file_path}' [y/n/q]? \")  # nosec\n        answer = answer.lower()\n        if answer in (\"no\", \"n\"):\n            return False\n        if answer in (\"quit\", \"q\"):\n            sys.exit(1)\n    return True\n\n\ndef test_apply_changes_yes():\n    with patch('builtins.input', return_value='y'):\n        assert ask_whether_to_apply_changes_to_file(\"test_file.txt\") is True\n\n\ndef test_apply_changes_no():\n    with patch('builtins.input', return_value='n'):\n        assert ask_whether_to_apply_changes_to_file(\"test_file.txt\") is False\n\n\ndef test_apply_changes_quit():\n    with patch('builtins.input', return_value='q'):\n        with pytest.raises(SystemExit):\n            ask_whether_to_apply_changes_to_file(\"test_file.txt\")\n\n\ndef test_apply_changes_invalid_input_then_yes():\n    with patch('builtins.input', side_effect=['invalid', 'y']):\n        assert ask_whether_to_apply_changes_to_file(\"test_file.txt\") is True\n\n\ndef test_apply_changes_invalid_input_then_no():\n    with patch('builtins.input', side_effect=['invalid', 'n']):\n        assert ask_whether_to_apply_changes_to_file(\"test_file.txt\") is False\n",
+      "cost_usd": 0.0025234499999999827,
+      "latency_seconds": 63.13999999999214
+    }
+  ]
+}

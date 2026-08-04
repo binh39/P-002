@@ -117,10 +117,10 @@ def _evaluation_digest(
                     path.read_bytes()
                 ).hexdigest()
     payload = {
-        # Schema 6 records zero-coverage batches when CoverUp accepts no tests.
-        # Older caches incorrectly treated pytest's NO_TESTS_COLLECTED status as
-        # an unusable evaluation and omitted all symbol denominators.
-        "cache_schema": 6,
+        # Schema 7 rejects generated tests that mutate imported state at module
+        # scope. Schema 6 also records zero-coverage batches when CoverUp accepts
+        # no tests instead of dropping the symbol denominators.
+        "cache_schema": 7,
         "config": config_values,
         "targets": [_target_identity(target) for target in targets],
         "sources": source_hashes,
@@ -741,7 +741,7 @@ def _optimization_run_digest(
     evaluation_replicates: int,
 ) -> str:
     payload = {
-        "optimizer_schema": 6,
+        "optimizer_schema": 7,
         "baseline": baseline.as_candidate(),
         "train": [_target_identity(target) for target in train_targets],
         "validation": [_target_identity(target) for target in validation_targets],

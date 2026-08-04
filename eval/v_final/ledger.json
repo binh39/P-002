@@ -1,0 +1,24 @@
+{
+  "runs": {
+    "coverup": {
+      "holdout_digest": "7335a18155d636ad",
+      "result_file": "eval\\v_final\\results\\coverup.json"
+    },
+    "zero_shot": {
+      "holdout_digest": "7335a18155d636ad",
+      "result_file": "eval\\v_final\\results\\zero_shot.json"
+    },
+    "static_symprompt": {
+      "holdout_digest": "7335a18155d636ad",
+      "result_file": "eval\\v_final\\results\\static_symprompt.json"
+    },
+    "bootstrap_few_shot": {
+      "holdout_digest": "7335a18155d636ad",
+      "result_file": "eval\\v_final\\results\\bootstrap_few_shot.json"
+    },
+    "gepa": {
+      "holdout_digest": "7335a18155d636ad",
+      "result_file": "eval\\v_final\\results\\gepa.json"
+    }
+  }
+}

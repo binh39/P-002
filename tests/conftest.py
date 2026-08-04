@@ -1,8 +1,13 @@
+import os
 from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+
+# Tests must never connect to the developer's PostgreSQL instance from .env.
+os.environ["APP_ENV"] = "test"
+os.environ["DATABASE_URL"] = "sqlite://"
 
 from src.main import app
 

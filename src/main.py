@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from db.base import init_database
 from src.api.routes import router
 from src.config import get_settings
 
@@ -10,6 +11,7 @@ from src.config import get_settings
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    init_database()
     print(f"Starting {settings.app_name} in {settings.app_env} mode")
     yield
     print("Shutting down...")

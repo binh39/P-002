@@ -27,6 +27,7 @@ from src.optimization.gepa import (
 from src.optimization.metrics import aggregate_coverage_score, build_feedback, score_symbol
 from src.optimization.models import ExperimentConfig, SymbolTarget
 from src.optimization.prompts import baseline_bundle
+from src.optimization.provider import resolve_model_provider
 from src.optimization.runner import CoverUpExperimentRunner, _zero_coverage_like
 
 
@@ -43,6 +44,173 @@ def coverage(*, executed_lines=(), missing_lines=(), executed_branches=(), missi
         executed_branches=tuple(executed_branches),
         missing_branches=tuple(missing_branches),
     )
+
+
+def test_openai_provider_defaults_to_gpt_4o_mini():
+    config = resolve_model_provider({
+        "LLM_PROVIDER": "openai",
+        "OPENAI_API_KEY": "test-key",
+    })
+
+    assert config.provider == "openai"
+    assert config.generation_model == "openai/gpt-4o-mini"
+    assert config.optimization_model == "openai/gpt-4o-mini"
+
+
+def test_openai_provider_is_inferred_from_api_key():
+    config = resolve_model_provider({
+        "OPENAI_API_KEY": "test-key",
+    })
+
+    assert config.provider == "openai"
+    assert config.generation_model == "openai/gpt-4o-mini"
+    assert config.optimization_model == "openai/gpt-4o-mini"
+
+
+def test_coverup_reads_unified_openai_configuration(monkeypatch):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    coverup_module = importlib.import_module("coverup.coverup")
+
+    model = coverup_module.configured_model_from_env({
+        "LLM_PROVIDER": "openai",
+        "LLM_MODEL": "gpt-4o-mini",
+        "OPENAI_API_KEY": "test-key",
+    })
+
+    assert model == "openai/gpt-4o-mini"
+
+
+def test_coverup_caps_output_tokens_to_model_limit(monkeypatch):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    llm_module = importlib.import_module("coverup.llm")
+    monkeypatch.setattr(
+        llm_module.Chatter, "_validate_model", staticmethod(lambda model: None)
+    )
+
+    chatter = llm_module.Chatter("openai/gpt-4o-mini")
+
+    assert chatter._request([])["max_tokens"] == 16384
+
+
+@pytest.mark.asyncio
+async def test_coverup_draft_runner_reports_all_failures(tmp_path, monkeypatch):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    runner_module = importlib.import_module("coverup.testrunner")
+    captured = {}
+
+    async def fake_subprocess_run(command, **kwargs):
+        captured["command"] = command
+        report = Path(command[command.index("--out") + 1])
+        report.write_text("{}", encoding="utf-8")
+        return SimpleNamespace(stdout=b"")
+
+    monkeypatch.setattr(runner_module, "subprocess_run", fake_subprocess_run)
+
+    await runner_module.measure_test_coverage(
+        test="def test_example():\n    assert True\n",
+        tests_dir=tmp_path,
+    )
+
+    pytest_args = captured["command"][
+        captured["command"].index("pytest") + 1:
+    ]
+    assert "-x" not in pytest_args
+
+
+def test_coverup_salvages_passing_top_level_tests(monkeypatch):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    coverup_module = importlib.import_module("coverup.coverup")
+    test_code = (
+        "def test_passes():\n"
+        "    assert True\n\n"
+        "def test_fails():\n"
+        "    assert False\n"
+    )
+    pytest_output = (
+        "_____________________ test_fails _____________________\n"
+        "E   assert False\n"
+    )
+
+    salvaged = coverup_module.remove_failing_test_functions(
+        test_code, pytest_output
+    )
+
+    assert salvaged is not None
+    assert "test_passes" in salvaged
+    assert "test_fails" not in salvaged
+
+
+def test_coverup_rejects_module_scope_mutation_of_imported_state(monkeypatch):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    coverup_module = importlib.import_module("coverup.coverup")
+    test_code = (
+        "import isort.comments\n\n"
+        "def fake_add_to_line(*args):\n"
+        "    return 'changed'\n\n"
+        "isort.comments.add_to_line = fake_add_to_line\n\n"
+        "def test_example():\n"
+        "    assert True\n"
+    )
+
+    mutations = coverup_module.find_module_scope_state_mutations(test_code)
+
+    assert mutations == ["line 6: isort.comments.add_to_line"]
+
+
+def test_coverup_allows_monkeypatch_inside_test(monkeypatch):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    coverup_module = importlib.import_module("coverup.coverup")
+    test_code = (
+        "import isort.comments\n\n"
+        "def test_example(monkeypatch):\n"
+        "    monkeypatch.setattr(isort.comments, 'add_to_line', lambda *args: 'changed')\n"
+        "    assert True\n"
+    )
+
+    assert coverup_module.find_module_scope_state_mutations(test_code) == []
+
+
+def test_openai_provider_requires_api_key():
+    with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
+        resolve_model_provider({
+            "LLM_PROVIDER": "openai",
+            "LLM_MODEL": "gpt-4o-mini",
+        })
+
+
+def test_vertex_provider_qualifies_model():
+    config = resolve_model_provider({
+        "LLM_PROVIDER": "vertex_ai",
+        "LLM_MODEL": "gemini-test-model",
+        "VERTEXAI_PROJECT": "test-project",
+        "VERTEXAI_LOCATION": "global",
+    })
+
+    assert config.provider == "vertex_ai"
+    assert config.generation_model == "vertex_ai/gemini-test-model"
+    assert config.optimization_model == "vertex_ai/gemini-test-model"
+
+
+def test_legacy_role_specific_models_remain_supported():
+    config = resolve_model_provider({
+        "COVERUP_MODEL": "vertex_ai/gemini-generation",
+        "OPTIMIZE_MODEL": "vertex_ai/gemini-reflection",
+    })
+
+    assert config.generation_model == "vertex_ai/gemini-generation"
+    assert config.optimization_model == "vertex_ai/gemini-reflection"
 
 
 def test_zero_coverage_start_preserves_all_targets():

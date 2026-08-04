@@ -1,0 +1,12 @@
+{
+  "isort/settings.py::find_all_configs": "empty.py",
+  "isort/settings.py::_find_config": "../../../src/sample_repo/isort/tests_base_line_70bf98e239d3e2a5-5fc1a96cfab9_test/test_opt_4.py",
+  "isort/identify.py::imports": "../../../src/sample_repo/isort/tests_base_line_70bf98e239d3e2a5-5fc1a96cfab9_test/test_opt_5.py",
+  "isort/deprecated/finders.py::ReqsBaseFinder.find": "../../../src/sample_repo/isort/tests_base_line_70bf98e239d3e2a5-5fc1a96cfab9_test/test_opt_2.py",
+  "isort/main.py::main": "../../../src/sample_repo/isort/tests_base_line_70bf98e239d3e2a5-5fc1a96cfab9_test/test_opt_6.py",
+  "isort/settings.py::Config.__init__": "../../../src/sample_repo/isort/tests_base_line_70bf98e239d3e2a5-5fc1a96cfab9_test/test_opt_4.py",
+  "isort/wrap_modes.py::hanging_indent_with_parentheses": "../../../src/sample_repo/isort/tests_base_line_70bf98e239d3e2a5-5fc1a96cfab9_test/test_opt_3.py",
+  "isort/wrap_modes.py::_vertical_grid_common": "../../../src/sample_repo/isort/tests_base_line_70bf98e239d3e2a5-5fc1a96cfab9_test/test_opt_1.py",
+  "isort/api.py::sort_file": "empty.py",
+  "isort/deprecated/finders.py::PathFinder.find": "empty.py"
+}

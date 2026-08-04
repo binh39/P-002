@@ -36,6 +36,11 @@ The code below, extracted from {filename}, does not achieve full coverage:
 when tested, {segment.lines_branches_missing_do()} not execute.
 Create new pytest test functions that execute all missing lines and branches, always making
 sure that each test is correct and indeed improves coverage.
+Start with a small, focused module of one to three reliable tests. Correctness is more
+important than attempting every path in one response; later coverage feedback will request
+additional tests. Never guess an expected return value, exception, or exact output: derive
+each assertion from the provided source, information returned by get_info, or established
+library behavior.
 Use the get_info tool function as necessary.
 Always send entire Python test scripts when proposing a new test or correcting one you
 previously proposed.
@@ -57,6 +62,11 @@ Respond ONLY with the Python code enclosed in backticks, without any explanation
             return [mk_message(self._render("error", self.templates["error"], error=error))]
         return [mk_message(f"""\
 Executing the test yields an error, shown below.
+Treat the pytest output as authoritative runtime evidence. Fix every failure listed in that
+output in the same response. Do not keep an assertion that contradicts the actual value
+reported by pytest. If a test relies on behavior you cannot verify from source or get_info,
+remove that test and keep a smaller passing module. Do not mutate frozen/immutable objects;
+construct a new configured object instead.
 Modify or rewrite the test to correct it; respond only with the complete Python code in backticks.
 Use the get_info tool function as necessary.
 

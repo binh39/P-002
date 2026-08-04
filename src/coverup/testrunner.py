@@ -28,7 +28,9 @@ async def measure_test_coverage(*, test: str, tests_dir: Path, pytest_args='',
                 command = [sys.executable, '-X', 'utf8', '-m', 'slipcover',  *(('--branch',) if branch_coverage else ()),
                            '--json', '--out', j.name,
                            '-m', 'pytest', *pytest_args.split(),
-                           '-qq', '-x', '--disable-warnings', test_name]
+                           # Report every failure in the generated module so one
+                           # LLM repair turn can fix all bad assertions.
+                           '-qq', '--disable-warnings', test_name]
 
                 p = await subprocess_run(command, check=True, timeout=120)
 

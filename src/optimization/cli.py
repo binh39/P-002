@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import random
 from pathlib import Path
 
@@ -20,6 +19,7 @@ from .gepa import (
 from .metrics import aggregate_coverage_score
 from .models import ExperimentConfig
 from .prompts import PromptBundle, baseline_bundle
+from .provider import resolve_model_provider
 from .runner import CoverUpExperimentRunner
 
 
@@ -62,7 +62,7 @@ def parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--split", default="validation")
     evaluate.add_argument("--evaluation-replicates", type=int, default=1)
 
-    tune = commands.add_parser("optimize", help="Run GEPA using Gemini")
+    tune = commands.add_parser("optimize", help="Run GEPA using the configured LLM")
     tune.add_argument("--dataset", type=Path, required=True)
     tune.add_argument("--prompt", type=Path, required=True)
     tune.add_argument(
@@ -87,13 +87,6 @@ def parser() -> argparse.ArgumentParser:
 
 def _resolve(root: Path, path: Path) -> Path:
     return path if path.is_absolute() else root / path
-
-
-def _model_from_env(name: str) -> str:
-    value = os.getenv(name, "").strip()
-    if not value:
-        raise RuntimeError(f"{name} is not configured. Add it to .env before running the pipeline.")
-    return value
 
 
 def should_promote(*, optimized_mean: float, baseline_mean: float) -> bool:
@@ -144,12 +137,13 @@ def make_runner(args: argparse.Namespace) -> CoverUpExperimentRunner:
     if args.rate_limit is not None and args.rate_limit < 1:
         raise ValueError("--rate-limit must be at least 1")
     root = args.project_root.resolve()
+    provider = resolve_model_provider()
     config = ExperimentConfig(
         project_root=root,
         package_dir=_resolve(root, args.package_dir),
         tests_dir=_resolve(root, args.tests_dir),
         artifacts_dir=_resolve(root, args.artifacts_dir),
-        coverup_model=_model_from_env("COVERUP_MODEL"),
+        coverup_model=provider.generation_model,
         max_attempts=args.max_attempts,
         repeat_tests=args.repeat_tests,
         max_concurrency=args.max_concurrency,
@@ -203,6 +197,7 @@ def evaluate(args: argparse.Namespace) -> None:
 def tune(args: argparse.Namespace) -> None:
     load_dotenv(args.project_root.resolve() / ".env")
     runner = make_runner(args)
+    provider = resolve_model_provider()
     baseline = PromptBundle.load(args.prompt.resolve())
     train = load_targets(args.dataset.resolve(), "train")
     validation = load_targets(args.dataset.resolve(), "validation")
@@ -212,7 +207,7 @@ def tune(args: argparse.Namespace) -> None:
     final_targets = holdout or validation
     final_split = args.holdout_split if holdout else "validation"
     lm = dspy.LM(
-        _model_from_env("OPTIMIZE_MODEL"),
+        provider.optimization_model,
         max_tokens=8192,
         temperature=args.reflection_temperature,
     )

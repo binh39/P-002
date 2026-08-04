@@ -1,0 +1,193 @@
+{
+  "name": "coverup",
+  "build_rate": 0.7,
+  "pass_rate": 0.7,
+  "statement_coverage": 0.4261290299577126,
+  "branch_coverage": 0.3994285714285714,
+  "mutation_score": 0.1726335656213705,
+  "cost_usd": 0.0,
+  "latency_seconds": 1295.7350000000079,
+  "holdout_digest": "7335a18155d636ad",
+  "per_example": [
+    {
+      "example_id": "isort/settings.py::find_all_configs",
+      "result": {
+        "build_ok": false,
+        "build_error": "================================ tests coverage ================================\n_______________ coverage: platform linux, python 3.11.15-final-0 _______________\n\nCoverage JSON written to file /app/output/coverage.json\nno tests ran in 3.92s",
+        "num_tests": 0,
+        "num_passed": 0,
+        "pass_rate": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 4.796999999998661
+      },
+      "test_code": "# CoverUp produced no test for this held-out target.\n",
+      "cost_usd": 0.0,
+      "latency_seconds": 4.796999999998661
+    },
+    {
+      "example_id": "isort/settings.py::_find_config",
+      "result": {
+        "build_ok": true,
+        "build_error": "",
+        "num_tests": 5,
+        "num_passed": 5,
+        "pass_rate": 1.0,
+        "statement_coverage": 0.043478260869565216,
+        "branch_coverage": 0.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 34.76600000000326
+      },
+      "test_code": "# file: src\\sample_repo\\isort\\isort\\settings.py:284-516\n# asked: {\"lines\": [284, 286, 287, 288, 289, 291, 292, 293, 294, 295, 296, 298, 299, 300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 314, 316, 320, 321, 322, 323, 325, 326, 327, 328, 333, 335, 336, 337, 339, 340, 342, 343, 345, 346, 347, 348, 349, 350, 352, 353, 355, 356, 357, 359, 360, 361, 362, 363, 365, 366, 367, 368, 369, 371, 372, 373, 374, 376, 377, 378, 379, 381, 388, 389, 390, 391, 392, 393, 394, 395, 396, 400, 403, 405, 406, 407, 408, 410, 413, 415, 416, 417, 418, 421, 422, 423, 425, 427, 428, 429, 431, 432, 433, 434, 436, 437, 440, 441, 442, 443, 444, 447, 448, 449, 450, 452, 453, 454, 455, 457, 458, 459, 461, 463, 464, 465, 466, 467, 469, 473, 474, 475, 477, 478, 480, 481, 482, 483, 484, 485, 486, 489, 492, 493, 494, 495, 496, 497, 498, 499, 500, 501, 503, 504, 505, 507, 508, 509, 510, 511, 513, 514, 516], \"branches\": [[298, 299], [298, 314], [320, 321], [320, 335], [326, 327], [326, 345], [335, 336], [335, 342], [336, 337], [336, 339], [347, 348], [347, 359], [348, 349], [348, 352], [349, 350], [349, 352], [352, 353], [352, 355], [359, 360], [359, 361], [361, 362], [361, 365], [366, 367], [366, 376], [368, 369], [368, 371], [372, 373], [372, 374], [379, 381], [379, 427], [381, 388], [381, 415], [391, 392], [391, 405], [393, 394], [393, 403], [406, 407], [406, 415], [415, 416], [415, 417], [417, 418], [417, 421], [422, 423], [422, 425], [427, 428], [427, 440], [428, 429], [428, 431], [431, 427], [431, 432], [440, 441], [440, 447], [449, 450], [449, 452], [453, 454], [453, 461], [457, 453], [457, 458], [458, 457], [458, 459], [463, 464], [463, 473], [464, 465], [464, 469], [465, 464], [465, 466], [480, 481], [480, 492], [481, 482], [481, 483], [483, 484], [483, 492], [492, 493], [492, 494], [494, 495], [494, 498], [495, 496], [495, 497], [498, 499], [498, 503], [499, 500], [499, 501], [504, 507], [504, 513], [507, 504], [507, 508], [508, 507], [508, 509], [513, 514], [513, 516]]}\n# gained: {\"lines\": [284, 286, 287, 288, 291, 292, 293, 294, 295, 296, 298, 314, 316, 320, 335, 336, 337, 342, 343, 345, 346, 347, 348, 349, 352, 353, 359, 361, 362, 363, 365, 366, 376, 377, 378, 379, 381, 415, 417, 421, 422, 423, 425, 427, 440, 441, 443, 444, 447, 448, 449, 450, 463, 464, 469, 473, 474, 475, 477, 478, 480, 492, 494, 498, 503, 504, 505, 507, 508, 509, 510, 511, 513, 514, 516], \"branches\": [[298, 314], [320, 335], [335, 336], [335, 342], [336, 337], [347, 348], [347, 359], [348, 349], [349, 352], [352, 353], [359, 361], [361, 362], [361, 365], [366, 376], [379, 381], [379, 427], [381, 415], [415, 417], [417, 421], [422, 423], [422, 425], [427, 440], [440, 441], [449, 450], [463, 464], [463, 473], [464, 469], [480, 492], [492, 494], [494, 498], [498, 503], [504, 507], [504, 513], [507, 504], [507, 508], [508, 507], [508, 509], [513, 514], [513, 516]]}\n\nimport os\nimport pytest\nfrom isort.exceptions import FormattingPluginDoesNotExist, InvalidSettingsPath, ProfileDoesNotExist, UnsupportedSettings\nfrom isort.settings import Config\n\n@pytest.fixture\ndef clean_config():\n    \"\"\"Fixture to create a clean Config instance.\"\"\"\n    return Config()\n\n\ndef test_init_with_invalid_settings_path():\n    \"\"\"Test initialization with an invalid settings path.\"\"\"\n    with pytest.raises(InvalidSettingsPath):\n        Config(settings_path=\"invalid/path/to/settings\")\n\ndef test_init_with_nonexistent_profile():\n    \"\"\"Test initialization with a profile that does not exist.\"\"\"\n    with pytest.raises(ProfileDoesNotExist):\n        Config(profile=\"nonexistent_profile\")\n\ndef test_init_with_formatting_plugin_does_not_exist():\n    \"\"\"Test initialization with a formatting plugin that does not exist.\"\"\"\n    with pytest.raises(FormattingPluginDoesNotExist):\n        Config(formatter=\"nonexistent_formatter\")\n\ndef test_init_with_unsupported_settings():\n    \"\"\"Test initialization with unsupported settings.\"\"\"\n    unsupported_settings = {\n        \"unsupported_option\": {\"value\": \"some_value\", \"source\": \"source_name\"}\n    }\n    with pytest.raises(UnsupportedSettings):\n        Config(**unsupported_settings)\n\ndef test_init_with_deprecated_options(clean_config):\n    \"\"\"Test initialization with deprecated options.\"\"\"\n    deprecated_options = {\n        \"deprecated_option\": \"value\"\n    }\n    with pytest.raises(UnsupportedSettings):\n        clean_config.__init__(**deprecated_options)\n",
+      "cost_usd": 0.0,
+      "latency_seconds": 34.76600000000326
+    },
+    {
+      "example_id": "isort/identify.py::imports",
+      "result": {
+        "build_ok": true,
+        "build_error": "",
+        "num_tests": 7,
+        "num_passed": 7,
+        "pass_rate": 1.0,
+        "statement_coverage": 0.6538461538461539,
+        "branch_coverage": 0.68,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 306.75
+      },
+      "test_code": "# file: src\\sample_repo\\isort\\isort\\identify.py:44-208\n# asked: {\"lines\": [44, 45, 46, 47, 48, 49, 51, 53, 54, 55, 56, 59, 60, 61, 62, 64, 65, 66, 67, 68, 69, 70, 71, 73, 74, 75, 76, 77, 78, 80, 81, 83, 84, 85, 86, 88, 89, 90, 91, 92, 93, 95, 97, 98, 99, 101, 102, 103, 105, 107, 108, 109, 110, 113, 114, 115, 116, 117, 118, 120, 121, 123, 124, 125, 126, 127, 129, 132, 133, 135, 136, 137, 138, 139, 140, 141, 143, 144, 145, 146, 148, 149, 152, 153, 154, 155, 156, 158, 160, 161, 162, 165, 166, 167, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 188, 191, 192, 193, 194, 195, 196, 197, 199, 201, 202, 203, 204, 205, 207, 208], \"branches\": [[54, 0], [54, 55], [59, 60], [59, 61], [61, 62], [61, 64], [65, 66], [65, 83], [66, 67], [66, 74], [67, 68], [67, 74], [74, 75], [74, 81], [85, 86], [85, 88], [88, 54], [88, 89], [90, 91], [90, 92], [92, 93], [92, 95], [113, 114], [113, 123], [114, 115], [114, 152], [123, 124], [123, 152], [132, 133], [132, 143], [135, 123], [135, 136], [143, 146], [143, 148], [152, 153], [152, 165], [172, 173], [172, 201], [173, 174], [173, 201], [176, 177], [176, 191], [185, 186], [185, 188], [196, 197], [196, 199], [201, 88], [201, 202], [202, 203], [202, 207], [204, 88], [204, 205], [207, 88], [207, 208]]}\n# gained: {\"lines\": [44, 47, 48, 51, 53, 54, 55, 56, 59, 61, 64, 65, 83, 84, 85, 86, 88, 89, 90, 91, 92, 93, 95, 97, 98, 99, 101, 102, 103, 105, 107, 108, 109, 110, 113, 114, 115, 116, 120, 121, 123, 152, 153, 154, 155, 156, 158, 160, 161, 162, 165, 166, 167, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 188, 191, 192, 193, 194, 195, 196, 199, 201, 202, 203, 204, 205, 207, 208], \"branches\": [[54, 0], [54, 55], [59, 61], [61, 64], [65, 83], [85, 86], [85, 88], [88, 54], [88, 89], [90, 91], [90, 92], [92, 93], [92, 95], [113, 114], [113, 123], [114, 115], [114, 152], [123, 152], [152, 153], [152, 165], [172, 173], [172, 201], [173, 174], [173, 201], [176, 177], [176, 191], [185, 188], [196, 199], [201, 88], [201, 202], [202, 203], [202, 207], [204, 88], [204, 205], [207, 88], [207, 208]]}\n\nimport pytest\nfrom io import StringIO\nfrom pathlib import Path\nfrom isort.identify import imports\nfrom isort.settings import Config\nfrom isort.comments import parse as parse_comments\nfrom isort.parse import normalize_line\n\nclass MockImport:\n    def __init__(self, line_number, indented, module, attribute=None, alias=None, cimport=False, file_path=None):\n        self.line_number = line_number\n        self.indented = indented\n        self.module = module\n        self.attribute = attribute\n        self.alias = alias\n        self.cimport = cimport\n        self.file_path = file_path\n\n    def __str__(self):\n        return f\"{self.module} as {self.alias}\" if self.alias else self.module\n\n@pytest.fixture\ndef config():\n    return Config()\n\ndef test_imports_top_only(config):\n    input_stream = StringIO(\"import os\\nimport sys\\n\")\n    result = list(imports(input_stream, config=config, top_only=True))\n    assert len(result) == 2\n    assert result[0].module == \"os\"\n    assert result[1].module == \"sys\"\n\n\ndef test_imports_with_from_import(config):\n    input_stream = StringIO(\"from os import path\\nfrom sys import version\\n\")\n    result = list(imports(input_stream, config=config))\n    assert len(result) == 2\n    assert result[0].module == \"os\"\n    assert result[0].attribute == \"path\"\n    assert result[1].module == \"sys\"\n    assert result[1].attribute == \"version\"\n\ndef test_imports_with_as_alias(config):\n    input_stream = StringIO(\"import numpy as np\\nfrom pandas import DataFrame as DF\\n\")\n    result = list(imports(input_stream, config=config))\n    assert len(result) == 2\n    assert result[0].module == \"numpy\"\n    assert result[0].alias == \"np\"\n    assert result[1].module == \"pandas\"\n    assert result[1].attribute == \"DataFrame\"\n    assert result[1].alias == \"DF\"\n\ndef test_imports_with_multiline_import(config):\n    input_stream = StringIO(\"import os\\nimport sys\\nimport (\\n    json,\\n    re\\n)\\n\")\n    result = list(imports(input_stream, config=config))\n    assert len(result) == 4  # Adjusted to account for all imports\n    assert result[0].module == \"os\"\n    assert result[1].module == \"sys\"\n    assert result[2].module == \"json\"\n    assert result[3].module == \"re\"\n\ndef test_imports_with_cimport(config):\n    input_stream = StringIO(\"cimport numpy as cnp\\n\")\n    result = list(imports(input_stream, config=config))\n    assert len(result) == 1\n    assert result[0].module == \"numpy\"\n    assert result[0].alias == \"cnp\"\n    assert result[0].cimport is True\n\n\ndef test_imports_with_empty_lines(config):\n    input_stream = StringIO(\"\\n\\nimport os\\n\\n\")\n    result = list(imports(input_stream, config=config))\n    assert len(result) == 1\n    assert result[0].module == \"os\"\n\ndef test_imports_with_comments(config):\n    input_stream = StringIO(\"# This is a comment\\nimport os  # Importing os\\n\")\n    result = list(imports(input_stream, config=config))\n    assert len(result) == 1\n    assert result[0].module == \"os\"\n",
+      "cost_usd": 0.0,
+      "latency_seconds": 306.75
+    },
+    {
+      "example_id": "isort/deprecated/finders.py::ReqsBaseFinder.find",
+      "result": {
+        "build_ok": true,
+        "build_error": "",
+        "num_tests": 6,
+        "num_passed": 6,
+        "pass_rate": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "mutation_score": 0.6666666666666666,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 41.73500000000058
+      },
+      "test_code": "# file: src\\sample_repo\\isort\\isort\\deprecated\\finders.py:274-287\n# asked: {\"lines\": [274, 276, 277, 279, 280, 281, 282, 284, 285, 286, 287], \"branches\": [[276, 277], [276, 279], [281, 282], [281, 284], [284, 285], [284, 287], [285, 284], [285, 286]]}\n# gained: {\"lines\": [274, 276, 277, 279, 280, 281, 282, 284, 285, 286, 287], \"branches\": [[276, 277], [276, 279], [281, 282], [281, 284], [284, 285], [284, 287], [285, 284], [285, 286]]}\n\nimport pytest\nfrom isort import sections\nfrom isort.deprecated.finders import ReqsBaseFinder\nfrom isort.settings import Config\nfrom collections.abc import Iterator\n\nclass MockReqsBaseFinder(ReqsBaseFinder):\n    def __init__(self, config: Config, path: str = '.') -> None:\n        super().__init__(config, path)\n        self.names = ['numpy', 'pandas']\n\n    def _get_files_from_dir(self, path: str) -> Iterator[str]:\n        return iter([])  # Mock implementation\n\n    def _get_names(self, path: str) -> Iterator[str]:\n        return iter(self.names)  # Return the names set in the instance\n\n@pytest.fixture\ndef config():\n    return Config()  # Provide a mock or default config\n\nclass TestReqsBaseFinder:\n    @pytest.fixture\n    def finder(self, config):\n        finder = MockReqsBaseFinder(config)\n        finder.enabled = True\n        return finder\n\n    def test_find_enabled_with_matching_name(self, finder):\n        result = finder.find('numpy')\n        assert result == sections.THIRDPARTY\n\n    def test_find_enabled_with_non_matching_name(self, finder):\n        result = finder.find('scipy')\n        assert result is None\n\n    def test_find_enabled_with_empty_name(self, finder):\n        result = finder.find('')\n        assert result is None\n\n    def test_find_disabled(self, finder):\n        finder.enabled = False\n        result = finder.find('numpy')\n        assert result is None\n\n    def test_find_with_submodules(self, finder):\n        result = finder.find('numpy.submodule')\n        assert result == sections.THIRDPARTY  # Assuming submodules should return the same section\n\n    def test_find_with_lowercase_name(self, finder):\n        result = finder.find('PANDAS')\n        assert result == sections.THIRDPARTY  # Check case insensitivity\n",
+      "cost_usd": 0.0,
+      "latency_seconds": 41.73500000000058
+    },
+    {
+      "example_id": "isort/main.py::main",
+      "result": {
+        "build_ok": true,
+        "build_error": "",
+        "num_tests": 6,
+        "num_passed": 6,
+        "pass_rate": 1.0,
+        "statement_coverage": 0.5214285714285715,
+        "branch_coverage": 0.38095238095238093,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 306.87499999999636
+      },
+      "test_code": "# file: src\\sample_repo\\isort\\isort\\main.py:1061-1304\n# asked: {\"lines\": [1061, 1062, 1063, 1064, 1065, 1067, 1068, 1069, 1070, 1072, 1073, 1074, 1075, 1077, 1079, 1080, 1081, 1082, 1083, 1085, 1086, 1087, 1088, 1089, 1090, 1091, 1092, 1093, 1094, 1095, 1097, 1098, 1100, 1101, 1102, 1103, 1104, 1105, 1106, 1107, 1108, 1109, 1110, 1111, 1112, 1113, 1114, 1116, 1117, 1118, 1120, 1121, 1122, 1125, 1126, 1127, 1128, 1129, 1130, 1131, 1132, 1134, 1135, 1136, 1137, 1138, 1139, 1140, 1141, 1144, 1146, 1147, 1148, 1150, 1151, 1152, 1153, 1154, 1156, 1157, 1158, 1159, 1160, 1162, 1163, 1164, 1166, 1167, 1168, 1170, 1171, 1172, 1173, 1175, 1176, 1177, 1178, 1179, 1181, 1182, 1184, 1185, 1186, 1187, 1188, 1189, 1190, 1191, 1192, 1193, 1195, 1196, 1198, 1199, 1200, 1202, 1203, 1204, 1205, 1206, 1207, 1208, 1210, 1214, 1215, 1216, 1217, 1218, 1219, 1220, 1221, 1222, 1223, 1225, 1229, 1230, 1231, 1232, 1233, 1234, 1235, 1236, 1237, 1238, 1239, 1242, 1243, 1245, 1247, 1249, 1250, 1251, 1252, 1253, 1254, 1258, 1260, 1261, 1262, 1263, 1264, 1265, 1267, 1269, 1270, 1271, 1272, 1274, 1275, 1276, 1277, 1278, 1279, 1281, 1282, 1283, 1284, 1285, 1287, 1288, 1290, 1293, 1294, 1296, 1297, 1299, 1300, 1301, 1303, 1304], \"branches\": [[1063, 1064], [1063, 1067], [1069, 1070], [1069, 1072], [1072, 1073], [1072, 1079], [1073, 1074], [1073, 1077], [1079, 1080], [1079, 1085], [1082, 1083], [1082, 1085], [1086, 1087], [1086, 1091], [1088, 1089], [1088, 1090], [1091, 1092], [1091, 1100], [1097, 1098], [1097, 1100], [1117, 1118], [1117, 1120], [1120, 1121], [1120, 1125], [1126, 1127], [1126, 1129], [1129, 1130], [1129, 1158], [1131, 1132], [1131, 1134], [1135, 1136], [1135, 1146], [1158, 1159], [1158, 1166], [1166, 1167], [1166, 1172], [1175, 1176], [1175, 1184], [1177, 1178], [1177, 1182], [1178, 1179], [1178, 1181], [1185, 1186], [1185, 1189], [1186, 1187], [1186, 1188], [1192, 1193], [1192, 1195], [1195, 1196], [1195, 1214], [1231, 1232], [1231, 1249], [1232, 1233], [1232, 1234], [1235, 1236], [1235, 1237], [1237, 1238], [1237, 1242], [1242, 1243], [1242, 1245], [1250, 1251], [1250, 1260], [1251, 1252], [1251, 1258], [1252, 1253], [1252, 1258], [1261, 1262], [1261, 1269], [1262, 1263], [1262, 1267], [1263, 1264], [1263, 1267], [1269, 1270], [1269, 1271], [1271, 1272], [1271, 1274], [1274, 1275], [1274, 1293], [1275, 1276], [1275, 1281], [1281, 1282], [1281, 1287], [1293, 1294], [1293, 1296], [1296, 1297], [1296, 1299], [1299, 0], [1299, 1300]]}\n# gained: {\"lines\": [1061, 1062, 1063, 1067, 1068, 1069, 1072, 1073, 1077, 1079, 1085, 1086, 1087, 1088, 1089, 1091, 1092, 1094, 1095, 1097, 1098, 1100, 1101, 1102, 1103, 1104, 1105, 1106, 1107, 1108, 1109, 1110, 1111, 1112, 1113, 1114, 1116, 1117, 1120, 1125, 1126, 1129, 1158, 1159, 1160, 1162, 1163, 1164, 1166, 1172, 1173, 1175, 1184, 1185, 1189, 1190, 1191, 1192, 1195, 1214, 1225, 1229, 1230, 1231, 1249, 1250, 1260, 1261, 1262, 1267, 1269, 1270, 1271, 1274, 1293, 1296, 1297], \"branches\": [[1063, 1067], [1069, 1072], [1072, 1073], [1072, 1079], [1073, 1077], [1079, 1085], [1086, 1087], [1086, 1091], [1088, 1089], [1091, 1092], [1097, 1098], [1097, 1100], [1117, 1120], [1120, 1125], [1126, 1129], [1129, 1158], [1158, 1159], [1158, 1166], [1166, 1172], [1175, 1184], [1185, 1189], [1192, 1195], [1195, 1214], [1231, 1249], [1250, 1260], [1261, 1262], [1262, 1267], [1269, 1270], [1271, 1274], [1274, 1293], [1293, 1296], [1296, 1297]]}\n\nimport pytest\nimport os\nimport sys\nfrom io import StringIO\nfrom isort.main import main\nfrom isort.exceptions import FileSkipped\nfrom isort.settings import Config\nfrom isort.api import check_stream, sort_stream\nfrom isort.format import create_terminal_printer\n\n@pytest.fixture\ndef mock_stdout(monkeypatch):\n    new_stdout = StringIO()\n    monkeypatch.setattr(sys, 'stdout', new_stdout)\n    return new_stdout\n\n@pytest.fixture\ndef mock_stdin(monkeypatch):\n    new_stdin = StringIO(\"import os\\nimport sys\\n\")\n    monkeypatch.setattr(sys, 'stdin', new_stdin)\n    return new_stdin\n\n\n\n\ndef test_main_invalid_settings_path():\n    sys.argv = ['isort', '--settings-path', 'invalid_path']\n    with pytest.raises(SystemExit):\n        main()\n\n\n\n\n\ndef test_main_allow_root_warning(monkeypatch):\n    sys.argv = ['isort', '/']\n    with pytest.raises(SystemExit):\n        main()\n\ndef test_main_invalid_encoding(mock_stdout):\n    sys.argv = ['isort', 'invalid_encoding_file.py']\n    with pytest.raises(SystemExit):\n        main()\n\n\ndef test_main_no_valid_encodings(mock_stdout):\n    sys.argv = ['isort', 'invalid_encoding_file.py']\n    with pytest.raises(SystemExit):\n        main()\n\ndef test_create_terminal_printer():\n    printer = create_terminal_printer(color=True)\n    assert printer is not None  # Ensure the printer is created\n\ndef test_check_stream(mock_stdin):\n    result = check_stream(mock_stdin, show_diff=False)\n    assert result is True  # Assuming the input is already sorted\n",
+      "cost_usd": 0.0,
+      "latency_seconds": 306.87499999999636
+    },
+    {
+      "example_id": "isort/settings.py::Config.__init__",
+      "result": {
+        "build_ok": true,
+        "build_error": "",
+        "num_tests": 5,
+        "num_passed": 5,
+        "pass_rate": 1.0,
+        "statement_coverage": 0.4925373134328358,
+        "branch_coverage": 0.43333333333333335,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 307.9850000000042
+      },
+      "test_code": "# file: src\\sample_repo\\isort\\isort\\settings.py:284-516\n# asked: {\"lines\": [284, 286, 287, 288, 289, 291, 292, 293, 294, 295, 296, 298, 299, 300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 314, 316, 320, 321, 322, 323, 325, 326, 327, 328, 333, 335, 336, 337, 339, 340, 342, 343, 345, 346, 347, 348, 349, 350, 352, 353, 355, 356, 357, 359, 360, 361, 362, 363, 365, 366, 367, 368, 369, 371, 372, 373, 374, 376, 377, 378, 379, 381, 388, 389, 390, 391, 392, 393, 394, 395, 396, 400, 403, 405, 406, 407, 408, 410, 413, 415, 416, 417, 418, 421, 422, 423, 425, 427, 428, 429, 431, 432, 433, 434, 436, 437, 440, 441, 442, 443, 444, 447, 448, 449, 450, 452, 453, 454, 455, 457, 458, 459, 461, 463, 464, 465, 466, 467, 469, 473, 474, 475, 477, 478, 480, 481, 482, 483, 484, 485, 486, 489, 492, 493, 494, 495, 496, 497, 498, 499, 500, 501, 503, 504, 505, 507, 508, 509, 510, 511, 513, 514, 516], \"branches\": [[298, 299], [298, 314], [320, 321], [320, 335], [326, 327], [326, 345], [335, 336], [335, 342], [336, 337], [336, 339], [347, 348], [347, 359], [348, 349], [348, 352], [349, 350], [349, 352], [352, 353], [352, 355], [359, 360], [359, 361], [361, 362], [361, 365], [366, 367], [366, 376], [368, 369], [368, 371], [372, 373], [372, 374], [379, 381], [379, 427], [381, 388], [381, 415], [391, 392], [391, 405], [393, 394], [393, 403], [406, 407], [406, 415], [415, 416], [415, 417], [417, 418], [417, 421], [422, 423], [422, 425], [427, 428], [427, 440], [428, 429], [428, 431], [431, 427], [431, 432], [440, 441], [440, 447], [449, 450], [449, 452], [453, 454], [453, 461], [457, 453], [457, 458], [458, 457], [458, 459], [463, 464], [463, 473], [464, 465], [464, 469], [465, 464], [465, 466], [480, 481], [480, 492], [481, 482], [481, 483], [483, 484], [483, 492], [492, 493], [492, 494], [494, 495], [494, 498], [495, 496], [495, 497], [498, 499], [498, 503], [499, 500], [499, 501], [504, 507], [504, 513], [507, 504], [507, 508], [508, 507], [508, 509], [513, 514], [513, 516]]}\n# gained: {\"lines\": [284, 286, 287, 288, 291, 292, 293, 294, 295, 296, 298, 314, 316, 320, 335, 336, 337, 342, 343, 345, 346, 347, 348, 349, 352, 353, 359, 361, 362, 363, 365, 366, 376, 377, 378, 379, 381, 415, 417, 421, 422, 423, 425, 427, 440, 441, 443, 444, 447, 448, 449, 450, 463, 464, 469, 473, 474, 475, 477, 478, 480, 492, 494, 498, 503, 504, 505, 507, 508, 509, 510, 511, 513, 514, 516], \"branches\": [[298, 314], [320, 335], [335, 336], [335, 342], [336, 337], [347, 348], [347, 359], [348, 349], [349, 352], [352, 353], [359, 361], [361, 362], [361, 365], [366, 376], [379, 381], [379, 427], [381, 415], [415, 417], [417, 421], [422, 423], [422, 425], [427, 440], [440, 441], [449, 450], [463, 464], [463, 473], [464, 469], [480, 492], [492, 494], [494, 498], [498, 503], [504, 507], [504, 513], [507, 504], [507, 508], [508, 507], [508, 509], [513, 514], [513, 516]]}\n\nimport os\nimport pytest\nfrom isort.exceptions import FormattingPluginDoesNotExist, InvalidSettingsPath, ProfileDoesNotExist, UnsupportedSettings\nfrom isort.settings import Config\n\n@pytest.fixture\ndef clean_config():\n    \"\"\"Fixture to create a clean Config instance.\"\"\"\n    return Config()\n\n\ndef test_init_with_invalid_settings_path():\n    \"\"\"Test initialization with an invalid settings path.\"\"\"\n    with pytest.raises(InvalidSettingsPath):\n        Config(settings_path=\"invalid/path/to/settings\")\n\ndef test_init_with_nonexistent_profile():\n    \"\"\"Test initialization with a profile that does not exist.\"\"\"\n    with pytest.raises(ProfileDoesNotExist):\n        Config(profile=\"nonexistent_profile\")\n\ndef test_init_with_formatting_plugin_does_not_exist():\n    \"\"\"Test initialization with a formatting plugin that does not exist.\"\"\"\n    with pytest.raises(FormattingPluginDoesNotExist):\n        Config(formatter=\"nonexistent_formatter\")\n\ndef test_init_with_unsupported_settings():\n    \"\"\"Test initialization with unsupported settings.\"\"\"\n    unsupported_settings = {\n        \"unsupported_option\": {\"value\": \"some_value\", \"source\": \"source_name\"}\n    }\n    with pytest.raises(UnsupportedSettings):\n        Config(**unsupported_settings)\n\ndef test_init_with_deprecated_options(clean_config):\n    \"\"\"Test initialization with deprecated options.\"\"\"\n    deprecated_options = {\n        \"deprecated_option\": \"value\"\n    }\n    with pytest.raises(UnsupportedSettings):\n        clean_config.__init__(**deprecated_options)\n",
+      "cost_usd": 0.0,
+      "latency_seconds": 307.9850000000042
+    },
+    {
+      "example_id": "isort/wrap_modes.py::hanging_indent_with_parentheses",
+      "result": {
+        "build_ok": true,
+        "build_error": "",
+        "num_tests": 2,
+        "num_passed": 2,
+        "pass_rate": 1.0,
+        "statement_coverage": 0.55,
+        "branch_coverage": 0.5,
+        "mutation_score": 0.25609756097560976,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 149.10900000000038
+      },
+      "test_code": "# file: src\\sample_repo\\isort\\isort\\wrap_modes.py:311-364\n# asked: {\"lines\": [311, 312, 313, 314, 316, 318, 319, 320, 322, 323, 324, 325, 326, 327, 328, 330, 332, 333, 334, 335, 337, 338, 340, 341, 342, 345, 346, 347, 348, 349, 351, 352, 353, 354, 355, 356, 357, 358, 360, 362, 363, 364], \"branches\": [[313, 314], [313, 316], [322, 323], [322, 333], [334, 335], [334, 364], [336, 340], [336, 345], [352, 353], [352, 363]]}\n# gained: {\"lines\": [311, 312, 313, 314, 316, 318, 319, 320, 322, 333, 334, 364], \"branches\": [[313, 314], [313, 316], [322, 333], [334, 364]]}\n\nimport pytest\nfrom isort.wrap_modes import hanging_indent_with_parentheses  # Import the function to be tested\n\n# Test module for hanging_indent_with_parentheses\n@pytest.fixture\ndef mock_add_to_line(monkeypatch):\n    def mock_function(comments, statement, removed=False, comment_prefix=''):\n        return f\"{statement} # Mocked comment\"\n    \n    monkeypatch.setattr(\"isort.comments.add_to_line\", mock_function)\n\ndef test_hanging_indent_with_parentheses_no_imports(mock_add_to_line):\n    interface = {\n        \"imports\": [],\n        \"line_length\": 80,\n        \"statement\": \"\",\n        \"comments\": [],\n        \"remove_comments\": False,\n        \"comment_prefix\": \"\",\n        \"line_separator\": \"\\n\",\n        \"indent\": \"    \",\n        \"include_trailing_comma\": False,\n    }\n    result = hanging_indent_with_parentheses(**interface)\n    assert result == \"\"\n\ndef test_hanging_indent_with_parentheses_single_import(mock_add_to_line):\n    interface = {\n        \"imports\": [\"import os\"],\n        \"line_length\": 80,\n        \"statement\": \"\",\n        \"comments\": [],\n        \"remove_comments\": False,\n        \"comment_prefix\": \"\",\n        \"line_separator\": \"\\n\",\n        \"indent\": \"    \",\n        \"include_trailing_comma\": False,\n    }\n    result = hanging_indent_with_parentheses(**interface)\n    assert result == \"(import os)\"\n",
+      "cost_usd": 0.0,
+      "latency_seconds": 149.10900000000038
+    },
+    {
+      "example_id": "isort/wrap_modes.py::_vertical_grid_common",
+      "result": {
+        "build_ok": true,
+        "build_error": "",
+        "num_tests": 6,
+        "num_passed": 6,
+        "pass_rate": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "mutation_score": 0.8035714285714286,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 133.01500000000306
+      },
+      "test_code": "# file: src\\sample_repo\\isort\\isort\\wrap_modes.py:186-219\n# asked: {\"lines\": [186, 187, 188, 190, 191, 192, 193, 194, 195, 197, 198, 199, 201, 202, 203, 204, 205, 207, 208, 210, 211, 212, 213, 214, 216, 217, 218, 219], \"branches\": [[187, 188], [187, 190], [201, 202], [201, 217], [205, 207], [205, 208], [208, 210], [208, 211], [211, 212], [211, 216], [217, 218], [217, 219]]}\n# gained: {\"lines\": [186, 187, 188, 190, 191, 192, 193, 194, 195, 197, 198, 199, 201, 202, 203, 204, 205, 207, 208, 210, 211, 212, 213, 214, 216, 217, 218, 219], \"branches\": [[187, 188], [187, 190], [201, 202], [201, 217], [205, 207], [205, 208], [208, 210], [208, 211], [211, 212], [211, 216], [217, 218], [217, 219]]}\n\nimport pytest\nimport isort.comments\n\n# Assuming the _vertical_grid_common function is defined in a module named `isort_wrap_modes`\nfrom isort.wrap_modes import _vertical_grid_common\n\n@pytest.fixture\ndef interface_setup():\n    \"\"\"Fixture to set up the interface dictionary for tests.\"\"\"\n    return {\n        \"imports\": [],\n        \"statement\": \"\",\n        \"comments\": [],\n        \"remove_comments\": False,\n        \"comment_prefix\": \"#\",\n        \"line_separator\": \"\\n\",\n        \"indent\": \"    \",\n        \"line_length\": 80,\n        \"include_trailing_comma\": False,\n    }\n\ndef test_vertical_grid_no_imports(interface_setup):\n    \"\"\"Test case where there are no imports.\"\"\"\n    interface = interface_setup\n    result = _vertical_grid_common(need_trailing_char=False, **interface)\n    assert result == \"\"\n\ndef test_vertical_grid_with_one_import(interface_setup):\n    \"\"\"Test case with one import.\"\"\"\n    interface = interface_setup\n    interface[\"imports\"] = [\"import os\"]\n    result = _vertical_grid_common(need_trailing_char=False, **interface)\n    assert result == \"(\\n    import os\"\n\ndef test_vertical_grid_with_multiple_imports(interface_setup):\n    \"\"\"Test case with multiple imports.\"\"\"\n    interface = interface_setup\n    interface[\"imports\"] = [\"import os\", \"import sys\"]\n    result = _vertical_grid_common(need_trailing_char=False, **interface)\n    assert result == \"(\\n    import os, import sys\"\n\ndef test_vertical_grid_with_trailing_char(interface_setup):\n    \"\"\"Test case with trailing character needed.\"\"\"\n    interface = interface_setup\n    interface[\"imports\"] = [\"import os\", \"import sys\"]\n    interface[\"include_trailing_comma\"] = True\n    result = _vertical_grid_common(need_trailing_char=True, **interface)\n    assert result == \"(\\n    import os, import sys,\"\n\ndef test_vertical_grid_exceeds_line_length(interface_setup):\n    \"\"\"Test case where the line length is exceeded.\"\"\"\n    interface = interface_setup\n    interface[\"imports\"] = [\"import os\", \"import sys\", \"import json\"]\n    interface[\"line_length\"] = 20  # Set a low line length to trigger the split\n    result = _vertical_grid_common(need_trailing_char=False, **interface)\n    assert result == \"(\\n    import os,\\n    import sys,\\n    import json\"\n\ndef test_vertical_grid_with_comments(interface_setup):\n    \"\"\"Test case with comments included.\"\"\"\n    interface = interface_setup\n    interface[\"imports\"] = [\"import os\"]\n    interface[\"comments\"] = [\"This is a comment\"]\n    result = _vertical_grid_common(need_trailing_char=False, **interface)\n    assert result == \"(# This is a comment\\n    import os\"\n",
+      "cost_usd": 0.0,
+      "latency_seconds": 133.01500000000306
+    },
+    {
+      "example_id": "isort/api.py::sort_file",
+      "result": {
+        "build_ok": false,
+        "build_error": "================================ tests coverage ================================\n_______________ coverage: platform linux, python 3.11.15-final-0 _______________\n\nCoverage JSON written to file /app/output/coverage.json\nno tests ran in 4.69s",
+        "num_tests": 0,
+        "num_passed": 0,
+        "pass_rate": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 5.625
+      },
+      "test_code": "# CoverUp produced no test for this held-out target.\n",
+      "cost_usd": 0.0,
+      "latency_seconds": 5.625
+    },
+    {
+      "example_id": "isort/deprecated/finders.py::PathFinder.find",
+      "result": {
+        "build_ok": false,
+        "build_error": "================================ tests coverage ================================\n_______________ coverage: platform linux, python 3.11.15-final-0 _______________\n\nCoverage JSON written to file /app/output/coverage.json\nno tests ran in 4.21s",
+        "num_tests": 0,
+        "num_passed": 0,
+        "pass_rate": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 5.078000000001339
+      },
+      "test_code": "# CoverUp produced no test for this held-out target.\n",
+      "cost_usd": 0.0,
+      "latency_seconds": 5.078000000001339
+    }
+  ]
+}

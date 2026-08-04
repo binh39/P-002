@@ -1,4 +1,5 @@
 import asyncio
+import ast
 import json
 import os
 
@@ -49,6 +50,32 @@ load_dotenv()
 load_dotenv(find_dotenv('.env.coverup'), override=False)
 
 
+def configured_model_from_env(environ: T.Mapping[str, str] | None = None) -> str | None:
+    """Read the shared project LLM configuration for standalone CoverUp runs."""
+    env = os.environ if environ is None else environ
+    if legacy_model := env.get('COVERUP_MODEL', '').strip():
+        return legacy_model
+
+    provider = env.get('LLM_PROVIDER', '').strip().lower()
+    if not provider:
+        if env.get('OPENAI_API_KEY', '').strip():
+            provider = 'openai'
+        elif (
+            env.get('VERTEXAI_PROJECT', '').strip()
+            and env.get('VERTEXAI_LOCATION', '').strip()
+        ):
+            provider = 'vertex_ai'
+
+    model = env.get('LLM_MODEL', '').strip()
+    if provider == 'openai':
+        model = model or 'gpt-4o-mini'
+        return model if model.startswith('openai/') else f'openai/{model}'
+    if provider in {'vertex', 'vertex_ai'}:
+        model = model or 'gemini-3.6-flash'
+        return model if model.startswith('vertex_ai/') else f'vertex_ai/{model}'
+    return None
+
+
 def parse_args(args=None):
     ap = argparse.ArgumentParser(prog='CoverUp',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -60,7 +87,7 @@ def parse_args(args=None):
         if not path_dir.is_dir(): raise argparse.ArgumentTypeError(f"\"{value}\" must be a directory")
         return path_dir
 
-    ap.add_argument('--tests-dir', type=Path_dir, default='tests',
+    ap.add_argument('--tests-dir', '--tests', type=Path_dir, default='tests',
                     help='directory where tests reside')
 
     g = ap.add_mutually_exclusive_group(required=False)
@@ -74,9 +101,7 @@ def parse_args(args=None):
                     help='disable checkpoint')
 
     def default_model():
-        # Vertex AI uses Application Default Credentials created by
-        # `gcloud auth application-default login`; no API key is required.
-        return os.environ.get('COVERUP_MODEL')
+        return configured_model_from_env()
 
     ap.add_argument('--model', type=str, default=default_model(),
                     help='LLM model to use')
@@ -131,7 +156,7 @@ def parse_args(args=None):
     ap.add_argument('--pytest-args', type=str, default='',
                     help='extra arguments to pass to pytest')
 
-    ap.add_argument('--target-symbols', type=str, default='',
+    ap.add_argument('--target-symbols', '--target-symbol', type=str, default='',
                     help='comma-separated function/class symbols to generate tests for (e.g. foo,Bar.baz)')
 
     ap.add_argument('--install-missing-modules', default=False,
@@ -538,6 +563,85 @@ def extract_python(response: str) -> str:
     return m.group(1)
 
 
+def remove_failing_test_functions(test_code: str, pytest_output: str) -> str | None:
+    """Remove failed top-level tests so passing coverage can be salvaged."""
+    failed_names = set(re.findall(
+        r"_{2,}\s+(test_[A-Za-z0-9_]+)\s+_{2,}",
+        pytest_output,
+    ))
+    if not failed_names:
+        return None
+
+    try:
+        tree = ast.parse(test_code)
+    except SyntaxError:
+        return None
+
+    failed_nodes = [
+        node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name in failed_names
+    ]
+    if not failed_nodes:
+        return None
+
+    lines = test_code.splitlines(keepends=True)
+    for node in sorted(failed_nodes, key=lambda item: item.lineno, reverse=True):
+        del lines[node.lineno - 1:node.end_lineno]
+    salvaged = "".join(lines)
+
+    try:
+        salvaged_tree = ast.parse(salvaged)
+    except SyntaxError:
+        return None
+    has_tests = any(
+        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name.startswith("test_")
+        for node in salvaged_tree.body
+    )
+    return salvaged if has_tests else None
+
+
+def find_module_scope_state_mutations(test_code: str) -> list[str]:
+    """Find top-level writes to imported modules that can pollute later tests."""
+    try:
+        tree = ast.parse(test_code)
+    except SyntaxError:
+        return []
+
+    imported_names: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            imported_names.update(alias.asname or alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imported_names.update(alias.asname or alias.name for alias in node.names)
+
+    def root_name(node: ast.AST) -> str | None:
+        while isinstance(node, (ast.Attribute, ast.Subscript)):
+            node = node.value
+        return node.id if isinstance(node, ast.Name) else None
+
+    def assigned_targets(node: ast.AST) -> list[ast.AST]:
+        if isinstance(node, ast.Assign):
+            return node.targets
+        if isinstance(node, (ast.AnnAssign, ast.AugAssign)):
+            return [node.target]
+        return []
+
+    mutations: list[str] = []
+    for statement in tree.body:
+        for target in assigned_targets(statement):
+            if (
+                isinstance(target, (ast.Attribute, ast.Subscript))
+                and root_name(target) in imported_names
+            ):
+                mutations.append(
+                    f"line {getattr(target, 'lineno', '?')}: {ast.unparse(target)}"
+                )
+    return mutations
+
+
 state: State
 
 async def improve_coverage(
@@ -608,6 +712,28 @@ async def improve_coverage(
             })
             continue
 
+        if mutations := find_module_scope_state_mutations(last_test):
+            state.inc_counter('F')
+            details = "\n".join(f"- {mutation}" for mutation in mutations)
+            log_write(
+                args,
+                seg,
+                "Rejected module-scope state mutation(s):\n" + details,
+            )
+            messages.append({
+                "role": "user",
+                "content": (
+                    "This draft mutates imported state at module scope and would pollute "
+                    "other test modules:\n"
+                    f"{details}\n"
+                    "Rewrite the complete test module. Put each patch inside a test or "
+                    "fixture and use pytest's monkeypatch fixture so the original state "
+                    "is restored automatically. Return only the complete Python module "
+                    "inside a ```python code block."
+                ),
+            })
+            continue
+
         if missing := missing_imports(find_imports(last_test)):
             log_write(args, seg, f"Missing modules {' '.join(missing)}")
             if not args.install_missing_modules or not install_missing_imports(args, seg, missing):
@@ -630,12 +756,40 @@ async def improve_coverage(
         except subprocess.CalledProcessError as e:
             state.inc_counter('F')
             error = clean_error(str(e.stdout, 'UTF-8', errors='ignore'))
-            if not (prompts := prompter.error_prompt(seg, error)):
-                log_write(args, seg, "Test failed:\n\n" + error)
-                break
+            salvaged = False
+            if attempts >= args.max_attempts:
+                if salvaged_test := remove_failing_test_functions(last_test, error):
+                    try:
+                        coverage = await measure_test_coverage(
+                            test=salvaged_test,
+                            tests_dir=args.tests_dir,
+                            pytest_args=pytest_args,
+                            isolate_tests=args.isolate_tests,
+                            branch_coverage=args.branch_coverage,
+                            log_write=lambda msg: log_write(args, seg, msg),
+                        )
+                    except (
+                        subprocess.CalledProcessError,
+                        subprocess.TimeoutExpired,
+                    ):
+                        pass
+                    else:
+                        last_test = salvaged_test
+                        salvaged = True
+                        log_write(
+                            args,
+                            seg,
+                            "Salvaged passing tests after removing failures "
+                            "from the final draft.",
+                        )
 
-            messages.extend(prompts)
-            continue
+            if not salvaged:
+                if not (prompts := prompter.error_prompt(seg, error)):
+                    log_write(args, seg, "Test failed:\n\n" + error)
+                    break
+
+                messages.extend(prompts)
+                continue
 
         result = coverage['files'].get(seg.filename, None)
         new_lines = set(result['executed_lines']) if result else set()
@@ -697,7 +851,10 @@ def main():
     args = parse_args()
 
     if not args.model:
-        print('No model configured. Set COVERUP_MODEL in .env or pass --model.')
+        print(
+            'No model configured. Set LLM_PROVIDER/LLM_MODEL and provider '
+            'credentials in .env, set COVERUP_MODEL, or pass --model.'
+        )
         return 1
 
     if args.model.startswith("vertex_ai/") and not (args.vertex_project and args.vertex_location):

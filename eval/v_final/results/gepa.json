@@ -1,0 +1,193 @@
+{
+  "name": "gepa",
+  "build_rate": 0.4,
+  "pass_rate": 0.1,
+  "statement_coverage": 0.005,
+  "branch_coverage": 0.0,
+  "mutation_score": 0.0,
+  "cost_usd": 2.2335772499999997,
+  "latency_seconds": 16908.593999999997,
+  "holdout_digest": "7335a18155d636ad",
+  "per_example": [
+    {
+      "example_id": "isort/settings.py::find_all_configs",
+      "result": {
+        "build_ok": true,
+        "build_error": "",
+        "num_tests": 1,
+        "num_passed": 0,
+        "pass_rate": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 5.047000000005937
+      },
+      "test_code": "import os\nfrom unittest.mock import patch, mock_open\nimport pytest\n\nCONFIG_SOURCES = ['config1.yaml', 'config2.json', 'config3.yaml']\nCONFIG_SECTIONS = {\n    'config1.yaml': 'section1', \n    'config2.json': 'section2', \n    'config3.yaml': 'section3'\n}\n\n# Create a test function for find_all_configs\ndef test_find_all_configs():\n    path = 'test_path'\n    config_data_1 = {'key1': 'value1'}\n    config_data_2 = {'key2': 'value2'}\n\n    # Mock os.walk to simulate file traversal\n    with patch('os.walk') as mock_walk:\n        mock_walk.return_value = [\n            (path, [], ['config1.yaml', 'config2.json']),\n        ]\n\n        with patch('os.path.isfile') as mock_isfile:\n            mock_isfile.side_effect = [True, True]  # simulate both config files existing\n\n            with patch('builtins.open', new_callable=mock_open, read_data='fake data'):\n                with patch('_get_config_data') as mock_get_config_data:\n                    mock_get_config_data.side_effect = [config_data_1, config_data_2]\n\n                    trie = find_all_configs(path)\n                    # validate trie insertions and data\n                    assert trie.root['config1.yaml'] == config_data_1\n                    assert trie.root['config2.json'] == config_data_2\n\n    # Testing for non-existent files and exceptions\n    with patch('os.walk') as mock_walk:\n        mock_walk.return_value = [\n            (path, [], ['nonexistent.yaml']),\n        ]\n        with patch('os.path.isfile', return_value=False):\n            trie = find_all_configs(path)\n            assert trie.root == {}  # should return an empty trie root\n\n    # Testing for exceptions when getting config data\n    with patch('os.walk') as mock_walk:\n        mock_walk.return_value = [\n            (path, [], ['config3.yaml']),\n        ]\n        with patch('os.path.isfile', return_value=True):\n            with patch('_get_config_data', side_effect=Exception):\n                trie = find_all_configs(path)\n                assert trie.root == {}  # should still handle and return empty\n\n    # Testing when the provided path does not exist\n    with patch('os.walk') as mock_walk:\n        mock_walk.side_effect = FileNotFoundError\n        trie = find_all_configs('invalid_path')\n        assert trie.root == {}  # should return an empty trie root\n",
+      "cost_usd": 0.0027137999999999884,
+      "latency_seconds": 60.28100000000268
+    },
+    {
+      "example_id": "isort/settings.py::_find_config",
+      "result": {
+        "build_ok": false,
+        "build_error": "ImportError while importing test module '/app/input/test_generated_5fb65c3e.py'.\nHint: make sure your test modules/packages have valid Python names.\nTraceback:\n/usr/local/lib/python3.11/importlib/__init__.py:126: in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntest_generated_5fb65c3e.py:2: in <module>\n    from your_module import _find_config\nE   ModuleNotFoundError: No module named 'your_module'",
+        "num_tests": 0,
+        "num_passed": 0,
+        "pass_rate": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 0.9689999999973224
+      },
+      "test_code": "import os\nfrom your_module import _find_config\n\ndef test_find_config_valid_file(monkeypatch):\n    # Mock os.path.isfile to return True for a specific config file check\n    monkeypatch.setattr(os.path, 'isfile', lambda path: path == '/path/to/directory/config.yml')\n    # Mock _get_config_data to return sample config data\n    monkeypatch.setattr('your_module._get_config_data', lambda file, section: {\"key\": \"value\"})\n    # Call the function\n    result = _find_config('/path/to/directory')\n    # Validate the result\n    assert result == ('/path/to/directory', {\"key\": \"value\"})\n\ndef test_find_config_no_file(monkeypatch):\n    # Mock os.path.isfile to simulate no valid config file\n    monkeypatch.setattr(os.path, 'isfile', lambda path: False)\n    # Call the function\n    result = _find_config('/path/to/directory')\n    # Validate the result\n    assert result == ('/path/to/directory', {})\n\ndef test_find_config_reaches_max_depth(monkeypatch):\n    # Simulate reaching MAX_CONFIG_SEARCH_DEPTH without finding a config file\n    monkeypatch.setattr(os.path, 'isfile', lambda path: False)\n    monkeypatch.setattr(os.path, 'isdir', lambda path: True)  # Simulate directories still existing\n    result = _find_config('/path/to/directory')\n    assert result == ('/path/to/directory', {})\n\ndef test_find_config_stopping_on_dir(monkeypatch):\n    # Simulating stopping on a designated directory\n    monkeypatch.setattr(os.path, 'isfile', lambda path: False)\n    monkeypatch.setattr(os.path, 'isdir', lambda path: path in ['/path/to/directory/stop_dir'])\n    result = _find_config('/path/to/directory')\n    assert result == ('/path/to/directory', {})  # Adjust expected result based on STOP_CONFIG_SEARCH_ON_DIRS\n",
+      "cost_usd": 0.0025164000000001963,
+      "latency_seconds": 50.93800000000192
+    },
+    {
+      "example_id": "isort/identify.py::imports",
+      "result": {
+        "build_ok": false,
+        "build_error": "/usr/local/lib/python3.11/site-packages/_pytest/python.py:498: in importtestmodule\n    mod = import_path(\n/usr/local/lib/python3.11/site-packages/_pytest/pathlib.py:587: in import_path\n    importlib.import_module(module_name)\n/usr/local/lib/python3.11/importlib/__init__.py:126: in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n<frozen importlib._bootstrap>:1204: in _gcd_import\n    ???\n<frozen importlib._bootstrap>:1176: in _find_and_load\n    ???\n<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked\n    ???\n<frozen importlib._bootstrap>:690: in _load_unlocked\n    ???\n/usr/local/lib/python3.11/site-packages/_pytest/assertion/rewrite.py:177: in exec_module\n    source_stat, co = _rewrite_test(fn, self.config)\n                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n/usr/local/lib/python3.11/site-packages/_pytest/assertion/rewrite.py:357: in _rewrite_test\n    tree = ast.parse(source, filename=strfn)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n/usr/local/lib/python3.11/ast.py:50: in parse\n    return compile(source, filename, mode, flags,\nE     File \"/app/input/test_generated_0a7256b6.py\", line 23\nE       def test_imports_no_imports():\nE       ^^^\nE   IndentationError: expected an indented block after function definition on line 14",
+        "num_tests": 0,
+        "num_passed": 0,
+        "pass_rate": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 1.0
+      },
+      "test_code": "import io\nfrom pathlib import Path\nfrom typing import Optional, Iterator, Any\n\n# Mock of the Import class\nclass Import:\n    def __init__(self, line_no: int, is_indented: bool, module_name: str, attribute_name: Optional[str] = None, alias: Optional[str] = None):\n        self.line_no = line_no\n        self.is_indented = is_indented\n        self.module_name = module_name\n        self.attribute_name = attribute_name\n        self.alias = alias\n\ndef imports(\n    input_stream: Any,  # Adjusted for testing\n    config: Any = None,  # Skip for simplicity\n    file_path: Optional[Path] = None,\n    top_only: bool = False,\n) -> Iterator[Import]:\n    # Original function implementation goes here...\n    # ... (remaining function implementation as in the provided focal_code)\n\ndef test_imports_no_imports():\n    input_stream = io.StringIO('')\n    result = list(imports(input_stream, file_path=Path('test.py')))\n    assert len(result) == 0  # Expecting no Import objects when input is empty\n\ndef test_imports_basic():\n    input_stream = io.StringIO('import os')\n    result = list(imports(input_stream, file_path=Path('test.py')))\n    assert len(result) == 1  # Expecting one Import object for 'import os'\n    assert result[0].module_name == 'os'  # Check if the module name is correct\n\ndef test_imports_multiple_imports():\n    input_stream = io.StringIO('import os\\nimport sys\\nfrom collections import defaultdict')\n    result = list(imports(input_stream, file_path=Path('test.py')))\n    assert len(result) == 3  # Expecting three Import objects for the imports\n    assert result[0].module_name == 'os'\n    assert result[1].module_name == 'sys'\n    assert result[2].module_name == 'collections'\n    assert result[2].attribute_name == 'defaultdict'  # Check if the from import is correct\n\n# Add more tests to cover edge cases as necessary\n",
+      "cost_usd": 0.0021398999999999724,
+      "latency_seconds": 47.09399999999732
+    },
+    {
+      "example_id": "isort/deprecated/finders.py::ReqsBaseFinder.find",
+      "result": {
+        "build_ok": false,
+        "build_error": "ImportError while importing test module '/app/input/test_generated_08c02034.py'.\nHint: make sure your test modules/packages have valid Python names.\nTraceback:\n/usr/local/lib/python3.11/importlib/__init__.py:126: in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntest_generated_08c02034.py:2: in <module>\n    from your_module import YourClass, sections  # Ensure to replace 'your_module' with the correct module name\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE   ModuleNotFoundError: No module named 'your_module'",
+        "num_tests": 0,
+        "num_passed": 0,
+        "pass_rate": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 1.0309999999954016
+      },
+      "test_code": "import pytest\nfrom your_module import YourClass, sections  # Ensure to replace 'your_module' with the correct module name\n\nclass TestFind:\n    def setup_method(self):\n        self.obj = YourClass()  # Replace with the actual class name\n        self.obj.names = ['module1', 'module2']  # Adjust initial names for tests\n\n    def test_find_disabled(self):\n        self.obj.enabled = False\n        result = self.obj.find('some.module')\n        assert result is None\n\n    def test_find_empty_module_name(self):\n        self.obj.enabled = True\n        result = self.obj.find('')\n        assert result is None\n\n    def test_find_module_not_in_names(self):\n        self.obj.enabled = True\n        result = self.obj.find('module3')\n        assert result is None\n\n    def test_find_module_in_names(self):\n        self.obj.enabled = True\n        result = self.obj.find('module1')\n        assert result == sections.THIRDPARTY  # Ensure that sections.THIRDPARTY is correctly defined\n",
+      "cost_usd": 0.0018898499999999707,
+      "latency_seconds": 37.57799999999406
+    },
+    {
+      "example_id": "isort/main.py::main",
+      "result": {
+        "build_ok": true,
+        "build_error": "",
+        "num_tests": 3,
+        "num_passed": 0,
+        "pass_rate": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 4.905999999995402
+      },
+      "test_code": "import pytest\nfrom io import StringIO\nimport sys\nimport os\nfrom pathlib import Path\n\n# Assuming main and other necessary classes/functions from the focal code are imported\n\n# Helper function to mock the parsing of arguments\ndef mock_parse_args(argv):\n    return {\n        'show_version': '--version' in argv,\n        'show_config': '--config' in argv,\n        'files': argv[1:] if len(argv) > 1 else []\n    }\n\n# Mocking necessary external dependencies/functionalities\n# Here, we define ASCII_ART as a placeholder\nASCII_ART = \"ASCII_ART\"\n\ndef mock_main(argv=None, stdin=None):\n    path = Path.cwd() / 'test_file.py'  # In case of tests, we can assert that the path exists\n    if argv is None:\n        argv = []\n    os.chdir('/tmp')  # Changing to a temporary directory for testing\n    arguments = mock_parse_args(argv)\n    if arguments.get(\"files\") == ['-']:\n        sys.exit(0)  # Simulating behavior for streaming input\n    if arguments.get(\"show_version\"):\n        print(ASCII_ART)\n    elif arguments.get(\"show_config\"):\n        print('Expected configuration output')  # Placeholder for actual config output\n\n# Test cases to cover different branches\ndef test_main_show_version(monkeypatch):\n    original_stdout = sys.stdout\n    sys.stdout = StringIO()  # Redirect stdout to capture print\n    monkeypatch.setattr('main', mock_main)\n    mock_main(['--version'])\n    output = sys.stdout.getvalue().strip()\n    sys.stdout = original_stdout  # Restore original stdout\n    assert output == 'ASCII_ART'  # Check against expected ASCII_ART\n\ndef test_main_show_config(monkeypatch):\n    original_stdout = sys.stdout\n    sys.stdout = StringIO()  # Redirect stdout to capture print\n    monkeypatch.setattr('main', mock_main)\n    mock_main(['--config'])\n    output = sys.stdout.getvalue().strip()\n    sys.stdout = original_stdout  # Restore original stdout\n    assert output == 'Expected configuration output'\n\ndef test_main_no_files_with_arguments(monkeypatch):\n    original_stdout = sys.stdout\n    sys.stdout = StringIO()  # Redirect stdout to capture output\n    monkeypatch.setattr('main', mock_main)\n    mock_main(['--config', '--other-arg'])\n    output = sys.stdout.getvalue().strip()\n    sys.stdout = original_stdout\n    assert \"Expected configuration output\" in output  # Check configuration output is present\n\n# Additional tests should be created to target other branches\n",
+      "cost_usd": 0.002717099999999917,
+      "latency_seconds": 76.35899999999674
+    },
+    {
+      "example_id": "isort/settings.py::Config.__init__",
+      "result": {
+        "build_ok": true,
+        "build_error": "",
+        "num_tests": 5,
+        "num_passed": 5,
+        "pass_rate": 1.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 190.3289999999979
+      },
+      "test_code": "import pytest\nfrom unittest.mock import Mock\n\nclass MyClass:\n    def __init__(self, settings_file: str = '', settings_path: str = '', config=None, **config_overrides):\n        self._known_patterns = None\n        self._section_comments = None\n        self._skips = None\n        self.quiet = config_overrides.get('quiet', False)\n        # Simulated constructor implementation based on the provided code\n    \ndef test_init_with_config():\n    mock_config = Mock()\n    mock_config.py_version = 'py38'\n    obj = MyClass(config=mock_config)\n    assert obj.quiet == False  # or any expected value based on the config\n\ndef test_init_with_settings_file():\n    obj = MyClass(settings_file='path/to/settings.file')\n    assert obj._section_comments is None  # Expectation based on constructor logic\n\ndef test_init_with_settings_path():\n    obj = MyClass(settings_path='path/to/settings')\n    assert obj._skips is None  # Expectation based on constructor logic\n\n@pytest.mark.parametrize('quiet', [True, False])\ndef test_init_with_various_quiet(quiet):\n    obj = MyClass(quiet=quiet)\n    assert obj.quiet == quiet\n\n# More tests can be added as needed.\n",
+      "cost_usd": 0.0028183500000000805,
+      "latency_seconds": 230.36000000000058
+    },
+    {
+      "example_id": "isort/wrap_modes.py::hanging_indent_with_parentheses",
+      "result": {
+        "build_ok": true,
+        "build_error": "",
+        "num_tests": 1,
+        "num_passed": 0,
+        "pass_rate": 0.0,
+        "statement_coverage": 0.05,
+        "branch_coverage": 0.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 6.765999999995984
+      },
+      "test_code": "import isort\n\ndef test_hanging_indent_with_parentheses():\n    # Test with no imports\n    result = hanging_indent_with_parentheses(imports=[], line_length=80, statement='', comments=[], line_separator='\\n', indent='    ', include_trailing_comma=False)\n    assert result == ''\n\n    # Test with one import under limit\n    result = hanging_indent_with_parentheses(imports=['module_one'], line_length=80, statement='', comments=[], line_separator='\\n', indent='    ', include_trailing_comma=False)\n    assert result == '(module_one)'\n\n    # Test with multiple imports under limit\n    result = hanging_indent_with_parentheses(imports=['module_one', 'module_two'], line_length=80, statement='', comments=[], line_separator='\\n', indent='    ', include_trailing_comma=False)\n    assert result == '(module_one, module_two)'\n\n    # Test with comments\n    result = hanging_indent_with_parentheses(imports=['module_one', 'module_two'], line_length=50, statement='import module_one # comment', comments=[], line_separator='\\n', indent='    ', include_trailing_comma=True)\n    assert result == '(module_one, module_two,)\\n    # comment'\n\n    # Test with a long import that exceeds the line length\n    result = hanging_indent_with_parentheses(imports=['a_very_long_module_name'], line_length=20, statement='', comments=[], line_separator='\\n', indent='    ', include_trailing_comma=False)\n    assert result == '(a_very_long_module_name)'\n\n    # Additional tests\n    # Test with lengthy imports exceeding line length with comments\n    result = hanging_indent_with_parentheses(imports=['a_long_module_name', 'another_module'], line_length=30, statement='import a_long_module_name # comment', comments=[], line_separator='\\n', indent='    ', include_trailing_comma=True)\n    assert result == '(a_long_module_name,)\\n    another_module # comment'\n\n    # Test with only comments and no imports\n    result = hanging_indent_with_parentheses(imports=[], line_length=80, statement='import # comment', comments=[], line_separator='\\n', indent='    ', include_trailing_comma=True)\n    assert result == 'import # comment'\n",
+      "cost_usd": 0.0025114500000000817,
+      "latency_seconds": 121.1559999999954
+    },
+    {
+      "example_id": "isort/wrap_modes.py::_vertical_grid_common",
+      "result": {
+        "build_ok": false,
+        "build_error": "ImportError while importing test module '/app/input/test_generated_e53477c3.py'.\nHint: make sure your test modules/packages have valid Python names.\nTraceback:\n/usr/local/lib/python3.11/importlib/__init__.py:126: in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntest_generated_e53477c3.py:2: in <module>\n    from your_module import _vertical_grid_common  # Adjust according to your actual module name\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE   ModuleNotFoundError: No module named 'your_module'",
+        "num_tests": 0,
+        "num_passed": 0,
+        "pass_rate": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 0.9689999999973224
+      },
+      "test_code": "import pytest\nfrom your_module import _vertical_grid_common  # Adjust according to your actual module name\n\ndef test_vertical_grid_common():\n    # Test case with two imports and check for trailing comma\n    result = _vertical_grid_common(True, imports=['a', 'b'], statement='', line_length=30, line_separator='\\n', indent='    ', include_trailing_comma=False, comments=[], remove_comments=[])\n    expected = '    a, b,'\n    assert result == expected\n\n    # Test case with a single import without trailing comma\n    result = _vertical_grid_common(False, imports=['c'], statement='', line_length=30, line_separator='\\n', indent='    ', include_trailing_comma=True, comments=[], remove_comments=[])\n    expected = '    c,'\n    assert result == expected\n\n    # Test case with no imports\n    result = _vertical_grid_common(True, imports=[], statement='', line_length=30, line_separator='\\n', indent='    ', include_trailing_comma=False, comments=[], remove_comments=[])\n    expected = ''\n    assert result == expected\n\n    # Additional edge case: imports that exceed line length\n    result = _vertical_grid_common(True, imports=['d', 'e', 'f'], statement='', line_length=10, line_separator='\\n', indent='    ', include_trailing_comma=False, comments=[], remove_comments=[])\n    expected = '    d,\\n    e,\\n    f'\n    assert result == expected\n",
+      "cost_usd": 0.002093400000000134,
+      "latency_seconds": 28.343999999997322
+    },
+    {
+      "example_id": "isort/api.py::sort_file",
+      "result": {
+        "build_ok": false,
+        "build_error": "ImportError while importing test module '/app/input/test_generated_36764862.py'.\nHint: make sure your test modules/packages have valid Python names.\nTraceback:\n/usr/local/lib/python3.11/importlib/__init__.py:126: in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntest_generated_36764862.py:2: in <module>\n    from your_module import sort_file, Config\nE   ModuleNotFoundError: No module named 'your_module'",
+        "num_tests": 0,
+        "num_passed": 0,
+        "pass_rate": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 0.9680000000007567
+      },
+      "test_code": "import pytest\nfrom your_module import sort_file, Config\nimport io\nimport sys\n\n# Mocking the sort_stream and other dependencies\ndef sort_stream(input_stream, output_stream, config, file_path, disregard_skip, extension):\n    output_stream.write(input_stream.read())  # Simulate sorting by echoing input \n    return True\n\nclass MockConfig:\n    overwrite_in_place = False\n    quiet = False\n    verbose = False\n    color_output = False\n    # Add other default config values as needed\n\n@pytest.fixture\ndef mock_file(tmp_path):\n    # Create a mock file for testing\n    file_path = tmp_path / 'test_file.py'\n    file_path.write_text('import os\\nimport sys')  # initial content\n    return file_path\n\n# Test with default parameters\ndef test_sort_file_default(mock_file):\n    config = MockConfig()\n    result = sort_file(mock_file, config=config)\n    assert result is True  # Expecting it to indicate changes were made\n\n# Test with write_to_stdout\ndef test_sort_file_write_to_stdout(mock_file):\n    config = MockConfig()\n    result = sort_file(mock_file, write_to_stdout=True, config=config)\n    assert result is True\n\n# Test with show_diff\ndef test_sort_file_show_diff(mock_file):\n    config = MockConfig()\n    result = sort_file(mock_file, show_diff=True, config=config)\n    assert result is True\n\n# Test with existing syntax errors\ndef test_sort_file_existing_syntax_errors(mock_file):\n    mock_file.write_text('import os\\ninvalid syntax')  # induce syntax error\n    result = sort_file(mock_file, config=MockConfig())\n    assert result is False  # Expecting it to indicate failure due to syntax error\n",
+      "cost_usd": 0.0028869000000000256,
+      "latency_seconds": 34.359000000004016
+    },
+    {
+      "example_id": "isort/deprecated/finders.py::PathFinder.find",
+      "result": {
+        "build_ok": false,
+        "build_error": "ImportError while importing test module '/app/input/test_generated_c8d01589.py'.\nHint: make sure your test modules/packages have valid Python names.\nTraceback:\n/usr/local/lib/python3.11/importlib/__init__.py:126: in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntest_generated_c8d01589.py:2: in <module>\n    from your_module import YourClass  # Change to the actual import path\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE   ModuleNotFoundError: No module named 'your_module'",
+        "num_tests": 0,
+        "num_passed": 0,
+        "pass_rate": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "mutation_score": 0.0,
+        "surviving_mutant_lines": [],
+        "duration_seconds": 0.9219999999986612
+      },
+      "test_code": "import pytest\nfrom your_module import YourClass  # Change to the actual import path\nimport os\nfrom unittest.mock import patch\n\nclass MockConfig:\n    def __init__(self):\n        self.src_paths = ['/mock/src']\n        self.is_skipped = lambda path: False\n        self.default_section = 'default'\n\nclass MockYourClass(YourClass):\n    def __init__(self, virtual_env=False, conda_env=None):\n        super().__init__()\n        self.paths = ['/mock/path']\n        self.virtual_env = virtual_env\n        self.stdlib_lib_prefix = '/usr/lib/python3.8'\n        self.conda_env = conda_env\n        self.config = MockConfig()\n\n@patch('your_module.exists_case_sensitive')\ndef test_find_first_party(mock_exists):\n    mock_exists.return_value = False  # Simulating the module does not exist\n    instance = MockYourClass()\n    result = instance.find('your_module')  # Adjust to a valid first-party module\n    assert result == 'default'\n\n@patch('your_module.exists_case_sensitive')\ndef test_find_stdlib(mock_exists):\n    mock_exists.side_effect = lambda path: 'os.py' in path  # Simulate 'os' as a standard library module\n    instance = MockYourClass()\n    result = instance.find('os')\n    assert result == sections.STDLIB\n\n@patch('your_module.exists_case_sensitive')\ndef test_find_third_party(mock_exists):\n    mock_exists.side_effect = lambda path: 'some_third_party_package' in path  # Simulating third-party check\n    instance = MockYourClass(virtual_env=True)\n    instance.paths = ['/mock/src/site-packages']\n    result = instance.find('some_third_party_package')\n    assert result == sections.THIRDPARTY\n\n@patch('your_module.exists_case_sensitive')\ndef test_find_package(mock_exists):\n    mock_exists.side_effect = lambda path: os.path.basename(path) == 'some_package' and os.path.isdir(path)\n    instance = MockYourClass()\n    instance.paths = ['/mock/src/some_package']\n    result = instance.find('some_package')\n    assert result == sections.FIRSTPARTY\n\n# Additional test for the pragma: no cover edge case\n@patch('your_module.exists_case_sensitive')\ndef test_find_stdlib_edge_case(mock_exists):\n    instance = MockYourClass()\n    instance.stdlib_lib_prefix = 'some_other_path'  # Simulating that we are testing the edge case behavior\n    result = instance.find('some_module')\n    assert result == 'default'  # Expecting default as nothing matches\n",
+      "cost_usd": 0.0020482499999996406,
+      "latency_seconds": 33.89100000000326
+    }
+  ]
+}

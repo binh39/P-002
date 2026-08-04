@@ -102,7 +102,7 @@ python -m src.optimization.cli `
   --reflection-temperature 0.7
 ```
 
-Benchmark gọi Vertex/CoverUp thật, tốn thời gian và chi phí. Không tự chạy full benchmark nếu người dùng chưa yêu cầu hoặc chưa xác nhận phạm vi chi phí. Cần các biến môi trường như `COVERUP_MODEL`, `OPTIMIZE_MODEL` và Vertex ADC; xem `.env.example`, tuyệt đối không ghi secret vào log hay tài liệu.
+Benchmark gọi LLM/CoverUp thật, tốn thời gian và chi phí. Không tự chạy full benchmark nếu người dùng chưa yêu cầu hoặc chưa xác nhận phạm vi chi phí. Provider được chọn bằng `LLM_PROVIDER`; OpenAI dùng `LLM_MODEL=gpt-4o-mini` và `OPENAI_API_KEY`, còn Vertex AI dùng `LLM_MODEL`, `VERTEXAI_PROJECT`, `VERTEXAI_LOCATION` và ADC. Xem `.env.example`; tuyệt đối không ghi secret vào log hay tài liệu.
 
 ## Ý nghĩa artifact
 
