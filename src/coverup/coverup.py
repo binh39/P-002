@@ -685,16 +685,46 @@ async def improve_coverage(
 
 def add_to_pythonpath(dir: Path):
     import os
-    os.environ['PYTHONPATH'] = str(dir) + (f":{os.environ['PYTHONPATH']}" if 'PYTHONPATH' in os.environ else "")
+    os.environ['PYTHONPATH'] = str(dir) + (
+        f"{os.pathsep}{os.environ['PYTHONPATH']}" if 'PYTHONPATH' in os.environ else ""
+    )
     sys.path.insert(0, str(dir))
 
 
 def main():
     from collections import defaultdict
-    import os
 
+    # pytest-isolate 0.0.14 imports the Unix-only fcntl/resource modules at
+    # plugin discovery time. CoverUp can run without test isolation on Windows,
+    # so prevent pytest from auto-loading only that incompatible plugin while
+    # preserving pytest-repeat and the other plugins used by CoverUp.
+    if sys.platform == 'win32':
+        current_addopts = os.environ.get('PYTEST_ADDOPTS', '')
+        disable_isolate = '-p no:pytest_isolate'
+        if disable_isolate not in current_addopts:
+            os.environ['PYTEST_ADDOPTS'] = f'{current_addopts} {disable_isolate}'.strip()
     global state
     args = parse_args()
+
+    # The vendored isort test suite contains network-dependent integration
+    # tests (for example it clones the latest pandas repository).  That suite
+    # is not a stable baseline for generating tests for isort.core.process.
+    # Keep the commonly copied command useful by selecting the small,
+    # deterministic baseline maintained for this target.
+    src_dir = Path(__file__).resolve().parent.parent
+    vendored_isort_tests = (src_dir / 'sample_repo' / 'isort' / 'tests').resolve()
+    process_baseline_tests = (src_dir / 'coverup_targets' / 'isort' / 'tests').resolve()
+    if (
+        args.tests_dir.resolve() == vendored_isort_tests
+        and 'process' in args.target_symbols
+        and process_baseline_tests.is_dir()
+    ):
+        print(
+            'Using the stable isort process baseline tests at '
+            f'"{process_baseline_tests}" instead of the full vendored suite '
+            '(which contains network-dependent integration tests).'
+        )
+        args.tests_dir = process_baseline_tests
 
     if not args.model:
         print('No model configured. Set COVERUP_MODEL in .env or pass --model.')

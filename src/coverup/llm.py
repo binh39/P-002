@@ -262,9 +262,22 @@ class Chatter:
                 raise
 
             except openai.APIConnectionError as e:
-                self._log_msg(ctx, f"Error: {type(e)} {e}")
-                # usually a server-side error... just retry right away
+                # Missing SDK modules are local configuration errors and will
+                # never recover by retrying. Surface them immediately instead
+                # of spinning thousands of times per second.
+                if "No module named" in str(e):
+                    self._log_msg(ctx, f"Failed: {type(e)} {e}")
+                    raise
+
+                import random
+                sleep = min(sleep * 2, self._max_backoff)
+                sleep_time = random.uniform(sleep / 2, sleep)
+                self._log_msg(
+                    ctx,
+                    f"Error: {type(e)} {e} {sleep=} {sleep_time=}",
+                )
                 self._signal_retry()
+                await asyncio.sleep(sleep_time)
 
             except openai.APIError as e:
                 # APIError is the base class for all API errors;
