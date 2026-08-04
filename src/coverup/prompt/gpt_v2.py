@@ -25,7 +25,7 @@ class GptV2Prompter(Prompter):
             return [mk_message(self._render(
                 "initial", self.templates["initial"],
                 filename=filename,
-                missing_coverage=segment.lines_branches_missing_do(),
+                coverage_targets=segment.lines_branches_missing_do(),
                 source_excerpt=segment.get_excerpt(),
             ))]
 
@@ -61,22 +61,6 @@ Modify or rewrite the test to correct it; respond only with the complete Python 
 Use the get_info tool function as necessary.
 
 {error}""")
-        ]
-
-
-    def missing_coverage_prompt(self, segment: CodeSegment,
-                                missing_lines: set, missing_branches: set) -> T.List[dict] | None:
-        if "missing_coverage" in self.templates:
-            return [mk_message(self._render(
-                "missing_coverage",
-                self.templates["missing_coverage"],
-                missing_coverage=lines_branches_do(missing_lines, set(), missing_branches),
-            ))]
-        return [mk_message(f"""\
-The tests still lack coverage: {lines_branches_do(missing_lines, set(), missing_branches)} not execute.
-Modify it to correct that; respond only with the complete Python code in backticks.
-Use the get_info tool function as necessary.
-""")
         ]
 
 

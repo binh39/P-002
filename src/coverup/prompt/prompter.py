@@ -2,7 +2,6 @@ import abc
 import argparse
 import typing as T
 from pathlib import Path
-from ..utils import lines_branches_do
 from ..segment import CodeSegment
 
 
@@ -21,12 +20,6 @@ class Prompter(abc.ABC):
     @abc.abstractmethod
     def error_prompt(self, segment: CodeSegment, error: str) -> T.List[dict] | None:
         """Returns prompts(s) in response to an error."""
-
-
-    @abc.abstractmethod
-    def missing_coverage_prompt(self, segment: CodeSegment,
-                                missing_lines: set, missing_branches: set) -> T.List[dict] | None:
-        """Returns prompts(s) in response to the suggested test(s) lacking coverage."""
 
 
     def get_functions(self) -> T.List[T.Callable]:

@@ -37,10 +37,5 @@ Respond ONLY with the Python code enclosed in backticks, without any explanation
         return None
 
 
-    def missing_coverage_prompt(self, segment: CodeSegment,
-                                missing_lines: set, missing_branches: set) -> T.List[dict] | None:
-        return None
-
-
     def get_functions(self) -> T.List[T.Callable]:
         return []

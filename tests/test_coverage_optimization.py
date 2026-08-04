@@ -148,6 +148,17 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
 
     def fake_subprocess_run(command, **kwargs):
         commands.append(command)
+        trace_path = Path(command[command.index("--trace-file") + 1])
+        trace_path.write_text(
+            json.dumps({
+                "source_file": "pkg/a.py",
+                "symbol": "first",
+                "name": "first",
+                "component": "initial",
+                "outcome": "coverage_gain_saved",
+            }) + "\n",
+            encoding="utf-8",
+        )
         return SimpleNamespace(returncode=0, stdout="coverup ok")
 
     def fake_run_coverage(**kwargs):
@@ -166,8 +177,10 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
         SymbolTarget("project", "pkg/a.py", "first", "train"),
         SymbolTarget("project", "pkg/b.py", "Second.method", "train"),
     ]
-    stale_empty_workspace = tests_dir.parent / "tests_candidate_candidate_train"
-    stale_empty_workspace.mkdir()
+    stale_empty_workspace = (
+        artifacts_dir / "generated_tests" / "train" / "tests_candidate_candidate"
+    )
+    stale_empty_workspace.mkdir(parents=True)
 
     record = runner.evaluate_batch(
         targets, prompt_path, candidate_id="candidate", split="train"
@@ -182,11 +195,23 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
 
     command = commands[0]
     assert command[command.index("--target-symbols") + 1] == "first,Second.method"
+    target_spec = Path(command[command.index("--target-spec-file") + 1])
+    assert json.loads(target_spec.read_text(encoding="utf-8")) == [
+        {"source_file": "pkg/a.py", "symbol": "first"},
+        {"source_file": "pkg/b.py", "symbol": "Second.method"},
+    ]
     assert command[command.index("--max-concurrency") + 1] == "10"
-    assert record.tests_workspace.endswith("tests_candidate_candidate_train")
-    assert baseline_record.tests_workspace.endswith("tests_base_line_baseline_train")
+    assert "--trace-file" in command
+    assert record.tests_workspace.endswith(
+        "artifacts\\generated_tests\\train\\tests_candidate_candidate"
+    )
+    assert baseline_record.tests_workspace.endswith(
+        "artifacts\\generated_tests\\train\\tests_base_line_baseline"
+    )
     assert Path(record.tests_workspace).is_dir()
     assert len(record.results) == 2
+    assert record.results[0].attempt_traces[0]["component"] == "initial"
+    assert record.results[1].attempt_traces == []
 
 
 def test_runner_salvages_measured_scores_after_coverup_process_failure(
@@ -374,17 +399,17 @@ def test_aggregate_score_penalizes_missing_coverage_using_reference():
     assert aggregate["num_branches"] == 1
 
 
-def test_isort_dataset_selects_top_45_with_locked_holdout():
+def test_isort_dataset_selects_110_targets_with_locked_holdout():
     report_path = Path("src/coverage.json")
     if not report_path.exists():
         pytest.skip("Repository coverage fixture is not present")
 
     targets = _top_isort_targets(report_path)
 
-    assert len(targets) == 45
-    assert sum(item["split"] == "train" for item in targets) == 25
-    assert sum(item["split"] == "validation" for item in targets) == 10
-    assert sum(item["split"] == "test" for item in targets) == 10
+    assert len(targets) == 110
+    assert sum(item["split"] == "train" for item in targets) == 50
+    assert sum(item["split"] == "validation" for item in targets) == 30
+    assert sum(item["split"] == "test" for item in targets) == 30
     assert all("/_vendored/" not in item["source_file"] for item in targets)
     assert targets == _top_isort_targets(report_path, seed=7)
     assert targets != _top_isort_targets(report_path, seed=8)
@@ -411,10 +436,10 @@ def test_baseline_prompt_preserves_coverup_placeholders():
     assert validate_template(template) is None
     assert validate_bundle(bundle) is None
     assert "{error}" in bundle.error
-    assert "{missing_coverage}" in bundle.missing_coverage
+    assert set(bundle.as_candidate()) == {"initial", "error"}
     rendered = template.format(
         filename="pkg/module.py",
-        missing_coverage="lines 4 and 5",
+        coverage_targets="lines 4 and 5",
         source_excerpt="def target(): pass",
     )
     assert "pkg/module.py" in rendered
@@ -424,12 +449,12 @@ def test_baseline_prompt_preserves_coverup_placeholders():
 def test_invalid_candidate_prompt_is_rejected():
     error = validate_template("Generate a test for {filename}")
     assert error is not None
-    assert "missing_coverage" in error
+    assert "coverage_targets" in error
 
 
 def test_bundle_rejects_missing_repair_prompt():
     bundle = baseline_bundle()
-    invalid = type(bundle)(initial=bundle.initial, error=None, missing_coverage=None)
+    invalid = type(bundle)(initial=bundle.initial, error=None)
     error = validate_bundle(invalid)
     assert error is not None
     assert "error prompt" in error
@@ -468,9 +493,10 @@ def test_metric_evaluation_is_cached_per_prompt_and_symbol(tmp_path):
     assert runner.candidate_id.startswith(first["prompt_digest"] + "-")
 
 
-def test_metric_serializes_concurrent_targets_for_same_candidate(tmp_path):
+def test_metric_isolates_targets_in_parallel_and_serializes_batch_cache(tmp_path):
     class ConcurrentRunner:
         def __init__(self):
+            self.config = SimpleNamespace(max_concurrency=2, rate_limit=None)
             self.active = 0
             self.max_active = 0
             self.calls = 0
@@ -513,8 +539,8 @@ def test_metric_serializes_concurrent_targets_for_same_candidate(tmp_path):
         ))
 
     assert [result["score"] for result in results] == [0.5, 0.5]
-    assert runner.max_active == 1
-    assert runner.calls == 1
+    assert runner.max_active == 2
+    assert runner.calls == 2
 
 
 def test_batch_cache_and_workspace_are_separate_per_split(tmp_path):
@@ -582,6 +608,7 @@ def test_direct_gepa_adapter_returns_distinct_per_symbol_scores_and_context(tmp_
             self, targets, candidate, *, candidate_id=None, split=None,
             workspace_kind="candidate",
         ):
+            assert len(targets) == 1
             self.calls.append(candidate_id)
             results = []
             for target in targets:
@@ -606,6 +633,12 @@ def test_direct_gepa_adapter_returns_distinct_per_symbol_scores_and_context(tmp_
                         "valid": True,
                     },
                     feedback=f"feedback for {target.symbol}",
+                    attempt_traces=[{
+                        "attempt": 1,
+                        "component": "initial",
+                        "outcome": "coverage_gain_saved",
+                        "generated_test": f"def test_{target.symbol}(): pass",
+                    }],
                 ))
             return SimpleNamespace(
                 run_id=f"run-{candidate_id}",
@@ -636,11 +669,56 @@ def test_direct_gepa_adapter_returns_distinct_per_symbol_scores_and_context(tmp_
     )
 
     assert evaluated.scores == pytest.approx([0.2, 0.8])
-    assert len(runner.calls) == 2
+    assert len(runner.calls) == 4
+    assert len(set(runner.calls)) == 4
     assert all(call.startswith(bundle_digest(baseline) + "-") for call in runner.calls)
-    assert runner.calls[1] == runner.calls[0] + "-r1"
+    assert sum("-r1-" in call for call in runner.calls) == 2
     assert "pkg/a.py::first" == reflective["initial"][0]["Inputs"]["target"]
     assert "def first" in reflective["initial"][0]["Inputs"]["source_context"]
+    assert (
+        reflective["initial"][0]["Generated Outputs"]["component_attempts"][0]
+        ["generated_test"]
+        == "def test_first(): pass"
+    )
+
+
+def test_reflection_uses_only_attempts_from_the_component_being_optimized(tmp_path):
+    baseline = baseline_bundle()
+    adapter = CoverUpPromptAdapter(
+        runner=SimpleNamespace(),
+        candidate_dir=tmp_path,
+        targets_by_split={},
+        baseline=baseline,
+        reflection_lm=lambda prompt: pytest.fail("no evidence must not invoke the LM"),
+    )
+    evaluation = SimpleNamespace(trajectories=[{
+        "target": {
+            "source_file": "pkg/a.py",
+            "symbol": "first",
+        },
+        "score": 0.25,
+        "replicate_scores": [0.25],
+        "feedback": "missing branches",
+        "source_context": "def first(): ...",
+        "attempt_traces": [{
+            "attempt": 1,
+            "component": "error",
+            "outcome": "test_error",
+            "generated_test": "def test_first(): ...",
+            "execution_error": "AssertionError",
+        }],
+    }])
+
+    reflective = adapter.make_reflective_dataset(
+        baseline.as_candidate(), evaluation, ["error", "initial"]
+    )
+
+    assert len(reflective["error"]) == 1
+    assert reflective["initial"] == []
+    unchanged = adapter.propose_new_texts(
+        baseline.as_candidate(), reflective, ["initial"]
+    )
+    assert unchanged["initial"] == baseline.initial
 
 
 def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
@@ -676,7 +754,10 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
             ],
         },
     )
-    train = [SymbolTarget("project", "pkg/a.py", "first", "train")]
+    train = [
+        SymbolTarget("project", f"pkg/{index}.py", f"target_{index}", "train")
+        for index in range(8)
+    ]
     validation = [
         SymbolTarget("project", "pkg/b.py", "second", "validation")
     ]
@@ -693,7 +774,114 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
     )
 
     assert captured["seed_candidate"] == baseline.as_candidate()
+    assert set(captured["seed_candidate"]) == {"initial", "error"}
+    assert captured["cache_evaluation"] is False
+    assert captured["reflection_minibatch_size"] == 8
+    assert captured["module_selector"] == "round_robin"
     assert result.best_bundle == baseline
+
+
+def test_tune_skips_final_split_when_gepa_keeps_unchanged_baseline(
+    tmp_path, monkeypatch,
+):
+    from src.optimization import cli
+
+    baseline = baseline_bundle()
+    prompt_path = tmp_path / "baseline.json"
+    baseline.save(prompt_path)
+    artifacts = tmp_path / "artifacts"
+    train = [SymbolTarget("project", "pkg/a.py", "first", "train")]
+    validation = [
+        SymbolTarget("project", "pkg/b.py", "second", "validation")
+    ]
+    test = [SymbolTarget("project", "pkg/c.py", "third", "test")]
+    targets = {"train": train, "validation": validation, "test": test}
+
+    monkeypatch.setattr(cli, "load_dotenv", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        cli,
+        "make_runner",
+        lambda args: SimpleNamespace(
+            config=SimpleNamespace(artifacts_dir=artifacts)
+        ),
+    )
+    monkeypatch.setattr(cli, "load_targets", lambda path, split: targets[split])
+    monkeypatch.setattr(cli.dspy, "LM", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        cli,
+        "optimize",
+        lambda **kwargs: SimpleNamespace(
+            best_bundle=baseline,
+            as_dict=lambda: {
+                "best_index": 0,
+                "best_candidate": baseline.as_candidate(),
+                "validation_scores": [0.5],
+                "total_metric_calls": 1,
+                "candidates": [baseline.as_candidate()],
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        cli,
+        "evaluate_bundle_repeated",
+        lambda *args, **kwargs: pytest.fail(
+            "unchanged baseline must not evaluate the final split"
+        ),
+    )
+    args = SimpleNamespace(
+        project_root=tmp_path,
+        artifacts_dir=artifacts,
+        prompt=prompt_path,
+        dataset=tmp_path / "dataset.jsonl",
+        holdout_split="test",
+        reflection_temperature=0.7,
+        auto=None,
+        max_metric_calls=1,
+        evaluation_replicates=1,
+        baseline_tests_dir=None,
+    )
+
+    cli.tune(args)
+
+    report = json.loads(
+        (artifacts / "final_validation.json").read_text(encoding="utf-8")
+    )
+    assert report["final_evaluation_skipped"] is True
+    assert report["skip_reason"].startswith("GEPA selected the unchanged baseline")
+    assert report["final_split"] == "test"
+    assert report["run_ids"] == []
+    assert report["baseline_run_ids"] == []
+    assert baseline_bundle().as_candidate() == json.loads(
+        (artifacts / "prompts" / "gepa_optimized.json").read_text(encoding="utf-8")
+    )
+
+
+def test_exact_target_spec_does_not_match_same_name_in_another_file(monkeypatch):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    coverup_module = importlib.import_module("coverup.coverup")
+    args = SimpleNamespace(
+        target_specs={("pkg/a.py", "find")},
+        target_symbols={"find"},
+    )
+
+    assert coverup_module.matches_target_spec(
+        args,
+        SimpleNamespace(path=Path("repo/pkg/a.py"), qualname="find", name="find"),
+    )
+    assert not coverup_module.matches_target_spec(
+        args,
+        SimpleNamespace(path=Path("repo/pkg/b.py"), qualname="find", name="find"),
+    )
+    assert not coverup_module.matches_target_spec(
+        args,
+        SimpleNamespace(
+            path=Path("repo/pkg/a.py"),
+            qualname="PathFinder.find",
+            name="find",
+        ),
+    )
 
 
 def test_baseline_preflight_rejects_missing_coverage_denominators():
@@ -756,3 +944,191 @@ def test_coverup_retries_null_assistant_content_without_crashing(tmp_path, monke
     assert chatter.calls == 1
     assert counters == ["R"]
     assert "Empty assistant response" in (tmp_path / "coverup.log").read_text()
+
+
+def test_coverup_trace_preserves_component_level_attempt_history(tmp_path, monkeypatch):
+    import importlib
+    import subprocess
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    coverup_module = importlib.import_module("coverup.coverup")
+    monkeypatch.setattr(
+        coverup_module,
+        "state",
+        SimpleNamespace(inc_counter=lambda key: None),
+        raising=False,
+    )
+    monkeypatch.setattr(coverup_module, "test_seq", 1)
+
+    coverage_calls = 0
+
+    async def fake_measure_test_coverage(**kwargs):
+        nonlocal coverage_calls
+        coverage_calls += 1
+        if coverage_calls == 1:
+            raise subprocess.CalledProcessError(
+                1, ["pytest"], output=b"AssertionError: wrong result"
+            )
+        return {
+            "files": {
+                "pkg/a.py": {
+                    "executed_lines": [2],
+                    "executed_branches": [],
+                }
+            }
+        }
+
+    monkeypatch.setattr(
+        coverup_module, "measure_test_coverage", fake_measure_test_coverage
+    )
+
+    class Chatter:
+        calls = 0
+
+        async def chat(self, messages, *, ctx=None):
+            self.calls += 1
+            code = "assert False" if self.calls == 1 else "assert True"
+            return {
+                "choices": [{
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": f"```python\n{code}\n```",
+                    },
+                }]
+            }
+
+    class Prompter:
+        def initial_prompt(self, seg):
+            return [{"role": "user", "content": "initial instructions"}]
+
+        def error_prompt(self, seg, error):
+            return [{"role": "user", "content": f"repair: {error}"}]
+
+    segment = SimpleNamespace(
+        filename="pkg/a.py",
+        qualname="first",
+        name="first",
+        missing_lines={2},
+        missing_branches=set(),
+        identify=lambda: "pkg/a.py:1-3",
+    )
+    args = SimpleNamespace(
+        dry_run=False,
+        max_attempts=3,
+        log_file=str(tmp_path / "coverup.log"),
+        trace_file=tmp_path / "attempt_trace.jsonl",
+        install_missing_modules=False,
+        pytest_args="",
+        tests_dir=tmp_path,
+        prefix="trace",
+        isolate_tests=True,
+        branch_coverage=True,
+        show_details=False,
+        save_coverage_to=None,
+    )
+
+    result = asyncio.run(
+        coverup_module.improve_coverage(args, Chatter(), Prompter(), segment)
+    )
+    traces = [
+        json.loads(line)
+        for line in args.trace_file.read_text(encoding="utf-8").splitlines()
+    ]
+
+    assert result is True
+    assert [trace["component"] for trace in traces] == ["initial", "error"]
+    assert [trace["outcome"] for trace in traces] == [
+        "test_error", "coverage_gain_saved",
+    ]
+    assert traces[0]["execution_error"] == "AssertionError: wrong result"
+    assert traces[1]["generated_test"].strip() == "assert True"
+
+
+def test_coverup_stops_after_no_gain_without_a_third_prompt_component(
+    tmp_path, monkeypatch,
+):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    coverup_module = importlib.import_module("coverup.coverup")
+    monkeypatch.setattr(
+        coverup_module,
+        "state",
+        SimpleNamespace(inc_counter=lambda key: None),
+        raising=False,
+    )
+    monkeypatch.setattr(coverup_module, "test_seq", 1)
+
+    async def fake_measure_test_coverage(**kwargs):
+        return {
+            "files": {
+                "pkg/a.py": {
+                    "executed_lines": [],
+                    "executed_branches": [],
+                }
+            }
+        }
+
+    monkeypatch.setattr(
+        coverup_module, "measure_test_coverage", fake_measure_test_coverage
+    )
+
+    class Chatter:
+        calls = 0
+
+        async def chat(self, messages, *, ctx=None):
+            self.calls += 1
+            return {
+                "choices": [{
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": "```python\nassert True\n```",
+                    },
+                }]
+            }
+
+    class Prompter:
+        def initial_prompt(self, seg):
+            return [{"role": "user", "content": "initial instructions"}]
+
+        def error_prompt(self, seg, error):
+            return [{"role": "user", "content": f"repair: {error}"}]
+
+    chatter = Chatter()
+    segment = SimpleNamespace(
+        filename="pkg/a.py",
+        qualname="first",
+        name="first",
+        missing_lines={2},
+        missing_branches=set(),
+        identify=lambda: "pkg/a.py:1-3",
+    )
+    args = SimpleNamespace(
+        dry_run=False,
+        max_attempts=3,
+        log_file=str(tmp_path / "coverup.log"),
+        trace_file=tmp_path / "attempt_trace.jsonl",
+        install_missing_modules=False,
+        pytest_args="",
+        tests_dir=tmp_path,
+        prefix="trace",
+        isolate_tests=True,
+        branch_coverage=True,
+        show_details=False,
+        save_coverage_to=None,
+    )
+
+    result = asyncio.run(
+        coverup_module.improve_coverage(args, chatter, Prompter(), segment)
+    )
+    trace = json.loads(
+        args.trace_file.read_text(encoding="utf-8").splitlines()[0]
+    )
+
+    assert result is True
+    assert chatter.calls == 1
+    assert trace["component"] == "initial"
+    assert trace["outcome"] == "no_coverage_gain_unrepairable"
+    assert "next_component" not in trace

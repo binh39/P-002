@@ -55,19 +55,18 @@ CoverUp được mở rộng bằng option:
 --prompt-template-file <prompt.json>
 ```
 
-Option này chỉ áp dụng cho prompt family `gpt-v2`. File JSON có thể override ba
+Option này chỉ áp dụng cho prompt family `gpt-v2`. File JSON override hai
 template:
 
 ```json
 {
   "initial": "...",
-  "error": "...",
-  "missing_coverage": "..."
+  "error": "..."
 }
 ```
 
-Cả ba template đều bắt buộc đối với `evaluate` và `optimize`. Pipeline tối ưu toàn
-bộ vòng hội thoại: sinh test lần đầu, sửa lỗi pytest và nhắm lại coverage còn thiếu.
+Hai template đều bắt buộc đối với `evaluate` và `optimize`. Pipeline tối ưu vòng
+hội thoại sinh test lần đầu và sửa lỗi pytest.
 Candidate thiếu một template hoặc placeholder bắt buộc sẽ nhận score 0 trước khi
 CoverUp được gọi.
 
@@ -98,7 +97,7 @@ VERTEXAI_LOCATION=global
 ```
 
 `COVERUP_MODEL` sinh và sửa unit test. `OPTIMIZE_MODEL` đọc score/feedback và
-reflection để đề xuất ba prompt template mới. Hai biến có thể trỏ tới hai model
+reflection để đề xuất hai prompt template mới. Hai biến có thể trỏ tới hai model
 khác nhau. Optimization CLI chỉ đọc hai model từ `.env` và không nhận model qua
 command line, nhờ đó mỗi run có một nguồn cấu hình duy nhất.
 
@@ -157,7 +156,7 @@ Các trường:
 Khuyến nghị không đưa cùng một symbol vào nhiều split. `test` là locked split,
 chỉ nên chạy sau khi đã chọn prompt bằng validation.
 
-Dataset mới do `init` tạo có 25 train, 10 validation và 10 locked-test symbols. Train
+Dataset mới do `init` tạo có 50 train, 30 validation và 30 locked-test symbols. Train
 lớn hơn giúp reflection thấy nhiều failure mode; validation nhỏ hơn dành budget cho
 exploration; test chỉ được dùng một lần ở promotion gate. Dataset cũ không có split
 `test` vẫn chạy được nhưng final comparison phải fallback về validation.
@@ -168,19 +167,18 @@ metric mất denominator và có thể tạo score 0 giả.
 
 ## Prompt baseline
 
-Prompt `gpt_v2_baseline.json` chứa ba template với placeholder bắt buộc:
+Prompt `gpt_v2_baseline.json` chứa hai template với placeholder bắt buộc:
 
 ```text
-initial:            {filename}, {missing_coverage}, {source_excerpt}
+initial:            {filename}, {coverage_targets}, {source_excerpt}
 error:              {error}
-missing_coverage:   {missing_coverage}
 ```
 
 Các placeholder của initial prompt là:
 
 ```text
 {filename}
-{missing_coverage}
+{coverage_targets}
 {source_excerpt}
 ```
 
@@ -205,17 +203,19 @@ Pipeline tạo run ID dạng:
 isort-train-batch-a1b2c3d4
 ```
 
-Mỗi candidate có một thư mục test rỗng, độc lập cho từng split:
+Mỗi target của một candidate có một workspace test rỗng, độc lập dưới thư mục
+`<artifacts-dir>/generated_tests/<split>/`:
 
 ```text
-src/sample_repo/isort/tests_candidate_<candidate-id>_train
-src/sample_repo/isort/tests_base_line_<baseline-digest>_validation
-src/sample_repo/isort/tests_candidate_<candidate-id>_validation
+<artifacts-dir>/generated_tests/train/tests_candidate_<candidate-id>
+<artifacts-dir>/generated_tests/validation/tests_base_line_<baseline-digest>
+<artifacts-dir>/generated_tests/validation/tests_candidate_<candidate-id>
 ```
 
 Baseline prompt dùng prefix `tests_base_line_` để phân biệt với các candidate do GEPA
-đề xuất. CoverUp sinh toàn bộ test cho các symbol của split trong đúng một lần gọi.
-Train và validation không dùng chung test; không sao chép test suite gốc.
+đề xuất. ID workspace chứa cả định danh target, nên các target có thể được đánh giá
+song song mà không ghi đè lẫn nhau. CoverUp chỉ sinh test cho target đang được đánh
+giá. Train và validation không dùng chung test; không sao chép test suite gốc.
 
 ### 2. Khởi tạo coverage
 
@@ -250,7 +250,7 @@ Luồng nội bộ của CoverUp:
 4. Gọi Gemini sinh một pytest module hoàn chỉnh.
 5. Chạy candidate test tạm.
 6. Nếu pytest fail, gửi traceback qua error repair prompt.
-7. Nếu test pass nhưng không tăng coverage, gửi missing-coverage repair prompt.
+7. Nếu test pass nhưng không tăng coverage, ghi trace `no_coverage_gain_unrepairable` và dừng target.
 8. Khi candidate có coverage gain, lưu thành `test_opt_<n>.py` trong test suite cô lập.
 
 Nếu provider trả `finish_reason="stop"` nhưng `content=null`, hoặc trả text không có
@@ -397,9 +397,9 @@ python -m src.optimization.cli `
   --max-metric-calls 20
 ```
 
-GEPA tối ưu trực tiếp ba text component `initial`, `error` và `missing_coverage`; không
-còn một LLM trung gian viết lại cả bundle trước khi optimization bắt đầu. Baseline chính
-là candidate số 0 và luôn nằm trong Pareto population.
+GEPA tối ưu trực tiếp hai text component `initial` và `error`. Không còn component repair
+coverage hoặc một LLM trung gian viết lại cả bundle trước khi optimization bắt đầu. Baseline
+chính là candidate số 0 và luôn nằm trong Pareto population.
 
 Trước khi GEPA bắt đầu search, pipeline chạy baseline preflight trên toàn train và
 validation split. Final holdout reference cũng được kiểm tra trước promotion. Mọi target
@@ -409,13 +409,17 @@ sửa/thay thế.
 
 Trong mỗi vòng reflection:
 
-1. GEPA chọn một component để sửa theo round-robin; merge có thể ghép các component tốt.
+1. GEPA chọn `initial` hoặc `error` theo round-robin với reflection minibatch 8;
+   merge có thể ghép các component tốt.
 2. Cả bundle được validate và hash để tạo candidate ID ổn định.
-3. Lần gọi đầu của mỗi split chạy batch toàn bộ symbol; các lần sau đọc cache.
+3. Mỗi symbol chạy trong workspace test riêng, được chọn chính xác bằng
+   `source_file + qualname`; các target vẫn có thể chạy song song theo `max_concurrency`.
 4. Mỗi example nhận score riêng của symbol, được scale theo số statement/branch để mean
    của GEPA đúng bằng micro-average cuối cùng.
 5. Feedback chứa file, symbol, source lines liên quan, coverage còn thiếu và kết quả từng
-   replicate; reflection không còn nhìn các số dòng không có ngữ cảnh.
+   replicate. Structured trace còn ghi component thực sự được gọi, prompt input, test code,
+   traceback, coverage gain/remaining và trạng thái dừng của từng attempt. Trước reflection,
+   evidence dài được cắt gọn và mỗi component chỉ học từ trajectory đã thực sự chạy nó.
 6. Proposal phải giữ placeholder, có giới hạn độ dài và chỉ thay đổi một component để
    giảm prompt inflation và cải thiện credit assignment.
 
@@ -424,10 +428,11 @@ Kết quả metric được cache theo `prompt hash + split` tại
 `evaluation-digest` bao gồm model/config, target set và source hashes nên cache cũ không
 thể âm thầm được dùng sau khi code hoặc protocol thay đổi. Các replicate bổ sung dùng
 `batch_r1.json`, `batch_r2.json`, ... và workspace riêng. Khi GEPA gọi metric cho từng
-example, pipeline lấy đúng score symbol từ batch đã lưu thay vì trả cùng aggregate score
-cho mọi example.
+example, pipeline lấy đúng score từ workspace cô lập của symbol đó thay vì coverage của
+test suite dùng chung. Cache per-example nội bộ của GEPA được tắt để ID integer của train
+không thể va chạm với validation; cache artifact phía adapter vẫn được giữ nguyên.
 
-Failure semantics hiện dùng cache schema 5. Artifact từ schema cũ không được tái sử
+Evaluation isolation và generated workspace layout hiện dùng cache schema 9. Artifact từ schema cũ không được tái sử
 dụng; với benchmark quyết định vẫn nên chọn một `--artifacts-dir` mới.
 
 Sau khi compile xong, pipeline lưu:
@@ -439,11 +444,15 @@ eval/prompt_optimization/prompts/gepa_optimized.json
 eval/prompt_optimization/final_validation.json
 ```
 
-Prompt mới được lưu trước dưới tên `gepa_proposed.json`. Nếu dataset có split `test`,
-baseline và proposal được so sánh trên locked test; nếu không thì CLI ghi rõ rằng nó phải
-fallback về validation. `gepa_optimized.json` luôn chứa prompt production thắng: proposal
-khi cải thiện nghiêm ngặt, ngược lại là baseline. Vì vậy một proposal kém không thể thay
-thế baseline.
+Prompt mới được lưu trước dưới tên `gepa_proposed.json`. Nếu GEPA chọn lại đúng baseline,
+pipeline giữ baseline trong `gepa_optimized.json` và bỏ toàn bộ final test/holdout vì không
+có prompt mới để so sánh; `final_validation.json` ghi `final_evaluation_skipped=true`. Nếu
+proposal khác baseline, baseline và proposal được so sánh trên locked test; nếu không có
+test thì fallback về validation. Proposal chỉ được promote khi cải thiện nghiêm ngặt, nên
+một proposal hòa hoặc kém không thể thay thế baseline.
+
+Sơ đồ ASCII chi tiết về input, batch/example, cache, reflection và promotion nằm tại
+`docs/GEPA_CURRENT_FLOW.md`.
 
 Nếu đã có test suite baseline hợp lệ, `--baseline-tests-dir <path>` chấm suite đó như một
 reference bổ sung trong report. Promotion gate vẫn dùng baseline/proposal được sinh theo
@@ -460,16 +469,17 @@ runs/<candidate-id>/<split>/<run-id>/
 ├── prompt.json
 ├── coverup.log
 ├── coverup.stdout.log
+├── attempt_trace.jsonl
 ├── coverage_after.json
 ├── coverage_after.data
 ├── record.json
 ```
 
 Mỗi prompt candidate có một `<candidate-id>` riêng (digest của toàn bộ prompt bundle).
-Runner tạo các workspace sibling độc lập dạng `tests_candidate_<candidate-id>_<split>`;
-riêng baseline prompt dùng `tests_base_line_<baseline-digest>_validation`.
-Mỗi workspace nhận một lệnh CoverUp chứa tất cả symbol của split. Candidate không nhận
-file test từ test suite gốc, prompt baseline, split khác hoặc candidate khác.
+Runner gom workspace độc lập vào
+`<artifacts-dir>/generated_tests/<split>/tests_candidate_<candidate-id>`; riêng baseline
+dùng prefix `tests_base_line_`. Source test suite `tests/` không chứa generated workspace
+nên một lần chạy pytest thông thường không vô tình thu thập test của benchmark.
 
 `record.json` là structured summary chính:
 
@@ -548,8 +558,8 @@ Các bước tiếp theo hợp lý:
 2. Cache baseline coverage theo hash của source và test suite để giảm thời gian.
 3. Parse token usage từ `coverup.log` thành trường riêng trong `record.json`.
 4. Thêm failure taxonomy: syntax, import, assertion, timeout và no-gain.
-5. Sau khi joint optimization ổn định, chạy thêm ablation theo từng prompt để đo
-   đóng góp riêng của `initial`, `error` và `missing_coverage`.
+5. Sau khi joint optimization ổn định, chạy thêm ablation để đo đóng góp riêng của
+   `initial` và `error`.
 6. Thêm MIPROv2 sau khi đã có demonstration bank đủ lớn từ các run thành công.
 
 ## Lệnh benchmark chất lượng cao
@@ -588,4 +598,4 @@ python -m src.optimization.cli `
   optimize `
   --dataset eval/prompt_optimization/datasets/isort_symbols.jsonl `
   --prompt eval/prompt_optimization/prompts/gpt_v2_baseline.json `
-  --max-metric-calls 50
+  --max-metric-calls 60

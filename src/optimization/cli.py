@@ -105,21 +105,27 @@ def _top_isort_targets(coverage_path: Path, *, seed: int = 7) -> list[dict]:
         report = json.load(file)
     ranked = []
     for source_file, file_data in report.get("files", {}).items():
+        normalized = source_file.replace("\\", "/")
+        marker = "/isort/isort/"
+        if marker not in normalized:
+            continue
+        source = "isort/" + normalized.split(marker, 1)[1]
+        if source.startswith("isort/_vendored/"):
+            continue
         for symbol, function in file_data.get("functions", {}).items():
+            statements = int(function.get("summary", {}).get("num_statements", 0))
             branches = int(function.get("summary", {}).get("num_branches", 0))
-            if symbol and branches:
-                normalized = source_file.replace("\\", "/")
-                marker = "/isort/isort/"
-                source = "isort/" + normalized.split(marker, 1)[1] if marker in normalized else normalized
-                # Vendored code is not a stable optimization target: projects often
-                # omit it from coverage and its import path can vary by Python version.
-                if source.startswith("isort/_vendored/"):
-                    continue
-                ranked.append((branches, source, symbol))
-    ranked.sort(key=lambda item: (-item[0], item[1], item[2]))
-    if len(ranked) < 45:
-        raise ValueError(f"Coverage report has only {len(ranked)} branch-bearing functions")
-    selected = ranked[:45]
+            if symbol and statements:
+                # Prefer every branch-bearing target, then use statement-heavy
+                # branchless functions to reach the requested benchmark size.
+                ranked.append((branches > 0, branches, statements, source, symbol))
+    ranked.sort(key=lambda item: (-item[0], -item[1], -item[2], item[3], item[4]))
+    if len(ranked) < 110:
+        raise ValueError(
+            f"Coverage report has only {len(ranked)} measurable isort functions; "
+            "110 are required"
+        )
+    selected = ranked[:110]
     random.Random(seed).shuffle(selected)
     return [
         {
@@ -127,10 +133,10 @@ def _top_isort_targets(coverage_path: Path, *, seed: int = 7) -> list[dict]:
             "source_file": source,
             "symbol": symbol,
             "split": (
-                "train" if index < 25 else "validation" if index < 35 else "test"
+                "train" if index < 50 else "validation" if index < 80 else "test"
             ),
         }
-        for index, (_, source, symbol) in enumerate(selected)
+        for index, (_, _, _, source, symbol) in enumerate(selected)
     ]
 
 
@@ -256,6 +262,7 @@ def tune(args: argparse.Namespace) -> None:
         max_metric_calls=args.max_metric_calls,
         evaluation_replicates=args.evaluation_replicates,
     )
+    artifacts.mkdir(parents=True, exist_ok=True)
     program_path = artifacts / "optimized_program.json"
     program_path.write_text(
         json.dumps(optimized.as_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
@@ -265,6 +272,48 @@ def tune(args: argparse.Namespace) -> None:
         raise ValueError(f"GEPA produced an invalid final prompt bundle: {error}")
     proposed_path = artifacts / "prompts" / "gepa_proposed.json"
     proposed_prompt.save(proposed_path)
+
+    if bundle_digest(proposed_prompt) == bundle_digest(baseline):
+        final_path = artifacts / "prompts" / "gepa_optimized.json"
+        baseline.save(final_path)
+        report = {
+            "mean_score": None,
+            "baseline_mean_score": None,
+            "optimized_mean_score": None,
+            "baseline_aggregate_coverage": None,
+            "optimized_aggregate_coverage": None,
+            "absolute_gain": None,
+            "promoted": False,
+            "final_evaluation_skipped": True,
+            "skip_reason": (
+                "GEPA selected the unchanged baseline; there is no new prompt "
+                "to compare on the final split."
+            ),
+            "final_split": final_split,
+            "used_locked_holdout": bool(holdout),
+            "evaluation_replicates": args.evaluation_replicates,
+            "prompt": str(proposed_path),
+            "production_prompt": str(final_path),
+            "baseline_prompt": str(args.prompt.resolve()),
+            "baseline_tests_workspaces": [],
+            "baseline_run_ids": [],
+            "run_ids": [],
+            "tests_workspaces": [],
+            "baseline_results": [],
+            "results": [],
+            "existing_baseline_reference": existing_baseline_reference,
+        }
+        report_path = artifacts / "final_validation.json"
+        report_path.write_text(
+            json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        print(f"Saved optimized program to {program_path}")
+        print(
+            "GEPA retained the unchanged baseline; skipped final "
+            f"{final_split} test generation and evaluation."
+        )
+        print(f"Retained baseline at {final_path}")
+        return
 
     baseline_evaluation = evaluate_bundle_repeated(
         runner,
@@ -287,11 +336,7 @@ def tune(args: argparse.Namespace) -> None:
         proposed_prompt,
         artifacts / "candidates",
         split=final_split,
-        workspace_kind=(
-            "baseline"
-            if bundle_digest(proposed_prompt) == bundle_digest(baseline)
-            else "candidate"
-        ),
+        workspace_kind="candidate",
         replicates=args.evaluation_replicates,
         reference_results=baseline_results,
     )
@@ -313,6 +358,8 @@ def tune(args: argparse.Namespace) -> None:
         "optimized_aggregate_coverage": optimized_aggregate,
         "absolute_gain": mean_score - baseline_mean_score,
         "promoted": promoted,
+        "final_evaluation_skipped": False,
+        "skip_reason": None,
         "final_split": final_split,
         "used_locked_holdout": bool(holdout),
         "evaluation_replicates": args.evaluation_replicates,

@@ -7,6 +7,7 @@ import subprocess
 import re
 import sys
 import typing as T
+import threading
 from dotenv import find_dotenv, load_dotenv
 
 from pathlib import Path
@@ -94,7 +95,7 @@ def parse_args(args=None):
                     help='Prompt style to use')
 
     ap.add_argument('--prompt-template-file', type=Path,
-                    help='JSON file overriding gpt-v2 initial/error/missing-coverage templates')
+                    help='JSON file overriding gpt-v2 initial/error templates')
 
     ap.add_argument('--ollama-api-base', type=str, default="http://localhost:11434",
                     help='"api_base" setting for Ollama models')
@@ -128,11 +129,17 @@ def parse_args(args=None):
     ap.add_argument('--log-file', default=f"coverup-log",
                     help='log file to use')
 
+    ap.add_argument('--trace-file', type=Path,
+                    help='append structured per-attempt optimization traces as JSONL')
+
     ap.add_argument('--pytest-args', type=str, default='',
                     help='extra arguments to pass to pytest')
 
     ap.add_argument('--target-symbols', type=str, default='',
                     help='comma-separated function/class symbols to generate tests for (e.g. foo,Bar.baz)')
+
+    ap.add_argument('--target-spec-file', type=Path,
+                    help='JSON file containing exact source_file/symbol targets')
 
     ap.add_argument('--install-missing-modules', default=False,
                     action=argparse.BooleanOptionalAction,
@@ -230,6 +237,19 @@ def parse_args(args=None):
         ap.error('Specify either --package-dir or a file name')
 
     args.target_symbols = {s.strip() for s in args.target_symbols.split(',') if s.strip()}
+    args.target_specs = set()
+    if args.target_spec_file:
+        try:
+            target_specs = json.loads(args.target_spec_file.read_text(encoding="utf-8"))
+            args.target_specs = {
+                (
+                    str(item["source_file"]).replace("\\", "/").lower(),
+                    str(item["symbol"]),
+                )
+                for item in target_specs
+            }
+        except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+            ap.error(f'Unable to load --target-spec-file: {exc}')
 
     return args
 
@@ -257,6 +277,31 @@ def new_test_file(args: argparse.Namespace):
         test_seq += 1
 
 
+def matches_target_spec(args: argparse.Namespace, seg: CodeSegment) -> bool:
+    """Match an optimization target without broadening a name across the package."""
+    if getattr(args, "target_specs", None):
+        segment_file = str(seg.path).replace("\\", "/").lower()
+        src_base = getattr(args, "src_base_dir", None)
+        if src_base is not None:
+            try:
+                segment_file = (
+                    seg.path.resolve().relative_to(Path(src_base).resolve()).as_posix().lower()
+                )
+            except ValueError:
+                return False
+        return any(
+            (
+                segment_file == source_file
+                if src_base is not None
+                else segment_file.endswith(source_file)
+            )
+            and seg.qualname == symbol
+            for source_file, symbol in args.target_specs
+        )
+    target_symbols = getattr(args, "target_symbols", set())
+    return not target_symbols or seg.name in target_symbols or seg.qualname in target_symbols
+
+
 def clean_error(error: str) -> str:
     """Conservatively removes pytest-generated (and possibly other) output not needed by GPT,
        to cut down on token use.  Conservatively: if the format isn't recognized, leave it alone."""
@@ -277,6 +322,7 @@ def clean_error(error: str) -> str:
 
 
 log_file = None
+trace_lock = threading.Lock()
 def log_write(args: argparse.Namespace, seg: CodeSegment, m: str) -> None:
     """Writes to the log file, opening it first if necessary."""
 
@@ -285,6 +331,25 @@ def log_write(args: argparse.Namespace, seg: CodeSegment, m: str) -> None:
         log_file = open(args.log_file, "a", buffering=1)    # 1 = line buffered
 
     log_file.write(f"---- {datetime.now().isoformat(timespec='seconds')} {seg} ----\n{m}\n")
+
+
+def trace_write(args: argparse.Namespace, seg: CodeSegment, event: dict) -> None:
+    """Append one self-contained attempt event without changing async scheduling."""
+    trace_file = getattr(args, "trace_file", None)
+    if not trace_file:
+        return
+    record = {
+        "source_file": str(seg.filename),
+        "symbol": seg.qualname,
+        "name": seg.name,
+        "segment": seg.identify(),
+        **event,
+    }
+    trace_file.parent.mkdir(parents=True, exist_ok=True)
+    serialized = json.dumps(record, ensure_ascii=False, default=str)
+    with trace_lock:
+        with trace_file.open("a", encoding="utf-8") as file:
+            file.write(serialized + "\n")
 
 
 def check_whole_suite(args: argparse.Namespace) -> None:
@@ -549,6 +614,7 @@ async def improve_coverage(
     """Works to improve coverage for a code segment."""
 
     messages = prompter.initial_prompt(seg)
+    component = "initial"
     attempts = 0
 
     if args.dry_run:
@@ -558,10 +624,30 @@ async def improve_coverage(
         attempts += 1
         if (attempts > args.max_attempts):
             log_write(args, seg, "Too many attempts, giving up")
+            trace_write(args, seg, {
+                "attempt": attempts - 1,
+                "component": component,
+                "outcome": "max_attempts_exhausted",
+            })
             break
+
+        prompt_input = next(
+            (
+                str(message.get("content", ""))
+                for message in reversed(messages)
+                if message.get("role") == "user"
+            ),
+            "",
+        )
 
         if not (response := await chatter.chat(messages, ctx=seg)):
             log_write(args, seg, "giving up")
+            trace_write(args, seg, {
+                "attempt": attempts,
+                "component": component,
+                "prompt_input": prompt_input,
+                "outcome": "model_request_failed",
+            })
             break
 
         try:
@@ -570,6 +656,12 @@ async def improve_coverage(
         except (KeyError, IndexError, TypeError):
             state.inc_counter('R')
             log_write(args, seg, "Malformed LLM response without a usable choice; retrying")
+            trace_write(args, seg, {
+                "attempt": attempts,
+                "component": component,
+                "prompt_input": prompt_input,
+                "outcome": "malformed_response",
+            })
             continue
 
         # Some providers can return finish_reason="stop" with content=null.  Never
@@ -585,6 +677,13 @@ async def improve_coverage(
                 seg,
                 f"Empty assistant response (finish_reason={finish_reason!r}); retrying",
             )
+            trace_write(args, seg, {
+                "attempt": attempts,
+                "component": component,
+                "prompt_input": prompt_input,
+                "outcome": "empty_response",
+                "finish_reason": finish_reason,
+            })
             messages.append({
                 "role": "user",
                 "content": (
@@ -599,6 +698,13 @@ async def improve_coverage(
         else:
             state.inc_counter('R')
             log_write(args, seg, "No Python code block in LLM response; retrying")
+            trace_write(args, seg, {
+                "attempt": attempts,
+                "component": component,
+                "prompt_input": prompt_input,
+                "outcome": "missing_python_block",
+                "assistant_response": content,
+            })
             messages.append({
                 "role": "user",
                 "content": (
@@ -611,6 +717,14 @@ async def improve_coverage(
         if missing := missing_imports(find_imports(last_test)):
             log_write(args, seg, f"Missing modules {' '.join(missing)}")
             if not args.install_missing_modules or not install_missing_imports(args, seg, missing):
+                trace_write(args, seg, {
+                    "attempt": attempts,
+                    "component": component,
+                    "prompt_input": prompt_input,
+                    "outcome": "missing_imports",
+                    "generated_test": last_test,
+                    "missing_imports": missing,
+                })
                 return False # not finished: needs a missing module
 
         try:
@@ -623,6 +737,13 @@ async def improve_coverage(
 
         except subprocess.TimeoutExpired:
             log_write(args, seg, "measure_coverage timed out")
+            trace_write(args, seg, {
+                "attempt": attempts,
+                "component": component,
+                "prompt_input": prompt_input,
+                "outcome": "coverage_timeout",
+                "generated_test": last_test,
+            })
             # FIXME is the built-in timeout reasonable? Do we prompt for a faster test?
             # We don't want slow tests, but there may not be any way around it.
             return True
@@ -632,9 +753,27 @@ async def improve_coverage(
             error = clean_error(str(e.stdout, 'UTF-8', errors='ignore'))
             if not (prompts := prompter.error_prompt(seg, error)):
                 log_write(args, seg, "Test failed:\n\n" + error)
+                trace_write(args, seg, {
+                    "attempt": attempts,
+                    "component": component,
+                    "prompt_input": prompt_input,
+                    "outcome": "test_error_unrepairable",
+                    "generated_test": last_test,
+                    "execution_error": error,
+                })
                 break
 
+            trace_write(args, seg, {
+                "attempt": attempts,
+                "component": component,
+                "prompt_input": prompt_input,
+                "outcome": "test_error",
+                "generated_test": last_test,
+                "execution_error": error,
+                "next_component": "error",
+            })
             messages.extend(prompts)
+            component = "error"
             continue
 
         result = coverage['files'].get(seg.filename, None)
@@ -654,12 +793,19 @@ async def improve_coverage(
 
         if not gained_lines and not gained_branches:
             state.inc_counter('U')
-            if not (prompts := prompter.missing_coverage_prompt(seg, seg.missing_lines, seg.missing_branches)):
-                log_write(args, seg, "Test doesn't improve coverage")
-                break
-
-            messages.extend(prompts)
-            continue
+            log_write(args, seg, "Test doesn't improve coverage")
+            trace_write(args, seg, {
+                "attempt": attempts,
+                "component": component,
+                "prompt_input": prompt_input,
+                "outcome": "no_coverage_gain_unrepairable",
+                "generated_test": last_test,
+                "gained_lines": [],
+                "gained_branches": [],
+                "remaining_lines": sorted(seg.missing_lines),
+                "remaining_branches": sorted(seg.missing_branches),
+            })
+            break
 
         asked = {'lines': sorted(seg.missing_lines), 'branches': sorted(seg.missing_branches)}
         gained = {'lines': sorted(gained_lines), 'branches': sorted(gained_branches)}
@@ -669,6 +815,19 @@ async def improve_coverage(
                             f"# asked: {json.dumps(asked)}\n" +\
                             f"# gained: {json.dumps(gained)}\n\n" +\
                     last_test, encoding="utf-8")
+
+        trace_write(args, seg, {
+            "attempt": attempts,
+            "component": component,
+            "prompt_input": prompt_input,
+            "outcome": "coverage_gain_saved",
+            "generated_test": last_test,
+            "gained_lines": sorted(gained_lines),
+            "gained_branches": sorted(gained_branches),
+            "remaining_lines": sorted(seg.missing_lines - gained_lines),
+            "remaining_branches": sorted(seg.missing_branches - gained_branches),
+            "saved_test": str(new_test),
+        })
 
         log_write(args, seg, f"Saved as {new_test}\n")
         state.inc_counter('G')
@@ -692,17 +851,8 @@ def add_to_pythonpath(dir: Path):
 
 
 def main():
-    from collections import defaultdict
+    import os
 
-    # pytest-isolate 0.0.14 imports the Unix-only fcntl/resource modules at
-    # plugin discovery time. CoverUp can run without test isolation on Windows,
-    # so prevent pytest from auto-loading only that incompatible plugin while
-    # preserving pytest-repeat and the other plugins used by CoverUp.
-    if sys.platform == 'win32':
-        current_addopts = os.environ.get('PYTEST_ADDOPTS', '')
-        disable_isolate = '-p no:pytest_isolate'
-        if disable_isolate not in current_addopts:
-            os.environ['PYTEST_ADDOPTS'] = f'{current_addopts} {disable_isolate}'.strip()
     global state
     args = parse_args()
 
@@ -839,7 +989,7 @@ def main():
             if args.source_files and seg.path not in args.source_files:
                 continue
 
-            if args.target_symbols and seg.name not in args.target_symbols and seg.qualname not in args.target_symbols:
+            if not matches_target_spec(args, seg):
                 continue
 
             if state.is_done(seg):

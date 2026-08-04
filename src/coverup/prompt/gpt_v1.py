@@ -1,6 +1,5 @@
 import typing as T
 from .prompter import Prompter, CodeSegment, mk_message, get_module_name
-from ..utils import lines_branches_do
 
 
 class GptV1Prompter(Prompter):
@@ -41,13 +40,4 @@ Executing the test yields an error, shown below.
 Modify the test to correct it; respond only with the complete Python code in backticks.
 
 {error}""")
-        ]
-
-
-    def missing_coverage_prompt(self, segment: CodeSegment,
-                                missing_lines: set, missing_branches: set) -> T.List[dict]:
-        return [mk_message(f"""\
-This test still lacks coverage: {lines_branches_do(missing_lines, set(), missing_branches)} not execute.
-Modify it to correct that; respond only with the complete Python code in backticks.
-""")
         ]

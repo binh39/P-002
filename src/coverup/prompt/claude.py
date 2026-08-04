@@ -63,21 +63,6 @@ You may use the `get_info` tool function if needed.
         ]
 
 
-    def missing_coverage_prompt(self, segment: CodeSegment,
-                                missing_lines: set, missing_branches: set) -> T.List[dict] | None:
-        return [
-            *self.system_prompt(),
-            mk_message(f"""\
-The test still lacks coverage: {lines_branches_do(missing_lines, set(), missing_branches)} do not execute.
-
-Revise the test to ensure full coverage.
-
-Respond with only the complete revised Python test file, enclosed in triple backticks.
-You may use the `get_info` tool function if helpful.
-""")
-        ]
-
-
     def get_info(self, ctx: CodeSegment, name: str) -> str:
         """
         {
