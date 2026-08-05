@@ -1,0 +1,52 @@
+from functools import lru_cache
+from typing import Literal
+
+from pydantic import Field, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    # App
+    app_name: str = "PromptOpt API"
+    app_env: Literal["development", "production", "test"] = "development"
+    app_port: int = Field(default=8000, ge=1, le=65535)
+    app_host: str = "0.0.0.0"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    cors_origins: str = "http://localhost:5173,https://vinaip002.web.app"
+    api_prefix: str = "/api/v1"
+
+    # Authentication and Google Cloud
+    auth_mode: Literal["disabled", "firebase"] = "disabled"
+    repository_backend: Literal["memory", "firestore"] = "memory"
+    storage_backend: Literal["local", "gcs"] = "local"
+    gcp_project_id: str = "vinaip002"
+    gcs_bucket: str = ""
+    signed_url_ttl_seconds: int = Field(default=900, ge=60, le=3600)
+    max_upload_bytes: int = Field(default=100 * 1024 * 1024, ge=1024)
+    local_upload_dir: str = "./data/uploads"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @model_validator(mode="after")
+    def validate_production_backends(self):
+        if self.app_env == "production":
+            if self.auth_mode != "firebase":
+                raise ValueError("AUTH_MODE=firebase is required in production")
+            if self.repository_backend != "firestore":
+                raise ValueError("REPOSITORY_BACKEND=firestore is required in production")
+            if self.storage_backend != "gcs" or not self.gcs_bucket:
+                raise ValueError("STORAGE_BACKEND=gcs and GCS_BUCKET are required in production")
+        return self
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

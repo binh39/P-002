@@ -1,5 +1,31 @@
 # PromptOpt application
 
+## Repository layout
+
+```text
+codebase/
+  src/          # FastAPI backend (the only backend source root)
+  tests/        # Backend tests
+  frontend/     # React/Vite frontend
+  Dockerfile
+  requirements.txt
+```
+
+The legacy repository-level `src/` is not used by PromptOpt development and can be removed later. All new backend code must be placed under `codebase/src`.
+
+## Backend development
+
+```powershell
+cd codebase
+..\.venv\Scripts\python.exe -m pip install -r requirements.txt
+..\.venv\Scripts\python.exe -m ruff format --check src tests
+..\.venv\Scripts\python.exe -m ruff check src tests
+..\.venv\Scripts\python.exe -m pytest tests
+..\.venv\Scripts\python.exe -m uvicorn src.main:app --reload --port 8000
+```
+
+The Projects/upload API and production configuration are documented in [docs/backend-projects-slice.md](docs/backend-projects-slice.md).
+
 ## Frontend status
 
 The frontend can be deployed before the backend in either of these combinations:

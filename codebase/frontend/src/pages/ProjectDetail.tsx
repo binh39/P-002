@@ -1,21 +1,57 @@
-import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { useLocation, useParams } from "wouter";
 
+import { useRepositories } from "@/app/providers";
 import { Field, PageHeader, StatCard, StatusBadge } from "@/components/PlatformUI";
-import { projectFunctions, pythonProjects, sourcePreview } from "@/mocks/fixtures/platform";
+import type { PythonProject } from "@/domain/projects";
 
 type ProjectTab = "overview" | "functions" | "settings" | "versions";
 
 export default function ProjectDetail() {
   const { projectId = "isort" } = useParams<{ projectId: string }>();
   const [, navigate] = useLocation();
+  const { projects } = useRepositories();
   const [tab, setTab] = useState<ProjectTab>("overview");
   const [sourceName, setSourceName] = useState<string | null>(null);
-  const project = pythonProjects.find((item) => item.id === projectId) ?? pythonProjects[0];
-  const functions = useMemo(
-    () => projectFunctions.filter((item) => item.project === project.id),
-    [project.id],
-  );
+  const projectQuery = useQuery({
+    queryKey: ["projects", projectId],
+    queryFn: ({ signal }) => projects.get(projectId, signal),
+  });
+  const functionsQuery = useQuery({
+    queryKey: ["projects", projectId, "functions"],
+    queryFn: ({ signal }) => projects.listFunctions(projectId, signal),
+    enabled: tab === "functions" || sourceName !== null,
+  });
+  const functions = functionsQuery.data ?? [];
+  const selectedFunction = functions.find((item) => item.name === sourceName);
+  const sourceQuery = useQuery({
+    queryKey: ["projects", projectId, "functions", selectedFunction?.id, "source"],
+    queryFn: ({ signal }) =>
+      projects.getFunctionSource(projectId, selectedFunction?.id ?? "", signal),
+    enabled: selectedFunction !== undefined,
+  });
+
+  if (projectQuery.isPending)
+    return (
+      <div className="page-state" role="status">
+        Loading projectâ€¦
+      </div>
+    );
+  if (projectQuery.isError)
+    return (
+      <div className="page-state page-state-error" role="alert">
+        <h2>Project is unavailable</h2>
+        <p>
+          {projectQuery.error instanceof Error
+            ? projectQuery.error.message
+            : "An unexpected error occurred."}
+        </p>
+        <button onClick={() => projectQuery.refetch()}>Try again</button>
+      </div>
+    );
+
+  const project = projectQuery.data;
 
   return (
     <div className="platform-page">
@@ -144,6 +180,21 @@ export default function ProjectDetail() {
               </select>
             </div>
           </div>
+          {functionsQuery.isPending && (
+            <div className="page-state" role="status">
+              Loading analyzed functionsâ€¦
+            </div>
+          )}
+          {functionsQuery.isError && (
+            <div className="page-state page-state-error" role="alert">
+              <p>
+                {functionsQuery.error instanceof Error
+                  ? functionsQuery.error.message
+                  : "Functions are unavailable."}
+              </p>
+              <button onClick={() => functionsQuery.refetch()}>Try again</button>
+            </div>
+          )}
           <div className="table-scroll">
             <table className="platform-table">
               <thead>
@@ -255,7 +306,13 @@ export default function ProjectDetail() {
               <button onClick={() => setSourceName(null)}>×</button>
             </div>
             <pre>
-              <code>{sourcePreview}</code>
+              <code>
+                {sourceQuery.isPending
+                  ? "Loading sourceâ€¦"
+                  : sourceQuery.isError
+                    ? "Source is unavailable."
+                    : sourceQuery.data}
+              </code>
             </pre>
             <div className="drawer-legend">
               <span>
@@ -274,7 +331,7 @@ export default function ProjectDetail() {
   );
 }
 
-function ProjectSettings({ project }: { project: (typeof pythonProjects)[number] }) {
+function ProjectSettings({ project }: { project: PythonProject }) {
   const [section, setSection] = useState("runtime");
   const sections = ["runtime", "dependencies", "tests", "coverage", "security"];
   return (
