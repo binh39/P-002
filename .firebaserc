@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "vinaip002",
+    "prod": "vinaip002"
+  },
+  "targets": {
+    "vinaip002": {
+      "hosting": {
+        "frontend": [
+          "vinaip002"
+        ]
+      }
+    }
+  }
+}
