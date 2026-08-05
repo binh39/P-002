@@ -172,7 +172,9 @@ VITE_FIREBASE_APP_ID=
 ## Phase 4 — Firebase Authentication
 
 - [ ] Tạo Firebase project development và production riêng nếu ngân sách cho phép.
-- [x] Bật Firebase Authentication và Google Sign-In cho project `vinaip002`; OAuth brand là `PromptOpt`.
+- [x] Bật Firebase Authentication, Google Sign-In và Email/Password cho project `vinaip002`; OAuth brand là `PromptOpt`.
+- [x] Hoàn thiện UI chuyển đổi Login/Register, validation confirm password và Firebase display name.
+- [x] Hoàn thiện email login, account registration và password reset qua Firebase Auth.
 - [x] Connected auth dùng Firebase Auth SDK; `sessionStorage` chỉ còn trong adapter demo tách biệt.
 - [x] Tạo `AuthProvider` cung cấp `user`, `loading`, `error`, `signIn`, `signOut`.
 - [x] API client tự lấy Firebase ID token và gắn `Authorization: Bearer <token>`.
@@ -240,7 +242,7 @@ POST /prompt-versions/{id}/approve
 - [x] Không còn TypeScript/lint error.
 - [x] API base mặc định là same-origin `/api/v1`, không hardcode localhost trong production config.
 - [x] `.env.local` và service-account JSON không được sử dụng/commit; CI dùng OIDC.
-- [x] Test `/` và direct URL `/dashboard` trên preview: đều HTTP 200 và trả SPA shell.
+- [x] Test `/` và direct URL `/dashboard` trên Firebase Hosting: đều HTTP 200 và trả SPA shell.
 - [ ] Test login/logout/refresh session.
 - [x] Test demo auth gate và badge `demo data`.
 - [ ] Test empty/error/loading states.
@@ -249,10 +251,10 @@ POST /prompt-versions/{id}/approve
 
 ### 6.3 Deploy thủ công lần đầu
 
-- [x] Deploy preview channel `frontend-foundation` (hết hạn ngày 2026-08-12).
-- [x] Smoke test HTTPS, SPA rewrite và cache headers trên URL preview thật.
-- [ ] Deploy live production.
-- [x] Ghi lại Firebase project ID, Web App ID, Hosting site ID và preview URL trong `codebase/Readme.md`.
+- [x] Preview channel `frontend-foundation` đã dùng để nghiệm thu và đã xóa; feature branch hiện test bằng `npm run dev`.
+- [x] Smoke test HTTPS, SPA rewrite và cache headers trên Firebase Hosting.
+- [x] Deploy live production tự động từ `main` thành công.
+- [x] Ghi lại Firebase project ID, Web App ID, Hosting site ID và live URL trong `codebase/Readme.md`.
 - [ ] Kiểm tra rollback một Firebase release.
 
 ---
@@ -347,6 +349,6 @@ Create experiment
 2. [ ] Phase 2: thêm router, providers và error handling.
 3. [ ] Phase 3: chuyển mock data sau repository contracts.
 4. [x] Phase 4: tích hợp Firebase Auth, bật Google provider và điền Firebase project config thật.
-5. [x] Phase 6 preview: cấu hình và deploy Firebase Hosting preview; còn live production sau khi nghiệm thu đăng nhập bằng trình duyệt.
-6. [ ] Phase 7: tự động hóa frontend CI/CD.
+5. [x] Phase 6: cấu hình Firebase Hosting, nghiệm thu preview, xóa preview và deploy live production.
+6. [x] Phase 7: frontend CI/CD tự động deploy `main` đã hoạt động.
 7. [ ] Phase 5 + 8: code và deploy backend vertical slice đầu tiên.

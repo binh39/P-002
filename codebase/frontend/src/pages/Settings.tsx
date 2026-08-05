@@ -1,198 +1,312 @@
-const card = {
-  background: "#fff",
-  borderRadius: 14,
-  border: "1px solid #E8EBF5",
-  boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
-} as const;
+import { useState } from "react";
+
+import { Field, PageHeader, StatusBadge } from "@/components/PlatformUI";
+
+const tabs = ["General", "AI & Optimization", "Evaluation", "Execution & Security"];
 
 export default function Settings() {
+  const [tab, setTab] = useState(tabs[0]);
   return (
-    <div style={{ padding: "28px 32px", maxWidth: 800 }}>
-      <h1
-        style={{
-          fontSize: 22,
-          fontWeight: 700,
-          color: "#0F1117",
-          margin: "0 0 6px",
-          letterSpacing: "-0.02em",
-        }}
-      >
-        Settings
-      </h1>
-      <p style={{ color: "#9CA3AF", fontSize: 13, margin: "0 0 28px" }}>
-        Manage your workspace preferences and API keys
-      </p>
-
-      {[
-        {
-          title: "API Keys",
-          items: [
-            {
-              label: "OpenAI API Key",
-              value: "sk-proj-••••••••••••••••••••••xxK3",
-              hint: "Used for GPT-4o, GPT-4o-mini",
-            },
-
-            {
-              label: "Anthropic API Key",
-              value: "sk-ant-••••••••••••••••••••••••••xR8",
-              hint: "Used for Claude models",
-            },
-          ],
-        },
-
-        {
-          title: "Default Model Settings",
-          items: [
-            {
-              label: "Default Model",
-              value: "gpt-4o",
-              hint: "Model used for new experiments",
-            },
-
-            {
-              label: "Default Temperature",
-              value: "0.7",
-              hint: "Sampling temperature (0–2)",
-            },
-
-            {
-              label: "Default Max Tokens",
-              value: "2048",
-              hint: "Maximum token output per call",
-            },
-          ],
-        },
-
-        {
-          title: "Optimization Defaults",
-          items: [
-            {
-              label: "Default Generations",
-              value: "5",
-              hint: "Number of optimization generations",
-            },
-
-            {
-              label: "Candidates per Gen",
-              value: "3",
-              hint: "Candidates evaluated per generation",
-            },
-
-            {
-              label: "Coverage Target",
-              value: "85%",
-              hint: "Minimum branch coverage target",
-            },
-          ],
-        },
-      ].map(({ title, items }) => (
-        <div key={title} style={{ ...card, padding: "22px 24px", marginBottom: 16 }}>
-          <h3
-            style={{
-              margin: "0 0 16px",
-              fontSize: 14,
-              fontWeight: 600,
-              color: "#0F1117",
-            }}
-          >
-            {title}
-          </h3>
-          {items.map(({ label, value, hint }) => (
-            <div
-              key={label}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                paddingBlock: 12,
-                borderBottom: "1px solid #F0F1F5",
-              }}
+    <div className="platform-page">
+      <PageHeader
+        eyebrow="Workspace defaults"
+        title="Tool Settings"
+        description="Global defaults inherited by projects and experiments."
+        actions={<button className="primary-button">Save changes</button>}
+      />
+      <div className="settings-layout tool-settings-layout">
+        <nav className="settings-nav">
+          {tabs.map((item) => (
+            <button
+              key={item}
+              className={tab === item ? "active" : ""}
+              onClick={() => setTab(item)}
             >
-              <div>
-                <div style={{ fontSize: 13.5, fontWeight: 500, color: "#374151" }}>{label}</div>
-                <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>{hint}</div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span
-                  style={{
-                    fontSize: 13,
-                    fontFamily: "JetBrains Mono, monospace",
-                    color: "#6B7280",
-                    background: "#F0F1F5",
-                    padding: "4px 10px",
-                    borderRadius: 6,
-                  }}
-                >
-                  {value}
-                </span>
-                <button
-                  style={{
-                    background: "none",
-                    border: "1px solid #E8EBF5",
-                    borderRadius: 6,
-                    padding: "5px 10px",
-                    cursor: "pointer",
-                    color: "#6B7280",
-                    fontSize: 12,
-                    fontFamily: "inherit",
-                  }}
-                >
-                  Edit
-                </button>
-              </div>
-            </div>
+              {item}
+            </button>
           ))}
-        </div>
-      ))}
-
-      <div style={{ ...card, padding: "22px 24px" }}>
-        <h3
-          style={{
-            margin: "0 0 16px",
-            fontSize: 14,
-            fontWeight: 600,
-            color: "#0F1117",
-          }}
-        >
-          Danger Zone
-        </h3>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "14px 16px",
-            background: "#FEF2F2",
-            borderRadius: 10,
-            border: "1px solid #FECACA",
-          }}
-        >
-          <div>
-            <div style={{ fontSize: 13.5, fontWeight: 500, color: "#991B1B" }}>
-              Delete all experiment data
-            </div>
-            <div style={{ fontSize: 12, color: "#EF4444", marginTop: 2 }}>
-              This action cannot be undone
-            </div>
-          </div>
-          <button
-            style={{
-              padding: "7px 14px",
-              background: "#EF4444",
-              color: "#fff",
-              border: "none",
-              borderRadius: 8,
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            Delete
-          </button>
+        </nav>
+        <div className="settings-stack">
+          {tab === "General" && (
+            <>
+              <SettingsSection
+                title="Workspace"
+                description="Naming, locale and retention defaults."
+              >
+                <div className="form-grid">
+                  <Field label="Workspace name">
+                    <input defaultValue="PromptOpt Research" />
+                  </Field>
+                  <Field label="Timezone">
+                    <select>
+                      <option>Asia/Ho_Chi_Minh</option>
+                      <option>UTC</option>
+                    </select>
+                  </Field>
+                  <Field label="Metric precision">
+                    <select>
+                      <option>2 decimal places</option>
+                      <option>3 decimal places</option>
+                    </select>
+                  </Field>
+                  <Field label="Default export">
+                    <select>
+                      <option>Markdown</option>
+                      <option>CSV</option>
+                      <option>JSON</option>
+                    </select>
+                  </Field>
+                  <Field label="Experiment retention">
+                    <select>
+                      <option>180 days</option>
+                      <option>365 days</option>
+                    </select>
+                  </Field>
+                  <Field label="Log retention">
+                    <select>
+                      <option>30 days</option>
+                      <option>90 days</option>
+                    </select>
+                  </Field>
+                </div>
+              </SettingsSection>
+              <SettingsSection
+                title="Cloud resources"
+                description="Read-only deployment context; credentials stay in Google Secret Manager."
+              >
+                <div className="integration-row">
+                  <div>
+                    <strong>Google Cloud</strong>
+                    <span>Project vinaip002 · asia-southeast1</span>
+                  </div>
+                  <StatusBadge tone="success">Connected</StatusBadge>
+                </div>
+                <div className="integration-row">
+                  <div>
+                    <strong>Cloud Storage</strong>
+                    <span>promptopt-projects · Standard</span>
+                  </div>
+                  <StatusBadge tone="success">Healthy</StatusBadge>
+                </div>
+                <div className="integration-row">
+                  <div>
+                    <strong>Firestore</strong>
+                    <span>Native mode · nam5</span>
+                  </div>
+                  <StatusBadge tone="info">Planned</StatusBadge>
+                </div>
+              </SettingsSection>
+            </>
+          )}
+          {tab === "AI & Optimization" && (
+            <>
+              <SettingsSection
+                title="Gemini provider"
+                description="Secret values are never returned to the browser."
+              >
+                <div className="integration-row">
+                  <div>
+                    <strong>Gemini API</strong>
+                    <span>Secret: gemini-api-key · Last validated 4 minutes ago</span>
+                  </div>
+                  <StatusBadge tone="success">Connected</StatusBadge>
+                </div>
+                <div className="form-grid">
+                  <Field label="Default model">
+                    <select>
+                      <option>Gemini 2.5 Pro</option>
+                      <option>Gemini 2.5 Flash</option>
+                    </select>
+                  </Field>
+                  <Field label="Fallback model">
+                    <select>
+                      <option>Gemini 2.5 Flash</option>
+                    </select>
+                  </Field>
+                  <Field label="Temperature">
+                    <input defaultValue="0.3" />
+                  </Field>
+                  <Field label="Max output tokens">
+                    <input defaultValue="4096" />
+                  </Field>
+                </div>
+              </SettingsSection>
+              <SettingsSection
+                title="Optimization defaults"
+                description="Experiments may override these values."
+              >
+                <div className="form-grid">
+                  <Field label="Optimizer">
+                    <select>
+                      <option>GEPA</option>
+                      <option>DSPy MIPROv2</option>
+                    </select>
+                  </Field>
+                  <Field label="Iterations">
+                    <input defaultValue="10" />
+                  </Field>
+                  <Field label="Candidates / iteration">
+                    <input defaultValue="4" />
+                  </Field>
+                  <Field label="Stop patience">
+                    <input defaultValue="3" />
+                  </Field>
+                  <Field label="Default cost budget">
+                    <input defaultValue="$12.00" />
+                  </Field>
+                  <Field label="Optimization timeout">
+                    <input defaultValue="90 minutes" />
+                  </Field>
+                </div>
+              </SettingsSection>
+            </>
+          )}
+          {tab === "Evaluation" && (
+            <>
+              <SettingsSection
+                title="Scoring formula"
+                description="Weights must total 1.00 and apply equally to baseline and optimized prompts."
+              >
+                <div className="weight-row">
+                  <span>Branch coverage</span>
+                  <input defaultValue="0.50" />
+                  <b>50%</b>
+                </div>
+                <div className="weight-row">
+                  <span>Statement coverage</span>
+                  <input defaultValue="0.30" />
+                  <b>30%</b>
+                </div>
+                <div className="weight-row">
+                  <span>Test pass rate</span>
+                  <input defaultValue="0.20" />
+                  <b>20%</b>
+                </div>
+                <div className="formula-preview">
+                  Score = 0.50 × Branch + 0.30 × Statement + 0.20 × Pass rate
+                </div>
+              </SettingsSection>
+              <SettingsSection
+                title="Failure handling"
+                description="Consistent penalties protect result comparability."
+              >
+                <div className="form-grid">
+                  <Field label="Test failure penalty">
+                    <input defaultValue="-0.10" />
+                  </Field>
+                  <Field label="Timeout penalty">
+                    <input defaultValue="-0.15" />
+                  </Field>
+                  <Field label="Coverage error score">
+                    <input defaultValue="0.00" />
+                  </Field>
+                  <Field label="Target branch coverage">
+                    <input defaultValue="85%" />
+                  </Field>
+                  <Field label="Target statement coverage">
+                    <input defaultValue="90%" />
+                  </Field>
+                  <Field label="Best prompt rule">
+                    <select>
+                      <option>Highest validation score</option>
+                    </select>
+                  </Field>
+                </div>
+              </SettingsSection>
+            </>
+          )}
+          {tab === "Execution & Security" && (
+            <>
+              <SettingsSection
+                title="Execution defaults"
+                description="Project settings can request lower limits, never exceed workspace maximums."
+              >
+                <div className="form-grid">
+                  <Field label="Parallel workers">
+                    <input defaultValue="4" />
+                  </Field>
+                  <Field label="Function timeout">
+                    <input defaultValue="120 seconds" />
+                  </Field>
+                  <Field label="Run timeout">
+                    <input defaultValue="90 minutes" />
+                  </Field>
+                  <Field label="Retry count">
+                    <input defaultValue="1" />
+                  </Field>
+                  <Field label="CPU limit">
+                    <select>
+                      <option>2 vCPU</option>
+                    </select>
+                  </Field>
+                  <Field label="Memory limit">
+                    <select>
+                      <option>4 GiB</option>
+                    </select>
+                  </Field>
+                </div>
+              </SettingsSection>
+              <SettingsSection
+                title="Sandbox policy"
+                description="Uploaded code executes in isolated jobs, never inside the API service."
+              >
+                <div className="toggle-row">
+                  <div>
+                    <strong>Disable outbound network</strong>
+                    <span>Block package and application traffic during evaluation</span>
+                  </div>
+                  <input type="checkbox" defaultChecked />
+                </div>
+                <div className="toggle-row">
+                  <div>
+                    <strong>Read-only source filesystem</strong>
+                    <span>Only temporary test and report paths are writable</span>
+                  </div>
+                  <input type="checkbox" defaultChecked />
+                </div>
+                <div className="form-grid">
+                  <Field label="Maximum upload">
+                    <input defaultValue="50 MB" />
+                  </Field>
+                  <Field label="Maximum logs">
+                    <input defaultValue="10 MB" />
+                  </Field>
+                  <Field label="Allowed environment names">
+                    <input defaultValue="PYTHONHASHSEED, TZ, LANG" />
+                  </Field>
+                  <Field label="Secret source">
+                    <select>
+                      <option>Google Secret Manager</option>
+                    </select>
+                  </Field>
+                </div>
+              </SettingsSection>
+            </>
+          )}
         </div>
       </div>
     </div>
+  );
+}
+
+function SettingsSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="platform-card settings-panel">
+      <div className="card-heading">
+        <div>
+          <h2>{title}</h2>
+          <p>{description}</p>
+        </div>
+      </div>
+      {children}
+    </section>
   );
 }

@@ -2,11 +2,10 @@ import { IC } from "./Icons";
 
 export type NavigationId =
   | "dashboard"
+  | "projects"
   | "experiments"
+  | "datasets"
   | "playground"
-  | "optimization"
-  | "comparison"
-  | "review"
   | "registry"
   | "settings";
 
@@ -20,16 +19,11 @@ interface SidebarProps {
 
 const navItems = [
   { id: "dashboard" as NavigationId, label: "Dashboard", Icon: IC.Dashboard },
+  { id: "projects" as NavigationId, label: "Projects", Icon: IC.Code },
   { id: "experiments" as NavigationId, label: "Experiments", Icon: IC.Flask },
+  { id: "datasets" as NavigationId, label: "Datasets", Icon: IC.Database },
+  { id: "registry" as NavigationId, label: "Prompt Registry", Icon: IC.CheckSquare },
   { id: "playground" as NavigationId, label: "Playground", Icon: IC.Play },
-  {
-    id: "optimization" as NavigationId,
-    label: "Optimization",
-    Icon: IC.TrendUp,
-  },
-  { id: "comparison" as NavigationId, label: "Comparison", Icon: IC.Compare },
-  { id: "review" as NavigationId, label: "Review", Icon: IC.CheckSquare },
-  { id: "registry" as NavigationId, label: "Registry", Icon: IC.Database },
 ];
 
 export default function Sidebar({
@@ -116,7 +110,7 @@ export default function Sidebar({
             fontWeight: 500,
           }}
         >
-          <span>payment-service</span>
+          <span>PromptOpt Research</span>
           <IC.ChevronDown />
         </button>
       </div>
@@ -172,21 +166,6 @@ export default function Sidebar({
                 <Icon />
               </span>
               {label}
-              {id === "review" && (
-                <span
-                  style={{
-                    marginLeft: "auto",
-                    background: "#EF4444",
-                    color: "#fff",
-                    borderRadius: 10,
-                    fontSize: 10,
-                    fontWeight: 600,
-                    padding: "1px 6px",
-                  }}
-                >
-                  3
-                </span>
-              )}
             </button>
           );
         })}

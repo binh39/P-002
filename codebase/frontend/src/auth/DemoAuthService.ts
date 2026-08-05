@@ -21,10 +21,26 @@ export class DemoAuthService implements AuthService {
     };
   }
 
-  async signIn() {
+  private activateSession() {
     sessionStorage.setItem(DEMO_SESSION_KEY, "active");
     this.user = demoUser;
     this.listener?.(this.user);
+  }
+
+  async signInWithGoogle() {
+    this.activateSession();
+  }
+
+  async signInWithEmail() {
+    this.activateSession();
+  }
+
+  async registerWithEmail() {
+    this.activateSession();
+  }
+
+  async sendPasswordReset() {
+    return Promise.resolve();
   }
 
   async signOut() {
