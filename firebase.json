@@ -1,6 +1,7 @@
 {
   "auth": {
     "providers": {
+      "emailPassword": true,
       "googleSignIn": {
         "oAuthBrandDisplayName": "PromptOpt",
         "supportEmail": "nguyenbinh39205@gmail.com"

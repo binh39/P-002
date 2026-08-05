@@ -10,9 +10,9 @@ npm ci
 npm run dev
 ```
 
-The default `VITE_AUTH_MODE=demo` uses an explicit demo session. Set it to `firebase` for Firebase Google Sign-In.
+The default `VITE_AUTH_MODE=demo` uses an explicit demo session. Set it to `firebase` for Firebase Google Sign-In plus Email/Password login, registration and password reset.
 
-The connected Firebase project is `vinaip002`. Its current preview is `https://vinaip002--frontend-foundation-k738rydv.web.app` and expires on 2026-08-12. Local Firebase values belong in the ignored `.env.local`; start from `.env.example` on a new machine.
+The connected Firebase project is `vinaip002`, with production at `https://vinaip002.web.app`. Feature branches are tested with `npm run dev`; no public preview channel is kept. Local Firebase values belong in the ignored `.env.local`; start from `.env.example` on a new machine.
 
 The independent `VITE_DATA_MODE=demo` uses repository-backed fixtures and displays a `demo data` badge. Set it to `connected` feature-by-feature only when the matching `/api/v1` endpoints are available. Connected mode never falls back to demo data when an API request fails.
 

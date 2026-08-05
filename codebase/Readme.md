@@ -20,27 +20,22 @@ The first production project is connected:
 | Firebase Web App | `PromptOpt Frontend` |
 | Web App ID | `1:891999064201:web:69022a3951a6ff42eaf658` |
 | Hosting site | `vinaip002` |
-| Future live URL | `https://vinaip002.web.app` |
-| Preview channel | `frontend-foundation` |
-| Preview URL | `https://vinaip002--frontend-foundation-k738rydv.web.app` |
-| Preview expiry | 2026-08-12 13:55 (Asia/Ho_Chi_Minh) |
+| Live URL | `https://vinaip002.web.app` |
+| Preview channels | None; feature branches are tested locally |
 
-Firebase Authentication and Google Sign-In are enabled. The production and preview Hosting domains are authorized. The preview currently uses real Firebase login with repository-backed demo data because the backend is not deployed.
+Firebase Authentication supports Google Sign-In and Email/Password login, registration and password reset. The production Hosting domain is authorized. The deployed frontend uses real Firebase authentication with repository-backed demo data because the backend is not deployed.
 
-The ignored `codebase/frontend/.env.local` contains the Firebase Web App configuration. To rebuild and refresh the preview:
+The ignored `codebase/frontend/.env.local` contains the Firebase Web App configuration. Feature branches are reviewed locally:
 
 ```powershell
 cd codebase\frontend
 npm ci
-npm run build
-cd ..\..
-firebase use prod
-firebase hosting:channel:deploy frontend-foundation --only frontend --expires 7d
+npm run dev
 ```
 
 Do not commit `.env.local`, service-account JSON files, generated credentials or OAuth client secrets. Firebase Web App values are public identifiers, but deployment credentials must use Workload Identity Federation.
 
-Before promoting to the live URL, manually complete a browser sign-in/sign-out/refresh-session acceptance test on the preview. Then deploy with:
+Merges to `main` deploy automatically. A manual production deploy, when explicitly needed, uses:
 
 ```powershell
 firebase deploy --only hosting:frontend --project vinaip002

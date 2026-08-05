@@ -8,21 +8,19 @@ import TopNav from "@/components/TopNav";
 
 const pathByNavigationId: Record<NavigationId, string> = {
   dashboard: "/dashboard",
-  experiments: "/projects/new",
+  projects: "/projects",
+  experiments: "/experiments",
+  datasets: "/datasets",
   playground: "/playground",
-  optimization: "/runs/demo",
-  comparison: "/runs/demo/compare",
-  review: "/review",
   registry: "/prompts",
   settings: "/settings",
 };
 
 function currentNavigationId(pathname: string): NavigationId {
-  if (pathname.startsWith("/projects")) return "experiments";
+  if (pathname.startsWith("/projects")) return "projects";
+  if (pathname.startsWith("/experiments") || pathname.startsWith("/runs")) return "experiments";
+  if (pathname.startsWith("/datasets")) return "datasets";
   if (pathname.startsWith("/playground")) return "playground";
-  if (pathname.endsWith("/compare")) return "comparison";
-  if (pathname.startsWith("/runs")) return "optimization";
-  if (pathname.startsWith("/review")) return "review";
   if (pathname.startsWith("/prompts")) return "registry";
   if (pathname.startsWith("/settings")) return "settings";
   return "dashboard";

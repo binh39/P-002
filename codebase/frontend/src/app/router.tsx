@@ -12,15 +12,19 @@ import NotFound from "@/pages/NotFound";
 const Comparison = lazy(() => import("@/pages/Comparison"));
 const CreateExperiment = lazy(() => import("@/pages/CreateExperiment"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const Datasets = lazy(() => import("@/pages/Datasets"));
+const Experiments = lazy(() => import("@/pages/Experiments"));
 const OptimizationProgress = lazy(() => import("@/pages/OptimizationProgress"));
 const Playground = lazy(() => import("@/pages/Playground"));
 const Registry = lazy(() => import("@/pages/Registry"));
 const ReviewApproval = lazy(() => import("@/pages/ReviewApproval"));
+const ProjectDetail = lazy(() => import("@/pages/ProjectDetail"));
+const Projects = lazy(() => import("@/pages/Projects"));
 const Settings = lazy(() => import("@/pages/Settings"));
 
 const legacyPagePaths = {
   dashboard: "/dashboard",
-  experiments: "/projects/new",
+  experiments: "/experiments/new",
   playground: "/playground",
   optimization: "/runs/demo",
   comparison: "/runs/demo/compare",
@@ -30,15 +34,32 @@ const legacyPagePaths = {
 } as const;
 
 function LoginRoute() {
-  const { user, signIn, error } = useAuth();
+  const {
+    user,
+    clearError,
+    signInWithGoogle,
+    signInWithEmail,
+    registerWithEmail,
+    sendPasswordReset,
+    error,
+  } = useAuth();
   const [, navigate] = useLocation();
   if (user) return <Redirect to="/dashboard" replace />;
+
+  const runAndNavigate = async (action: () => Promise<void>) => {
+    await action();
+    navigate("/dashboard", { replace: true });
+  };
+
   return (
     <Login
-      onLogin={async () => {
-        await signIn();
-        navigate("/dashboard", { replace: true });
-      }}
+      onClearError={clearError}
+      onGoogleSignIn={() => runAndNavigate(signInWithGoogle)}
+      onEmailSignIn={(email, password) => runAndNavigate(() => signInWithEmail(email, password))}
+      onRegister={(name, email, password) =>
+        runAndNavigate(() => registerWithEmail(name, email, password))
+      }
+      onPasswordReset={sendPasswordReset}
       connected={env.authMode === "firebase"}
       authError={error}
     />
@@ -51,8 +72,7 @@ function DashboardRoute() {
 }
 
 function CreateExperimentRoute() {
-  const [, navigate] = useLocation();
-  return <CreateExperiment onNavigate={(page) => navigate(legacyPagePaths[page])} />;
+  return <CreateExperiment />;
 }
 
 function RouteLoading() {
@@ -80,8 +100,20 @@ function RoutedApplication() {
           <Route path="/dashboard">
             <DashboardRoute />
           </Route>
-          <Route path="/projects/new">
+          <Route path="/projects">
+            <Projects />
+          </Route>
+          <Route path="/projects/:projectId">
+            <ProjectDetail />
+          </Route>
+          <Route path="/experiments">
+            <Experiments />
+          </Route>
+          <Route path="/experiments/new">
             <CreateExperimentRoute />
+          </Route>
+          <Route path="/datasets">
+            <Datasets />
           </Route>
           <Route path="/playground">
             <Playground />

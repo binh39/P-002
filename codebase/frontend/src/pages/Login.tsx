@@ -1,323 +1,245 @@
 import { useState } from "react";
 
-import { IC } from "../components/Icons";
+import { IC } from "@/components/Icons";
+
+type AuthMode = "login" | "register";
+type PendingAction = "email" | "google" | "reset" | null;
 
 interface Props {
-  onLogin: () => Promise<void>;
+  onClearError: () => void;
+  onGoogleSignIn: () => Promise<void>;
+  onEmailSignIn: (email: string, password: string) => Promise<void>;
+  onRegister: (name: string, email: string, password: string) => Promise<void>;
+  onPasswordReset: (email: string) => Promise<void>;
   connected: boolean;
   authError?: string | null;
 }
 
-export default function Login({ onLogin, connected, authError }: Props) {
-  const [email, setEmail] = useState("alex.morgan@company.com");
+export default function Login({
+  onClearError,
+  onGoogleSignIn,
+  onEmailSignIn,
+  onRegister,
+  onPasswordReset,
+  connected,
+  authError,
+}: Props) {
+  const [mode, setMode] = useState<AuthMode>("login");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState(connected ? "" : "alex.morgan@company.com");
+  const [password, setPassword] = useState(connected ? "" : "demo-password");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const [password, setPassword] = useState("••••••••••");
+  const isRegister = mode === "register";
+  const isBusy = pendingAction !== null;
 
-  const [loading, setLoading] = useState(false);
+  const clearMessages = () => {
+    setFormError(null);
+    setNotice(null);
+    onClearError();
+  };
 
-  const runLogin = async () => {
-    setLoading(true);
+  const switchMode = () => {
+    setMode((current) => (current === "login" ? "register" : "login"));
+    setPassword(connected ? "" : "demo-password");
+    setConfirmPassword("");
+    clearMessages();
+  };
+
+  const runAction = async (action: PendingAction, callback: () => Promise<void>) => {
+    clearMessages();
+    setPendingAction(action);
     try {
-      await onLogin();
+      await callback();
+      return true;
     } catch {
-      // AuthProvider exposes a user-facing error message.
+      return false;
     } finally {
-      setLoading(false);
+      setPendingAction(null);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!connected) await runLogin();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const normalizedEmail = email.trim();
+    const normalizedName = name.trim();
+
+    if (isRegister && normalizedName.length < 2) {
+      setFormError("Enter your full name.");
+      return;
+    }
+    if (isRegister && password.length < 8) {
+      setFormError("Create a password with at least 8 characters.");
+      return;
+    }
+    if (isRegister && password !== confirmPassword) {
+      setFormError("Passwords do not match.");
+      return;
+    }
+
+    await runAction("email", () =>
+      isRegister
+        ? onRegister(normalizedName, normalizedEmail, password)
+        : onEmailSignIn(normalizedEmail, password),
+    );
+  };
+
+  const handlePasswordReset = async () => {
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail) {
+      setFormError("Enter your email address first.");
+      return;
+    }
+
+    const sent = await runAction("reset", () => onPasswordReset(normalizedEmail));
+    if (sent) setNotice("Password reset instructions have been sent to your email.");
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#F5F7FF",
-
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-
-        fontFamily: "Inter, system-ui, sans-serif",
-      }}
-    >
-      {/* Background decoration */}
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          overflow: "hidden",
-          pointerEvents: "none",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            top: -200,
-            right: -200,
-            width: 600,
-            height: 600,
-
-            background: "radial-gradient(circle, rgba(124,58,237,0.08) 0%, transparent 70%)",
-
-            borderRadius: "50%",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            bottom: -200,
-            left: -100,
-            width: 500,
-            height: 500,
-
-            background: "radial-gradient(circle, rgba(79,110,247,0.08) 0%, transparent 70%)",
-
-            borderRadius: "50%",
-          }}
-        />
+    <main className="auth-page">
+      <div className="auth-decoration" aria-hidden="true">
+        <div className="auth-glow auth-glow-top" />
+        <div className="auth-glow auth-glow-bottom" />
       </div>
 
-      <div
-        style={{
-          position: "relative",
-          width: "100%",
-          maxWidth: 420,
-          padding: "0 24px",
-        }}
-      >
-        {/* Logo */}
-        <div style={{ textAlign: "center", marginBottom: 40 }}>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              marginBottom: 16,
-            }}
-          >
-            <div
-              style={{
-                width: 52,
-                height: 52,
-                borderRadius: 14,
-
-                background: "linear-gradient(135deg, #4F6EF7, #7C3AED)",
-
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-
-                boxShadow: "0 8px 24px rgba(79,110,247,0.3)",
-
-                color: "#fff",
-              }}
-            >
+      <div className="auth-container">
+        <header className="auth-brand">
+          <div className="auth-brand-title">
+            <div className="auth-logo">
               <IC.Zap />
             </div>
+            <h1>PromptOpt</h1>
           </div>
-          <h1
-            style={{
-              fontSize: 26,
-              fontWeight: 700,
-              color: "#0F1117",
-              margin: 0,
-              letterSpacing: "-0.02em",
-            }}
-          >
-            PromptOpt
-          </h1>
-          <p style={{ color: "#6B7280", fontSize: 14, marginTop: 6 }}>
-            AI Prompt Optimization Platform
-          </p>
-        </div>
+          <p>AI Prompt Optimization Platform</p>
+        </header>
 
-        {/* Card */}
-        <div
-          style={{
-            background: "#fff",
-            borderRadius: 16,
+        <section className="auth-card" aria-labelledby="auth-title">
+          <div className="auth-card-heading">
+            <h2 id="auth-title">{isRegister ? "Register" : "Login"}</h2>
+          </div>
 
-            border: "1px solid #E8EBF5",
-
-            boxShadow: "0 4px 24px rgba(0,0,0,0.06)",
-
-            padding: 32,
-          }}
-        >
-          <h2
-            style={{
-              fontSize: 18,
-              fontWeight: 600,
-              color: "#0F1117",
-              margin: "0 0 6px",
-            }}
-          >
-            Sign in to your workspace
-          </h2>
-          <p style={{ color: "#9CA3AF", fontSize: 13.5, margin: "0 0 28px" }}>
-            Welcome back, Alex.
-          </p>
-
-          {authError && (
+          {(formError || authError) && (
             <div className="auth-error" role="alert">
-              {authError}
+              {formError ?? authError}
             </div>
           )}
-          <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: 16 }}>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: "#374151",
-                  marginBottom: 6,
-                }}
-              >
-                Email address
-              </label>
+          {notice && (
+            <div className="auth-notice" role="status">
+              {notice}
+            </div>
+          )}
+
+          <form onSubmit={(event) => void handleSubmit(event)}>
+            {isRegister && (
+              <div className="auth-field">
+                <label htmlFor="auth-name">Full name</label>
+                <input
+                  id="auth-name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  type="text"
+                  autoComplete="name"
+                  placeholder="Alex Morgan"
+                  required
+                  disabled={isBusy}
+                />
+              </div>
+            )}
+
+            <div className="auth-field">
+              <label htmlFor="auth-email">Email address</label>
               <input
+                id="auth-email"
                 value={email}
-                disabled={connected}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(event) => setEmail(event.target.value)}
                 type="email"
-                style={{
-                  width: "100%",
-                  padding: "10px 14px",
-                  border: "1px solid #E8EBF5",
-
-                  borderRadius: 10,
-                  fontSize: 14,
-                  color: "#374151",
-                  background: "#F8F9FC",
-
-                  outline: "none",
-                  fontFamily: "inherit",
-                  boxSizing: "border-box",
-                }}
+                autoComplete="email"
+                placeholder="you@company.com"
+                required
+                disabled={isBusy}
               />
             </div>
-            <div style={{ marginBottom: 24 }}>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: 6,
-                }}
-              >
-                <label style={{ fontSize: 13, fontWeight: 500, color: "#374151" }}>Password</label>
-                <button
-                  type="button"
-                  onClick={() => window.alert("A password reset link has been sent to your email.")}
-                  style={{
-                    padding: 0,
-                    border: 0,
-                    background: "none",
-                    fontSize: 12.5,
-                    color: "#4F6EF7",
-                    cursor: "pointer",
-                  }}
-                >
-                  Forgot password?
-                </button>
+
+            <div className="auth-field">
+              <div className="auth-field-row">
+                <label htmlFor="auth-password">Password</label>
+                {!isRegister && (
+                  <button
+                    className="auth-text-button"
+                    type="button"
+                    onClick={() => void handlePasswordReset()}
+                    disabled={isBusy}
+                  >
+                    {pendingAction === "reset" ? "Sending…" : "Forgot password?"}
+                  </button>
+                )}
               </div>
               <input
+                id="auth-password"
                 value={password}
-                disabled={connected}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(event) => setPassword(event.target.value)}
                 type="password"
-                style={{
-                  width: "100%",
-                  padding: "10px 14px",
-                  border: "1px solid #E8EBF5",
-
-                  borderRadius: 10,
-                  fontSize: 14,
-                  color: "#374151",
-                  background: "#F8F9FC",
-
-                  outline: "none",
-                  fontFamily: "inherit",
-                  boxSizing: "border-box",
-                }}
+                autoComplete={isRegister ? "new-password" : "current-password"}
+                placeholder={isRegister ? "At least 8 characters" : "Enter your password"}
+                required
+                minLength={isRegister ? 8 : 6}
+                disabled={isBusy}
               />
             </div>
 
-            <button
-              type="submit"
-              disabled={loading || connected}
-              style={{
-                width: "100%",
-                padding: "11px 20px",
+            {isRegister && (
+              <div className="auth-field">
+                <label htmlFor="auth-confirm-password">Confirm password</label>
+                <input
+                  id="auth-confirm-password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="Re-enter your password"
+                  required
+                  minLength={8}
+                  disabled={isBusy}
+                />
+              </div>
+            )}
 
-                background: loading ? "#9BA8F5" : "linear-gradient(135deg, #4F6EF7, #7C3AED)",
-
-                color: "#fff",
-                border: "none",
-                borderRadius: 10,
-                fontSize: 14,
-
-                fontWeight: 600,
-                cursor: loading ? "not-allowed" : "pointer",
-
-                fontFamily: "inherit",
-                boxShadow: "0 4px 12px rgba(79,110,247,0.3)",
-
-                transition: "all 0.2s",
-              }}
-            >
-              {connected
-                ? "Email sign-in coming soon"
-                : loading
-                  ? "Signing in..."
-                  : "Enter demo workspace"}
+            <button className="auth-primary-button" type="submit" disabled={isBusy}>
+              {pendingAction === "email"
+                ? isRegister
+                  ? "Creating account…"
+                  : "Logging in…"
+                : isRegister
+                  ? "Register"
+                  : "Login"}
             </button>
           </form>
 
-          <div
-            style={{
-              marginTop: 20,
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-            }}
+          <button
+            className="auth-switch-button"
+            type="button"
+            onClick={switchMode}
+            disabled={isBusy}
           >
-            <div style={{ flex: 1, height: 1, background: "#E8EBF5" }} />
-            <span style={{ fontSize: 12, color: "#9CA3AF" }}>or continue with</span>
-            <div style={{ flex: 1, height: 1, background: "#E8EBF5" }} />
+            {isRegister ? "Already have an account? Login" : "Create new account"}
+          </button>
+
+          <div className="auth-divider">
+            <span />
+            <p>or continue with</p>
+            <span />
           </div>
 
           <button
+            className="auth-google-button"
             type="button"
-            onClick={() => void runLogin()}
-            disabled={loading}
-            style={{
-              width: "100%",
-              marginTop: 16,
-              padding: "10px 20px",
-
-              background: "#fff",
-              border: "1px solid #E8EBF5",
-              borderRadius: 10,
-
-              fontSize: 13.5,
-              fontWeight: 500,
-              color: "#374151",
-              cursor: "pointer",
-
-              fontFamily: "inherit",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-            }}
+            onClick={() => void runAction("google", onGoogleSignIn)}
+            disabled={isBusy}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24">
+            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
               <path
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                 fill="#4285F4"
@@ -335,25 +257,19 @@ export default function Login({ onLogin, connected, authError }: Props) {
                 fill="#EA4335"
               />
             </svg>
-            {loading
-              ? "Signing in…"
+            {pendingAction === "google"
+              ? "Connecting…"
               : connected
                 ? "Sign in with Google"
                 : "Continue with demo account"}
           </button>
-        </div>
+        </section>
 
-        <p
-          style={{
-            textAlign: "center",
-            fontSize: 12,
-            color: "#9CA3AF",
-            marginTop: 20,
-          }}
-        >
-          By signing in, you agree to the Terms of Service and Privacy Policy.
+        <p className="auth-legal">
+          By signing in, you agree to the <span>Terms of Service</span> and{" "}
+          <span>Privacy Policy</span>.
         </p>
       </div>
-    </div>
+    </main>
   );
 }

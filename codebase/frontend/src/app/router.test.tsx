@@ -15,9 +15,7 @@ describe("application routing", () => {
 
   it("protects application routes and enters the demo workspace", async () => {
     render(<App />);
-    expect(
-      await screen.findByRole("heading", { name: "Sign in to your workspace" }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Login" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Continue with demo account" }));
 
