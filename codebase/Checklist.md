@@ -301,6 +301,7 @@ build
   - [x] Module `projects + signed upload` đã được code với adapter local và Google Cloud.
   - [x] Unit/integration tests cho module đó.
   - [x] Docker context nằm tại `codebase/`, image chỉ copy `codebase/src` và loại frontend khỏi image.
+  - [x] Docker image chạy bằng non-root user và đã qua smoke test upload → create/list project.
   - [ ] Service account quyền tối thiểu.
 - [ ] Khi API đã deploy, thêm Firebase Hosting rewrite `/api/**` sang Cloud Run.
 - [ ] Chuyển đúng frontend feature từ mock repository sang HTTP repository.

@@ -8,7 +8,7 @@ Install dependencies and start the API:
 
 ```powershell
 cd codebase
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
 $env:APP_ENV = "development"
 $env:AUTH_MODE = "disabled"
 $env:REPOSITORY_BACKEND = "memory"
@@ -42,6 +42,22 @@ POST /api/v1/uploads
 ```
 
 Both `/health` and `/api/v1/health` are available. OpenAPI is served at `/docs` in the current build.
+
+## Docker
+
+Build and run from the `codebase` directory:
+
+```powershell
+docker build -t promptopt-api:local .
+docker run --rm -p 8000:8000 `
+  -e APP_ENV=development `
+  -e AUTH_MODE=disabled `
+  -e REPOSITORY_BACKEND=memory `
+  -e STORAGE_BACKEND=local `
+  promptopt-api:local
+```
+
+The runtime image installs only `requirements.txt`; local quality tools are isolated in `requirements-dev.txt`. It runs as non-root user `appuser` and only contains `/app/src` plus its writable data directory.
 
 ## Production configuration
 

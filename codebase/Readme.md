@@ -17,7 +17,7 @@ The legacy repository-level `src/` is not used by PromptOpt development and can 
 
 ```powershell
 cd codebase
-..\.venv\Scripts\python.exe -m pip install -r requirements.txt
+..\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 ..\.venv\Scripts\python.exe -m ruff format --check src tests
 ..\.venv\Scripts\python.exe -m ruff check src tests
 ..\.venv\Scripts\python.exe -m pytest tests
