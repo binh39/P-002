@@ -18,6 +18,10 @@ async def test_create_experiment_and_queue_baseline(client):
     experiment = created.json()
     assert experiment["status"] == "draft"
 
+    premature_optimization = await client.post(f"/api/v1/experiments/{experiment['id']}/optimize", headers=AUTH_HEADERS)
+    assert premature_optimization.status_code == 409
+    assert premature_optimization.json()["error"]["code"] == "BASELINE_NOT_READY"
+
     queued = await client.post(f"/api/v1/experiments/{experiment['id']}/runs", headers=AUTH_HEADERS)
     assert queued.status_code == 202
     run = queued.json()

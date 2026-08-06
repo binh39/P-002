@@ -14,6 +14,12 @@ class ExperimentStatus(StrEnum):
     BASELINE_QUEUED = "baseline_queued"
     BASELINE_RUNNING = "baseline_running"
     BASELINE_SUCCEEDED = "baseline_succeeded"
+    OPTIMIZATION_QUEUED = "optimization_queued"
+    OPTIMIZING = "optimizing"
+    CANDIDATE_EVALUATING = "candidate_evaluating"
+    OPTIMIZATION_SUCCEEDED = "optimization_succeeded"
+    TIMED_OUT = "timed_out"
+    CANCELLED = "cancelled"
     FAILED = "failed"
 
 
@@ -33,6 +39,7 @@ class ExperimentResponse(StrictModel):
     optimization_eligible: bool = False
     status: ExperimentStatus
     baseline_run_id: str | None = None
+    optimization_run_id: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -59,6 +66,28 @@ class BaselineRunResponse(StrictModel):
 
 
 class BaselineRunRecord(BaselineRunResponse):
+    pass
+
+
+class OptimizationRunResponse(StrictModel):
+    id: str
+    experiment_id: str
+    status: ExperimentStatus
+    parent_prompt_digest: str
+    candidate_prompt: dict[str, str] | None = None
+    candidate_prompt_digest: str | None = None
+    baseline_validation_score: float | None = None
+    candidate_validation_score: float | None = None
+    candidate_count: int = 0
+    metric_calls: int = 0
+    artifact_objects: dict[str, str] = Field(default_factory=dict)
+    error_message: str | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
+
+class OptimizationRunRecord(OptimizationRunResponse):
     pass
 
 

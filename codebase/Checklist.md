@@ -436,27 +436,27 @@ Create experiment
 - [x] Chia `train`, `validation`, `test` bằng seed cố định và lưu split trong experiment.
 - [x] Dataset dưới 3 targets được đánh dấu baseline-only, không giả lập validation/test.
 - [x] Chỉ đánh dấu `optimization_eligible` khi train/validation/test đều không rỗng (tối thiểu 3 targets).
-- [ ] Không dùng locked `test` split trong GEPA search/candidate selection.
+- [x] Không dùng locked `test` split trong GEPA search/candidate selection.
 - [ ] Không để cùng function/source version xuất hiện ở nhiều split.
 - [ ] Đóng băng denominator statement/branch từ baseline preflight.
 
 ### 10.5 PR 3 — DSPy/GEPA prompt optimization
 
 - [x] Pin `dspy==3.2.1` và `gepa==0.0.27`.
-- [ ] Tách model sinh test (`COVERUP_MODEL`) và reflection (`OPTIMIZE_MODEL`).
-- [ ] Validate Gemini/Vertex provider configuration và model allowlist.
-- [ ] Tạo GEPA adapter nhận `PromptBundle`, coverage và attempt trace thật.
-- [ ] Reward phải do coverage code tính; không dùng LLM judge.
-- [ ] Reflection chỉ sửa `initial` và `error`.
-- [ ] Loại candidate thiếu placeholder, format lỗi hoặc vượt size trước khi gọi CoverUp.
-- [ ] Cache theo prompt digest, source checksum, targets, split, model và runner config.
+- [x] Tách model sinh test (`COVERUP_MODEL`) và reflection (`OPTIMIZE_MODEL`).
+- [x] Validate Gemini/Vertex provider configuration và model allowlist.
+- [x] Tạo GEPA adapter nhận `PromptBundle`, coverage và attempt trace thật.
+- [x] Reward phải do coverage code tính; không dùng LLM judge.
+- [x] Reflection chỉ sửa `initial` và `error`.
+- [x] Loại candidate thiếu placeholder, format lỗi hoặc vượt size trước khi gọi CoverUp.
+- [x] Cache theo prompt digest, source checksum, targets, split, model và runner config.
 - [ ] Tách workspace theo candidate/target/replicate để không rò generated tests.
 - [ ] Thêm `max_metric_calls`, reflection minibatch, replicate, rate limit và concurrency limit.
 - [ ] Persist GEPA checkpoint để resume sau timeout/restart.
-- [ ] Thêm `POST /api/v1/experiments/{id}/optimize`, trả `202`.
+- [x] Thêm `POST /api/v1/experiments/{id}/optimize`, trả `202`.
 - [ ] Bổ sung trạng thái `optimizing`, `candidate_evaluating`, `optimization_succeeded`, `timed_out`, `cancelled`.
 - [ ] Lưu candidate prompt, parent prompt, generation, score, cost, latency và failure reason.
-- [ ] Không tự ghi đè baseline hoặc production prompt sau GEPA search.
+- [x] Không tự ghi đè baseline hoặc production prompt sau GEPA search.
 
 ### 10.6 PR 4 — Paired comparison và promotion gate
 
@@ -497,7 +497,7 @@ Create experiment
 
 - [x] Ruff format/check pass cho experiment foundation.
 - [x] Backend tests pass (`21 passed` sau target metrics và structured trace).
-- [ ] Unit test score, cache key, prompt validation và promotion rule.
+- [x] Unit test score, cache key và prompt validation; promotion rule để PR 4.
 - [ ] Contract/integration test cho experiment, run và artifact APIs bằng fake executor.
 - [ ] Docker smoke test fixture project và test timeout/retry/malformed response.
 - [ ] Test Firestore ownership isolation và GCS artifact authorization.

@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from .schemas import BaselineRunRecord, ExperimentRecord
+from .schemas import BaselineRunRecord, ExperimentRecord, OptimizationRunRecord
 
 
 class ExperimentRepository(Protocol):
@@ -10,12 +10,16 @@ class ExperimentRepository(Protocol):
     async def create_run(self, item: BaselineRunRecord) -> BaselineRunRecord: ...
     async def get_run(self, run_id: str) -> BaselineRunRecord | None: ...
     async def save_run(self, item: BaselineRunRecord) -> BaselineRunRecord: ...
+    async def create_optimization_run(self, item: OptimizationRunRecord) -> OptimizationRunRecord: ...
+    async def get_optimization_run(self, run_id: str) -> OptimizationRunRecord | None: ...
+    async def save_optimization_run(self, item: OptimizationRunRecord) -> OptimizationRunRecord: ...
 
 
 class InMemoryExperimentRepository:
     def __init__(self):
         self.experiments: dict[str, ExperimentRecord] = {}
         self.runs: dict[str, BaselineRunRecord] = {}
+        self.optimization_runs: dict[str, OptimizationRunRecord] = {}
 
     async def create(self, item):
         self.experiments[item.id] = item
@@ -39,6 +43,17 @@ class InMemoryExperimentRepository:
         self.runs[item.id] = item
         return item
 
+    async def create_optimization_run(self, item):
+        self.optimization_runs[item.id] = item
+        return item
+
+    async def get_optimization_run(self, run_id):
+        return self.optimization_runs.get(run_id)
+
+    async def save_optimization_run(self, item):
+        self.optimization_runs[item.id] = item
+        return item
+
 
 class FirestoreExperimentRepository:
     def __init__(self, client):
@@ -49,6 +64,9 @@ class FirestoreExperimentRepository:
 
     def _runs(self):
         return self.client.collection("baseline_runs")
+
+    def _optimization_runs(self):
+        return self.client.collection("optimization_runs")
 
     async def create(self, item):
         await self._experiments().document(item.id).create(item.model_dump(mode="python"))
@@ -72,4 +90,16 @@ class FirestoreExperimentRepository:
 
     async def save_run(self, item):
         await self._runs().document(item.id).set(item.model_dump(mode="python"))
+        return item
+
+    async def create_optimization_run(self, item):
+        await self._optimization_runs().document(item.id).create(item.model_dump(mode="python"))
+        return item
+
+    async def get_optimization_run(self, run_id):
+        snapshot = await self._optimization_runs().document(run_id).get()
+        return OptimizationRunRecord.model_validate(snapshot.to_dict()) if snapshot.exists else None
+
+    async def save_optimization_run(self, item):
+        await self._optimization_runs().document(item.id).set(item.model_dump(mode="python"))
         return item
