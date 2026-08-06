@@ -26,6 +26,15 @@ cd codebase
 
 The Projects/upload API and production configuration are documented in [docs/backend-projects-slice.md](docs/backend-projects-slice.md).
 
+## Experiment baseline API foundation
+
+This branch adds the durable first half of the experiment workflow: authenticated users
+can create an experiment from analyzed function IDs, enqueue one baseline run, and poll
+its run record. Records use Firestore in production and Cloud Tasks calls the internal,
+OIDC-protected worker endpoint. The execution endpoint deliberately does **not** execute
+an uploaded archive in the Cloud Run API container; the isolated CoverUp sandbox and its
+coverage artifacts are the next PR.
+
 ## Frontend status
 
 The frontend is deployed at [https://vinaip002.web.app](https://vinaip002.web.app). It uses Firebase Authentication and a hybrid data mode: implemented Project features call the production API, while screens without a backend slice remain clearly marked as demo data.

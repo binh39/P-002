@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     cloud_tasks_queue: str = "promptopt-analysis"
     analysis_worker_url: str = ""
     analysis_task_audience: str = ""
+    baseline_dispatcher: Literal["inline", "cloud_tasks"] = "inline"
+    baseline_cloud_tasks_queue: str = "promptopt-baseline"
+    baseline_worker_url: str = ""
+    baseline_task_audience: str = ""
     max_analysis_python_files: int = Field(default=5000, ge=1, le=20000)
     max_analysis_uncompressed_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
     signed_url_ttl_seconds: int = Field(default=900, ge=60, le=3600)
@@ -58,6 +62,10 @@ class Settings(BaseSettings):
                 raise ValueError("ANALYSIS_DISPATCHER=cloud_tasks is required in production")
             if not self.analysis_worker_url or not self.analysis_task_audience:
                 raise ValueError("ANALYSIS_WORKER_URL and ANALYSIS_TASK_AUDIENCE are required in production")
+            if self.baseline_dispatcher != "cloud_tasks":
+                raise ValueError("BASELINE_DISPATCHER=cloud_tasks is required in production")
+            if not self.baseline_worker_url or not self.baseline_task_audience:
+                raise ValueError("BASELINE_WORKER_URL and BASELINE_TASK_AUDIENCE are required in production")
         return self
 
 
