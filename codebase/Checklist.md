@@ -417,16 +417,16 @@ Create experiment
 - [x] Lưu prompt digest vào baseline run.
 - [ ] Tạo và lưu prompt version ID riêng trong prompt registry.
 - [x] Không parse coverage từ stdout; dùng structured coverage JSON làm nguồn chính.
-- [ ] Xuất coverage theo từng target function, không chỉ coverage tổng.
-- [ ] Bổ sung structured `attempt_trace.jsonl` vào runner wrapper cho CoverUp PyPI.
+- [x] Xuất `target_coverage.json` theo từng target function, không chỉ coverage tổng.
+- [x] Bổ sung structured `attempt_trace.jsonl` từ CoverUp request/response log.
 - [ ] Xác minh trace chứa đủ prompt input, model response, generated test, pytest error và reason dừng qua smoke test thật.
 - [x] Lưu generated tests ZIP, CoverUp log, stdout và prompt JSON.
 - [ ] Lưu command metadata và runner config đã chuẩn hóa.
 - [x] Upload artifacts vào object storage theo owner/project/experiment/run.
 - [ ] Lưu checksum, object name, size, content type và retention metadata vào Firestore.
 - [ ] Thêm `GET /api/v1/runs/{run_id}/artifacts` và signed download URL có ownership check.
-- [ ] Tính deterministic statement/branch score theo từng symbol.
-- [ ] Aggregate theo executable units; không trung bình đơn giản phần trăm giữa các function.
+- [x] Tính deterministic statement/branch score theo từng symbol.
+- [x] Aggregate theo executable units; không trung bình đơn giản phần trăm giữa các function.
 - [ ] Lưu token usage, cost estimate, latency, model và provider.
 
 ### 10.4 Dataset và split chống data leakage
@@ -435,7 +435,7 @@ Create experiment
 - [ ] Lưu project version, source checksum và settings checksum cùng dataset.
 - [x] Chia `train`, `validation`, `test` bằng seed cố định và lưu split trong experiment.
 - [x] Dataset dưới 3 targets được đánh dấu baseline-only, không giả lập validation/test.
-- [ ] Chốt minimum target count để cho phép bắt đầu GEPA optimization.
+- [x] Chỉ đánh dấu `optimization_eligible` khi train/validation/test đều không rỗng (tối thiểu 3 targets).
 - [ ] Không dùng locked `test` split trong GEPA search/candidate selection.
 - [ ] Không để cùng function/source version xuất hiện ở nhiều split.
 - [ ] Đóng băng denominator statement/branch từ baseline preflight.
@@ -496,7 +496,7 @@ Create experiment
 ### 10.9 Verification và Definition of Done
 
 - [x] Ruff format/check pass cho experiment foundation.
-- [x] Backend tests pass (`17 passed` sau structured artifact và ZIP-security changes).
+- [x] Backend tests pass (`21 passed` sau target metrics và structured trace).
 - [ ] Unit test score, cache key, prompt validation và promotion rule.
 - [ ] Contract/integration test cho experiment, run và artifact APIs bằng fake executor.
 - [ ] Docker smoke test fixture project và test timeout/retry/malformed response.

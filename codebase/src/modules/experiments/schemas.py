@@ -30,6 +30,7 @@ class ExperimentResponse(StrictModel):
     target_function_ids: list[str]
     dataset_splits: dict[str, list[str]] = Field(default_factory=dict)
     split_seed: int = 7
+    optimization_eligible: bool = False
     status: ExperimentStatus
     baseline_run_id: str | None = None
     created_at: datetime
@@ -50,6 +51,7 @@ class BaselineRunResponse(StrictModel):
     branch_coverage: float | None = None
     prompt_digest: str | None = None
     artifact_objects: dict[str, str] = Field(default_factory=dict)
+    target_metrics: dict[str, dict] = Field(default_factory=dict)
     error_message: str | None = None
     created_at: datetime
     started_at: datetime | None = None

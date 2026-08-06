@@ -13,6 +13,7 @@ from pathlib import Path, PurePosixPath
 from src.core.errors import AppError
 
 from .prompts import PromptBundle
+from .traces import as_jsonl, parse_coverup_log
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,6 +22,7 @@ class BaselineExecution:
     statement_coverage: float | None
     branch_coverage: float | None
     artifacts: dict[str, bytes]
+    target_metrics: dict[str, dict[str, float | int | None]]
 
 
 class DockerCoverUpExecutor:
@@ -149,14 +151,77 @@ class DockerCoverUpExecutor:
                 raise RuntimeError(completed.stdout[-4000:] or "CoverUp baseline failed")
             (artifacts_dir / "coverup.stdout.log").write_text(completed.stdout, encoding="utf-8")
             (artifacts_dir / "prompt.json").write_text(prompt.as_json(), encoding="utf-8")
+            coverup_log = artifacts_dir / "coverup.log"
+            if coverup_log.is_file():
+                (artifacts_dir / "attempt_trace.jsonl").write_bytes(
+                    as_jsonl(parse_coverup_log(coverup_log.read_text(encoding="utf-8")))
+                )
             shutil.make_archive(str(artifacts_dir / "generated_tests"), "zip", tests)
             report = self._run_coverage(project, tests, artifacts_dir, source_directory)
-            totals = report.get("totals", {})
-            statement = self._ratio(totals.get("covered_lines"), totals.get("num_statements"))
-            branch = self._ratio(totals.get("covered_branches"), totals.get("num_branches"))
-            score = None if statement is None else statement if branch is None else 0.4 * statement + 0.6 * branch
+            target_metrics = self._target_metrics(report, symbols)
+            (artifacts_dir / "target_coverage.json").write_text(
+                json.dumps(target_metrics, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+            statement, branch, score = self._aggregate_target_metrics(target_metrics)
             artifacts = {path.name: path.read_bytes() for path in artifacts_dir.iterdir() if path.is_file()}
-            return BaselineExecution(score, statement, branch, artifacts)
+            return BaselineExecution(score, statement, branch, artifacts, target_metrics)
+
+    @classmethod
+    def _target_metrics(cls, report: dict, symbols: list[str]) -> dict[str, dict[str, float | int | None]]:
+        functions = [
+            (name, data)
+            for file_data in report.get("files", {}).values()
+            for name, data in file_data.get("functions", {}).items()
+            if name
+        ]
+        result = {}
+        for symbol in symbols:
+            matches = [data for name, data in functions if name == symbol or name.endswith(f".{symbol}")]
+            if len(matches) != 1:
+                result[symbol] = {
+                    "valid": False,
+                    "covered_statements": 0,
+                    "num_statements": 0,
+                    "covered_branches": 0,
+                    "num_branches": 0,
+                    "statement_coverage": None,
+                    "branch_coverage": None,
+                    "score": 0.0,
+                }
+                continue
+            summary = matches[0]["summary"]
+            covered_statements = int(summary.get("covered_lines", 0))
+            num_statements = int(summary.get("num_statements", 0))
+            covered_branches = int(summary.get("covered_branches", 0))
+            num_branches = int(summary.get("num_branches", 0))
+            statement = cls._ratio(covered_statements, num_statements)
+            branch = cls._ratio(covered_branches, num_branches)
+            score = statement if branch is None else 0.4 * (statement or 0.0) + 0.6 * branch
+            result[symbol] = {
+                "valid": True,
+                "covered_statements": covered_statements,
+                "num_statements": num_statements,
+                "covered_branches": covered_branches,
+                "num_branches": num_branches,
+                "statement_coverage": statement,
+                "branch_coverage": branch,
+                "score": score,
+            }
+        return result
+
+    @staticmethod
+    def _aggregate_target_metrics(metrics: dict[str, dict]) -> tuple[float | None, float | None, float | None]:
+        valid = [value for value in metrics.values() if value.get("valid")]
+        if not valid:
+            return None, None, 0.0
+        covered_statements = sum(value["covered_statements"] for value in valid)
+        num_statements = sum(value["num_statements"] for value in valid)
+        covered_branches = sum(value["covered_branches"] for value in valid)
+        num_branches = sum(value["num_branches"] for value in valid)
+        statement = covered_statements / num_statements if num_statements else None
+        branch = covered_branches / num_branches if num_branches else None
+        score = statement if branch is None else 0.4 * (statement or 0.0) + 0.6 * branch
+        return statement, branch, score
 
     def _run_coverage(self, project: Path, tests: Path, artifacts: Path, source_directory: str) -> dict:
         docker = [

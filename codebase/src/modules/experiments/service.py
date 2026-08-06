@@ -47,11 +47,13 @@ class ExperimentService:
                 422, "UNKNOWN_TARGET_FUNCTION", f"Selected functions were not found: {', '.join(sorted(missing))}"
             )
         now = datetime.now(UTC)
+        dataset_splits = split_targets(payload.target_function_ids)
         item = ExperimentRecord(
             id=new_id(),
             owner_id=owner_id,
             **payload.model_dump(),
-            dataset_splits=split_targets(payload.target_function_ids),
+            dataset_splits=dataset_splits,
+            optimization_eligible=all(dataset_splits[name] for name in ("train", "validation", "test")),
             status=ExperimentStatus.DRAFT,
             created_at=now,
             updated_at=now,
@@ -127,6 +129,7 @@ class ExperimentService:
                 "prompt.json": "application/json",
                 "attempt_trace.jsonl": "application/x-ndjson",
                 "generated_tests.zip": "application/zip",
+                "target_coverage.json": "application/json",
             }
             for name, content in result.artifacts.items():
                 object_name = f"artifacts/{item.owner_id}/{item.project_id}/{item.id}/{run.id}/{name}"
@@ -139,6 +142,7 @@ class ExperimentService:
                 run.branch_coverage,
                 run.prompt_digest,
                 run.artifact_objects,
+                run.target_metrics,
                 run.finished_at,
             ) = (
                 ExperimentStatus.BASELINE_SUCCEEDED,
@@ -147,6 +151,7 @@ class ExperimentService:
                 result.branch_coverage,
                 prompt.digest(),
                 artifact_objects,
+                result.target_metrics,
                 datetime.now(UTC),
             )
             item.status, item.updated_at = ExperimentStatus.BASELINE_SUCCEEDED, run.finished_at
