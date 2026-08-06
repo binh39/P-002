@@ -15,7 +15,12 @@ from src.modules.analysis.repository import (
     InMemoryFunctionRepository,
 )
 from src.modules.analysis.service import AnalysisService
-from src.modules.experiments.dispatcher import CloudTasksBaselineDispatcher, InlineBaselineDispatcher
+from src.modules.experiments.dispatcher import (
+    CloudTasksBaselineDispatcher,
+    CloudTasksOptimizationDispatcher,
+    InlineBaselineDispatcher,
+    InlineOptimizationDispatcher,
+)
 from src.modules.experiments.executor import DockerCoverUpExecutor
 from src.modules.experiments.repository import FirestoreExperimentRepository, InMemoryExperimentRepository
 from src.modules.experiments.service import ExperimentService
@@ -123,7 +128,16 @@ def build_services(settings: Settings) -> ServiceContainer:
             settings.max_runner_uncompressed_bytes,
             settings.baseline_runner_network,
         )
-    experiments = ExperimentService(experiment_repository, projects, function_repository, storage, executor)
+    experiments = ExperimentService(
+        experiment_repository,
+        projects,
+        function_repository,
+        storage,
+        executor,
+        settings.optimize_model,
+        settings.gepa_max_metric_calls,
+        settings.optimize_model_allowlist_values,
+    )
     if settings.baseline_dispatcher == "cloud_tasks":
         experiments.set_dispatcher(
             CloudTasksBaselineDispatcher(
@@ -135,8 +149,19 @@ def build_services(settings: Settings) -> ServiceContainer:
                 settings.gcp_service_account_email,
             )
         )
+        experiments.set_optimization_dispatcher(
+            CloudTasksOptimizationDispatcher(
+                settings.gcp_project_id,
+                settings.cloud_tasks_location,
+                settings.baseline_cloud_tasks_queue,
+                settings.baseline_worker_url,
+                settings.baseline_task_audience,
+                settings.gcp_service_account_email,
+            )
+        )
     else:
         experiments.set_dispatcher(InlineBaselineDispatcher(experiments.execute_baseline))
+        experiments.set_optimization_dispatcher(InlineOptimizationDispatcher(experiments.execute_optimization))
     return ServiceContainer(
         token_verifier=token_verifier,
         internal_token_verifier=internal_token_verifier,
