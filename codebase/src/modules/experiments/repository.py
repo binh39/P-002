@@ -13,6 +13,7 @@ from .schemas import (
 class ExperimentRepository(Protocol):
     async def create(self, item: ExperimentRecord) -> ExperimentRecord: ...
     async def get(self, experiment_id: str) -> ExperimentRecord | None: ...
+    async def list_for_owner(self, owner_id: str) -> list[ExperimentRecord]: ...
     async def save(self, item: ExperimentRecord) -> ExperimentRecord: ...
     async def create_run(self, item: BaselineRunRecord) -> BaselineRunRecord: ...
     async def get_run(self, run_id: str) -> BaselineRunRecord | None: ...
@@ -45,6 +46,13 @@ class InMemoryExperimentRepository:
 
     async def get(self, experiment_id):
         return self.experiments.get(experiment_id)
+
+    async def list_for_owner(self, owner_id):
+        return sorted(
+            (item for item in self.experiments.values() if item.owner_id == owner_id),
+            key=lambda item: item.created_at,
+            reverse=True,
+        )
 
     async def save(self, item):
         self.experiments[item.id] = item
@@ -132,6 +140,13 @@ class FirestoreExperimentRepository:
     async def get(self, experiment_id):
         snapshot = await self._experiments().document(experiment_id).get()
         return ExperimentRecord.model_validate(snapshot.to_dict()) if snapshot.exists else None
+
+    async def list_for_owner(self, owner_id):
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        snapshots = self._experiments().where(filter=FieldFilter("owner_id", "==", owner_id)).stream()
+        items = [ExperimentRecord.model_validate(snapshot.to_dict()) async for snapshot in snapshots]
+        return sorted(items, key=lambda item: item.created_at, reverse=True)
 
     async def save(self, item):
         await self._experiments().document(item.id).set(item.model_dump(mode="python"))

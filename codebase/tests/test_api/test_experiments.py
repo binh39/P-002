@@ -27,6 +27,11 @@ async def test_create_experiment_and_queue_baseline(client):
     experiment = created.json()
     assert experiment["status"] == "draft"
 
+    listed = await client.get("/api/v1/experiments", headers=AUTH_HEADERS)
+    assert listed.status_code == 200
+    assert listed.json()["total"] == 1
+    assert listed.json()["items"][0]["id"] == experiment["id"]
+
     premature_optimization = await client.post(f"/api/v1/experiments/{experiment['id']}/optimize", headers=AUTH_HEADERS)
     assert premature_optimization.status_code == 409
     assert premature_optimization.json()["error"]["code"] == "BASELINE_NOT_READY"
@@ -46,6 +51,40 @@ async def test_create_experiment_and_queue_baseline(client):
     fetched = await client.get(f"/api/v1/experiments/runs/{run['id']}", headers=AUTH_HEADERS)
     assert fetched.status_code == 200
     assert fetched.json()["id"] == run["id"]
+
+
+@pytest.mark.asyncio
+async def test_download_baseline_artifact_checks_run_manifest(client, app):
+    project_id = await create_project(client, python_archive())
+    await client.post(f"/api/v1/projects/{project_id}/analyze", headers=AUTH_HEADERS)
+    functions = (await client.get(f"/api/v1/projects/{project_id}/functions", headers=AUTH_HEADERS)).json()["items"]
+    experiment = (
+        await client.post(
+            "/api/v1/experiments",
+            headers=AUTH_HEADERS,
+            json={
+                "project_id": project_id,
+                "name": "Artifact baseline",
+                "target_function_ids": [functions[0]["id"]],
+            },
+        )
+    ).json()
+    run = (await client.post(f"/api/v1/experiments/{experiment['id']}/runs", headers=AUTH_HEADERS)).json()
+    repository = app.state.services.experiments.repository
+    stored_run = await repository.get_run(run["id"])
+    object_name = f"artifacts/local-user/{project_id}/{experiment['id']}/{run['id']}/coverup.log"
+    stored_run.artifact_objects = {"coverup.log": object_name}
+    await repository.save_run(stored_run)
+    await app.state.services.experiments.storage.write(object_name, b"runner output", "text/plain")
+
+    downloaded = await client.get(f"/api/v1/experiments/runs/{run['id']}/artifacts/coverup.log", headers=AUTH_HEADERS)
+    missing = await client.get(f"/api/v1/experiments/runs/{run['id']}/artifacts/missing.log", headers=AUTH_HEADERS)
+
+    assert downloaded.status_code == 200
+    assert downloaded.content == b"runner output"
+    assert downloaded.headers["content-disposition"] == 'attachment; filename="coverup.log"'
+    assert missing.status_code == 404
+    assert missing.json()["error"]["code"] == "ARTIFACT_NOT_FOUND"
 
 
 @pytest.mark.asyncio

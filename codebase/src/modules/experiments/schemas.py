@@ -56,6 +56,11 @@ class ExperimentRecord(ExperimentResponse):
     owner_id: str
 
 
+class ExperimentListResponse(StrictModel):
+    items: list[ExperimentResponse]
+    total: int
+
+
 class BaselineRunResponse(StrictModel):
     id: str
     experiment_id: str

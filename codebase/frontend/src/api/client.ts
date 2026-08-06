@@ -13,7 +13,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+async function authenticatedFetch(path: string, init?: RequestInit) {
   const token = await getAccessToken();
   const response = await fetch(`${env.apiBaseUrl}${path}`, {
     ...init,
@@ -36,5 +36,14 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
     );
   }
 
+  return response;
+}
+
+export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await authenticatedFetch(path, init);
   return response.json() as Promise<T>;
+}
+
+export async function apiDownload(path: string): Promise<Blob> {
+  return (await authenticatedFetch(path)).blob();
 }

@@ -1,58 +1,4 @@
-import type { ProjectFunction, PythonProject } from "@/domain/projects";
-
-export const pythonProjects: PythonProject[] = [
-  {
-    id: "isort",
-    name: "isort",
-    description: "Python import formatter with rich configuration and sorting rules.",
-    python: "3.11",
-    commit: "9262aa8",
-    branch: "main",
-    files: 42,
-    functions: 186,
-    statements: 4823,
-    branches: 1146,
-    status: "ready",
-    analyzedAt: "5 minutes ago",
-    testCommand: "pytest -q tests",
-    sourceDir: "isort/",
-    testDir: "tests/",
-  },
-  {
-    id: "httpx",
-    name: "httpx",
-    description: "Async-capable HTTP client used to evaluate I/O-heavy functions.",
-    python: "3.11",
-    commit: "3bd19fe",
-    branch: "master",
-    files: 67,
-    functions: 294,
-    statements: 7610,
-    branches: 1862,
-    status: "warning",
-    analyzedAt: "Yesterday",
-    testCommand: "pytest -q tests --disable-warnings",
-    sourceDir: "httpx/",
-    testDir: "tests/",
-  },
-  {
-    id: "attrs",
-    name: "attrs",
-    description: "Class helpers with decorators, validators and edge-case branches.",
-    python: "3.12",
-    commit: "bd8f611",
-    branch: "main",
-    files: 31,
-    functions: 128,
-    statements: 3184,
-    branches: 792,
-    status: "ready",
-    analyzedAt: "2 hours ago",
-    testCommand: "pytest -q tests --timeout=30",
-    sourceDir: "src/attr/",
-    testDir: "tests/",
-  },
-];
+import type { ProjectFunction } from "@/domain/projects";
 
 export const projectFunctions: ProjectFunction[] = [
   {
@@ -141,57 +87,6 @@ export const projectFunctions: ProjectFunction[] = [
   },
 ];
 
-export const experiments = [
-  {
-    id: "EXP-2408",
-    name: "GEPA branch optimization",
-    projects: "isort + attrs",
-    dataset: "DS-104",
-    model: "Gemini 2.5 Pro",
-    status: "Running",
-    score: "0.74",
-    statement: "81.2%",
-    branch: "68.4%",
-    updated: "3 min ago",
-  },
-  {
-    id: "EXP-2407",
-    name: "Baseline vs optimized v4",
-    projects: "isort",
-    dataset: "DS-103",
-    model: "Gemini 2.5 Flash",
-    status: "Completed",
-    score: "0.82",
-    statement: "88.6%",
-    branch: "76.8%",
-    updated: "Today, 10:42",
-  },
-  {
-    id: "EXP-2406",
-    name: "HTTP client edge cases",
-    projects: "httpx",
-    dataset: "DS-102",
-    model: "Gemini 2.5 Pro",
-    status: "Failed",
-    score: "—",
-    statement: "—",
-    branch: "—",
-    updated: "Yesterday",
-  },
-  {
-    id: "EXP-2405",
-    name: "Random seed validation",
-    projects: "attrs",
-    dataset: "DS-101",
-    model: "Gemini 2.5 Flash",
-    status: "Draft",
-    score: "—",
-    statement: "—",
-    branch: "—",
-    updated: "Aug 2",
-  },
-];
-
 export const datasets = [
   {
     id: "DS-104",
@@ -230,16 +125,3 @@ export const datasets = [
     created: "Aug 3",
   },
 ];
-
-export const sourcePreview = `def sort_code_string(code: str, extension: str = "py", **config_kwargs: Any) -> str:
-    """Sort imports in a Python code string."""
-    config = Config(extension=extension, **config_kwargs)
-    if not code.strip():
-        return code
-
-    try:
-        return sort_stream(StringIO(code), config=config)
-    except ExistingSyntaxErrors:
-        if config.atomic:
-            raise
-        return code`;

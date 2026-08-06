@@ -2,12 +2,7 @@ import { IC } from "./Icons";
 import { env } from "../config/env";
 
 export default function TopNav({ onMenu }: { onMenu: () => void }) {
-  const dataStatus =
-    env.dataMode === env.projectsDataMode
-      ? env.dataMode === "demo"
-        ? "demo data"
-        : "connected"
-      : "hybrid data";
+  const dataStatus = env.dataMode === "demo" ? "hybrid data" : "connected";
 
   return (
     <header

@@ -1,667 +1,311 @@
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+import { useMutation, useQuery, type UseMutationResult } from "@tanstack/react-query";
+import { useLocation, useParams } from "wouter";
 
-import { IC } from "../components/Icons";
+import { useRepositories } from "@/app/providers";
+import { PageHeader, StatCard, StatusBadge } from "@/components/PlatformUI";
+import { baselineRunIsActive, type BaselineRun, type ExperimentStatus } from "@/domain/experiments";
 
-const card = {
-  background: "#fff",
-  borderRadius: 14,
-  border: "1px solid #E8EBF5",
-  boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
-} as const;
+const statusLabels: Partial<Record<ExperimentStatus, string>> = {
+  baseline_queued: "Queued",
+  baseline_running: "Running",
+  baseline_succeeded: "Baseline succeeded",
+  failed: "Failed",
+  timed_out: "Timed out",
+  cancelled: "Cancelled",
+};
 
-const progressData = [
-  { gen: "Gen 1", branch: 62.1, statement: 70.3, cost: 0.052 },
+function statusTone(status: ExperimentStatus) {
+  if (status === "baseline_succeeded") return "success" as const;
+  if (status === "failed" || status === "timed_out" || status === "cancelled") {
+    return "danger" as const;
+  }
+  return "info" as const;
+}
 
-  { gen: "Gen 2", branch: 68.5, statement: 75.8, cost: 0.047 },
+function percentage(value: number | null | undefined) {
+  return value === null || value === undefined ? "—" : `${(value * 100).toFixed(1)}%`;
+}
 
-  { gen: "Gen 3", branch: 74.2, statement: 81.1, cost: 0.045 },
-
-  { gen: "Gen 4", branch: 79.8, statement: 85.6, cost: 0.044 },
-
-  { gen: "Gen 5", branch: 87.3, statement: 93.1, cost: 0.043 },
-];
-
-const generations = [
-  {
-    id: 1,
-    label: "Generation 1",
-    status: "completed",
-
-    candidates: [
-      {
-        id: "A",
-        branch: 62.1,
-        statement: 70.3,
-        tokens: 1842,
-        cost: 0.052,
-        latency: 2.1,
-        best: false,
-      },
-
-      {
-        id: "B",
-        branch: 58.4,
-        statement: 67.9,
-        tokens: 1920,
-        cost: 0.055,
-        latency: 2.3,
-        best: false,
-      },
-
-      {
-        id: "C",
-        branch: 65.3,
-        statement: 72.1,
-        tokens: 1780,
-        cost: 0.051,
-        latency: 1.9,
-        best: false,
-      },
-    ],
-
-    bestId: "C",
-  },
-
-  {
-    id: 2,
-    label: "Generation 2",
-    status: "completed",
-
-    candidates: [
-      {
-        id: "A",
-        branch: 68.5,
-        statement: 75.8,
-        tokens: 2041,
-        cost: 0.047,
-        latency: 1.8,
-        best: false,
-      },
-
-      {
-        id: "B",
-        branch: 71.2,
-        statement: 77.4,
-        tokens: 2180,
-        cost: 0.048,
-        latency: 2.0,
-        best: true,
-      },
-
-      {
-        id: "C",
-        branch: 66.9,
-        statement: 74.2,
-        tokens: 1950,
-        cost: 0.046,
-        latency: 1.7,
-        best: false,
-      },
-    ],
-
-    bestId: "B",
-  },
-
-  {
-    id: 3,
-    label: "Generation 3",
-    status: "completed",
-
-    candidates: [
-      {
-        id: "A",
-        branch: 74.2,
-        statement: 81.1,
-        tokens: 2340,
-        cost: 0.045,
-        latency: 1.9,
-        best: false,
-      },
-
-      {
-        id: "B",
-        branch: 76.8,
-        statement: 83.2,
-        tokens: 2410,
-        cost: 0.046,
-        latency: 2.0,
-        best: true,
-      },
-
-      {
-        id: "C",
-        branch: 73.5,
-        statement: 80.7,
-        tokens: 2290,
-        cost: 0.044,
-        latency: 1.8,
-        best: false,
-      },
-    ],
-
-    bestId: "B",
-  },
-
-  {
-    id: 4,
-    label: "Generation 4",
-    status: "completed",
-
-    candidates: [
-      {
-        id: "A",
-        branch: 79.8,
-        statement: 85.6,
-        tokens: 2680,
-        cost: 0.044,
-        latency: 1.9,
-        best: true,
-      },
-
-      {
-        id: "B",
-        branch: 78.1,
-        statement: 84.3,
-        tokens: 2590,
-        cost: 0.043,
-        latency: 1.8,
-        best: false,
-      },
-
-      {
-        id: "C",
-        branch: 81.4,
-        statement: 87.2,
-        tokens: 2720,
-        cost: 0.045,
-        latency: 2.0,
-        best: false,
-      },
-    ],
-
-    bestId: "C",
-  },
-
-  {
-    id: 5,
-    label: "Generation 5",
-    status: "completed",
-
-    candidates: [
-      {
-        id: "A",
-        branch: 87.3,
-        statement: 93.1,
-        tokens: 2847,
-        cost: 0.043,
-        latency: 1.84,
-        best: true,
-      },
-
-      {
-        id: "B",
-        branch: 84.9,
-        statement: 91.2,
-        tokens: 2710,
-        cost: 0.041,
-        latency: 1.72,
-        best: false,
-      },
-
-      {
-        id: "C",
-        branch: 85.7,
-        statement: 92.0,
-        tokens: 2780,
-        cost: 0.042,
-        latency: 1.78,
-        best: false,
-      },
-    ],
-
-    bestId: "A",
-  },
-];
+function formatTimestamp(value: string | null) {
+  return value
+    ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "medium" }).format(
+        new Date(value),
+      )
+    : "—";
+}
 
 export default function OptimizationProgress() {
+  const { runId = "" } = useParams<{ runId: string }>();
+  const [, navigate] = useLocation();
+  const { experiments } = useRepositories();
+  const runQuery = useQuery({
+    queryKey: ["baseline-runs", runId],
+    queryFn: ({ signal }) => experiments.getBaselineRun(runId, signal),
+    enabled: runId !== "",
+    refetchInterval: (query) =>
+      query.state.data && baselineRunIsActive(query.state.data.status) ? 2_500 : false,
+  });
+  const experimentQuery = useQuery({
+    queryKey: ["experiments", runQuery.data?.experimentId],
+    queryFn: ({ signal }) => experiments.get(runQuery.data?.experimentId ?? "", signal),
+    enabled: runQuery.data !== undefined,
+  });
+  const download = useMutation({
+    mutationFn: async (artifactName: string) => ({
+      artifactName,
+      blob: await experiments.downloadBaselineArtifact(runId, artifactName),
+    }),
+    onSuccess: ({ artifactName, blob }) => {
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = artifactName;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    },
+  });
+
+  if (runQuery.isPending) {
+    return (
+      <div className="page-state" role="status">
+        Loading baseline run…
+      </div>
+    );
+  }
+  if (runQuery.isError) {
+    return (
+      <div className="page-state page-state-error" role="alert">
+        <h2>Baseline run is unavailable</h2>
+        <p>
+          {runQuery.error instanceof Error
+            ? runQuery.error.message
+            : "An unexpected error occurred."}
+        </p>
+        <button onClick={() => runQuery.refetch()}>Try again</button>
+      </div>
+    );
+  }
+
+  const run = runQuery.data;
+  const active = baselineRunIsActive(run.status);
+  const experiment = experimentQuery.data;
+
   return (
-    <div style={{ padding: "28px 32px", maxWidth: 1200 }}>
-      {/* Header */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          marginBottom: 24,
-        }}
-      >
-        <div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              marginBottom: 4,
-            }}
-          >
-            <h1
-              style={{
-                fontSize: 22,
-                fontWeight: 700,
-                color: "#0F1117",
-                margin: 0,
-                letterSpacing: "-0.02em",
-              }}
-            >
-              Optimization Progress
-            </h1>
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 5,
-                background: "#F0FDF4",
-                color: "#059669",
-                padding: "3px 10px",
-                borderRadius: 20,
-                fontSize: 12,
-                fontWeight: 600,
-                border: "1px solid #BBF7D0",
-              }}
-            >
-              <span
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  background: "#10B981",
-                  display: "inline-block",
-                }}
-              />
-              Completed
-            </span>
+    <div className="platform-page baseline-run-page">
+      <button className="back-link" onClick={() => navigate("/experiments/new")}>
+        ← New experiment
+      </button>
+      <PageHeader
+        eyebrow={`Baseline run · ${run.id.slice(0, 8)}`}
+        title={experiment?.name ?? "Baseline evaluation"}
+        description="Real-time coverage result from the isolated production runner."
+        actions={
+          <StatusBadge tone={statusTone(run.status)}>
+            {statusLabels[run.status] ?? run.status.replace(/_/g, " ")}
+          </StatusBadge>
+        }
+      />
+
+      {active && (
+        <section className="baseline-running-card" role="status">
+          <span className="baseline-spinner" aria-hidden="true" />
+          <div>
+            <h2>
+              {run.status === "baseline_queued" ? "Waiting for a runner" : "Baseline is running"}
+            </h2>
+            <p>The page refreshes automatically. You can leave and return with this run URL.</p>
           </div>
-          <p style={{ color: "#9CA3AF", fontSize: 13, margin: 0 }}>
-            EXP-047 · GPT-4o Unit Test Generator v3 · 5 generations · 15 candidates
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <button
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "8px 16px",
+        </section>
+      )}
 
-              background: "#fff",
-              border: "1px solid #E8EBF5",
-              borderRadius: 8,
+      {run.errorMessage && (
+        <section className="baseline-error" role="alert">
+          <strong>Baseline execution failed</strong>
+          <pre>{run.errorMessage}</pre>
+        </section>
+      )}
 
-              fontSize: 13,
-              fontWeight: 500,
-              color: "#6B7280",
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            <IC.ExternalLink /> Export Report
-          </button>
-          <button
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 7,
-              padding: "8px 18px",
-
-              background: "linear-gradient(135deg, #4F6EF7, #7C3AED)",
-              color: "#fff",
-
-              border: "none",
-              borderRadius: 8,
-              fontSize: 13,
-              fontWeight: 600,
-
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            <IC.CheckSquare /> Review Best
-          </button>
-        </div>
+      <div className="platform-stats-grid baseline-metrics-grid">
+        <StatCard
+          label="Coverage score"
+          value={percentage(run.coverageScore)}
+          detail="Aggregate target score"
+        />
+        <StatCard
+          label="Statement coverage"
+          value={percentage(run.statementCoverage)}
+          detail="Executed statements"
+          tone="violet"
+        />
+        <StatCard
+          label="Branch coverage"
+          value={percentage(run.branchCoverage)}
+          detail="Executed branch outcomes"
+          tone="green"
+        />
+        <StatCard
+          label="Targets"
+          value={run.targetCount}
+          detail={`${Object.keys(run.targetMetrics).length} reported`}
+          tone="orange"
+        />
       </div>
 
-      {/* Summary KPIs */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
-          gap: 14,
-          marginBottom: 20,
-        }}
-      >
-        {[
-          {
-            label: "Best Branch Coverage",
-            value: "87.3%",
-            gain: "+25.2% from baseline",
-            color: "#4F6EF7",
-          },
-
-          {
-            label: "Best Stmt Coverage",
-            value: "93.1%",
-            gain: "+22.8% from baseline",
-            color: "#8B5CF6",
-          },
-
-          {
-            label: "Avg. Cost / Run",
-            value: "$0.043",
-            gain: "↓17% vs initial",
-            color: "#10B981",
-          },
-
-          {
-            label: "Total Generations",
-            value: "5",
-            gain: "15 candidates evaluated",
-            color: "#F59E0B",
-          },
-        ].map(({ label, value, gain, color }) => (
-          <div key={label} style={{ ...card, padding: "18px 20px" }}>
-            <div style={{ fontSize: 12.5, color: "#9CA3AF", marginBottom: 8 }}>{label}</div>
-            <div
-              style={{
-                fontSize: 26,
-                fontWeight: 700,
-                color,
-                letterSpacing: "-0.03em",
-              }}
-            >
-              {value}
+      <div className="platform-two-column baseline-details-grid">
+        <section className="platform-card">
+          <div className="card-heading">
+            <div>
+              <h2>Run details</h2>
+              <p>Immutable identifiers and execution timestamps.</p>
             </div>
-            <div style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 6 }}>{gain}</div>
           </div>
-        ))}
-      </div>
-
-      {/* Chart */}
-      <div style={{ ...card, padding: "22px 24px", marginBottom: 20 }}>
-        <h3
-          style={{
-            margin: "0 0 18px",
-            fontSize: 14,
-            fontWeight: 600,
-            color: "#0F1117",
-          }}
-        >
-          Coverage Progress by Generation
-        </h3>
-        <ResponsiveContainer width="100%" height={160}>
-          <LineChart data={progressData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#F0F1F5" vertical={false} />
-            <XAxis
-              dataKey="gen"
-              tick={{ fontSize: 11, fill: "#9CA3AF" }}
-              axisLine={false}
-              tickLine={false}
-            />
-            <YAxis
-              tick={{ fontSize: 11, fill: "#9CA3AF" }}
-              axisLine={false}
-              tickLine={false}
-              domain={[50, 100]}
-            />
-            <Tooltip
-              contentStyle={{
-                border: "1px solid #E8EBF5",
-                borderRadius: 8,
-                fontSize: 12,
-              }}
-              formatter={(v) => [`${v}%`]}
-            />
-            <Line
-              type="monotone"
-              dataKey="branch"
-              stroke="#4F6EF7"
-              strokeWidth={2.5}
-              dot={{ r: 4, fill: "#4F6EF7" }}
-            />
-            <Line
-              type="monotone"
-              dataKey="statement"
-              stroke="#8B5CF6"
-              strokeWidth={2.5}
-              dot={{ r: 4, fill: "#8B5CF6" }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-        <div
-          style={{
-            display: "flex",
-            gap: 20,
-            justifyContent: "center",
-            marginTop: 8,
-          }}
-        >
-          {[
-            ["Branch Coverage", "#4F6EF7"],
-            ["Statement Coverage", "#8B5CF6"],
-          ].map(([label, color]) => (
-            <span
-              key={label}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                fontSize: 12,
-                color: "#6B7280",
-              }}
-            >
-              <span
-                style={{
-                  width: 12,
-                  height: 3,
-                  background: color,
-                  borderRadius: 2,
-                  display: "inline-block",
-                }}
-              />
-              {label}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* Generations timeline */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        {generations.map((gen) => {
-          const best = gen.candidates.find((c) => c.id === gen.bestId)!;
-
-          return (
-            <div key={gen.id}>
-              {/* Generation header */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  marginBottom: 10,
-                }}
-              >
-                <div
-                  style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: "50%",
-
-                    background: "linear-gradient(135deg, #4F6EF7, #7C3AED)",
-
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-
-                    color: "#fff",
-                    fontSize: 12,
-                    fontWeight: 700,
-                    flexShrink: 0,
-                  }}
-                >
-                  {gen.id}
-                </div>
-                <span style={{ fontSize: 14, fontWeight: 600, color: "#0F1117" }}>{gen.label}</span>
-                <div style={{ flex: 1, height: 1, background: "#E8EBF5" }} />
-                <span style={{ fontSize: 12, color: "#9CA3AF" }}>
-                  Best: {best.branch}% branch, {best.statement}% stmt
-                </span>
-              </div>
-
-              {/* Candidates */}
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
-                  gap: 12,
-                  paddingLeft: 40,
-                }}
-              >
-                {gen.candidates.map((cand) => {
-                  const isBest = cand.id === gen.bestId;
-
-                  return (
-                    <div
-                      key={cand.id}
-                      style={{
-                        ...card,
-
-                        padding: "16px 18px",
-
-                        border: isBest ? "2px solid #4F6EF7" : "1px solid #E8EBF5",
-
-                        background: isBest ? "#FAFBFF" : "#fff",
-
-                        position: "relative",
-                      }}
-                    >
-                      {isBest && (
-                        <div
-                          style={{
-                            position: "absolute",
-                            top: -10,
-                            right: 12,
-
-                            background: "linear-gradient(135deg, #4F6EF7, #7C3AED)",
-
-                            color: "#fff",
-                            fontSize: 10,
-                            fontWeight: 700,
-                            padding: "2px 8px",
-
-                            borderRadius: 10,
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 4,
-                          }}
-                        >
-                          <IC.Award /> BEST
-                        </div>
-                      )}
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 13,
-                            fontWeight: 600,
-                            color: "#0F1117",
-                          }}
-                        >
-                          Candidate {cand.id}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: 11.5,
-                            color: "#9CA3AF",
-                            fontFamily: "JetBrains Mono, monospace",
-                          }}
-                        >
-                          {gen.id}-{cand.id}
-                        </span>
-                      </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr 1fr",
-                          gap: 8,
-                        }}
-                      >
-                        {[
-                          {
-                            label: "Branch",
-                            value: `${cand.branch}%`,
-                            color: "#4F6EF7",
-                          },
-
-                          {
-                            label: "Statement",
-                            value: `${cand.statement}%`,
-                            color: "#8B5CF6",
-                          },
-
-                          {
-                            label: "Cost",
-                            value: `$${cand.cost}`,
-                            color: "#10B981",
-                          },
-
-                          {
-                            label: "Latency",
-                            value: `${cand.latency}s`,
-                            color: "#6B7280",
-                          },
-                        ].map(({ label, value, color }) => (
-                          <div
-                            key={label}
-                            style={{
-                              background: "#F8F9FC",
-                              borderRadius: 8,
-                              padding: "8px 10px",
-                            }}
-                          >
-                            <div
-                              style={{
-                                fontSize: 10,
-                                color: "#9CA3AF",
-                                marginBottom: 3,
-                              }}
-                            >
-                              {label}
-                            </div>
-                            <div style={{ fontSize: 14, fontWeight: 700, color }}>{value}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+          <dl className="definition-list">
+            <div>
+              <dt>Run ID</dt>
+              <dd>
+                <code>{run.id}</code>
+              </dd>
             </div>
-          );
-        })}
+            <div>
+              <dt>Experiment ID</dt>
+              <dd>
+                <code>{run.experimentId}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>Prompt digest</dt>
+              <dd>
+                <code>{run.promptDigest ?? "Pending"}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>Created</dt>
+              <dd>{formatTimestamp(run.createdAt)}</dd>
+            </div>
+            <div>
+              <dt>Started</dt>
+              <dd>{formatTimestamp(run.startedAt)}</dd>
+            </div>
+            <div>
+              <dt>Finished</dt>
+              <dd>{formatTimestamp(run.finishedAt)}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <ArtifactsPanel run={run} download={download} />
       </div>
+
+      <section className="platform-card table-card baseline-targets-card">
+        <div className="table-toolbar">
+          <div>
+            <h2>Target metrics</h2>
+            <p>Coverage reported for every selected qualified function.</p>
+          </div>
+        </div>
+        {Object.keys(run.targetMetrics).length === 0 ? (
+          <div className="empty-state">
+            {active
+              ? "Metrics will appear when the runner finishes."
+              : "No target metrics were published."}
+          </div>
+        ) : (
+          <div className="table-scroll">
+            <table className="platform-table">
+              <thead>
+                <tr>
+                  <th>Target</th>
+                  <th>Score</th>
+                  <th>Statements</th>
+                  <th>Statement coverage</th>
+                  <th>Branches</th>
+                  <th>Branch coverage</th>
+                  <th>Valid</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(run.targetMetrics).map(([target, metric]) => (
+                  <tr key={target}>
+                    <td>
+                      <code>{target}</code>
+                    </td>
+                    <td>{percentage(metric.score)}</td>
+                    <td>
+                      {metric.coveredStatements ?? 0} / {metric.numStatements ?? 0}
+                    </td>
+                    <td>{percentage(metric.statementCoverage)}</td>
+                    <td>
+                      {metric.coveredBranches ?? 0} / {metric.numBranches ?? 0}
+                    </td>
+                    <td>{percentage(metric.branchCoverage)}</td>
+                    <td>
+                      <StatusBadge tone={metric.valid === false ? "danger" : "success"}>
+                        {metric.valid === false ? "Invalid" : "Valid"}
+                      </StatusBadge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
+}
+
+function ArtifactsPanel({
+  run,
+  download,
+}: {
+  run: BaselineRun;
+  download: UseMutationResult<{ artifactName: string; blob: Blob }, Error, string>;
+}) {
+  return (
+    <section className="platform-card baseline-artifacts-card">
+      <div className="card-heading">
+        <div>
+          <h2>Artifacts</h2>
+          <p>Authenticated downloads produced by this baseline.</p>
+        </div>
+        <StatusBadge tone={run.artifacts.length > 0 ? "success" : "neutral"}>
+          {run.artifacts.length} files
+        </StatusBadge>
+      </div>
+      {run.artifacts.length === 0 ? (
+        <div className="empty-state">Artifacts will appear after a successful baseline.</div>
+      ) : (
+        <div className="artifact-list">
+          {run.artifacts.map((artifact) => (
+            <div key={artifact}>
+              <span>
+                <strong>{artifact}</strong>
+                <small>{artifactKind(artifact)}</small>
+              </span>
+              <button
+                className="table-action"
+                disabled={download.isPending}
+                onClick={() => download.mutate(artifact)}
+              >
+                Download
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {download.isError && (
+        <div className="auth-error" role="alert">
+          {download.error.message}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function artifactKind(name: string) {
+  if (name.endsWith(".zip")) return "Generated test archive";
+  if (name.endsWith(".json")) return "JSON report";
+  if (name.endsWith(".jsonl")) return "Execution trace";
+  if (name.endsWith(".log")) return "Runner log";
+  return "Coverage artifact";
 }
