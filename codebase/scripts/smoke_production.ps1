@@ -12,8 +12,8 @@ if (-not (Test-Path -LiteralPath $ArchivePath -PathType Leaf)) {
     throw "Smoke archive was not found: $ArchivePath"
 }
 
-$SecureToken = Read-Host "Paste Firebase token after 'Bearer '" -AsSecureString
-$Token = [Net.NetworkCredential]::new("", $SecureToken).Password.Trim().Trim('"').Trim("'")
+$Token = Read-Host "Paste Firebase token after 'Bearer ' (visible input)"
+$Token = $Token.Trim().Trim('"').Trim("'")
 if ($Token.StartsWith("Bearer ", [System.StringComparison]::OrdinalIgnoreCase)) {
     $Token = $Token.Substring(7).Trim()
 }
