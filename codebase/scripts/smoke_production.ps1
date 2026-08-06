@@ -13,12 +13,17 @@ if (-not (Test-Path -LiteralPath $ArchivePath -PathType Leaf)) {
 }
 
 $SecureToken = Read-Host "Paste Firebase token after 'Bearer '" -AsSecureString
-$Token = [Net.NetworkCredential]::new("", $SecureToken).Password.Trim()
+$Token = [Net.NetworkCredential]::new("", $SecureToken).Password.Trim().Trim('"').Trim("'")
 if ($Token.StartsWith("Bearer ", [System.StringComparison]::OrdinalIgnoreCase)) {
     $Token = $Token.Substring(7).Trim()
 }
+$Token = $Token -replace "\s", ""
+$Token = $Token -replace "[\x00-\x1F\x7F]", ""
 if (-not $Token) {
     throw "Firebase token is required"
+}
+if (($Token.Split(".").Count) -ne 3) {
+    throw "The pasted value is not a Firebase ID token JWT. Paste only the token after 'Bearer '."
 }
 
 $Headers = @{ Authorization = "Bearer $Token" }
