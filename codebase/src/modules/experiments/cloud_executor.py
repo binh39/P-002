@@ -1,3 +1,4 @@
+import asyncio
 import json
 from uuid import uuid4
 
@@ -38,26 +39,28 @@ class CloudRunJobCoverUpExecutor:
             json.dumps(spec, separators=(",", ":")).encode(),
             "application/json",
         )
-        operation = await self.client.run_job(
-            request={
-                "name": self.job_name,
-                "overrides": {
-                    "container_overrides": [
-                        {
-                            "env": [
-                                {"name": "PROMPTOPT_JOB_BUCKET", "value": self.bucket},
-                                {"name": "PROMPTOPT_JOB_PREFIX", "value": prefix},
-                            ]
-                        }
-                    ],
-                    "task_count": 1,
-                    "timeout": f"{self.timeout_seconds}s",
-                },
-            }
+        request = {
+            "name": self.job_name,
+            "overrides": {
+                "container_overrides": [
+                    {
+                        "env": [
+                            {"name": "PROMPTOPT_JOB_BUCKET", "value": self.bucket},
+                            {"name": "PROMPTOPT_JOB_PREFIX", "value": prefix},
+                        ]
+                    }
+                ],
+                "task_count": 1,
+                "timeout": f"{self.timeout_seconds}s",
+            },
+        }
+        operation = await asyncio.to_thread(
+            self.client.run_job,
+            request=request,
         )
         operation_error = None
         try:
-            await operation.result(timeout=self.timeout_seconds + 60)
+            await asyncio.to_thread(operation.result, timeout=self.timeout_seconds + 60)
         except TimeoutError as exc:
             raise RuntimeError("Cloud Run Job evaluation timed out") from exc
         except Exception as exc:

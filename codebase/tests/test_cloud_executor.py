@@ -1,4 +1,5 @@
 import json
+import threading
 
 import pytest
 
@@ -20,18 +21,22 @@ class FakeStorage:
 class FakeOperation:
     def __init__(self):
         self.timeout = None
+        self.thread_id = None
 
-    async def result(self, timeout):
+    def result(self, timeout):
         self.timeout = timeout
+        self.thread_id = threading.get_ident()
 
 
 class FakeJobsClient:
     def __init__(self, storage):
         self.storage = storage
         self.request = None
+        self.thread_id = None
         self.operation = FakeOperation()
 
-    async def run_job(self, request):
+    def run_job(self, request):
+        self.thread_id = threading.get_ident()
         self.request = request
         environment = request["overrides"]["container_overrides"][0]["env"]
         prefix = next(item["value"] for item in environment if item["name"] == "PROMPTOPT_JOB_PREFIX")
@@ -49,13 +54,13 @@ class FakeJobsClient:
 
 
 class FailedOperation:
-    async def result(self, timeout):
+    def result(self, timeout):
         del timeout
         raise RuntimeError("execution task failed")
 
 
 class FailedJobsClient(FakeJobsClient):
-    async def run_job(self, request):
+    def run_job(self, request):
         self.request = request
         environment = request["overrides"]["container_overrides"][0]["env"]
         prefix = next(item["value"] for item in environment if item["name"] == "PROMPTOPT_JOB_PREFIX")
@@ -66,6 +71,7 @@ class FailedJobsClient(FakeJobsClient):
 
 @pytest.mark.asyncio
 async def test_cloud_run_job_executor_uses_gcs_manifest_and_environment_references_only():
+    event_loop_thread_id = threading.get_ident()
     storage = FakeStorage()
     client = FakeJobsClient(storage)
     executor = CloudRunJobCoverUpExecutor(
@@ -92,6 +98,8 @@ async def test_cloud_run_job_executor_uses_gcs_manifest_and_environment_referenc
     assert "source archive" not in json.dumps(client.request)
     assert "initial" not in json.dumps(client.request)
     assert client.operation.timeout == 960
+    assert client.thread_id != event_loop_thread_id
+    assert client.operation.thread_id != event_loop_thread_id
 
 
 @pytest.mark.asyncio
