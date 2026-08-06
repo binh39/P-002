@@ -118,4 +118,51 @@ describe("HttpExperimentRepository", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+
+  it("starts and maps a paired comparison run", async () => {
+    const response = {
+      id: "comparison-1",
+      experiment_id: "experiment-1",
+      optimization_run_id: "optimization-1",
+      status: "in_review",
+      baseline_prompt_digest: "parent-digest",
+      candidate_prompt_digest: "candidate-digest",
+      test_target_ids: ["fn-1"],
+      replicate_count: 2,
+      baseline_metrics: { score: 0.2, pass_rate: 1, sample_count: 2 },
+      candidate_metrics: {
+        score: 0.7,
+        pass_rate: 1,
+        sample_count: 2,
+        flaky_targets: [],
+      },
+      absolute_gain: 0.5,
+      relative_gain: 2.5,
+      promotion_eligible: true,
+      decision_reason: "Candidate improved locked-test coverage and passed all hard gates",
+      artifact_objects: { "final_validation.json": "private/object" },
+      prompt_version_id: "version-1",
+      error_message: null,
+      created_at: "2026-08-06T00:00:00Z",
+      started_at: "2026-08-06T00:00:01Z",
+      finished_at: "2026-08-06T00:01:00Z",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(response), {
+        status: 202,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const run = await new HttpExperimentRepository().requestComparison("experiment-1");
+
+    expect(run.promotionEligible).toBe(true);
+    expect(run.candidateMetrics.score).toBe(0.7);
+    expect(run.artifacts).toEqual(["final_validation.json"]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/experiments/experiment-1/compare",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
 });

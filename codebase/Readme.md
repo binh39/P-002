@@ -41,7 +41,7 @@ Firestore stores durable run and prompt-version records. Cloud Tasks invokes OID
 
 ## Frontend status
 
-The frontend is deployed at [https://vinaip002.web.app](https://vinaip002.web.app). It uses Firebase Authentication and a hybrid data mode: Project, Experiment, baseline and optimization features call the production API, while screens without a connected backend slice remain demo data.
+The frontend is deployed at [https://vinaip002.web.app](https://vinaip002.web.app). It uses Firebase Authentication and a hybrid data mode: Project, Experiment, baseline, optimization and paired-comparison features call the production API, while screens without a connected backend slice remain demo data.
 
 ## Implemented web features
 
@@ -70,7 +70,7 @@ The frontend is deployed at [https://vinaip002.web.app](https://vinaip002.web.ap
 - Safely inspect the uploaded ZIP and extract Python functions, methods, async functions, source ranges, LOC, statement count and branch candidates using Python AST.
 - View analyzed functions and open the exact extracted source for each function.
 
-### Experiments, baseline and optimization
+### Experiments, baseline, optimization and comparison
 
 - List experiments owned by the signed-in user without fixture fallback.
 - Create an experiment from one analyzed project and up to 50 selected functions.
@@ -78,11 +78,14 @@ The frontend is deployed at [https://vinaip002.web.app](https://vinaip002.web.ap
 - Download baseline artifacts through authenticated ownership-checked API endpoints.
 - Start GEPA optimization only for experiments with non-empty train, validation and locked test splits.
 - Poll optimization status and display the selected candidate prompt, validation scores, prompt lineage and artifacts.
+- Start and poll the paired final comparison on the locked test split.
+- Display baseline/candidate score, statement and branch coverage, pass rate, absolute/relative gain and promotion-gate decision.
+- Download the ownership-checked `final_validation.json` comparison artifact.
 
 ### Available UI screens
 
 - Dashboard, Projects, Project Detail, Create Experiment, Experiments, Runs/Comparison, Prompt Registry, Playground, Datasets and Settings.
-- Projects, Project Analysis, Experiments, Baseline Runs and Optimization Runs use production backend data. Comparison, Review, Dashboard and Datasets remain UI/demo workflows until their next vertical slices are connected.
+- Projects, Project Analysis, Experiments, Baseline Runs, Optimization Runs and Paired Comparison use production backend data. Review, Dashboard and Datasets remain UI/demo workflows until their next vertical slices are connected.
 
 ### Current delivery status
 
@@ -93,7 +96,8 @@ The frontend is deployed at [https://vinaip002.web.app](https://vinaip002.web.ap
 | Async Python AST analysis and function source viewer | Production |
 | Project settings UI | UI ready; persistence is available for project settings API |
 | Experiment creation, baseline run and GEPA optimization | Production API connected in frontend |
-| Paired comparison and prompt review | Backend implemented; frontend integration pending |
+| Paired comparison | Production API connected in frontend |
+| Prompt review and approve/reject | Backend implemented; frontend integration pending |
 
 The frontend can also run in these modes during development:
 

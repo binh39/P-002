@@ -423,6 +423,16 @@ class ExperimentService:
         await self._owned(run.experiment_id, owner_id)
         return ComparisonRunResponse.model_validate(run)
 
+    async def get_comparison_artifact(self, run_id: str, artifact_name: str, owner_id: str) -> bytes:
+        run = await self.repository.get_comparison_run(run_id)
+        if run is None:
+            raise AppError(404, "COMPARISON_RUN_NOT_FOUND", "Comparison run was not found")
+        await self._owned(run.experiment_id, owner_id)
+        object_name = run.artifact_objects.get(artifact_name)
+        if object_name is None:
+            raise AppError(404, "ARTIFACT_NOT_FOUND", "Artifact was not found in the run manifest")
+        return await self.storage.read(object_name)
+
     async def execute_comparison(self, run_id: str) -> None:
         run = await self.repository.get_comparison_run(run_id)
         if run is None or run.status != ExperimentStatus.COMPARISON_QUEUED:
