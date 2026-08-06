@@ -56,26 +56,26 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument(
         "--projects",
         nargs="+",
-        default=["isort", "mlxtend"],
+        default=["isort", "mlxtend", "typesystem"],
         help="Project names; each must contain a package directory with the same name",
     )
-    result.add_argument("--train-limit", type=int, default=100)
-    result.add_argument("--validation-limit", type=int, default=60)
-    result.add_argument("--test-limit", type=int, default=60)
+    result.add_argument("--train-limit", type=int, default=10)
+    result.add_argument("--validation-limit", type=int, default=20)
+    result.add_argument("--test-limit", type=int, default=20)
     result.add_argument(
         "--output",
         type=Path,
-        default=ROOT / "eval" / "prompt_optimization" / "datasets" / "isort_mlxtend_symbols.jsonl",
+        default=ROOT / "eval" / "prompt_optimization" / "datasets" / "data_symbols.jsonl",
     )
     result.add_argument(
         "--ranked-output",
         type=Path,
-        default=ROOT / "eval" / "prompt_optimization" / "datasets" / "isort_mlxtend_ranked.csv",
+        default=ROOT / "eval" / "prompt_optimization" / "datasets" / "data_ranked.csv",
     )
     result.add_argument(
         "--report-output",
         type=Path,
-        default=ROOT / "eval" / "prompt_optimization" / "datasets" / "isort_mlxtend_ranked_report.json",
+        default=ROOT / "eval" / "prompt_optimization" / "datasets" / "data_ranked_report.json",
     )
     result.add_argument(
         "--exclude-dirs",

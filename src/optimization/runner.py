@@ -21,19 +21,40 @@ def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
-def _test_environment(project_root: Path) -> dict[str, str]:
+def _display_path(path: Path, project_root: Path) -> str:
+    """Return a path relative to the project root when possible, else absolute.
+
+    Artifacts can live outside the project root (e.g. a GCS volume mount in
+    Cloud Run), where relative_to() would raise ValueError.
+    """
+    try:
+        return str(path.relative_to(project_root))
+    except ValueError:
+        return str(path.resolve())
+
+
+def _test_environment(
+    project_root: Path,
+    extra_roots: tuple[Path, ...] = (),
+) -> dict[str, str]:
     """Build the subprocess environment used for every test evaluation.
 
     The Windows Store Python used by this workspace ships a broken Tcl/Tk, so
     matplotlib's default TkAgg backend fails whenever a generated test creates
     a figure (e.g. mlxtend plotting targets).  Forcing the headless Agg backend
     keeps figure creation fully functional without a GUI session.
+
+    extra_roots: package parent directories (e.g. src/sample_repo/isort) added
+    to PYTHONPATH so generated tests can import the sample repos by name
+    (e.g. "from isort.core import process") without relying on pip-installed
+    copies that may be missing or have a different API.
     """
 
     environment = os.environ.copy()
     src_dir = project_root.resolve() / "src"
+    roots = [str(src_dir), *(str(root.resolve()) for root in extra_roots)]
     environment["PYTHONPATH"] = (
-        str(src_dir) + os.pathsep + environment.get("PYTHONPATH", "")
+        os.pathsep.join(roots) + os.pathsep + environment.get("PYTHONPATH", "")
     )
     environment["MPLBACKEND"] = "Agg"
     return environment
@@ -186,9 +207,10 @@ class CoverUpExperimentRunner:
         stdout_file = run_dir / "coverup.stdout.log"
         attempt_trace = run_dir / "attempt_trace.jsonl"
         prompt_copy = run_dir / "prompt.json"
-        shutil.copy2(prompt_template.resolve(), prompt_copy)
-
-        environment = _test_environment(self.config.project_root)
+        # Use copyfile() instead of copy()/copy2(): both of those copy file
+        # metadata (utime/chmod), which Cloud Run's GCS volume mount (gcsfuse)
+        # does not support and fails with PermissionError. Content only.
+        shutil.copyfile(prompt_template.resolve(), prompt_copy)
 
         grouped: dict[str, list[SymbolTarget]] = {}
         for target in targets:
@@ -205,6 +227,10 @@ class CoverUpExperimentRunner:
                 "Package directory does not exist for a target project: "
                 + ", ".join(missing_packages)
             )
+        environment = _test_environment(
+            self.config.project_root,
+            tuple(sorted({package_dir.parent for package_dir in package_dirs.values()})),
+        )
 
         stdout_parts: list[str] = []
         generated_tests: list[str] = []
@@ -281,9 +307,10 @@ class CoverUpExperimentRunner:
             )
             final_exit_code = completed.returncode
             stdout_parts.append(completed.stdout)
+            project_root_resolved = self.config.project_root.resolve()
             generated_tests.extend(
                 sorted(
-                    str(path.relative_to(self.config.project_root.resolve()))
+                    _display_path(path, project_root_resolved)
                     for path in workspace.glob("test_opt_*.py")
                     if path.name not in before_tests
                 )

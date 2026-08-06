@@ -1,0 +1,50 @@
+# uv-managed project config.
+#
+# Chạy:            uv sync                     (tạo/đồng bộ .venv từ uv.lock)
+# Chạy với lock:   uv sync --frozen
+# Xem thêm:        requirements.freeze.txt     (snapshot chính xác venv hiện tại, dùng trong Docker)
+
+[project]
+name = "p002-agent"
+version = "0.1.0"
+description = "AI20K agent + GEPA/CoverUp optimization pipeline"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.141.1",
+    "uvicorn[standard]==0.52.1",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.14.2",
+    "python-dotenv==1.2.2",
+    "langchain==1.3.14",
+    "langchain-openai==1.4.1",
+    "langgraph==1.2.10",
+    "aiolimiter==1.2.1",
+    "litellm[google]==1.94.0",
+    "dspy==3.2.1",
+    "gepa==0.0.27",
+    # Sample repo evaluation (mlxtend targets)
+    "matplotlib==3.11.1",
+    "pandas==3.0.5",
+    "scipy==1.18.0",
+    "scikit-learn==1.9.0",
+    "slipcover>=1.0.18",
+]
+
+[dependency-groups]
+dev = [
+    "ruff==0.16.1",
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "coverage==7.15.2",
+    "pytest-cov==7.1.0",
+    "google-auth==2.56.2",
+    "httpx==0.28.1",
+    # src/coverup chạy "python -m slipcover" cho mọi phép đo coverage
+    "slipcover==1.0.18",
+    "tabulate==0.10.0",
+    # Lưu ý: không cài coverup từ PyPI — pipeline dùng src/coverup qua PYTHONPATH
+    # (giống venv hiện tại; tránh kéo theo gói "asyncio" backport của coverup==0.6.3)
+]
+
+[tool.uv]
+package = false
