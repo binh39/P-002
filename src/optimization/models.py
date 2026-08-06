@@ -18,6 +18,14 @@ class SymbolTarget:
         return cls(**{key: value[key] for key in fields if key in value})
 
 
+@dataclass(frozen=True)
+class ProjectLayout:
+    """Package and tests directories for one project of a multi-project run."""
+
+    package_dir: Path
+    tests_dir: Path
+
+
 @dataclass
 class ExperimentConfig:
     project_root: Path
@@ -31,6 +39,27 @@ class ExperimentConfig:
     max_concurrency: int = 10
     rate_limit: int | None = None
     pytest_args: str = ""
+    projects: dict[str, ProjectLayout] | None = None
+
+    def package_dir_for(self, project: str) -> Path:
+        """Resolve the package directory for ``project``.
+
+        Falls back to the single-project ``package_dir`` when no per-project
+        layout is configured.
+        """
+        if self.projects and project in self.projects:
+            return self.projects[project].package_dir
+        return self.package_dir
+
+    def tests_dir_for(self, project: str) -> Path:
+        """Resolve the tests directory for ``project``.
+
+        Falls back to the single-project ``tests_dir`` when no per-project
+        layout is configured.
+        """
+        if self.projects and project in self.projects:
+            return self.projects[project].tests_dir
+        return self.tests_dir
 
 
 @dataclass

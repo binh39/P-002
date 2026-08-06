@@ -591,11 +591,9 @@ python -m src.optimization.cli `
 
 ## Không được xóa
   python -m src.optimization.cli `
-  --package-dir src/sample_repo/isort/isort `
-  --tests-dir src/sample_repo/isort/tests `
-  --artifacts-dir eval/prompt_optimization_v2 `
-  --max-concurrency 10 `
-  optimize `
-  --dataset eval/prompt_optimization/datasets/isort_symbols.jsonl `
-  --prompt eval/prompt_optimization/prompts/gpt_v2_baseline.json `
-  --max-metric-calls 60
+    --artifacts-dir eval/prompt_optimization_v3 `
+    --max-concurrency 10 `
+    optimize `
+    --dataset eval/prompt_optimization/datasets/isort_mlxtend_symbols.jsonl `
+    --prompt eval/prompt_optimization/prompts/gpt_v2_baseline.json `
+    --max-metric-calls 450
