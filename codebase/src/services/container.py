@@ -114,7 +114,14 @@ def build_services(settings: Settings) -> ServiceContainer:
     analysis.set_dispatcher(dispatcher)
     executor = None
     if settings.baseline_execution_backend == "docker":
-        executor = DockerCoverUpExecutor(settings.baseline_runner_image, 900, 2048, 1)
+        executor = DockerCoverUpExecutor(
+            settings.baseline_runner_image,
+            900,
+            2048,
+            1,
+            settings.max_runner_files,
+            settings.max_runner_uncompressed_bytes,
+        )
     experiments = ExperimentService(experiment_repository, projects, function_repository, storage, executor)
     if settings.baseline_dispatcher == "cloud_tasks":
         experiments.set_dispatcher(

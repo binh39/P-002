@@ -1,7 +1,9 @@
 import asyncio
 import io
+import json
 import os
 import shutil
+import stat
 import subprocess
 import tempfile
 import zipfile
@@ -16,13 +18,26 @@ from .prompts import PromptBundle
 @dataclass(frozen=True, slots=True)
 class BaselineExecution:
     coverage_score: float | None
+    statement_coverage: float | None
+    branch_coverage: float | None
+    artifacts: dict[str, bytes]
 
 
 class DockerCoverUpExecutor:
     """Runs CoverUp outside the API process in a least-privilege Docker container."""
 
-    def __init__(self, image: str, timeout_seconds: int, memory_mb: int, cpu: int):
+    def __init__(
+        self,
+        image: str,
+        timeout_seconds: int,
+        memory_mb: int,
+        cpu: int,
+        max_files: int,
+        max_uncompressed_bytes: int,
+    ):
         self.image, self.timeout_seconds, self.memory_mb, self.cpu = image, timeout_seconds, memory_mb, cpu
+        self.max_files = max_files
+        self.max_uncompressed_bytes = max_uncompressed_bytes
 
     async def execute(
         self, archive: bytes, source_directory: str, symbols: list[str], prompt: PromptBundle
@@ -38,9 +53,11 @@ class DockerCoverUpExecutor:
             project = root / "project"
             tests = root / "generated-tests"
             prompt_dir = root / "prompt"
+            artifacts_dir = root / "artifacts"
             project.mkdir()
             tests.mkdir()
             prompt_dir.mkdir()
+            artifacts_dir.mkdir()
             (prompt_dir / "prompt.json").write_text(prompt.as_json(), encoding="utf-8")
             self._extract_archive(archive, project)
             source = (project / source_directory).resolve()
@@ -71,6 +88,8 @@ class DockerCoverUpExecutor:
                 f"type=bind,src={tests},dst=/workspace/tests",
                 "--mount",
                 f"type=bind,src={prompt_dir},dst=/workspace/prompt,readonly",
+                "--mount",
+                f"type=bind,src={artifacts_dir},dst=/workspace/artifacts",
             ]
             credentials = self._application_default_credentials()
             if credentials:
@@ -101,6 +120,10 @@ class DockerCoverUpExecutor:
                     "gpt-v2",
                     "--prompt-template-file",
                     "/workspace/prompt/prompt.json",
+                    "--trace-file",
+                    "/workspace/artifacts/attempt_trace.jsonl",
+                    "--log-file",
+                    "/workspace/artifacts/coverup.log",
                     "--max-attempts",
                     "3",
                     "--repeat-tests",
@@ -125,7 +148,91 @@ class DockerCoverUpExecutor:
                 raise RuntimeError("Baseline runner timed out") from exc
             if completed.returncode:
                 raise RuntimeError(completed.stdout[-4000:] or "CoverUp baseline failed")
-            return BaselineExecution(coverage_score=self._coverage_from_output(completed.stdout))
+            (artifacts_dir / "coverup.stdout.log").write_text(completed.stdout, encoding="utf-8")
+            (artifacts_dir / "prompt.json").write_text(prompt.as_json(), encoding="utf-8")
+            shutil.make_archive(str(artifacts_dir / "generated_tests"), "zip", tests)
+            report = self._run_coverage(project, tests, artifacts_dir, source_directory)
+            totals = report.get("totals", {})
+            statement = self._ratio(totals.get("covered_lines"), totals.get("num_statements"))
+            branch = self._ratio(totals.get("covered_branches"), totals.get("num_branches"))
+            score = None if statement is None else statement if branch is None else 0.4 * statement + 0.6 * branch
+            artifacts = {path.name: path.read_bytes() for path in artifacts_dir.iterdir() if path.is_file()}
+            return BaselineExecution(score, statement, branch, artifacts)
+
+    def _run_coverage(self, project: Path, tests: Path, artifacts: Path, source_directory: str) -> dict:
+        docker = [
+            "docker",
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            "--read-only",
+            "--cap-drop",
+            "ALL",
+            "--pids-limit",
+            "256",
+            "--memory",
+            f"{self.memory_mb}m",
+            "--cpus",
+            str(self.cpu),
+            "--tmpfs",
+            "/tmp:rw,noexec,nosuid,size=128m",
+            "--mount",
+            f"type=bind,src={project},dst=/workspace/project,readonly",
+            "--mount",
+            f"type=bind,src={tests},dst=/workspace/tests,readonly",
+            "--mount",
+            f"type=bind,src={artifacts},dst=/workspace/artifacts",
+            "--env",
+            "COVERAGE_FILE=/workspace/artifacts/coverage.data",
+            self.image,
+        ]
+        run_command = [
+            *docker,
+            "coverage",
+            "run",
+            "--branch",
+            f"--source=/workspace/project/{source_directory}",
+            "-m",
+            "pytest",
+            "-q",
+            "/workspace/tests",
+        ]
+        completed = subprocess.run(
+            run_command,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=self.timeout_seconds,
+            check=False,
+        )
+        (artifacts / "coverage.stdout.log").write_text(completed.stdout, encoding="utf-8")
+        if completed.returncode:
+            raise RuntimeError(completed.stdout[-4000:] or "Generated tests failed coverage validation")
+        json_command = [
+            *docker,
+            "coverage",
+            "json",
+            "-o",
+            "/workspace/artifacts/coverage_after.json",
+        ]
+        exported = subprocess.run(
+            json_command,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=self.timeout_seconds,
+            check=False,
+        )
+        if exported.returncode:
+            raise RuntimeError(exported.stdout[-4000:] or "Coverage JSON export failed")
+        return json.loads((artifacts / "coverage_after.json").read_text(encoding="utf-8"))
+
+    @staticmethod
+    def _ratio(covered, total) -> float | None:
+        if total is None or int(total) == 0:
+            return None
+        return int(covered or 0) / int(total)
 
     @staticmethod
     def _coverage_from_output(output: str) -> float | None:
@@ -146,16 +253,21 @@ class DockerCoverUpExecutor:
         candidate = Path(app_data) / "gcloud" / "application_default_credentials.json" if app_data else None
         return candidate.resolve() if candidate and candidate.is_file() else None
 
-    @staticmethod
-    def _extract_archive(archive: bytes, destination: Path) -> None:
+    def _extract_archive(self, archive: bytes, destination: Path) -> None:
         try:
             bundle = zipfile.ZipFile(io.BytesIO(archive))
         except zipfile.BadZipFile as exc:
             raise AppError(422, "INVALID_ZIP", "The project archive is not a valid ZIP") from exc
-        for info in bundle.infolist():
+        entries = [info for info in bundle.infolist() if not info.is_dir()]
+        if len(entries) > self.max_files:
+            raise AppError(413, "TOO_MANY_ARCHIVE_FILES", "The archive contains too many files")
+        if sum(info.file_size for info in entries) > self.max_uncompressed_bytes:
+            raise AppError(413, "RUNNER_ARCHIVE_TOO_LARGE", "The archive exceeds the runner extraction limit")
+        for info in entries:
             path = PurePosixPath(info.filename.replace("\\", "/"))
-            if info.is_dir():
-                continue
+            mode = info.external_attr >> 16
+            if mode and stat.S_IFMT(mode) not in {0, stat.S_IFREG}:
+                raise AppError(422, "INVALID_ZIP_ENTRY", "The archive contains a non-regular file")
             if path.is_absolute() or ".." in path.parts:
                 raise AppError(422, "INVALID_ZIP", "The archive contains an unsafe path")
             target = (destination / path.as_posix()).resolve()

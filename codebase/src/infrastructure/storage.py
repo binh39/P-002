@@ -31,6 +31,8 @@ class ObjectStorage(Protocol):
 
     async def read(self, object_name: str) -> bytes: ...
 
+    async def write(self, object_name: str, content: bytes, content_type: str) -> None: ...
+
 
 class LocalObjectStorage:
     def __init__(self, directory: str, api_prefix: str):
@@ -74,6 +76,10 @@ class LocalObjectStorage:
         if self.root not in target.parents or not await asyncio.to_thread(target.is_file):
             raise AppError(404, "UPLOAD_NOT_FOUND", "The source archive was not found")
         return await asyncio.to_thread(target.read_bytes)
+
+    async def write(self, object_name: str, content: bytes, content_type: str) -> None:
+        del content_type
+        await self.put_local(object_name, content)
 
 
 class GcsObjectStorage:
@@ -125,3 +131,7 @@ class GcsObjectStorage:
 
     async def read(self, object_name: str) -> bytes:
         return await asyncio.to_thread(self.bucket.blob(object_name).download_as_bytes)
+
+    async def write(self, object_name: str, content: bytes, content_type: str) -> None:
+        blob = self.bucket.blob(object_name)
+        await asyncio.to_thread(blob.upload_from_string, content, content_type=content_type)

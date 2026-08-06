@@ -112,15 +112,39 @@ class ExperimentService:
             selected = [await self.functions.get(project.id, function_id) for function_id in item.target_function_ids]
             if any(function is None for function in selected):
                 raise RuntimeError("A selected function is no longer available")
+            prompt = baseline_prompt()
             result = await self.executor.execute(
                 await self.storage.read(project.object_name),
                 project.settings.runtime.source_directory,
                 [function.qualified_name for function in selected if function],
-                baseline_prompt(),
+                prompt,
             )
-            run.status, run.coverage_score, run.finished_at = (
+            artifact_objects = {}
+            content_types = {
+                "coverage_after.json": "application/json",
+                "prompt.json": "application/json",
+                "attempt_trace.jsonl": "application/x-ndjson",
+                "generated_tests.zip": "application/zip",
+            }
+            for name, content in result.artifacts.items():
+                object_name = f"artifacts/{item.owner_id}/{item.project_id}/{item.id}/{run.id}/{name}"
+                await self.storage.write(object_name, content, content_types.get(name, "text/plain"))
+                artifact_objects[name] = object_name
+            (
+                run.status,
+                run.coverage_score,
+                run.statement_coverage,
+                run.branch_coverage,
+                run.prompt_digest,
+                run.artifact_objects,
+                run.finished_at,
+            ) = (
                 ExperimentStatus.BASELINE_SUCCEEDED,
                 result.coverage_score,
+                result.statement_coverage,
+                result.branch_coverage,
+                prompt.digest(),
+                artifact_objects,
                 datetime.now(UTC),
             )
             item.status, item.updated_at = ExperimentStatus.BASELINE_SUCCEEDED, run.finished_at

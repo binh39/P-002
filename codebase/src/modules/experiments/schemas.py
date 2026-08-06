@@ -44,6 +44,10 @@ class BaselineRunResponse(StrictModel):
     status: ExperimentStatus
     target_count: int
     coverage_score: float | None = None
+    statement_coverage: float | None = None
+    branch_coverage: float | None = None
+    prompt_digest: str | None = None
+    artifact_objects: dict[str, str] = Field(default_factory=dict)
     error_message: str | None = None
     created_at: datetime
     started_at: datetime | None = None
