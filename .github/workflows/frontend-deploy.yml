@@ -20,10 +20,6 @@ concurrency:
 env:
   FIREBASE_PROJECT_ID: vinaip002
   FIREBASE_WEB_APP_ID: 1:891999064201:web:69022a3951a6ff42eaf658
-  VITE_AUTH_MODE: firebase
-  VITE_DATA_MODE: demo
-  VITE_PROJECTS_DATA_MODE: connected
-  VITE_API_BASE_URL: /api/v1
 
 jobs:
   deploy:
@@ -66,6 +62,11 @@ jobs:
           } >> "$GITHUB_ENV"
       - name: Build production frontend
         working-directory: codebase/frontend
+        env:
+          VITE_AUTH_MODE: firebase
+          VITE_DATA_MODE: demo
+          VITE_PROJECTS_DATA_MODE: connected
+          VITE_API_BASE_URL: /api/v1
         run: npm run build
       - name: Deploy Firebase Hosting
         run: npx --yes firebase-tools@15.19.0 deploy --only hosting:frontend --project "$FIREBASE_PROJECT_ID" --non-interactive
