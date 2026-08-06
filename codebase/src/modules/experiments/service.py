@@ -1,10 +1,14 @@
 from datetime import UTC, datetime
 
 from src.core.errors import AppError
+from src.infrastructure.storage import ObjectStorage
 from src.modules.analysis.repository import FunctionRepository
 from src.modules.projects.service import ProjectService
 
+from .dataset import split_targets
 from .dispatcher import BaselineDispatcher
+from .executor import DockerCoverUpExecutor
+from .prompts import baseline_prompt
 from .repository import ExperimentRepository
 from .schemas import (
     BaselineRunRecord,
@@ -18,8 +22,16 @@ from .schemas import (
 
 
 class ExperimentService:
-    def __init__(self, repository: ExperimentRepository, projects: ProjectService, functions: FunctionRepository):
+    def __init__(
+        self,
+        repository: ExperimentRepository,
+        projects: ProjectService,
+        functions: FunctionRepository,
+        storage: ObjectStorage,
+        executor: DockerCoverUpExecutor | None = None,
+    ):
         self.repository, self.projects, self.functions = repository, projects, functions
+        self.storage, self.executor = storage, executor
         self.dispatcher: BaselineDispatcher | None = None
 
     def set_dispatcher(self, dispatcher: BaselineDispatcher) -> None:
@@ -35,10 +47,13 @@ class ExperimentService:
                 422, "UNKNOWN_TARGET_FUNCTION", f"Selected functions were not found: {', '.join(sorted(missing))}"
             )
         now = datetime.now(UTC)
+        dataset_splits = split_targets(payload.target_function_ids)
         item = ExperimentRecord(
             id=new_id(),
             owner_id=owner_id,
             **payload.model_dump(),
+            dataset_splits=dataset_splits,
+            optimization_eligible=all(dataset_splits[name] for name in ("train", "validation", "test")),
             status=ExperimentStatus.DRAFT,
             created_at=now,
             updated_at=now,
@@ -91,19 +106,65 @@ class ExperimentService:
         run = await self.repository.get_run(run_id)
         if run is None:
             return
-        # Execution of uploaded code belongs in the isolated runner introduced in PR 2.
-        # This worker preserves the durable lifecycle and never executes user code in the API container.
         run.status, run.started_at = ExperimentStatus.BASELINE_RUNNING, datetime.now(UTC)
         await self.repository.save_run(run)
-        run.status, run.error_message, run.finished_at = (
-            ExperimentStatus.FAILED,
-            "Baseline sandbox is not configured",
-            datetime.now(UTC),
-        )
-        await self.repository.save_run(run)
         item = await self.repository.get(run.experiment_id)
+        try:
+            if item is None or self.executor is None:
+                raise RuntimeError("Baseline sandbox is not configured")
+            project = await self.projects.require_owned(item.project_id, item.owner_id)
+            selected = [await self.functions.get(project.id, function_id) for function_id in item.target_function_ids]
+            if any(function is None for function in selected):
+                raise RuntimeError("A selected function is no longer available")
+            prompt = baseline_prompt()
+            result = await self.executor.execute(
+                await self.storage.read(project.object_name),
+                project.settings.runtime.source_directory,
+                [function.qualified_name for function in selected if function],
+                prompt,
+            )
+            artifact_objects = {}
+            content_types = {
+                "coverage_after.json": "application/json",
+                "prompt.json": "application/json",
+                "attempt_trace.jsonl": "application/x-ndjson",
+                "generated_tests.zip": "application/zip",
+                "target_coverage.json": "application/json",
+            }
+            for name, content in result.artifacts.items():
+                object_name = f"artifacts/{item.owner_id}/{item.project_id}/{item.id}/{run.id}/{name}"
+                await self.storage.write(object_name, content, content_types.get(name, "text/plain"))
+                artifact_objects[name] = object_name
+            (
+                run.status,
+                run.coverage_score,
+                run.statement_coverage,
+                run.branch_coverage,
+                run.prompt_digest,
+                run.artifact_objects,
+                run.target_metrics,
+                run.finished_at,
+            ) = (
+                ExperimentStatus.BASELINE_SUCCEEDED,
+                result.coverage_score,
+                result.statement_coverage,
+                result.branch_coverage,
+                prompt.digest(),
+                artifact_objects,
+                result.target_metrics,
+                datetime.now(UTC),
+            )
+            item.status, item.updated_at = ExperimentStatus.BASELINE_SUCCEEDED, run.finished_at
+        except Exception as exc:
+            run.status, run.error_message, run.finished_at = (
+                ExperimentStatus.FAILED,
+                str(exc)[-4000:],
+                datetime.now(UTC),
+            )
+            if item:
+                item.status, item.updated_at = ExperimentStatus.FAILED, run.finished_at
+        await self.repository.save_run(run)
         if item:
-            item.status, item.updated_at = ExperimentStatus.FAILED, run.finished_at
             await self.repository.save(item)
 
     async def _owned(self, experiment_id, owner_id):

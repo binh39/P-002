@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     baseline_cloud_tasks_queue: str = "promptopt-baseline"
     baseline_worker_url: str = ""
     baseline_task_audience: str = ""
+    baseline_execution_backend: Literal["disabled", "docker"] = "disabled"
+    baseline_runner_image: str = "promptopt-coverup-runner:local"
+    max_runner_files: int = Field(default=10000, ge=1, le=50000)
+    max_runner_uncompressed_bytes: int = Field(default=100 * 1024 * 1024, ge=1024)
+    baseline_runner_network: str = "none"
     max_analysis_python_files: int = Field(default=5000, ge=1, le=20000)
     max_analysis_uncompressed_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
     signed_url_ttl_seconds: int = Field(default=900, ge=60, le=3600)

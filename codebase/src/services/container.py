@@ -16,6 +16,7 @@ from src.modules.analysis.repository import (
 )
 from src.modules.analysis.service import AnalysisService
 from src.modules.experiments.dispatcher import CloudTasksBaselineDispatcher, InlineBaselineDispatcher
+from src.modules.experiments.executor import DockerCoverUpExecutor
 from src.modules.experiments.repository import FirestoreExperimentRepository, InMemoryExperimentRepository
 from src.modules.experiments.service import ExperimentService
 from src.modules.projects.repository import (
@@ -111,7 +112,18 @@ def build_services(settings: Settings) -> ServiceContainer:
     else:
         dispatcher = InlineAnalysisDispatcher(analysis.run)
     analysis.set_dispatcher(dispatcher)
-    experiments = ExperimentService(experiment_repository, projects, function_repository)
+    executor = None
+    if settings.baseline_execution_backend == "docker":
+        executor = DockerCoverUpExecutor(
+            settings.baseline_runner_image,
+            900,
+            2048,
+            1,
+            settings.max_runner_files,
+            settings.max_runner_uncompressed_bytes,
+            settings.baseline_runner_network,
+        )
+    experiments = ExperimentService(experiment_repository, projects, function_repository, storage, executor)
     if settings.baseline_dispatcher == "cloud_tasks":
         experiments.set_dispatcher(
             CloudTasksBaselineDispatcher(

@@ -377,3 +377,131 @@ Create experiment
 5. [x] Phase 6: cấu hình Firebase Hosting, nghiệm thu preview, xóa preview và deploy live production.
 6. [x] Phase 7: frontend CI/CD tự động deploy `main` đã hoạt động.
 7. [x] Phase 5 + 8: backend vertical slice đầu tiên tại `codebase/src` đã provision GCP, deploy Cloud Run và nối Firebase Hosting.
+
+---
+
+## Phase 10 — Experiment, CoverUp baseline và GEPA optimization
+
+### 10.1 PR 1 — Experiment API và run lifecycle
+
+- [x] Tạo branch `feature/experiment-baseline-slice` từ `main`.
+- [x] Tạo module `codebase/src/modules/experiments`.
+- [x] Thêm trạng thái `draft`, `baseline_queued`, `baseline_running`, `baseline_succeeded`, `failed`.
+- [x] Thêm API tạo/lấy experiment từ project đã analysis và các function hợp lệ.
+- [x] Thêm API tạo baseline run trả `202` và API polling run.
+- [x] Tạo in-memory repository cho local/test và Firestore repository cho production.
+- [x] Tạo Cloud Tasks dispatcher và internal worker endpoint có Google OIDC authentication.
+- [x] Không chạy source upload trực tiếp trong HTTP request.
+- [x] Thêm API tests cho ownership, analysis prerequisite, queue run và polling.
+
+### 10.2 PR 2 — Isolated CoverUp baseline runner
+
+- [x] Tạo runner image riêng tại `codebase/sandbox/Dockerfile`.
+- [x] Chạy source trong container với network disabled, source read-only, drop capabilities và giới hạn CPU/RAM/PID.
+- [x] Thêm timeout tổng và kiểm tra ZIP path traversal.
+- [x] Chỉ bật local Docker runner khi `BASELINE_EXECUTION_BACKEND=docker`; mặc định fail-closed.
+- [x] Hỗ trợ Vertex ADC local và build được image `promptopt-coverup-runner:local`.
+- [x] Thêm giới hạn tổng dung lượng giải nén và số file cho runner.
+- [x] Chặn symlink, device file và ZIP entry không phải regular file.
+- [ ] Không truyền secret trực tiếp trên Docker command line.
+- [ ] Thêm maximum provider retries và maximum total LLM calls cho CoverUp.
+- [x] Chạy smoke test thật với fixture project nhỏ và Vertex Gemini (`score=1.0`, statement/branch `100%`).
+- [ ] Chạy smoke test isort với function được chọn qua API.
+
+### 10.3 Prompt bundle và baseline artifacts
+
+- [x] Định nghĩa `PromptBundle` gồm `initial` và `error`.
+- [x] Validate placeholder bắt buộc và sinh prompt digest ổn định.
+- [x] Mount prompt JSON riêng và gọi CoverUp bằng `--prompt-template-file`.
+- [x] Giữ baseline prompt immutable trong một run.
+- [x] Lưu prompt digest vào baseline run.
+- [ ] Tạo và lưu prompt version ID riêng trong prompt registry.
+- [x] Không parse coverage từ stdout; dùng structured coverage JSON làm nguồn chính.
+- [x] Xuất `target_coverage.json` theo từng target function, không chỉ coverage tổng.
+- [x] Bổ sung structured `attempt_trace.jsonl` từ CoverUp request/response log.
+- [ ] Xác minh trace chứa đủ prompt input, model response, generated test, pytest error và reason dừng qua smoke test thật.
+- [x] Lưu generated tests ZIP, CoverUp log, stdout và prompt JSON.
+- [ ] Lưu command metadata và runner config đã chuẩn hóa.
+- [x] Upload artifacts vào object storage theo owner/project/experiment/run.
+- [ ] Lưu checksum, object name, size, content type và retention metadata vào Firestore.
+- [ ] Thêm `GET /api/v1/runs/{run_id}/artifacts` và signed download URL có ownership check.
+- [x] Tính deterministic statement/branch score theo từng symbol.
+- [x] Aggregate theo executable units; không trung bình đơn giản phần trăm giữa các function.
+- [ ] Lưu token usage, cost estimate, latency, model và provider.
+
+### 10.4 Dataset và split chống data leakage
+
+- [x] Tạo dataset snapshot từ function người dùng chọn, không hard-code isort.
+- [ ] Lưu project version, source checksum và settings checksum cùng dataset.
+- [x] Chia `train`, `validation`, `test` bằng seed cố định và lưu split trong experiment.
+- [x] Dataset dưới 3 targets được đánh dấu baseline-only, không giả lập validation/test.
+- [x] Chỉ đánh dấu `optimization_eligible` khi train/validation/test đều không rỗng (tối thiểu 3 targets).
+- [ ] Không dùng locked `test` split trong GEPA search/candidate selection.
+- [ ] Không để cùng function/source version xuất hiện ở nhiều split.
+- [ ] Đóng băng denominator statement/branch từ baseline preflight.
+
+### 10.5 PR 3 — DSPy/GEPA prompt optimization
+
+- [x] Pin `dspy==3.2.1` và `gepa==0.0.27`.
+- [ ] Tách model sinh test (`COVERUP_MODEL`) và reflection (`OPTIMIZE_MODEL`).
+- [ ] Validate Gemini/Vertex provider configuration và model allowlist.
+- [ ] Tạo GEPA adapter nhận `PromptBundle`, coverage và attempt trace thật.
+- [ ] Reward phải do coverage code tính; không dùng LLM judge.
+- [ ] Reflection chỉ sửa `initial` và `error`.
+- [ ] Loại candidate thiếu placeholder, format lỗi hoặc vượt size trước khi gọi CoverUp.
+- [ ] Cache theo prompt digest, source checksum, targets, split, model và runner config.
+- [ ] Tách workspace theo candidate/target/replicate để không rò generated tests.
+- [ ] Thêm `max_metric_calls`, reflection minibatch, replicate, rate limit và concurrency limit.
+- [ ] Persist GEPA checkpoint để resume sau timeout/restart.
+- [ ] Thêm `POST /api/v1/experiments/{id}/optimize`, trả `202`.
+- [ ] Bổ sung trạng thái `optimizing`, `candidate_evaluating`, `optimization_succeeded`, `timed_out`, `cancelled`.
+- [ ] Lưu candidate prompt, parent prompt, generation, score, cost, latency và failure reason.
+- [ ] Không tự ghi đè baseline hoặc production prompt sau GEPA search.
+
+### 10.6 PR 4 — Paired comparison và promotion gate
+
+- [ ] Chọn candidate bằng validation rồi khóa candidate trước final evaluation.
+- [ ] Chạy baseline và candidate trên cùng locked test targets, runner config và replicate count.
+- [ ] So sánh paired statement/branch coverage, pass rate, cost và latency.
+- [ ] Chỉ promote khi candidate tốt hơn baseline và qua hard gate.
+- [ ] Hard gate: pytest hợp lệ, không flaky, không timeout và không giảm pass rate.
+- [ ] Nếu GEPA giữ nguyên baseline digest thì skip final evaluation và ghi rõ reason.
+- [ ] Lưu `final_validation.json`, absolute/relative gain và promotion decision.
+- [ ] Tạo prompt version `in_review`; không tự động chuyển production.
+- [ ] Thêm approve/reject API có reviewer, comment, audit timestamp và idempotency.
+
+### 10.7 Production runner trên Google Cloud
+
+- [ ] Không dùng Docker socket/Docker-in-Docker trong Cloud Run API service.
+- [ ] Push runner image riêng lên Artifact Registry.
+- [ ] Dùng Cloud Run Job cho execution; Cloud Tasks chỉ dispatch/orchestrate.
+- [ ] Tạo runner service account riêng với quyền tối thiểu trên source/artifact objects.
+- [ ] Dùng workload identity/Secret Manager; không mount ADC file trong production.
+- [ ] Cấu hình job timeout, retries, parallelism, maximum instances và cancellation.
+- [ ] Thêm quota theo user/workspace: concurrent runs, functions, LLM calls và cost ceiling.
+- [ ] Thêm retention policy và xóa artifacts theo project.
+- [ ] Provision queue `promptopt-baseline`, hoàn thiện OIDC/IAM và production smoke test.
+
+### 10.8 Frontend integration
+
+- [ ] Tạo `ExperimentRepository` HTTP và domain types đúng backend contract.
+- [ ] Chuyển Create Experiment từ mock sang project/functions thật.
+- [ ] Gọi create experiment/run và polling bằng TanStack Query.
+- [ ] Hiển thị state machine thật từ queued đến succeeded/failed.
+- [ ] Hiển thị baseline metrics theo function và aggregate.
+- [ ] Hiển thị prompt diff, generated tests, coverage artifacts, logs và failure reason.
+- [ ] Hoàn thiện comparison và review/approve/reject bằng API thật.
+- [ ] Xóa mock experiment/run/comparison sau khi từng màn hình đã nối backend.
+
+### 10.9 Verification và Definition of Done
+
+- [x] Ruff format/check pass cho experiment foundation.
+- [x] Backend tests pass (`21 passed` sau target metrics và structured trace).
+- [ ] Unit test score, cache key, prompt validation và promotion rule.
+- [ ] Contract/integration test cho experiment, run và artifact APIs bằng fake executor.
+- [ ] Docker smoke test fixture project và test timeout/retry/malformed response.
+- [ ] Test Firestore ownership isolation và GCS artifact authorization.
+- [ ] Test GEPA resume checkpoint và idempotent Cloud Task retry.
+- [ ] CI build cả API image và runner image khi source liên quan thay đổi.
+- [ ] Production smoke test baseline → optimize → locked comparison → review.
+- [ ] Chỉ merge GEPA khi report chứng minh baseline và optimized dùng cùng evaluation protocol.
