@@ -135,7 +135,7 @@ def build_services(settings: Settings) -> ServiceContainer:
         from google.cloud import run_v2
 
         executor = CloudRunJobCoverUpExecutor(
-            client=run_v2.JobsAsyncClient(),
+            client=run_v2.JobsClient(),
             storage=storage,
             bucket=settings.gcs_bucket,
             job_name=(
