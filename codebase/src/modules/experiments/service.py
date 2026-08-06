@@ -21,6 +21,7 @@ from .schemas import (
     ComparisonRunRecord,
     ComparisonRunResponse,
     CreateExperimentRequest,
+    ExperimentListResponse,
     ExperimentRecord,
     ExperimentResponse,
     ExperimentStatus,
@@ -94,6 +95,13 @@ class ExperimentService:
     async def get(self, experiment_id: str, owner_id: str) -> ExperimentResponse:
         return ExperimentResponse.model_validate(await self._owned(experiment_id, owner_id))
 
+    async def list(self, owner_id: str) -> ExperimentListResponse:
+        items = await self.repository.list_for_owner(owner_id)
+        return ExperimentListResponse(
+            items=[ExperimentResponse.model_validate(item) for item in items],
+            total=len(items),
+        )
+
     async def request_baseline(self, experiment_id: str, owner_id: str) -> BaselineRunResponse:
         item = await self._owned(experiment_id, owner_id)
         if item.status != ExperimentStatus.DRAFT:
@@ -131,6 +139,16 @@ class ExperimentService:
             raise AppError(404, "RUN_NOT_FOUND", "Baseline run was not found")
         await self._owned(run.experiment_id, owner_id)
         return BaselineRunResponse.model_validate(run)
+
+    async def get_baseline_artifact(self, run_id: str, artifact_name: str, owner_id: str) -> bytes:
+        run = await self.repository.get_run(run_id)
+        if run is None:
+            raise AppError(404, "RUN_NOT_FOUND", "Baseline run was not found")
+        await self._owned(run.experiment_id, owner_id)
+        object_name = run.artifact_objects.get(artifact_name)
+        if object_name is None:
+            raise AppError(404, "ARTIFACT_NOT_FOUND", "Baseline artifact was not found")
+        return await self.storage.read(object_name)
 
     async def execute_baseline(self, run_id: str) -> None:
         run = await self.repository.get_run(run_id)

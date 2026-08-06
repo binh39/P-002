@@ -4,15 +4,17 @@ import { createContext, type PropsWithChildren, useContext, useState } from "rea
 
 import { env } from "@/config/env";
 import type { DashboardRepository } from "@/repositories/contracts/DashboardRepository";
+import type { ExperimentRepository } from "@/repositories/contracts/ExperimentRepository";
 import type { ProjectRepository } from "@/repositories/contracts/ProjectRepository";
 import { HttpDashboardRepository } from "@/repositories/http/HttpDashboardRepository";
+import { HttpExperimentRepository } from "@/repositories/http/HttpExperimentRepository";
 import { HttpProjectRepository } from "@/repositories/http/HttpProjectRepository";
 import { MockDashboardRepository } from "@/repositories/mock/MockDashboardRepository";
-import { MockProjectRepository } from "@/repositories/mock/MockProjectRepository";
 
 interface Repositories {
   dashboard: DashboardRepository;
   projects: ProjectRepository;
+  experiments: ExperimentRepository;
 }
 const RepositoryContext = createContext<Repositories | null>(null);
 
@@ -20,8 +22,8 @@ function createRepositories(): Repositories {
   return {
     dashboard:
       env.dataMode === "demo" ? new MockDashboardRepository() : new HttpDashboardRepository(),
-    projects:
-      env.projectsDataMode === "demo" ? new MockProjectRepository() : new HttpProjectRepository(),
+    projects: new HttpProjectRepository(),
+    experiments: new HttpExperimentRepository(),
   };
 }
 

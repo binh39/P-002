@@ -65,7 +65,6 @@ jobs:
         env:
           VITE_AUTH_MODE: firebase
           VITE_DATA_MODE: demo
-          VITE_PROJECTS_DATA_MODE: connected
           VITE_API_BASE_URL: /api/v1
         run: npm run build
       - name: Deploy Firebase Hosting

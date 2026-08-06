@@ -19,7 +19,7 @@ describe("application routing", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Continue with demo account" }));
 
-    expect(await screen.findByText("demo data")).toBeInTheDocument();
+    expect(await screen.findByText("hybrid data")).toBeInTheDocument();
     expect(screen.getByRole("navigation")).toBeInTheDocument();
     expect(window.location.pathname).toBe("/dashboard");
   });

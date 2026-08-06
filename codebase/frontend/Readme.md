@@ -14,7 +14,7 @@ The default `VITE_AUTH_MODE=demo` uses an explicit demo session. Set it to `fire
 
 The connected Firebase project is `vinaip002`, with production at `https://vinaip002.web.app`. Feature branches are tested with `npm run dev`; no public preview channel is kept. Local Firebase values belong in the ignored `.env.local`; start from `.env.example` on a new machine.
 
-The independent `VITE_DATA_MODE=demo` uses repository-backed fixtures. `VITE_PROJECTS_DATA_MODE` can switch only Projects to `connected` while unfinished modules remain in demo mode; the UI then displays a `hybrid data` badge. Connected repositories never fall back to demo data when an API request fails.
+Projects and the create-experiment/baseline flow always use the authenticated HTTP repositories and never fall back to fixture data. `VITE_DATA_MODE=demo` currently keeps only unfinished dashboard and later optimization screens in demo mode, so the UI displays a `hybrid data` badge until those slices are connected.
 
 ## Quality checks
 
