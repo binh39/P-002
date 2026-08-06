@@ -126,7 +126,7 @@ Lệnh tạo:
 
 ```text
 eval/prompt_optimization/
-├── datasets/isort_symbols.jsonl
+├── datasets/isort_mlxtend_symbols.jsonl
 └── prompts/gpt_v2_baseline.json
 ```
 
@@ -138,7 +138,7 @@ python -m src.optimization.cli init --force
 
 ## Dataset symbol
 
-Mỗi dòng trong `datasets/isort_symbols.jsonl` là một JSON object:
+Mỗi dòng trong `datasets/isort_mlxtend_symbols.jsonl` là một JSON object:
 
 ```json
 {"project":"isort","source_file":"isort/core.py","symbol":"process","split":"train"}
@@ -344,10 +344,9 @@ response và token usage.
 $env:PYTHONPATH = "src"
 
 python -m src.optimization.cli `
-  --package-dir src/sample_repo/isort/isort `
-  --tests-dir src/sample_repo/isort/tests `
+  --sample-repos-dir src/sample_repo `
   evaluate `
-  --dataset eval/prompt_optimization/datasets/isort_symbols.jsonl `
+  --dataset eval/prompt_optimization/datasets/isort_mlxtend_symbols.jsonl `
   --prompt eval/prompt_optimization/prompts/gpt_v2_baseline.json `
   --split validation
 ```
@@ -364,10 +363,9 @@ Có thể đánh giá train hoặc locked test bằng cách đổi `--split`.
 $env:PYTHONPATH = "src"
 
 python -m src.optimization.cli `
-  --package-dir src/sample_repo/isort/isort `
-  --tests-dir src/sample_repo/isort/tests `
+  --sample-repos-dir src/sample_repo `
   optimize `
-  --dataset eval/prompt_optimization/datasets/isort_symbols.jsonl `
+  --dataset eval/prompt_optimization/datasets/isort_mlxtend_symbols.jsonl `
   --prompt eval/prompt_optimization/prompts/gpt_v2_baseline.json
 ```
 
@@ -375,10 +373,9 @@ Mặc định CLI dùng `--auto medium`. Có thể chọn budget tự động kh
 
 ```powershell
 python -m src.optimization.cli `
-  --package-dir src/sample_repo/isort/isort `
-  --tests-dir src/sample_repo/isort/tests `
+  --sample-repos-dir src/sample_repo `
   optimize `
-  --dataset eval/prompt_optimization/datasets/isort_symbols.jsonl `
+  --dataset eval/prompt_optimization/datasets/isort_mlxtend_symbols.jsonl `
   --prompt eval/prompt_optimization/prompts/gpt_v2_baseline.json `
   --auto light
 ```
@@ -389,10 +386,9 @@ Hoặc tắt auto bằng budget thủ công:
 $env:PYTHONPATH = "src"
 
 python -m src.optimization.cli `
-  --package-dir src/sample_repo/isort/isort `
-  --tests-dir src/sample_repo/isort/tests `
+  --sample-repos-dir src/sample_repo `
   optimize `
-  --dataset eval/prompt_optimization/datasets/isort_symbols.jsonl `
+  --dataset eval/prompt_optimization/datasets/isort_mlxtend_symbols.jsonl `
   --prompt eval/prompt_optimization/prompts/gpt_v2_baseline.json `
   --max-metric-calls 20
 ```
@@ -566,13 +562,12 @@ Các bước tiếp theo hợp lý:
 
 ```powershell
 python -m src.optimization.cli `
-  --package-dir src/sample_repo/isort/isort `
-  --tests-dir src/sample_repo/isort/tests `
+  --sample-repos-dir src/sample_repo `
   --artifacts-dir eval/prompt_optimization_v3 `
   --max-concurrency 10 `
   --repeat-tests 2 `
   optimize `
-  --dataset eval/prompt_optimization/datasets/isort_symbols.jsonl `
+  --dataset eval/prompt_optimization/datasets/isort_mlxtend_symbols.jsonl `
   --prompt eval/prompt_optimization/prompts/gpt_v2_baseline.json `
   --auto heavy `
   --evaluation-replicates 2 `
@@ -580,11 +575,10 @@ python -m src.optimization.cli `
 ```
 
 python -m src.optimization.cli `
-  --package-dir src/sample_repo/isort/isort `
-  --tests-dir src/sample_repo/isort/tests `
+  --sample-repos-dir src/sample_repo `
   --artifacts-dir eval/prompt_optimization_batch_v2 `
   optimize `
-  --dataset eval/prompt_optimization/datasets/isort_symbols.jsonl `
+  --dataset eval/prompt_optimization/datasets/isort_mlxtend_symbols.jsonl `
   --prompt eval/prompt_optimization/prompts/gpt_v2_baseline.json `
   --max-metric-calls 50
 
