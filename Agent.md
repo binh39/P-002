@@ -48,7 +48,7 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
 
 ## Cấu hình khuyến nghị
 
-- Dataset mặc định: 50 train / 30 validation / 30 test.
+- Dataset mặc định: 50 train / 100 validation / 100 test.
 - `--repeat-tests 2`: giảm nhiễu do test execution.
 - `--evaluation-replicates 2`: giảm nhiễu do LLM generation khi đánh giá candidate quan trọng.
 - `--max-concurrency 10`: trần mặc định cho CoverUp; hạ xuống nếu gặp HTTP 429 hoặc giới hạn quota.
@@ -72,13 +72,12 @@ Smoke test rẻ hơn:
 
 ```powershell
 python -m src.optimization.cli `
-  --package-dir src/sample_repo/isort/isort `
-  --tests-dir src/sample_repo/isort/tests `
+  --sample-repos-dir src/sample_repo `
   --artifacts-dir eval/prompt_optimization_smoke `
   --max-concurrency 10 `
   --repeat-tests 2 `
   optimize `
-  --dataset eval/prompt_optimization/datasets/isort_symbols.jsonl `
+  --dataset eval/prompt_optimization/datasets/isort_mlxtend_symbols.jsonl `
   --prompt eval/prompt_optimization/prompts/gpt_v2_baseline.json `
   --auto light `
   --evaluation-replicates 1 `
@@ -89,13 +88,12 @@ Benchmark chất lượng cao:
 
 ```powershell
 python -m src.optimization.cli `
-  --package-dir src/sample_repo/isort/isort `
-  --tests-dir src/sample_repo/isort/tests `
+  --sample-repos-dir src/sample_repo `
   --artifacts-dir eval/prompt_optimization_v3 `
   --max-concurrency 10 `
   --repeat-tests 2 `
   optimize `
-  --dataset eval/prompt_optimization/datasets/isort_symbols.jsonl `
+  --dataset eval/prompt_optimization/datasets/isort_mlxtend_symbols.jsonl `
   --prompt eval/prompt_optimization/prompts/gpt_v2_baseline.json `
   --auto heavy `
   --evaluation-replicates 2 `
@@ -116,6 +114,14 @@ Luôn đọc leaderboard/report cùng split, replicate count, model/config và d
 ## Bài học từ pipeline cũ
 
 Prompt mới thường tệ hơn baseline vì pipeline cũ tối ưu meta-prompt thay vì prompt thật, cấp context gần như giống nhau cho các example, dùng aggregate score làm local feedback, không neo baseline trong quần thể, cho prompt dài dần và đánh giá một lần trong điều kiện có 429. Các artifact trong `eval/prompt_optimization_batch_v2/` chỉ nên dùng để chẩn đoán lịch sử, không xem là benchmark chuẩn của kiến trúc hiện tại.
+
+
+### Report coverage sau khi optimize
+
+- `src/optimization/gepa.py`: thêm `build_coverage_report()` (+ helper `_bundle_split_summary`) — gom statement/branch coverage theo từng split (train/validation/test) cho hai prompt (baseline/optimized); optimized được score với reference denominator của baseline, tái sử dụng cache `candidates/evaluations` nên không tốn thêm LLM call sau một run hoàn tất.
+- `src/optimization/cli.py`: cuối nhánh final comparison của `tune()` tự động ghi `coverage_report.json` vào artifacts và in bảng tóm tắt qua `_print_coverage_report()`.
+- Report không được tạo khi GEPA giữ nguyên baseline (không có prompt thứ hai để so sánh).
+- **Lưu ý budget:** GEPA đếm theo per-example; với valset 100, mỗi iteration được chấp nhận tốn ~116 calls (16 minibatch + 100 full eval), cộng seed eval 100. `MaxMetricCallsStopper` chỉ kiểm tra giữa các iteration và full eval là khối nguyên tử nên dễ vượt budget; `--max-metric-calls 150` chỉ cho phép đúng 1 iteration.
 
 ## Checklist bàn giao
 
