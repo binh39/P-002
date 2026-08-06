@@ -26,6 +26,9 @@ export interface Experiment {
   optimizationEligible: boolean;
   status: ExperimentStatus;
   baselineRunId: string | null;
+  optimizationRunId: string | null;
+  comparisonRunId: string | null;
+  promptVersionId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -64,6 +67,24 @@ export interface BaselineRun {
   finishedAt: string | null;
 }
 
+export interface OptimizationRun {
+  id: string;
+  experimentId: string;
+  status: ExperimentStatus;
+  parentPromptDigest: string;
+  candidatePrompt: Record<string, string> | null;
+  candidatePromptDigest: string | null;
+  baselineValidationScore: number | null;
+  candidateValidationScore: number | null;
+  candidateCount: number;
+  metricCalls: number;
+  artifacts: string[];
+  errorMessage: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
 export const baselineRunIsActive = (status: ExperimentStatus) =>
   status === "baseline_queued" || status === "baseline_running";
 
@@ -72,3 +93,6 @@ export const baselineRunIsFinished = (status: ExperimentStatus) =>
   status === "failed" ||
   status === "timed_out" ||
   status === "cancelled";
+
+export const optimizationRunIsActive = (status: ExperimentStatus) =>
+  status === "optimization_queued" || status === "optimizing" || status === "candidate_evaluating";

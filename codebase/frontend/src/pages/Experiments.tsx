@@ -31,9 +31,13 @@ export default function Experiments() {
     queryFn: ({ signal }) => experiments.list(signal),
     refetchInterval: (current) =>
       current.state.data?.some((item) =>
-        ["baseline_queued", "baseline_running", "optimization_queued", "optimizing"].includes(
-          item.status,
-        ),
+        [
+          "baseline_queued",
+          "baseline_running",
+          "optimization_queued",
+          "optimizing",
+          "candidate_evaluating",
+        ].includes(item.status),
       )
         ? 3_000
         : false,
@@ -59,9 +63,13 @@ export default function Experiments() {
 
   const items = query.data;
   const active = items.filter((item) =>
-    ["baseline_queued", "baseline_running", "optimization_queued", "optimizing"].includes(
-      item.status,
-    ),
+    [
+      "baseline_queued",
+      "baseline_running",
+      "optimization_queued",
+      "optimizing",
+      "candidate_evaluating",
+    ].includes(item.status),
   ).length;
   const completed = items.filter((item) => item.status === "baseline_succeeded").length;
   const failed = items.filter((item) => item.status === "failed").length;
@@ -140,7 +148,20 @@ export default function Experiments() {
                       }).format(new Date(item.updatedAt))}
                     </td>
                     <td>
-                      {item.baselineRunId ? (
+                      {item.optimizationRunId &&
+                      [
+                        "optimization_queued",
+                        "optimizing",
+                        "candidate_evaluating",
+                        "optimization_succeeded",
+                      ].includes(item.status) ? (
+                        <button
+                          className="table-action"
+                          onClick={() => navigate(`/optimization-runs/${item.optimizationRunId}`)}
+                        >
+                          Open optimization
+                        </button>
+                      ) : item.baselineRunId ? (
                         <button
                           className="table-action"
                           onClick={() => navigate(`/runs/${item.baselineRunId}`)}

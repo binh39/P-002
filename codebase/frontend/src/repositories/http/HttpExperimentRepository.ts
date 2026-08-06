@@ -4,6 +4,7 @@ import type {
   CreateExperimentInput,
   Experiment,
   ExperimentStatus,
+  OptimizationRun,
   TargetMetric,
 } from "@/domain/experiments";
 import type { ExperimentRepository } from "@/repositories/contracts/ExperimentRepository";
@@ -17,6 +18,9 @@ interface ApiExperiment {
   optimization_eligible: boolean;
   status: ExperimentStatus;
   baseline_run_id: string | null;
+  optimization_run_id: string | null;
+  comparison_run_id: string | null;
+  prompt_version_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -54,6 +58,24 @@ interface ApiBaselineRun {
   finished_at: string | null;
 }
 
+interface ApiOptimizationRun {
+  id: string;
+  experiment_id: string;
+  status: ExperimentStatus;
+  parent_prompt_digest: string;
+  candidate_prompt: Record<string, string> | null;
+  candidate_prompt_digest: string | null;
+  baseline_validation_score: number | null;
+  candidate_validation_score: number | null;
+  candidate_count: number;
+  metric_calls: number;
+  artifact_objects: Record<string, string>;
+  error_message: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
 function mapExperiment(item: ApiExperiment): Experiment {
   return {
     id: item.id,
@@ -64,8 +86,31 @@ function mapExperiment(item: ApiExperiment): Experiment {
     optimizationEligible: item.optimization_eligible,
     status: item.status,
     baselineRunId: item.baseline_run_id,
+    optimizationRunId: item.optimization_run_id,
+    comparisonRunId: item.comparison_run_id,
+    promptVersionId: item.prompt_version_id,
     createdAt: item.created_at,
     updatedAt: item.updated_at,
+  };
+}
+
+function mapOptimizationRun(item: ApiOptimizationRun): OptimizationRun {
+  return {
+    id: item.id,
+    experimentId: item.experiment_id,
+    status: item.status,
+    parentPromptDigest: item.parent_prompt_digest,
+    candidatePrompt: item.candidate_prompt,
+    candidatePromptDigest: item.candidate_prompt_digest,
+    baselineValidationScore: item.baseline_validation_score,
+    candidateValidationScore: item.candidate_validation_score,
+    candidateCount: item.candidate_count,
+    metricCalls: item.metric_calls,
+    artifacts: Object.keys(item.artifact_objects).sort(),
+    errorMessage: item.error_message,
+    createdAt: item.created_at,
+    startedAt: item.started_at,
+    finishedAt: item.finished_at,
   };
 }
 
@@ -143,5 +188,25 @@ export class HttpExperimentRepository implements ExperimentRepository {
 
   downloadBaselineArtifact(runId: string, artifactName: string) {
     return apiDownload(`/experiments/runs/${runId}/artifacts/${encodeURIComponent(artifactName)}`);
+  }
+
+  async requestOptimization(experimentId: string) {
+    return mapOptimizationRun(
+      await apiRequest<ApiOptimizationRun>(`/experiments/${experimentId}/optimize`, {
+        method: "POST",
+      }),
+    );
+  }
+
+  async getOptimizationRun(runId: string, signal?: AbortSignal) {
+    return mapOptimizationRun(
+      await apiRequest<ApiOptimizationRun>(`/experiments/optimization-runs/${runId}`, { signal }),
+    );
+  }
+
+  downloadOptimizationArtifact(runId: string, artifactName: string) {
+    return apiDownload(
+      `/experiments/optimization-runs/${runId}/artifacts/${encodeURIComponent(artifactName)}`,
+    );
   }
 }
