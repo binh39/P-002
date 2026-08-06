@@ -24,4 +24,13 @@ describe("MockProjectRepository", () => {
     expect(project.status).toBe("analyzing");
     expect((await repository.list())[0].name).toBe("sample");
   });
+
+  it("supports re-analysis through the shared repository contract", async () => {
+    const repository = new MockProjectRepository();
+
+    const project = await repository.analyze("isort");
+
+    expect(project.status).toBe("ready");
+    expect(project.analyzedAt).toBe("Just now");
+  });
 });

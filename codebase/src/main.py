@@ -12,6 +12,7 @@ from src.api.router import api_router
 from src.config import Settings, get_settings
 from src.core.errors import AppError
 from src.core.logging import configure_logging
+from src.modules.analysis.router import internal_router
 from src.services.container import build_services
 
 logger = logging.getLogger("promptopt.api")
@@ -95,6 +96,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return error_response(request, 500, "INTERNAL_ERROR", "An unexpected error occurred")
 
     application.include_router(api_router, prefix=settings.api_prefix)
+    application.include_router(internal_router)
 
     async def health():
         return {"status": "ok", "service": "promptopt-api", "env": settings.app_env}

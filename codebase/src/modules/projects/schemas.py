@@ -10,6 +10,7 @@ class StrictModel(BaseModel):
 
 class ProjectStatus(StrEnum):
     UPLOADED = "uploaded"
+    ANALYZING = "analyzing"
     READY = "ready"
     WARNING = "warning"
     FAILED = "failed"

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useLocation, useParams } from "wouter";
 
@@ -12,24 +12,38 @@ export default function ProjectDetail() {
   const { projectId = "isort" } = useParams<{ projectId: string }>();
   const [, navigate] = useLocation();
   const { projects } = useRepositories();
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState<ProjectTab>("overview");
-  const [sourceName, setSourceName] = useState<string | null>(null);
+  const [sourceFunctionId, setSourceFunctionId] = useState<string | null>(null);
   const projectQuery = useQuery({
     queryKey: ["projects", projectId],
     queryFn: ({ signal }) => projects.get(projectId, signal),
+    refetchInterval: (current) => (current.state.data?.status === "analyzing" ? 2_000 : false),
   });
   const functionsQuery = useQuery({
     queryKey: ["projects", projectId, "functions"],
     queryFn: ({ signal }) => projects.listFunctions(projectId, signal),
-    enabled: tab === "functions" || sourceName !== null,
+    enabled:
+      (tab === "functions" || sourceFunctionId !== null) &&
+      projectQuery.data?.status !== "analyzing",
   });
   const functions = functionsQuery.data ?? [];
-  const selectedFunction = functions.find((item) => item.name === sourceName);
+  const selectedFunction = functions.find((item) => item.id === sourceFunctionId);
   const sourceQuery = useQuery({
     queryKey: ["projects", projectId, "functions", selectedFunction?.id, "source"],
     queryFn: ({ signal }) =>
       projects.getFunctionSource(projectId, selectedFunction?.id ?? "", signal),
     enabled: selectedFunction !== undefined,
+  });
+  const analyzeMutation = useMutation({
+    mutationFn: () => projects.analyze(projectId),
+    onSuccess: async (project) => {
+      queryClient.setQueryData(["projects", projectId], project);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["projects"] }),
+        queryClient.invalidateQueries({ queryKey: ["projects", projectId, "functions"] }),
+      ]);
+    },
   });
 
   if (projectQuery.isPending)
@@ -65,10 +79,42 @@ export default function ProjectDetail() {
         actions={
           <>
             <button className="secondary-button">Validate</button>
-            <button className="primary-button">Re-analyze</button>
+            <button
+              className="primary-button"
+              disabled={analyzeMutation.isPending || project.status === "analyzing"}
+              onClick={() => analyzeMutation.mutate()}
+            >
+              {project.status === "analyzing" || analyzeMutation.isPending
+                ? "Analyzing..."
+                : "Re-analyze"}
+            </button>
           </>
         }
       />
+
+      {project.status === "analyzing" && (
+        <div className="platform-callout" role="status">
+          <div>
+            <strong>Project analysis is running</strong>
+            <p>
+              Python files and functions are being extracted. This page refreshes automatically.
+            </p>
+          </div>
+          <StatusBadge tone="info">Queued</StatusBadge>
+        </div>
+      )}
+      {project.status === "failed" && (
+        <div className="page-state page-state-error" role="alert">
+          Analysis failed. Review the ZIP archive and project settings, then run the analysis again.
+        </div>
+      )}
+      {analyzeMutation.isError && (
+        <div className="page-state page-state-error" role="alert">
+          {analyzeMutation.error instanceof Error
+            ? analyzeMutation.error.message
+            : "Analysis could not be started."}
+        </div>
+      )}
 
       <div className="platform-tabs" role="tablist">
         {(["overview", "functions", "settings", "versions"] as ProjectTab[]).map((item) => (
@@ -229,7 +275,7 @@ export default function ProjectDetail() {
                       </StatusBadge>
                     </td>
                     <td>
-                      <button className="table-action" onClick={() => setSourceName(item.name)}>
+                      <button className="table-action" onClick={() => setSourceFunctionId(item.id)}>
                         View source
                       </button>
                     </td>
@@ -292,18 +338,21 @@ export default function ProjectDetail() {
         </section>
       )}
 
-      {sourceName && (
-        <div className="drawer-backdrop" onClick={() => setSourceName(null)}>
+      {sourceFunctionId && selectedFunction && (
+        <div className="drawer-backdrop" onClick={() => setSourceFunctionId(null)}>
           <aside className="source-drawer" onClick={(event) => event.stopPropagation()}>
             <div className="drawer-heading">
               <div>
                 <span className="eyebrow">
                   {project.name} · {project.sourceDir}
                 </span>
-                <h2>{sourceName}</h2>
-                <p>Lines 34–82 · 31 statements · 12 branches</p>
+                <h2>{selectedFunction.name}</h2>
+                <p>
+                  Lines {selectedFunction.lines} · {selectedFunction.statements} statements ·{" "}
+                  {selectedFunction.branches} branches
+                </p>
               </div>
-              <button onClick={() => setSourceName(null)}>×</button>
+              <button onClick={() => setSourceFunctionId(null)}>×</button>
             </div>
             <pre>
               <code>
