@@ -27,8 +27,8 @@ const legacyPagePaths = {
   dashboard: "/dashboard",
   experiments: "/experiments/new",
   playground: "/playground",
-  optimization: "/runs/demo",
-  comparison: "/runs/demo/compare",
+  optimization: "/experiments",
+  comparison: "/experiments",
   review: "/review",
   registry: "/prompts",
   settings: "/settings",
@@ -119,7 +119,7 @@ function RoutedApplication() {
           <Route path="/playground">
             <Playground />
           </Route>
-          <Route path="/runs/:runId/compare">
+          <Route path="/comparison-runs/:runId">
             <Comparison />
           </Route>
           <Route path="/runs/:runId">

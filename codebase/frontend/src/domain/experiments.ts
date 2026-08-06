@@ -85,6 +85,40 @@ export interface OptimizationRun {
   finishedAt: string | null;
 }
 
+export interface ComparisonMetrics {
+  score: number | null;
+  statementCoverage: number | null;
+  branchCoverage: number | null;
+  passRate: number | null;
+  latencySeconds: number | null;
+  sampleCount: number | null;
+  timeoutCount: number | null;
+  flakyTargets: string[];
+}
+
+export interface ComparisonRun {
+  id: string;
+  experimentId: string;
+  optimizationRunId: string;
+  status: ExperimentStatus;
+  baselinePromptDigest: string;
+  candidatePromptDigest: string;
+  testTargetIds: string[];
+  replicateCount: number;
+  baselineMetrics: ComparisonMetrics;
+  candidateMetrics: ComparisonMetrics;
+  absoluteGain: number | null;
+  relativeGain: number | null;
+  promotionEligible: boolean;
+  decisionReason: string;
+  artifacts: string[];
+  promptVersionId: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
 export const baselineRunIsActive = (status: ExperimentStatus) =>
   status === "baseline_queued" || status === "baseline_running";
 
@@ -96,3 +130,6 @@ export const baselineRunIsFinished = (status: ExperimentStatus) =>
 
 export const optimizationRunIsActive = (status: ExperimentStatus) =>
   status === "optimization_queued" || status === "optimizing" || status === "candidate_evaluating";
+
+export const comparisonRunIsActive = (status: ExperimentStatus) =>
+  status === "comparison_queued" || status === "comparing";

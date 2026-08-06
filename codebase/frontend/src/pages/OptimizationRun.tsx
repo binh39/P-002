@@ -51,6 +51,10 @@ export default function OptimizationRun() {
     queryFn: ({ signal }) => experiments.get(runQuery.data?.experimentId ?? "", signal),
     enabled: runQuery.data !== undefined,
   });
+  const compare = useMutation({
+    mutationFn: (experimentId: string) => experiments.requestComparison(experimentId),
+    onSuccess: (comparison) => navigate(`/comparison-runs/${comparison.id}`),
+  });
   const download = useMutation({
     mutationFn: async (artifactName: string) => ({
       artifactName,
@@ -141,7 +145,33 @@ export default function OptimizationRun() {
             <strong>Candidate prompt is locked</strong>
             <p>The candidate is ready for an isolated paired comparison against the baseline.</p>
           </div>
-          <StatusBadge tone="success">Ready for comparison</StatusBadge>
+          {experiment?.comparisonRunId && experiment.status !== "optimization_succeeded" ? (
+            <button
+              className="primary-button"
+              onClick={() => navigate(`/comparison-runs/${experiment.comparisonRunId}`)}
+            >
+              Open comparison
+            </button>
+          ) : (
+            <button
+              className="primary-button"
+              disabled={!experiment || compare.isPending}
+              onClick={() => experiment && compare.mutate(experiment.id)}
+            >
+              {compare.isPending
+                ? "Queueing comparison…"
+                : experiment?.comparisonRunId
+                  ? "Retry paired comparison"
+                  : "Start paired comparison"}
+            </button>
+          )}
+        </section>
+      )}
+
+      {compare.isError && (
+        <section className="baseline-error" role="alert">
+          <strong>Comparison could not be started</strong>
+          <pre>{compare.error.message}</pre>
         </section>
       )}
 

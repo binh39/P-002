@@ -1,6 +1,8 @@
 import { apiDownload, apiRequest } from "@/api/client";
 import type {
   BaselineRun,
+  ComparisonMetrics,
+  ComparisonRun,
   CreateExperimentInput,
   Experiment,
   ExperimentStatus,
@@ -70,6 +72,40 @@ interface ApiOptimizationRun {
   candidate_count: number;
   metric_calls: number;
   artifact_objects: Record<string, string>;
+  error_message: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+interface ApiComparisonMetrics {
+  score?: number | null;
+  statement_coverage?: number | null;
+  branch_coverage?: number | null;
+  pass_rate?: number | null;
+  latency_seconds?: number | null;
+  sample_count?: number | null;
+  timeout_count?: number | null;
+  flaky_targets?: string[];
+}
+
+interface ApiComparisonRun {
+  id: string;
+  experiment_id: string;
+  optimization_run_id: string;
+  status: ExperimentStatus;
+  baseline_prompt_digest: string;
+  candidate_prompt_digest: string;
+  test_target_ids: string[];
+  replicate_count: number;
+  baseline_metrics: ApiComparisonMetrics;
+  candidate_metrics: ApiComparisonMetrics;
+  absolute_gain: number | null;
+  relative_gain: number | null;
+  promotion_eligible: boolean;
+  decision_reason: string;
+  artifact_objects: Record<string, string>;
+  prompt_version_id: string | null;
   error_message: string | null;
   created_at: string;
   started_at: string | null;
@@ -148,6 +184,44 @@ function mapBaselineRun(item: ApiBaselineRun): BaselineRun {
   };
 }
 
+function mapComparisonMetrics(item: ApiComparisonMetrics): ComparisonMetrics {
+  return {
+    score: item.score ?? null,
+    statementCoverage: item.statement_coverage ?? null,
+    branchCoverage: item.branch_coverage ?? null,
+    passRate: item.pass_rate ?? null,
+    latencySeconds: item.latency_seconds ?? null,
+    sampleCount: item.sample_count ?? null,
+    timeoutCount: item.timeout_count ?? null,
+    flakyTargets: item.flaky_targets ?? [],
+  };
+}
+
+function mapComparisonRun(item: ApiComparisonRun): ComparisonRun {
+  return {
+    id: item.id,
+    experimentId: item.experiment_id,
+    optimizationRunId: item.optimization_run_id,
+    status: item.status,
+    baselinePromptDigest: item.baseline_prompt_digest,
+    candidatePromptDigest: item.candidate_prompt_digest,
+    testTargetIds: item.test_target_ids,
+    replicateCount: item.replicate_count,
+    baselineMetrics: mapComparisonMetrics(item.baseline_metrics),
+    candidateMetrics: mapComparisonMetrics(item.candidate_metrics),
+    absoluteGain: item.absolute_gain,
+    relativeGain: item.relative_gain,
+    promotionEligible: item.promotion_eligible,
+    decisionReason: item.decision_reason,
+    artifacts: Object.keys(item.artifact_objects).sort(),
+    promptVersionId: item.prompt_version_id,
+    errorMessage: item.error_message,
+    createdAt: item.created_at,
+    startedAt: item.started_at,
+    finishedAt: item.finished_at,
+  };
+}
+
 export class HttpExperimentRepository implements ExperimentRepository {
   async list(signal?: AbortSignal) {
     const response = await apiRequest<ApiExperimentList>("/experiments", { signal });
@@ -207,6 +281,26 @@ export class HttpExperimentRepository implements ExperimentRepository {
   downloadOptimizationArtifact(runId: string, artifactName: string) {
     return apiDownload(
       `/experiments/optimization-runs/${runId}/artifacts/${encodeURIComponent(artifactName)}`,
+    );
+  }
+
+  async requestComparison(experimentId: string) {
+    return mapComparisonRun(
+      await apiRequest<ApiComparisonRun>(`/experiments/${experimentId}/compare`, {
+        method: "POST",
+      }),
+    );
+  }
+
+  async getComparisonRun(runId: string, signal?: AbortSignal) {
+    return mapComparisonRun(
+      await apiRequest<ApiComparisonRun>(`/experiments/comparison-runs/${runId}`, { signal }),
+    );
+  }
+
+  downloadComparisonArtifact(runId: string, artifactName: string) {
+    return apiDownload(
+      `/experiments/comparison-runs/${runId}/artifacts/${encodeURIComponent(artifactName)}`,
     );
   }
 }

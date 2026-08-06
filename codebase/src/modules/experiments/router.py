@@ -91,6 +91,17 @@ async def get_comparison_run(run_id: str, user: CurrentUser, request: Request):
     return await request.app.state.services.experiments.get_comparison_run(run_id, user.uid)
 
 
+@router.get("/comparison-runs/{run_id}/artifacts/{artifact_name}")
+async def get_comparison_artifact(run_id: str, artifact_name: str, user: CurrentUser, request: Request):
+    content = await request.app.state.services.experiments.get_comparison_artifact(run_id, artifact_name, user.uid)
+    safe_name = artifact_name.replace('"', "")
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
+    )
+
+
 @router.get("/{experiment_id}", response_model=ExperimentResponse)
 async def get_experiment(experiment_id: str, user: CurrentUser, request: Request):
     return await request.app.state.services.experiments.get(experiment_id, user.uid)

@@ -37,6 +37,8 @@ export default function Experiments() {
           "optimization_queued",
           "optimizing",
           "candidate_evaluating",
+          "comparison_queued",
+          "comparing",
         ].includes(item.status),
       )
         ? 3_000
@@ -69,6 +71,8 @@ export default function Experiments() {
       "optimization_queued",
       "optimizing",
       "candidate_evaluating",
+      "comparison_queued",
+      "comparing",
     ].includes(item.status),
   ).length;
   const completed = items.filter((item) => item.status === "baseline_succeeded").length;
@@ -148,13 +152,14 @@ export default function Experiments() {
                       }).format(new Date(item.updatedAt))}
                     </td>
                     <td>
-                      {item.optimizationRunId &&
-                      [
-                        "optimization_queued",
-                        "optimizing",
-                        "candidate_evaluating",
-                        "optimization_succeeded",
-                      ].includes(item.status) ? (
+                      {item.comparisonRunId ? (
+                        <button
+                          className="table-action"
+                          onClick={() => navigate(`/comparison-runs/${item.comparisonRunId}`)}
+                        >
+                          Open comparison
+                        </button>
+                      ) : item.optimizationRunId ? (
                         <button
                           className="table-action"
                           onClick={() => navigate(`/optimization-runs/${item.optimizationRunId}`)}

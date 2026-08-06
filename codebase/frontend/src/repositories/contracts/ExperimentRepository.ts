@@ -1,5 +1,6 @@
 import type {
   BaselineRun,
+  ComparisonRun,
   CreateExperimentInput,
   Experiment,
   OptimizationRun,
@@ -15,4 +16,7 @@ export interface ExperimentRepository {
   requestOptimization(experimentId: string): Promise<OptimizationRun>;
   getOptimizationRun(runId: string, signal?: AbortSignal): Promise<OptimizationRun>;
   downloadOptimizationArtifact(runId: string, artifactName: string): Promise<Blob>;
+  requestComparison(experimentId: string): Promise<ComparisonRun>;
+  getComparisonRun(runId: string, signal?: AbortSignal): Promise<ComparisonRun>;
+  downloadComparisonArtifact(runId: string, artifactName: string): Promise<Blob>;
 }

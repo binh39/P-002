@@ -4,6 +4,7 @@ import pytest
 
 from src.modules.experiments.prompts import baseline_prompt
 from src.modules.experiments.schemas import (
+    ComparisonRunRecord,
     ExperimentRecord,
     ExperimentStatus,
     OptimizationRunRecord,
@@ -133,6 +134,58 @@ async def test_download_optimization_artifact_checks_run_manifest(client, app):
 
     assert downloaded.status_code == 200
     assert downloaded.json() == {"score": 0.8}
+    assert missing.status_code == 404
+    assert missing.json()["error"]["code"] == "ARTIFACT_NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_download_comparison_artifact_checks_run_manifest(client, app):
+    repository = app.state.services.experiments.repository
+    now = datetime.now(UTC)
+    await repository.create(
+        ExperimentRecord(
+            id="comparison-artifact-experiment",
+            owner_id="local-user",
+            project_id="project-1",
+            name="Comparison artifacts",
+            target_function_ids=["fn-1"],
+            status=ExperimentStatus.COMPARISON_SUCCEEDED,
+            comparison_run_id="comparison-artifact-run",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    object_name = (
+        "artifacts/local-user/project-1/comparison-artifact-experiment/comparison-artifact-run/final_validation.json"
+    )
+    await repository.create_comparison_run(
+        ComparisonRunRecord(
+            id="comparison-artifact-run",
+            experiment_id="comparison-artifact-experiment",
+            optimization_run_id="optimization-1",
+            status=ExperimentStatus.COMPARISON_SUCCEEDED,
+            baseline_prompt_digest="parent",
+            candidate_prompt_digest="candidate",
+            test_target_ids=["fn-1"],
+            replicate_count=2,
+            artifact_objects={"final_validation.json": object_name},
+            created_at=now,
+            finished_at=now,
+        )
+    )
+    await app.state.services.experiments.storage.write(object_name, b'{"absolute_gain": 0.4}', "application/json")
+
+    downloaded = await client.get(
+        "/api/v1/experiments/comparison-runs/comparison-artifact-run/artifacts/final_validation.json",
+        headers=AUTH_HEADERS,
+    )
+    missing = await client.get(
+        "/api/v1/experiments/comparison-runs/comparison-artifact-run/artifacts/missing.json",
+        headers=AUTH_HEADERS,
+    )
+
+    assert downloaded.status_code == 200
+    assert downloaded.json() == {"absolute_gain": 0.4}
     assert missing.status_code == 404
     assert missing.json()["error"]["code"] == "ARTIFACT_NOT_FOUND"
 
