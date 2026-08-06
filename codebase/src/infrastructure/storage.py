@@ -69,11 +69,28 @@ class LocalObjectStorage:
 
 
 class GcsObjectStorage:
-    def __init__(self, project_id: str, bucket_name: str):
+    def __init__(self, project_id: str, bucket_name: str, service_account_email: str):
+        import google.auth
         from google.cloud import storage
 
-        self.client = storage.Client(project=project_id)
+        self.credentials, _ = google.auth.default()
+        self.client = storage.Client(project=project_id, credentials=self.credentials)
         self.bucket = self.client.bucket(bucket_name)
+        self.service_account_email = service_account_email
+
+    def _signed_put_url(self, object_name: str, content_type: str, expires_at: datetime) -> str:
+        from google.auth.transport.requests import Request
+
+        if not self.credentials.valid:
+            self.credentials.refresh(Request())
+        return self.bucket.blob(object_name).generate_signed_url(
+            version="v4",
+            expiration=expires_at,
+            method="PUT",
+            content_type=content_type,
+            service_account_email=self.service_account_email,
+            access_token=self.credentials.token,
+        )
 
     async def create_upload_target(
         self,
@@ -83,14 +100,7 @@ class GcsObjectStorage:
         expires_at: datetime,
     ) -> UploadTarget:
         del upload_id
-        blob = self.bucket.blob(object_name)
-        url = await asyncio.to_thread(
-            blob.generate_signed_url,
-            version="v4",
-            expiration=expires_at,
-            method="PUT",
-            content_type=content_type,
-        )
+        url = await asyncio.to_thread(self._signed_put_url, object_name, content_type, expires_at)
         return UploadTarget(url=url, method="PUT", headers={"Content-Type": content_type})
 
     async def put_local(self, object_name: str, content: bytes) -> None:

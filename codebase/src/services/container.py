@@ -44,7 +44,11 @@ def build_services(settings: Settings) -> ServiceContainer:
         project_repository = InMemoryProjectRepository()
 
     if settings.storage_backend == "gcs":
-        storage = GcsObjectStorage(settings.gcp_project_id, settings.gcs_bucket)
+        storage = GcsObjectStorage(
+            settings.gcp_project_id,
+            settings.gcs_bucket,
+            settings.gcp_service_account_email,
+        )
     else:
         storage = LocalObjectStorage(settings.local_upload_dir, settings.api_prefix)
 

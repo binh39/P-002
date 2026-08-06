@@ -69,6 +69,7 @@ AUTH_MODE=firebase
 REPOSITORY_BACKEND=firestore
 STORAGE_BACKEND=gcs
 GCP_PROJECT_ID=vinaip002
+GCP_SERVICE_ACCOUNT_EMAIL=promptopt-api@vinaip002.iam.gserviceaccount.com
 GCS_BUCKET=<private-source-bucket>
 CORS_ORIGINS=https://vinaip002.web.app,https://c3-app-002.io.vn
 ```
@@ -76,10 +77,13 @@ CORS_ORIGINS=https://vinaip002.web.app,https://c3-app-002.io.vn
 The Cloud Run runtime service account needs only:
 
 - Firestore read/write access for `projects` and `uploads`.
+- Firebase Authentication viewer access because revoked-token checking reads the user record.
 - Object create/read metadata access on the private source bucket.
 - Permission to sign V4 upload URLs (`iam.serviceAccounts.signBlob`, normally granted with Service Account Token Creator on itself).
 
 Configure bucket CORS to allow `PUT` with `Content-Type` from the production frontend origins. Do not make the bucket public. Uploaded size is verified again before a project can reference the archive.
+
+The deployed production resources are `promptopt-api`, Firestore `(default)` and bucket `vinaip002-promptopt-sources` in `asia-southeast1`. The public same-origin API base is `https://vinaip002.web.app/api/v1`; the direct Cloud Run URL is an implementation detail.
 
 ## Deliberate boundary
 

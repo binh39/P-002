@@ -4,6 +4,7 @@ const envSchema = z
   .object({
     VITE_AUTH_MODE: z.enum(["demo", "firebase"]).default("demo"),
     VITE_DATA_MODE: z.enum(["demo", "connected"]).default("demo"),
+    VITE_PROJECTS_DATA_MODE: z.enum(["demo", "connected"]).optional(),
     VITE_API_BASE_URL: z.string().min(1).default("/api/v1"),
     VITE_FIREBASE_API_KEY: z.string().optional(),
     VITE_FIREBASE_AUTH_DOMAIN: z.string().optional(),
@@ -40,6 +41,7 @@ if (!parsed.success) {
 export const env = {
   authMode: parsed.data.VITE_AUTH_MODE,
   dataMode: parsed.data.VITE_DATA_MODE,
+  projectsDataMode: parsed.data.VITE_PROJECTS_DATA_MODE ?? parsed.data.VITE_DATA_MODE,
   apiBaseUrl: parsed.data.VITE_API_BASE_URL.replace(/\/$/, ""),
   firebase: {
     apiKey: parsed.data.VITE_FIREBASE_API_KEY ?? "",

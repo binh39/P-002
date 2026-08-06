@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     repository_backend: Literal["memory", "firestore"] = "memory"
     storage_backend: Literal["local", "gcs"] = "local"
     gcp_project_id: str = "vinaip002"
+    gcp_service_account_email: str = ""
     gcs_bucket: str = ""
     signed_url_ttl_seconds: int = Field(default=900, ge=60, le=3600)
     max_upload_bytes: int = Field(default=100 * 1024 * 1024, ge=1024)
@@ -44,6 +45,8 @@ class Settings(BaseSettings):
                 raise ValueError("REPOSITORY_BACKEND=firestore is required in production")
             if self.storage_backend != "gcs" or not self.gcs_bucket:
                 raise ValueError("STORAGE_BACKEND=gcs and GCS_BUCKET are required in production")
+            if not self.gcp_service_account_email:
+                raise ValueError("GCP_SERVICE_ACCOUNT_EMAIL is required in production")
         return self
 
 

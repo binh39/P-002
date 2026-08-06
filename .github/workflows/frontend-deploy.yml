@@ -22,6 +22,7 @@ env:
   FIREBASE_WEB_APP_ID: 1:891999064201:web:69022a3951a6ff42eaf658
   VITE_AUTH_MODE: firebase
   VITE_DATA_MODE: demo
+  VITE_PROJECTS_DATA_MODE: connected
   VITE_API_BASE_URL: /api/v1
 
 jobs:

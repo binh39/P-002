@@ -1,0 +1,12 @@
+.gcloudignore
+.git
+.gitignore
+.env
+.env.*
+frontend/
+tests/
+docs/
+infra/
+data/
+**/__pycache__/
+**/*.pyc

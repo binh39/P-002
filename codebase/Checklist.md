@@ -302,10 +302,10 @@ build
   - [x] Unit/integration tests cho module đó.
   - [x] Docker context nằm tại `codebase/`, image chỉ copy `codebase/src` và loại frontend khỏi image.
   - [x] Docker image chạy bằng non-root user và đã qua smoke test upload → create/list project.
-  - [ ] Service account quyền tối thiểu.
-- [ ] Khi API đã deploy, thêm Firebase Hosting rewrite `/api/**` sang Cloud Run.
-- [ ] Chuyển đúng frontend feature từ mock repository sang HTTP repository.
-- [ ] Deploy backend độc lập khi `codebase/src/**` hoặc backend dependency thay đổi.
+  - [x] Service account quyền tối thiểu.
+- [x] Khi API đã deploy, thêm Firebase Hosting rewrite `/api/**` sang Cloud Run.
+- [x] Chuyển đúng frontend feature từ mock repository sang HTTP repository.
+- [x] Deploy backend độc lập khi `codebase/src/**` hoặc backend dependency thay đổi.
 - [ ] Không chờ hoàn thiện nhiều module backend mới deploy; deploy từng vertical slice nhỏ sau khi đạt các điều kiện trên.
 
 ### Backend vertical slice đề xuất đầu tiên
@@ -335,7 +335,7 @@ Create experiment
 
 - [x] Preview public URL truy cập được và HTTPS hoạt động.
 - [x] Navigation dùng URL, refresh/deep link hoạt động trên Firebase Hosting.
-- [ ] Firebase login/logout hoạt động trên domain thật.
+- [x] Firebase Auth token và API được kiểm thử end-to-end trên hạ tầng thật.
 - [ ] Không còn auth giả bằng `sessionStorage`.
 - [ ] Mock data chỉ tồn tại sau repository contracts và có badge demo.
 - [ ] Không component/page nào import trực tiếp mock fixtures.
@@ -352,4 +352,4 @@ Create experiment
 4. [x] Phase 4: tích hợp Firebase Auth, bật Google provider và điền Firebase project config thật.
 5. [x] Phase 6: cấu hình Firebase Hosting, nghiệm thu preview, xóa preview và deploy live production.
 6. [x] Phase 7: frontend CI/CD tự động deploy `main` đã hoạt động.
-7. [ ] Phase 5 + 8: backend vertical slice đầu tiên đã code tại `codebase/src`; còn provision GCP và deploy.
+7. [x] Phase 5 + 8: backend vertical slice đầu tiên tại `codebase/src` đã provision GCP, deploy Cloud Run và nối Firebase Hosting.

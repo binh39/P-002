@@ -20,7 +20,8 @@ function createRepositories(): Repositories {
   return {
     dashboard:
       env.dataMode === "demo" ? new MockDashboardRepository() : new HttpDashboardRepository(),
-    projects: env.dataMode === "demo" ? new MockProjectRepository() : new HttpProjectRepository(),
+    projects:
+      env.projectsDataMode === "demo" ? new MockProjectRepository() : new HttpProjectRepository(),
   };
 }
 
