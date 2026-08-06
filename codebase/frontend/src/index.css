@@ -1223,6 +1223,71 @@ body {
 .baseline-targets-card {
   margin-top: 0;
 }
+.optimization-run-page {
+  max-width: 1380px;
+}
+.optimization-ready-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border: 1px solid #a7f3d0;
+  border-radius: 13px;
+  background: #f0fdf4;
+}
+.optimization-ready-callout strong {
+  display: block;
+  margin-bottom: 3px;
+  color: #166534;
+  font-size: 13.5px;
+}
+.optimization-ready-callout p {
+  margin: 0;
+  color: #4d7c61;
+  font-size: 11.5px;
+}
+.optimization-details-grid {
+  margin-bottom: 18px;
+}
+.optimization-details-grid .definition-list dd {
+  max-width: 62%;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+.candidate-prompt-card {
+  margin-top: 0;
+}
+.candidate-prompt-sections {
+  display: grid;
+  gap: 12px;
+}
+.candidate-prompt-sections section {
+  overflow: hidden;
+  border: 1px solid #e6e9f2;
+  border-radius: 10px;
+  background: #fbfcff;
+}
+.candidate-prompt-sections h3 {
+  margin: 0;
+  padding: 10px 13px;
+  border-bottom: 1px solid #e6e9f2;
+  color: #44506a;
+  font-size: 11px;
+  text-transform: capitalize;
+}
+.candidate-prompt-sections pre {
+  max-height: 320px;
+  overflow: auto;
+  margin: 0;
+  padding: 14px;
+  color: #334155;
+  font:
+    11px/1.6 "JetBrains Mono",
+    monospace;
+  white-space: pre-wrap;
+}
 .wizard-heading {
   margin-bottom: 21px;
 }

@@ -64,6 +64,10 @@ export default function OptimizationProgress() {
       URL.revokeObjectURL(url);
     },
   });
+  const startOptimization = useMutation({
+    mutationFn: () => experiments.requestOptimization(runQuery.data?.experimentId ?? ""),
+    onSuccess: (optimizationRun) => navigate(`/optimization-runs/${optimizationRun.id}`),
+  });
 
   if (runQuery.isPending) {
     return (
@@ -89,6 +93,12 @@ export default function OptimizationProgress() {
   const run = runQuery.data;
   const active = baselineRunIsActive(run.status);
   const experiment = experimentQuery.data;
+  const canStartOptimization =
+    run.status === "baseline_succeeded" &&
+    experiment?.status === "baseline_succeeded" &&
+    experiment.optimizationEligible;
+  const canOpenOptimization =
+    experiment?.optimizationRunId && experiment.status !== "baseline_succeeded";
 
   return (
     <div className="platform-page baseline-run-page">
@@ -100,11 +110,53 @@ export default function OptimizationProgress() {
         title={experiment?.name ?? "Baseline evaluation"}
         description="Real-time coverage result from the isolated production runner."
         actions={
-          <StatusBadge tone={statusTone(run.status)}>
-            {statusLabels[run.status] ?? run.status.replace(/_/g, " ")}
-          </StatusBadge>
+          <>
+            <StatusBadge tone={statusTone(run.status)}>
+              {statusLabels[run.status] ?? run.status.replace(/_/g, " ")}
+            </StatusBadge>
+            {canOpenOptimization && (
+              <button
+                className="primary-button"
+                onClick={() => navigate(`/optimization-runs/${experiment.optimizationRunId}`)}
+              >
+                Open optimization
+              </button>
+            )}
+            {canStartOptimization && (
+              <button
+                className="primary-button"
+                disabled={startOptimization.isPending}
+                onClick={() => startOptimization.mutate()}
+              >
+                {experiment.optimizationRunId ? "Retry optimization" : "Start optimization"}
+              </button>
+            )}
+          </>
         }
       />
+
+      {run.status === "baseline_succeeded" && experiment && !experiment.optimizationEligible && (
+        <section className="platform-callout">
+          <div>
+            <strong>More targets are required for optimization</strong>
+            <p>
+              Create an experiment with at least three functions so train, validation and test
+              splits are non-empty.
+            </p>
+          </div>
+          <button className="secondary-button" onClick={() => navigate("/experiments/new")}>
+            Create another experiment
+          </button>
+        </section>
+      )}
+
+      {startOptimization.isError && (
+        <div className="auth-error" role="alert">
+          {startOptimization.error instanceof Error
+            ? startOptimization.error.message
+            : "Optimization could not be started."}
+        </div>
+      )}
 
       {active && (
         <section className="baseline-running-card" role="status">

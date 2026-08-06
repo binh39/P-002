@@ -20,6 +20,9 @@ describe("HttpExperimentRepository", () => {
         optimization_eligible: false,
         status: "draft",
         baseline_run_id: null,
+        optimization_run_id: null,
+        comparison_run_id: null,
+        prompt_version_id: null,
         created_at: "2026-08-06T00:00:00Z",
         updated_at: "2026-08-06T00:00:00Z",
       },
@@ -75,6 +78,43 @@ describe("HttpExperimentRepository", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "/api/v1/experiments/experiment-1/runs",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("starts and maps an optimization run", async () => {
+    const response = {
+      id: "optimization-1",
+      experiment_id: "experiment-1",
+      status: "optimization_queued",
+      parent_prompt_digest: "parent-digest",
+      candidate_prompt: null,
+      candidate_prompt_digest: null,
+      baseline_validation_score: null,
+      candidate_validation_score: null,
+      candidate_count: 0,
+      metric_calls: 0,
+      artifact_objects: {},
+      error_message: null,
+      created_at: "2026-08-06T00:00:00Z",
+      started_at: null,
+      finished_at: null,
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(response), {
+        status: 202,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const run = await new HttpExperimentRepository().requestOptimization("experiment-1");
+
+    expect(run.id).toBe("optimization-1");
+    expect(run.parentPromptDigest).toBe("parent-digest");
+    expect(run.status).toBe("optimization_queued");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/experiments/experiment-1/optimize",
       expect.objectContaining({ method: "POST" }),
     );
   });

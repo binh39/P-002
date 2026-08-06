@@ -269,6 +269,16 @@ class ExperimentService:
         await self._owned(run.experiment_id, owner_id)
         return OptimizationRunResponse.model_validate(run)
 
+    async def get_optimization_artifact(self, run_id: str, artifact_name: str, owner_id: str) -> bytes:
+        run = await self.repository.get_optimization_run(run_id)
+        if run is None:
+            raise AppError(404, "OPTIMIZATION_RUN_NOT_FOUND", "Optimization run was not found")
+        await self._owned(run.experiment_id, owner_id)
+        object_name = run.artifact_objects.get(artifact_name)
+        if object_name is None:
+            raise AppError(404, "ARTIFACT_NOT_FOUND", "Optimization artifact was not found")
+        return await self.storage.read(object_name)
+
     async def execute_optimization(self, run_id: str) -> None:
         run = await self.repository.get_optimization_run(run_id)
         if run is None or run.status != ExperimentStatus.OPTIMIZATION_QUEUED:

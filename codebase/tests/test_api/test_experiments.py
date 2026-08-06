@@ -6,6 +6,7 @@ from src.modules.experiments.prompts import baseline_prompt
 from src.modules.experiments.schemas import (
     ExperimentRecord,
     ExperimentStatus,
+    OptimizationRunRecord,
     PromptVersionRecord,
     PromptVersionStatus,
 )
@@ -83,6 +84,55 @@ async def test_download_baseline_artifact_checks_run_manifest(client, app):
     assert downloaded.status_code == 200
     assert downloaded.content == b"runner output"
     assert downloaded.headers["content-disposition"] == 'attachment; filename="coverup.log"'
+    assert missing.status_code == 404
+    assert missing.json()["error"]["code"] == "ARTIFACT_NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_download_optimization_artifact_checks_run_manifest(client, app):
+    repository = app.state.services.experiments.repository
+    now = datetime.now(UTC)
+    await repository.create(
+        ExperimentRecord(
+            id="optimization-artifact-experiment",
+            owner_id="local-user",
+            project_id="project-1",
+            name="Optimization artifacts",
+            target_function_ids=["fn-1"],
+            status=ExperimentStatus.OPTIMIZATION_SUCCEEDED,
+            optimization_run_id="optimization-artifact-run",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    object_name = (
+        "artifacts/local-user/project-1/optimization-artifact-experiment/optimization-artifact-run/gepa_result.json"
+    )
+    await repository.create_optimization_run(
+        OptimizationRunRecord(
+            id="optimization-artifact-run",
+            experiment_id="optimization-artifact-experiment",
+            status=ExperimentStatus.OPTIMIZATION_SUCCEEDED,
+            parent_prompt_digest="parent",
+            candidate_prompt_digest="candidate",
+            artifact_objects={"gepa_result.json": object_name},
+            created_at=now,
+            finished_at=now,
+        )
+    )
+    await app.state.services.experiments.storage.write(object_name, b'{"score": 0.8}', "application/json")
+
+    downloaded = await client.get(
+        "/api/v1/experiments/optimization-runs/optimization-artifact-run/artifacts/gepa_result.json",
+        headers=AUTH_HEADERS,
+    )
+    missing = await client.get(
+        "/api/v1/experiments/optimization-runs/optimization-artifact-run/artifacts/missing.json",
+        headers=AUTH_HEADERS,
+    )
+
+    assert downloaded.status_code == 200
+    assert downloaded.json() == {"score": 0.8}
     assert missing.status_code == 404
     assert missing.json()["error"]["code"] == "ARTIFACT_NOT_FOUND"
 

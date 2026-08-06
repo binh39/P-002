@@ -15,6 +15,7 @@ const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Datasets = lazy(() => import("@/pages/Datasets"));
 const Experiments = lazy(() => import("@/pages/Experiments"));
 const OptimizationProgress = lazy(() => import("@/pages/OptimizationProgress"));
+const OptimizationRun = lazy(() => import("@/pages/OptimizationRun"));
 const Playground = lazy(() => import("@/pages/Playground"));
 const Registry = lazy(() => import("@/pages/Registry"));
 const ReviewApproval = lazy(() => import("@/pages/ReviewApproval"));
@@ -123,6 +124,9 @@ function RoutedApplication() {
           </Route>
           <Route path="/runs/:runId">
             <OptimizationProgress />
+          </Route>
+          <Route path="/optimization-runs/:runId">
+            <OptimizationRun />
           </Route>
           <Route path="/review">
             <ReviewApproval />
