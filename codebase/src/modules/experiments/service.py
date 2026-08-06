@@ -1,10 +1,12 @@
 from datetime import UTC, datetime
 
 from src.core.errors import AppError
+from src.infrastructure.storage import ObjectStorage
 from src.modules.analysis.repository import FunctionRepository
 from src.modules.projects.service import ProjectService
 
 from .dispatcher import BaselineDispatcher
+from .executor import DockerCoverUpExecutor
 from .repository import ExperimentRepository
 from .schemas import (
     BaselineRunRecord,
@@ -18,8 +20,16 @@ from .schemas import (
 
 
 class ExperimentService:
-    def __init__(self, repository: ExperimentRepository, projects: ProjectService, functions: FunctionRepository):
+    def __init__(
+        self,
+        repository: ExperimentRepository,
+        projects: ProjectService,
+        functions: FunctionRepository,
+        storage: ObjectStorage,
+        executor: DockerCoverUpExecutor | None = None,
+    ):
         self.repository, self.projects, self.functions = repository, projects, functions
+        self.storage, self.executor = storage, executor
         self.dispatcher: BaselineDispatcher | None = None
 
     def set_dispatcher(self, dispatcher: BaselineDispatcher) -> None:
@@ -91,19 +101,37 @@ class ExperimentService:
         run = await self.repository.get_run(run_id)
         if run is None:
             return
-        # Execution of uploaded code belongs in the isolated runner introduced in PR 2.
-        # This worker preserves the durable lifecycle and never executes user code in the API container.
         run.status, run.started_at = ExperimentStatus.BASELINE_RUNNING, datetime.now(UTC)
         await self.repository.save_run(run)
-        run.status, run.error_message, run.finished_at = (
-            ExperimentStatus.FAILED,
-            "Baseline sandbox is not configured",
-            datetime.now(UTC),
-        )
-        await self.repository.save_run(run)
         item = await self.repository.get(run.experiment_id)
+        try:
+            if item is None or self.executor is None:
+                raise RuntimeError("Baseline sandbox is not configured")
+            project = await self.projects.require_owned(item.project_id, item.owner_id)
+            selected = [await self.functions.get(project.id, function_id) for function_id in item.target_function_ids]
+            if any(function is None for function in selected):
+                raise RuntimeError("A selected function is no longer available")
+            result = await self.executor.execute(
+                await self.storage.read(project.object_name),
+                project.settings.runtime.source_directory,
+                [function.qualified_name for function in selected if function],
+            )
+            run.status, run.coverage_score, run.finished_at = (
+                ExperimentStatus.BASELINE_SUCCEEDED,
+                result.coverage_score,
+                datetime.now(UTC),
+            )
+            item.status, item.updated_at = ExperimentStatus.BASELINE_SUCCEEDED, run.finished_at
+        except Exception as exc:
+            run.status, run.error_message, run.finished_at = (
+                ExperimentStatus.FAILED,
+                str(exc)[-4000:],
+                datetime.now(UTC),
+            )
+            if item:
+                item.status, item.updated_at = ExperimentStatus.FAILED, run.finished_at
+        await self.repository.save_run(run)
         if item:
-            item.status, item.updated_at = ExperimentStatus.FAILED, run.finished_at
             await self.repository.save(item)
 
     async def _owned(self, experiment_id, owner_id):
