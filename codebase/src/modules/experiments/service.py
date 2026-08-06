@@ -7,6 +7,7 @@ from src.modules.projects.service import ProjectService
 
 from .dispatcher import BaselineDispatcher
 from .executor import DockerCoverUpExecutor
+from .prompts import baseline_prompt
 from .repository import ExperimentRepository
 from .schemas import (
     BaselineRunRecord,
@@ -115,6 +116,7 @@ class ExperimentService:
                 await self.storage.read(project.object_name),
                 project.settings.runtime.source_directory,
                 [function.qualified_name for function in selected if function],
+                baseline_prompt(),
             )
             run.status, run.coverage_score, run.finished_at = (
                 ExperimentStatus.BASELINE_SUCCEEDED,

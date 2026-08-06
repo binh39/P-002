@@ -10,6 +10,8 @@ from pathlib import Path, PurePosixPath
 
 from src.core.errors import AppError
 
+from .prompts import PromptBundle
+
 
 @dataclass(frozen=True, slots=True)
 class BaselineExecution:
@@ -22,16 +24,24 @@ class DockerCoverUpExecutor:
     def __init__(self, image: str, timeout_seconds: int, memory_mb: int, cpu: int):
         self.image, self.timeout_seconds, self.memory_mb, self.cpu = image, timeout_seconds, memory_mb, cpu
 
-    async def execute(self, archive: bytes, source_directory: str, symbols: list[str]) -> BaselineExecution:
-        return await asyncio.to_thread(self._execute_sync, archive, source_directory, symbols)
+    async def execute(
+        self, archive: bytes, source_directory: str, symbols: list[str], prompt: PromptBundle
+    ) -> BaselineExecution:
+        return await asyncio.to_thread(self._execute_sync, archive, source_directory, symbols, prompt)
 
-    def _execute_sync(self, archive: bytes, source_directory: str, symbols: list[str]) -> BaselineExecution:
+    def _execute_sync(
+        self, archive: bytes, source_directory: str, symbols: list[str], prompt: PromptBundle
+    ) -> BaselineExecution:
+        prompt.validate()
         with tempfile.TemporaryDirectory(prefix="promptopt-baseline-") as temp:
             root = Path(temp)
             project = root / "project"
             tests = root / "generated-tests"
+            prompt_dir = root / "prompt"
             project.mkdir()
             tests.mkdir()
+            prompt_dir.mkdir()
+            (prompt_dir / "prompt.json").write_text(prompt.as_json(), encoding="utf-8")
             self._extract_archive(archive, project)
             source = (project / source_directory).resolve()
             if project not in source.parents or not source.is_dir():
@@ -59,6 +69,8 @@ class DockerCoverUpExecutor:
                 f"type=bind,src={project},dst=/workspace/project,readonly",
                 "--mount",
                 f"type=bind,src={tests},dst=/workspace/tests",
+                "--mount",
+                f"type=bind,src={prompt_dir},dst=/workspace/prompt,readonly",
             ]
             credentials = self._application_default_credentials()
             if credentials:
@@ -85,6 +97,10 @@ class DockerCoverUpExecutor:
                     "/workspace/tests",
                     "--target-symbol",
                     ",".join(symbols),
+                    "--prompt",
+                    "gpt-v2",
+                    "--prompt-template-file",
+                    "/workspace/prompt/prompt.json",
                     "--max-attempts",
                     "3",
                     "--repeat-tests",
