@@ -859,8 +859,40 @@ body {
   font-weight: 400;
 }
 .platform-field input,
-.platform-field select {
+.platform-field select,
+.platform-field textarea {
   width: 100%;
+}
+.platform-field textarea {
+  min-height: 92px;
+  resize: vertical;
+  padding: 9px 11px;
+  border: 1px solid #dfe3ef;
+  border-radius: 8px;
+  outline: none;
+  background: #fafbff;
+  color: #374151;
+  font: inherit;
+  font-weight: 400;
+}
+.add-project-drawer {
+  width: min(560px, 94vw);
+}
+.add-project-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 26px;
+}
+.upload-field {
+  padding: 16px;
+  border: 1px dashed #cbd2e4;
+  border-radius: 10px;
+  background: #fafbff;
+}
+.upload-field input[type="file"] {
+  padding: 8px;
+  background: #fff;
 }
 .settings-actions {
   display: flex;

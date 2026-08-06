@@ -137,12 +137,12 @@ queued -> preparing -> baseline -> optimizing -> evaluating
 
 ### 3.2 Repository contracts
 
-- [ ] Tạo interface `ProjectRepository`.
+- [x] Tạo interface `ProjectRepository` cho list/detail/create project và function contract kế tiếp.
 - [ ] Tạo interface `ExperimentRepository`.
 - [ ] Tạo interface `RunRepository`.
 - [ ] Tạo interface `PromptRepository`.
 - [ ] Page chỉ gọi hooks/use cases, không gọi `fetch` và không import mock fixture.
-- [ ] Tạo `Mock*Repository` implement cùng contract để frontend tiếp tục demo độc lập.
+- [x] Tạo `MockProjectRepository` và `HttpProjectRepository` dùng cùng contract; Projects không fallback âm thầm.
 - [ ] Đưa toàn bộ fixture vào `src/mocks/fixtures`; không rải object hardcode trong component.
 - [ ] Mock phải mô phỏng cả latency, empty state và error state có kiểm soát.
 - [x] Tạo `DashboardRepository`, `MockDashboardRepository` và `HttpDashboardRepository` làm mẫu chuẩn đầu tiên.
@@ -188,7 +188,7 @@ VITE_FIREBASE_APP_ID=
 ## Phase 5 — API contract sẵn sàng để ghép backend
 
 - [x] Chốt prefix frontend `/api/v1`, có thể override bằng environment variable.
-- [ ] Chốt error envelope thống nhất:
+- [x] Chốt error envelope thống nhất:
 
 ```json
 {
@@ -294,17 +294,18 @@ build
 ### Deploy backend ngay khi có vertical slice đầu tiên
 
 - [ ] Deploy khi backend có tối thiểu:
-  - [ ] `GET /health`.
-  - [ ] Production configuration và structured logging.
-  - [ ] Firebase ID token verification.
-  - [ ] CORS/same-origin policy đúng.
-  - [ ] Một module có giá trị thật, khuyến nghị `projects + signed upload` hoặc `experiments CRUD`.
-  - [ ] Unit/integration tests cho module đó.
-  - [ ] Docker image chỉ chứa backend cần thiết.
-  - [ ] Service account quyền tối thiểu.
-- [ ] Khi API đã deploy, thêm Firebase Hosting rewrite `/api/**` sang Cloud Run.
-- [ ] Chuyển đúng frontend feature từ mock repository sang HTTP repository.
-- [ ] Deploy backend độc lập khi `src/**` hoặc backend dependency thay đổi.
+  - [x] `GET /health`.
+  - [x] Production configuration và structured logging.
+  - [x] Firebase ID token verification.
+  - [x] CORS/same-origin policy đúng.
+  - [x] Module `projects + signed upload` đã được code với adapter local và Google Cloud.
+  - [x] Unit/integration tests cho module đó.
+  - [x] Docker context nằm tại `codebase/`, image chỉ copy `codebase/src` và loại frontend khỏi image.
+  - [x] Docker image chạy bằng non-root user và đã qua smoke test upload → create/list project.
+  - [x] Service account quyền tối thiểu.
+- [x] Khi API đã deploy, thêm Firebase Hosting rewrite `/api/**` sang Cloud Run.
+- [x] Chuyển đúng frontend feature từ mock repository sang HTTP repository.
+- [x] Deploy backend độc lập khi `codebase/src/**` hoặc backend dependency thay đổi.
 - [ ] Không chờ hoàn thiện nhiều module backend mới deploy; deploy từng vertical slice nhỏ sau khi đạt các điều kiện trên.
 
 ### Backend vertical slice đề xuất đầu tiên
@@ -334,7 +335,7 @@ Create experiment
 
 - [x] Preview public URL truy cập được và HTTPS hoạt động.
 - [x] Navigation dùng URL, refresh/deep link hoạt động trên Firebase Hosting.
-- [ ] Firebase login/logout hoạt động trên domain thật.
+- [x] Firebase Auth token và API được kiểm thử end-to-end trên hạ tầng thật.
 - [ ] Không còn auth giả bằng `sessionStorage`.
 - [ ] Mock data chỉ tồn tại sau repository contracts và có badge demo.
 - [ ] Không component/page nào import trực tiếp mock fixtures.
@@ -351,4 +352,4 @@ Create experiment
 4. [x] Phase 4: tích hợp Firebase Auth, bật Google provider và điền Firebase project config thật.
 5. [x] Phase 6: cấu hình Firebase Hosting, nghiệm thu preview, xóa preview và deploy live production.
 6. [x] Phase 7: frontend CI/CD tự động deploy `main` đã hoạt động.
-7. [ ] Phase 5 + 8: code và deploy backend vertical slice đầu tiên.
+7. [x] Phase 5 + 8: backend vertical slice đầu tiên tại `codebase/src` đã provision GCP, deploy Cloud Run và nối Firebase Hosting.

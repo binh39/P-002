@@ -1,22 +1,4 @@
-export type ProjectStatus = "ready" | "warning" | "analyzing";
-
-export interface PythonProject {
-  id: string;
-  name: string;
-  description: string;
-  python: string;
-  commit: string;
-  branch: string;
-  files: number;
-  functions: number;
-  statements: number;
-  branches: number;
-  status: ProjectStatus;
-  analyzedAt: string;
-  testCommand: string;
-  sourceDir: string;
-  testDir: string;
-}
+import type { ProjectFunction, PythonProject } from "@/domain/projects";
 
 export const pythonProjects: PythonProject[] = [
   {
@@ -72,7 +54,7 @@ export const pythonProjects: PythonProject[] = [
   },
 ];
 
-export const projectFunctions = [
+export const projectFunctions: ProjectFunction[] = [
   {
     id: "fn-1",
     project: "isort",

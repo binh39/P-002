@@ -1,0 +1,8 @@
+APP_ENV: production
+AUTH_MODE: firebase
+REPOSITORY_BACKEND: firestore
+STORAGE_BACKEND: gcs
+GCP_PROJECT_ID: vinaip002
+GCP_SERVICE_ACCOUNT_EMAIL: promptopt-api@vinaip002.iam.gserviceaccount.com
+GCS_BUCKET: vinaip002-promptopt-sources
+CORS_ORIGINS: https://vinaip002.web.app,https://c3-app-002.io.vn

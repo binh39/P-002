@@ -2,6 +2,13 @@ import { IC } from "./Icons";
 import { env } from "../config/env";
 
 export default function TopNav({ onMenu }: { onMenu: () => void }) {
+  const dataStatus =
+    env.dataMode === env.projectsDataMode
+      ? env.dataMode === "demo"
+        ? "demo data"
+        : "connected"
+      : "hybrid data";
+
   return (
     <header
       style={{
@@ -117,9 +124,7 @@ export default function TopNav({ onMenu }: { onMenu: () => void }) {
             display: "inline-block",
           }}
         />
-        <span style={{ fontSize: 12, color: "#059669", fontWeight: 500 }}>
-          {env.dataMode === "demo" ? "demo data" : "connected"}
-        </span>
+        <span style={{ fontSize: 12, color: "#059669", fontWeight: 500 }}>{dataStatus}</span>
       </div>
 
       {/* Notifications */}
