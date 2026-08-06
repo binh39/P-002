@@ -76,7 +76,7 @@ Workload Identity Pool: github-actions
 Provider: p002-main
 Allowed identity: binh39/P-002 on refs/heads/main
 Service account: github-frontend-deploy@vinaip002.iam.gserviceaccount.com
-Project role: roles/firebasehosting.admin
+Project roles: roles/firebasehosting.admin, roles/run.viewer
 ```
 
 `frontend-deploy.yml` retrieves the Firebase Web App config at runtime after WIF authentication, then builds and deploys Hosting after a merge to `main`. It does not require a service-account key or GitHub secret. Create the optional GitHub Environment named `production` only when you want approval gates or environment protection rules.
