@@ -1,4 +1,4 @@
-export type ProjectStatus = "ready" | "warning" | "analyzing";
+export type ProjectStatus = "ready" | "warning" | "analyzing" | "failed";
 
 export interface PythonProject {
   id: string;

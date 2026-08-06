@@ -45,6 +45,15 @@ export class MockProjectRepository implements ProjectRepository {
     return sourcePreview;
   }
 
+  async analyze(projectId: string) {
+    await delay();
+    const project = this.items.find((item) => item.id === projectId);
+    if (!project) throw new Error("Project was not found");
+    project.status = "ready";
+    project.analyzedAt = "Just now";
+    return structuredClone(project);
+  }
+
   async create(input: CreateProjectInput) {
     await delay();
     const project = {

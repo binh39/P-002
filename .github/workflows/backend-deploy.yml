@@ -63,6 +63,7 @@ jobs:
             --port 8080 \
             --cpu 1 \
             --memory 512Mi \
+            --timeout 600 \
             --min 0 \
             --max 3 \
             --concurrency 40 \

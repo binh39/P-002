@@ -14,6 +14,8 @@ export default function Projects() {
   const query = useQuery({
     queryKey: ["projects"],
     queryFn: ({ signal }) => projects.list(signal),
+    refetchInterval: (current) =>
+      current.state.data?.some((project) => project.status === "analyzing") ? 2_000 : false,
   });
   const createProject = useMutation({
     mutationFn: (input: CreateProjectInput) => projects.create(input),
@@ -114,7 +116,9 @@ export default function Projects() {
                     ? "Ready"
                     : project.status === "analyzing"
                       ? "Analysis pending"
-                      : "Needs attention"}
+                      : project.status === "failed"
+                        ? "Analysis failed"
+                        : "Needs attention"}
                 </StatusBadge>
               </div>
               <h2>{project.name}</h2>

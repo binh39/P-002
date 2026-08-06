@@ -14,7 +14,7 @@ interface ApiProject {
   description: string;
   branch: string;
   commit: string | null;
-  status: "uploaded" | "ready" | "warning" | "failed";
+  status: "uploaded" | "analyzing" | "ready" | "warning" | "failed";
   settings: {
     runtime: { python_version: string; source_directory: string };
     tests: { test_directory: string; test_command: string };
@@ -38,10 +38,45 @@ interface ApiUpload {
   headers: Record<string, string>;
 }
 
+interface ApiProjectFunction {
+  id: string;
+  project_id: string;
+  file: string;
+  class_name: string;
+  name: string;
+  start_line: number;
+  end_line: number;
+  loc: number;
+  statements: number;
+  branches: number;
+  status: string;
+}
+
+interface ApiProjectFunctionList {
+  items: ApiProjectFunction[];
+  total: number;
+}
+
 function mapStatus(status: ApiProject["status"]): ProjectStatus {
   if (status === "ready") return "ready";
-  if (status === "uploaded") return "analyzing";
+  if (status === "uploaded" || status === "analyzing") return "analyzing";
+  if (status === "failed") return "failed";
   return "warning";
+}
+
+function mapFunction(item: ApiProjectFunction): ProjectFunction {
+  return {
+    id: item.id,
+    project: item.project_id,
+    file: item.file,
+    className: item.class_name,
+    name: item.name,
+    lines: `${item.start_line}-${item.end_line}`,
+    loc: item.loc,
+    statements: item.statements,
+    branches: item.branches,
+    status: item.status === "Valid" ? "Valid" : "Warning",
+  };
 }
 
 function mapProject(project: ApiProject): PythonProject {
@@ -78,14 +113,23 @@ export class HttpProjectRepository implements ProjectRepository {
     return mapProject(await apiRequest<ApiProject>(`/projects/${projectId}`, { signal }));
   }
 
-  listFunctions(projectId: string, signal?: AbortSignal) {
-    return apiRequest<ProjectFunction[]>(`/projects/${projectId}/functions`, { signal });
+  async listFunctions(projectId: string, signal?: AbortSignal) {
+    const response = await apiRequest<ApiProjectFunctionList>(`/projects/${projectId}/functions`, {
+      signal,
+    });
+    return response.items.map(mapFunction);
   }
 
   getFunctionSource(projectId: string, functionId: string, signal?: AbortSignal) {
     return apiRequest<{ source: string }>(`/projects/${projectId}/functions/${functionId}/source`, {
       signal,
     }).then((response) => response.source);
+  }
+
+  async analyze(projectId: string) {
+    return mapProject(
+      await apiRequest<ApiProject>(`/projects/${projectId}/analyze`, { method: "POST" }),
+    );
   }
 
   async create(input: CreateProjectInput) {
@@ -111,7 +155,7 @@ export class HttpProjectRepository implements ProjectRepository {
       throw new Error(`ZIP upload failed with status ${uploadResponse.status}`);
 
     await apiRequest(`/uploads/${upload.id}/complete`, { method: "POST" });
-    return mapProject(
+    const project = mapProject(
       await apiRequest<ApiProject>("/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -124,5 +168,6 @@ export class HttpProjectRepository implements ProjectRepository {
         }),
       }),
     );
+    return this.analyze(project.id);
   }
 }

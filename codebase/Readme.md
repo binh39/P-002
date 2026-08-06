@@ -93,7 +93,10 @@ The first vertical slice is deployed in Singapore:
 | Firestore | `(default)`, Native mode, `asia-southeast1` |
 | Artifact Registry | `asia-southeast1-docker.pkg.dev/vinaip002/promptopt` |
 | Private source bucket | `vinaip002-promptopt-sources` |
+| Analysis task queue | `promptopt-analysis` |
 | Runtime identity | `promptopt-api@vinaip002.iam.gserviceaccount.com` |
 | Deploy identity | `github-backend-deploy@vinaip002.iam.gserviceaccount.com` |
 
 The bucket has public access prevention and only permits browser `PUT` requests from the production domains through short-lived signed URLs. Firebase Hosting rewrites `/api/**` to Cloud Run. Backend changes under `codebase/src/**` build and deploy independently after merging to `main` through `.github/workflows/backend-deploy.yml`.
+
+Project analysis runs asynchronously through Cloud Tasks. Production extracts Python functions and source ranges with `ast`, stores function snapshots below each Firestore project, and exposes them through the authenticated Projects API. The frontend polls only while a project is analyzing and does not fall back to fixture data when an API call fails.

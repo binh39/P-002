@@ -25,9 +25,16 @@ class Settings(BaseSettings):
     auth_mode: Literal["disabled", "firebase"] = "disabled"
     repository_backend: Literal["memory", "firestore"] = "memory"
     storage_backend: Literal["local", "gcs"] = "local"
+    analysis_dispatcher: Literal["inline", "cloud_tasks"] = "inline"
     gcp_project_id: str = "vinaip002"
     gcp_service_account_email: str = ""
     gcs_bucket: str = ""
+    cloud_tasks_location: str = "asia-southeast1"
+    cloud_tasks_queue: str = "promptopt-analysis"
+    analysis_worker_url: str = ""
+    analysis_task_audience: str = ""
+    max_analysis_python_files: int = Field(default=5000, ge=1, le=20000)
+    max_analysis_uncompressed_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
     signed_url_ttl_seconds: int = Field(default=900, ge=60, le=3600)
     max_upload_bytes: int = Field(default=100 * 1024 * 1024, ge=1024)
     local_upload_dir: str = "./data/uploads"
@@ -47,6 +54,10 @@ class Settings(BaseSettings):
                 raise ValueError("STORAGE_BACKEND=gcs and GCS_BUCKET are required in production")
             if not self.gcp_service_account_email:
                 raise ValueError("GCP_SERVICE_ACCOUNT_EMAIL is required in production")
+            if self.analysis_dispatcher != "cloud_tasks":
+                raise ValueError("ANALYSIS_DISPATCHER=cloud_tasks is required in production")
+            if not self.analysis_worker_url or not self.analysis_task_audience:
+                raise ValueError("ANALYSIS_WORKER_URL and ANALYSIS_TASK_AUDIENCE are required in production")
         return self
 
 

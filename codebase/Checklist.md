@@ -331,6 +331,30 @@ Create experiment
 
 ---
 
+## Phase 9 — Project Analysis vertical slice
+
+- [x] `POST /api/v1/projects/{project_id}/analyze` trả `202` và enqueue Cloud Tasks.
+- [x] Worker nội bộ xác thực Google OIDC token và không chấp nhận Firebase user token.
+- [x] Phân tích ZIP bằng Python AST, có giới hạn số file và kích thước giải nén.
+- [x] Lưu function snapshot, source range và aggregate metrics vào Firestore.
+- [x] Hoàn thiện API list functions và xem source theo function ID.
+- [x] Project Detail có re-analyze, polling khi đang chạy, loading/error/failed state.
+- [x] Project tạo mới tự động bắt đầu analysis trong HTTP repository.
+- [x] Provision queue `promptopt-analysis`, retry tối đa 5 lần và concurrency 2.
+- [x] Smoke test production Firebase Auth → upload → Cloud Task → AST → function source.
+
+Slice tiếp theo sau Project Analysis:
+
+```text
+Create experiment
+  -> chọn project/functions đã phân tích
+  -> POST /experiments
+  -> POST /experiments/{id}/runs trả 202
+  -> worker chạy baseline pytest/coverage trong sandbox
+```
+
+---
+
 ## Definition of Done cho mốc “Frontend deployed”
 
 - [x] Preview public URL truy cập được và HTTPS hoạt động.

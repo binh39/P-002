@@ -49,3 +49,23 @@ class FirebaseTokenVerifier:
         except ValueError:
             firebase_admin.initialize_app(options={"projectId": self.project_id})
         return auth.verify_id_token(token, check_revoked=True)
+
+
+class GoogleOidcTokenVerifier:
+    def __init__(self, audience: str, service_account_email: str):
+        self.audience = audience
+        self.service_account_email = service_account_email
+
+    async def verify(self, token: str) -> None:
+        try:
+            claims = await asyncio.to_thread(self._verify_sync, token)
+        except Exception as exc:
+            raise AppError(401, "INVALID_INTERNAL_TOKEN", "Internal task token is invalid") from exc
+        if claims.get("email") != self.service_account_email or claims.get("email_verified") is not True:
+            raise AppError(403, "INVALID_TASK_IDENTITY", "Internal task identity is not allowed")
+
+    def _verify_sync(self, token: str) -> dict:
+        from google.auth.transport.requests import Request
+        from google.oauth2 import id_token
+
+        return id_token.verify_oauth2_token(token, Request(), audience=self.audience)
