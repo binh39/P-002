@@ -63,7 +63,7 @@ class CloudTasksBaselineDispatcher:
                 "headers": {"Content-Type": "application/json"},
                 "oidc_token": {"service_account_email": self.service_account_email, "audience": self.audience},
             },
-            "dispatch_deadline": duration_pb2.Duration(seconds=600),
+            "dispatch_deadline": duration_pb2.Duration(seconds=1800),
         }
         await asyncio.to_thread(self.client.create_task, parent=self.parent, task=task)
 

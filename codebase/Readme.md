@@ -151,9 +151,27 @@ The first vertical slice is deployed in Singapore:
 | Artifact Registry | `asia-southeast1-docker.pkg.dev/vinaip002/promptopt` |
 | Private source bucket | `vinaip002-promptopt-sources` |
 | Analysis task queue | `promptopt-analysis` |
+| Experiment task queue | `promptopt-baseline` |
+| CoverUp Cloud Run Job | `promptopt-coverup-runner` |
+| Runner identity | `promptopt-runner@vinaip002.iam.gserviceaccount.com` |
 | Runtime identity | `promptopt-api@vinaip002.iam.gserviceaccount.com` |
 | Deploy identity | `github-backend-deploy@vinaip002.iam.gserviceaccount.com` |
 
 The bucket has public access prevention and only permits browser `PUT` requests from the production domains through short-lived signed URLs. Firebase Hosting rewrites `/api/**` to Cloud Run. Backend changes under `codebase/src/**` build and deploy independently after merging to `main` through `.github/workflows/backend-deploy.yml`.
 
 Project analysis runs asynchronously through Cloud Tasks. Production extracts Python functions and source ranges with `ast`, stores function snapshots below each Firestore project, and exposes them through the authenticated Projects API. The frontend polls only while a project is analyzing and does not fall back to fixture data when an API call fails.
+
+### Provision the production runner once
+
+The deployment workflow builds separate API and CoverUp images. It deploys the CoverUp image as a Cloud Run Job with one task, no retries, a 15-minute timeout and a dedicated runtime identity. Before the first merge that contains the runner workflow, a project administrator must run:
+
+```powershell
+cd codebase
+.\infra\provision-production-runner.ps1
+```
+
+The script enables the required APIs, creates `promptopt-runner` when absent, and creates a custom object role containing only `storage.objects.get/create`. An IAM condition restricts that role to the opaque `runner-jobs/` prefix; the runner cannot list, overwrite or delete bucket objects and cannot read original uploads outside this prefix. The script also grants Vertex AI access, lets the GitHub deploy identity attach the runner account, and creates or limits the `promptopt-baseline` queue. It does not create service-account keys or store credentials.
+
+The API writes source, prompt and a versioned execution manifest under `runner-jobs/<execution-id>/` in the private bucket. The Cloud Run Job receives only the bucket and object prefix as overrides, uses its workload identity to read/write those objects, and publishes `result.json` plus artifacts. No Docker socket, ADC file or prompt/source payload is passed on the command line.
+
+Current limitation: each CoverUp evaluation is one Cloud Run Job execution. Baseline and paired comparison fit the Cloud Tasks 30-minute request deadline. A large GEPA search still needs durable checkpoint/resume orchestration before it should be enabled for high `max_metric_calls` in production.

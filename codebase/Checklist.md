@@ -472,11 +472,11 @@ Create experiment
 
 ### 10.7 Production runner trên Google Cloud
 
-- [ ] Không dùng Docker socket/Docker-in-Docker trong Cloud Run API service.
+- [x] Không dùng Docker socket/Docker-in-Docker trong Cloud Run API service.
 - [ ] Push runner image riêng lên Artifact Registry.
-- [ ] Dùng Cloud Run Job cho execution; Cloud Tasks chỉ dispatch/orchestrate.
+- [x] Dùng Cloud Run Job cho execution; Cloud Tasks chỉ dispatch/orchestrate.
 - [ ] Tạo runner service account riêng với quyền tối thiểu trên source/artifact objects.
-- [ ] Dùng workload identity/Secret Manager; không mount ADC file trong production.
+- [x] Dùng workload identity/Secret Manager; không mount ADC file trong production.
 - [ ] Cấu hình job timeout, retries, parallelism, maximum instances và cancellation.
 - [ ] Thêm quota theo user/workspace: concurrent runs, functions, LLM calls và cost ceiling.
 - [ ] Thêm retention policy và xóa artifacts theo project.
@@ -496,12 +496,12 @@ Create experiment
 ### 10.9 Verification và Definition of Done
 
 - [x] Ruff format/check pass cho experiment foundation.
-- [x] Backend tests pass (`29 passed` sau paired comparison và prompt review).
+- [x] Backend tests pass (`33 passed` sau Cloud Run Job executor và production config gate).
 - [x] Unit test score, cache key, prompt validation và promotion rule.
 - [ ] Contract/integration test cho experiment, run và artifact APIs bằng fake executor.
 - [ ] Docker smoke test fixture project và test timeout/retry/malformed response.
 - [ ] Test Firestore ownership isolation và GCS artifact authorization.
 - [ ] Test GEPA resume checkpoint và idempotent Cloud Task retry.
-- [ ] CI build cả API image và runner image khi source liên quan thay đổi.
+- [x] CI build cả API image và runner image khi source liên quan thay đổi.
 - [ ] Production smoke test baseline → optimize → locked comparison → review.
 - [ ] Chỉ merge GEPA khi report chứng minh baseline và optimized dùng cùng evaluation protocol.

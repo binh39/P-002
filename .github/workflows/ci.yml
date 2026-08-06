@@ -11,6 +11,7 @@ on:
       - "codebase/ruff.toml"
       - "codebase/Dockerfile"
       - "codebase/.dockerignore"
+      - "codebase/sandbox/**"
       - ".github/workflows/ci.yml"
   pull_request:
     branches: [main]
@@ -22,6 +23,7 @@ on:
       - "codebase/ruff.toml"
       - "codebase/Dockerfile"
       - "codebase/.dockerignore"
+      - "codebase/sandbox/**"
       - ".github/workflows/ci.yml"
 
 jobs:
@@ -47,9 +49,14 @@ jobs:
         run: pip install -r requirements-dev.txt
 
       - name: Lint with ruff
-        run: ruff format --check src/ tests/ && ruff check src/ tests/
+        run: ruff format --check src/ tests/ sandbox/ && ruff check src/ tests/ sandbox/
 
       - name: Run tests
         run: python -m pytest tests/ -v --tb=short
         env:
           APP_ENV: test
+
+      - name: Build API and runner images
+        run: |
+          docker build --tag promptopt-api:ci .
+          docker build --file sandbox/Dockerfile --tag promptopt-coverup-runner:ci .

@@ -14,6 +14,9 @@ BASELINE_DISPATCHER: cloud_tasks
 BASELINE_CLOUD_TASKS_QUEUE: promptopt-baseline
 BASELINE_WORKER_URL: https://promptopt-api-891999064201.asia-southeast1.run.app
 BASELINE_TASK_AUDIENCE: https://promptopt-api-891999064201.asia-southeast1.run.app
+BASELINE_EXECUTION_BACKEND: cloud_run_job
+CLOUD_RUN_RUNNER_JOB: promptopt-coverup-runner
+CLOUD_RUN_RUNNER_TIMEOUT_SECONDS: "900"
 OPTIMIZE_MODEL: vertex_ai/gemini-3.6-flash
 OPTIMIZE_MODEL_ALLOWLIST: vertex_ai/gemini-3.6-flash
 GEPA_MAX_METRIC_CALLS: "30"

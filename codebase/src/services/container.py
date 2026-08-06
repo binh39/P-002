@@ -15,6 +15,7 @@ from src.modules.analysis.repository import (
     InMemoryFunctionRepository,
 )
 from src.modules.analysis.service import AnalysisService
+from src.modules.experiments.cloud_executor import CloudRunJobCoverUpExecutor
 from src.modules.experiments.dispatcher import (
     CloudTasksBaselineDispatcher,
     CloudTasksComparisonDispatcher,
@@ -129,6 +130,19 @@ def build_services(settings: Settings) -> ServiceContainer:
             settings.max_runner_files,
             settings.max_runner_uncompressed_bytes,
             settings.baseline_runner_network,
+        )
+    elif settings.baseline_execution_backend == "cloud_run_job":
+        from google.cloud import run_v2
+
+        executor = CloudRunJobCoverUpExecutor(
+            client=run_v2.JobsAsyncClient(),
+            storage=storage,
+            bucket=settings.gcs_bucket,
+            job_name=(
+                f"projects/{settings.gcp_project_id}/locations/{settings.cloud_tasks_location}/jobs/"
+                f"{settings.cloud_run_runner_job}"
+            ),
+            timeout_seconds=settings.cloud_run_runner_timeout_seconds,
         )
     experiments = ExperimentService(
         experiment_repository,

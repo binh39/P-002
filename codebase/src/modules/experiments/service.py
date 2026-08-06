@@ -134,7 +134,7 @@ class ExperimentService:
 
     async def execute_baseline(self, run_id: str) -> None:
         run = await self.repository.get_run(run_id)
-        if run is None:
+        if run is None or run.status != ExperimentStatus.BASELINE_QUEUED:
             return
         run.status, run.started_at = ExperimentStatus.BASELINE_RUNNING, datetime.now(UTC)
         await self.repository.save_run(run)
