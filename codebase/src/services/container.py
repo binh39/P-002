@@ -15,6 +15,9 @@ from src.modules.analysis.repository import (
     InMemoryFunctionRepository,
 )
 from src.modules.analysis.service import AnalysisService
+from src.modules.experiments.dispatcher import CloudTasksBaselineDispatcher, InlineBaselineDispatcher
+from src.modules.experiments.repository import FirestoreExperimentRepository, InMemoryExperimentRepository
+from src.modules.experiments.service import ExperimentService
 from src.modules.projects.repository import (
     FirestoreProjectRepository,
     InMemoryProjectRepository,
@@ -36,6 +39,7 @@ class ServiceContainer:
     uploads: UploadService
     projects: ProjectService
     analysis: AnalysisService
+    experiments: ExperimentService
 
 
 def build_services(settings: Settings) -> ServiceContainer:
@@ -59,6 +63,12 @@ def build_services(settings: Settings) -> ServiceContainer:
         upload_repository = InMemoryUploadRepository()
         project_repository = InMemoryProjectRepository()
         function_repository = InMemoryFunctionRepository()
+
+    experiment_repository = (
+        FirestoreExperimentRepository(firestore)
+        if settings.repository_backend == "firestore"
+        else InMemoryExperimentRepository()
+    )
 
     if settings.storage_backend == "gcs":
         storage = GcsObjectStorage(
@@ -101,10 +111,25 @@ def build_services(settings: Settings) -> ServiceContainer:
     else:
         dispatcher = InlineAnalysisDispatcher(analysis.run)
     analysis.set_dispatcher(dispatcher)
+    experiments = ExperimentService(experiment_repository, projects, function_repository)
+    if settings.baseline_dispatcher == "cloud_tasks":
+        experiments.set_dispatcher(
+            CloudTasksBaselineDispatcher(
+                settings.gcp_project_id,
+                settings.cloud_tasks_location,
+                settings.baseline_cloud_tasks_queue,
+                settings.baseline_worker_url,
+                settings.baseline_task_audience,
+                settings.gcp_service_account_email,
+            )
+        )
+    else:
+        experiments.set_dispatcher(InlineBaselineDispatcher(experiments.execute_baseline))
     return ServiceContainer(
         token_verifier=token_verifier,
         internal_token_verifier=internal_token_verifier,
         uploads=uploads,
         projects=projects,
         analysis=analysis,
+        experiments=experiments,
     )
