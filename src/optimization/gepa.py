@@ -8,6 +8,7 @@ import threading
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -95,9 +96,13 @@ def _evaluation_digest(
     }
     source_hashes = {}
     if config is not None:
-        package_dir = Path(getattr(config, "package_dir", ".")).resolve()
         project_root = Path(getattr(config, "project_root", ".")).resolve()
+        resolve_package = getattr(config, "package_dir_for", None)
         for target in targets:
+            if resolve_package is not None:
+                package_dir = Path(resolve_package(target.project)).resolve()
+            else:
+                package_dir = Path(getattr(config, "package_dir", ".")).resolve()
             source = Path(target.source_file)
             candidates = (
                 package_dir.parent / source,
@@ -424,12 +429,92 @@ def evaluate_bundle_repeated(
     }
 
 
+def _bundle_split_summary(batch: dict) -> dict[str, Any]:
+    """Reduce one split-level evaluation batch to aggregate coverage numbers."""
+    aggregate = batch.get("aggregate") or aggregate_coverage_score(batch["results"])
+    return {
+        "num_targets": len(batch["results"]),
+        "score": float(aggregate.get("score", 0.0)),
+        "statement_coverage": float(aggregate.get("statement_coverage", 0.0)),
+        "branch_coverage": float(aggregate.get("branch_coverage", 0.0)),
+        "covered_statements": int(aggregate.get("covered_statements", 0)),
+        "num_statements": int(aggregate.get("num_statements", 0)),
+        "covered_branches": int(aggregate.get("covered_branches", 0)),
+        "num_branches": int(aggregate.get("num_branches", 0)),
+    }
+
+
+def build_coverage_report(
+    runner: CoverUpExperimentRunner,
+    targets_by_split: dict[str, list[SymbolTarget]],
+    baseline: PromptBundle,
+    optimized: PromptBundle,
+    candidate_dir: Path,
+    *,
+    evaluation_replicates: int = 1,
+) -> dict[str, Any]:
+    """Aggregate statement/branch coverage per split for two prompt versions.
+
+    The optimized prompt is scored with the baseline evaluation as the
+    reference denominator on every split, matching how the final comparison is
+    computed.  Already-cached split-level batch evaluations are reused; any
+    missing evaluation is run and cached before the report is returned.
+    """
+
+    if evaluation_replicates < 1:
+        raise ValueError("evaluation_replicates must be at least 1")
+    baseline_digest_value = bundle_digest(baseline)
+    optimized_digest_value = bundle_digest(optimized)
+    splits: dict[str, Any] = {}
+    for split, targets in targets_by_split.items():
+        if not targets:
+            continue
+        baseline_batch = evaluate_bundle_repeated(
+            runner,
+            targets,
+            baseline,
+            candidate_dir,
+            split=split,
+            workspace_kind="baseline",
+            replicates=evaluation_replicates,
+        )
+        optimized_kind = (
+            "baseline" if optimized_digest_value == baseline_digest_value else "candidate"
+        )
+        optimized_batch = evaluate_bundle_repeated(
+            runner,
+            targets,
+            optimized,
+            candidate_dir,
+            split=split,
+            workspace_kind=optimized_kind,
+            replicates=evaluation_replicates,
+            reference_results=baseline_batch["results"],
+        )
+        splits[split] = {
+            "baseline": _bundle_split_summary(baseline_batch),
+            "optimized": _bundle_split_summary(optimized_batch),
+        }
+    return {
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "baseline_digest": baseline_digest_value,
+        "optimized_digest": optimized_digest_value,
+        "evaluation_replicates": evaluation_replicates,
+        "splits": splits,
+    }
+
+
 def _find_source_path(runner: CoverUpExperimentRunner, target: SymbolTarget) -> Path | None:
     source = Path(target.source_file)
+    resolve_package = getattr(runner.config, "package_dir_for", None)
+    if resolve_package is not None:
+        package_dir = Path(resolve_package(target.project)).resolve()
+    else:
+        package_dir = Path(runner.config.package_dir).resolve()
     candidates = (
-        runner.config.package_dir.resolve().parent / source,
+        package_dir.parent / source,
         runner.config.project_root.resolve() / source,
-        runner.config.package_dir.resolve() / source.name,
+        package_dir / source.name,
     )
     return next((path for path in candidates if path.is_file()), None)
 

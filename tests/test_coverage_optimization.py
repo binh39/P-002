@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.optimization.cli import _top_isort_targets, should_promote
+from src.optimization.cli import _resolve_project_layouts, _top_isort_targets, should_promote
 from src.optimization.coveragepy import (
     SymbolCoverage,
     load_report,
@@ -17,6 +17,7 @@ from src.optimization.coveragepy import (
 )
 from src.optimization.gepa import (
     CoverUpPromptAdapter,
+    build_coverage_report,
     bundle_digest,
     evaluate_bundle_cached,
     optimize,
@@ -25,8 +26,8 @@ from src.optimization.gepa import (
     validate_template,
 )
 from src.optimization.metrics import aggregate_coverage_score, build_feedback, score_symbol
-from src.optimization.models import ExperimentConfig, SymbolTarget
-from src.optimization.prompts import baseline_bundle
+from src.optimization.models import ExperimentConfig, ProjectLayout, SymbolTarget
+from src.optimization.prompts import PromptBundle, baseline_bundle
 from src.optimization.runner import CoverUpExperimentRunner, _zero_coverage_like
 
 
@@ -801,7 +802,7 @@ def test_tune_skips_final_split_when_gepa_keeps_unchanged_baseline(
     monkeypatch.setattr(
         cli,
         "make_runner",
-        lambda args: SimpleNamespace(
+        lambda args, projects=None: SimpleNamespace(
             config=SimpleNamespace(artifacts_dir=artifacts)
         ),
     )
@@ -1132,3 +1133,332 @@ def test_coverup_stops_after_no_gain_without_a_third_prompt_component(
     assert trace["component"] == "initial"
     assert trace["outcome"] == "no_coverage_gain_unrepairable"
     assert "next_component" not in trace
+
+
+def test_runner_partitions_targets_by_project(tmp_path, monkeypatch):
+    alpha_pkg = tmp_path / "repos" / "alpha" / "alpha"
+    beta_pkg = tmp_path / "repos" / "beta" / "beta"
+    alpha_pkg.mkdir(parents=True)
+    beta_pkg.mkdir(parents=True)
+    artifacts_dir = tmp_path / "artifacts"
+    prompt_path = tmp_path / "prompt.json"
+    baseline_bundle().save(prompt_path)
+    commands = []
+    coverage_outputs = []
+
+    def fake_subprocess_run(command, **kwargs):
+        commands.append(command)
+        trace_path = Path(command[command.index("--trace-file") + 1])
+        trace_path.write_text(
+            json.dumps({
+                "source_file": "alpha/a.py",
+                "symbol": "first",
+                "name": "first",
+                "component": "initial",
+                "outcome": "coverage_gain_saved",
+            }) + "\n",
+            encoding="utf-8",
+        )
+        return SimpleNamespace(returncode=0, stdout="coverup ok")
+
+    def fake_run_coverage(**kwargs):
+        coverage_outputs.append(kwargs)
+        symbol = "first" if kwargs["package_dir"] == alpha_pkg else "Second.method"
+        source_file = "alpha/a.py" if symbol == "first" else "beta/b.py"
+        kwargs["output"].write_text(json.dumps({
+            "files": {
+                source_file: {
+                    "functions": {
+                        symbol: {
+                            "executed_lines": [1],
+                            "missing_lines": [],
+                            "executed_branches": [[1, 2]],
+                            "missing_branches": [],
+                            "summary": {
+                                "covered_lines": 1,
+                                "num_statements": 1,
+                                "covered_branches": 1,
+                                "num_branches": 1,
+                            },
+                        }
+                    }
+                }
+            }
+        }), encoding="utf-8")
+        return SimpleNamespace(returncode=0, stdout="coverage ok")
+
+    monkeypatch.setattr("src.optimization.runner.subprocess.run", fake_subprocess_run)
+    monkeypatch.setattr("src.optimization.runner.run_coverage", fake_run_coverage)
+    runner = CoverUpExperimentRunner(ExperimentConfig(
+        project_root=tmp_path,
+        package_dir=alpha_pkg,
+        tests_dir=tmp_path / "repos" / "alpha" / "tests",
+        artifacts_dir=artifacts_dir,
+        coverup_model="fake-model",
+        projects={
+            "alpha": ProjectLayout(
+                package_dir=alpha_pkg,
+                tests_dir=tmp_path / "repos" / "alpha" / "tests",
+            ),
+            "beta": ProjectLayout(
+                package_dir=beta_pkg,
+                tests_dir=tmp_path / "repos" / "beta" / "tests",
+            ),
+        },
+    ))
+    targets = [
+        SymbolTarget("beta", "beta/b.py", "Second.method", "train"),
+        SymbolTarget("alpha", "alpha/a.py", "first", "train"),
+    ]
+
+    record = runner.evaluate_batch(
+        targets, prompt_path, candidate_id="candidate", split="train"
+    )
+
+    assert len(commands) == 2
+    alpha_command = next(
+        command for command in commands
+        if command[command.index("--target-symbols") + 1] == "first"
+    )
+    beta_command = next(
+        command for command in commands
+        if command[command.index("--target-symbols") + 1] == "Second.method"
+    )
+    assert Path(
+        alpha_command[alpha_command.index("--package-dir") + 1]
+    ).resolve() == alpha_pkg.resolve()
+    assert Path(
+        beta_command[beta_command.index("--package-dir") + 1]
+    ).resolve() == beta_pkg.resolve()
+    assert alpha_command[
+        alpha_command.index("--tests-dir") + 1
+    ].endswith("candidate\\alpha")
+    assert beta_command[
+        beta_command.index("--tests-dir") + 1
+    ].endswith("candidate\\beta")
+    assert len(coverage_outputs) == 2
+    assert {
+        str(kwargs["package_dir"].resolve()) for kwargs in coverage_outputs
+    } == {str(alpha_pkg.resolve()), str(beta_pkg.resolve())}
+    assert [result.target.symbol for result in record.results] == [
+        "Second.method", "first",
+    ]
+    assert all(result.score["score"] == 1.0 for result in record.results)
+
+
+def test_existing_baseline_tests_are_scored_per_project(tmp_path, monkeypatch):
+    alpha_pkg = tmp_path / "repos" / "alpha" / "alpha"
+    beta_pkg = tmp_path / "repos" / "beta" / "beta"
+    baseline_tests = tmp_path / "baseline"
+    (baseline_tests / "alpha").mkdir(parents=True)
+    (baseline_tests / "beta").mkdir(parents=True)
+    (baseline_tests / "alpha" / "test_alpha.py").write_text(
+        "def test_alpha(): pass\n", encoding="utf-8"
+    )
+    (baseline_tests / "beta" / "test_beta.py").write_text(
+        "def test_beta(): pass\n", encoding="utf-8"
+    )
+    artifacts_dir = tmp_path / "artifacts"
+    coverage_outputs = []
+
+    def fake_run_coverage(**kwargs):
+        coverage_outputs.append(kwargs)
+        symbol = "first" if kwargs["package_dir"] == alpha_pkg else "Second.method"
+        source_file = "alpha/a.py" if symbol == "first" else "beta/b.py"
+        kwargs["output"].write_text(json.dumps({
+            "files": {
+                source_file: {
+                    "functions": {
+                        symbol: {
+                            "executed_lines": [1],
+                            "missing_lines": [2],
+                            "executed_branches": [[1, 2]],
+                            "missing_branches": [[1, 3]],
+                            "summary": {
+                                "covered_lines": 1,
+                                "num_statements": 2,
+                                "covered_branches": 1,
+                                "num_branches": 2,
+                            },
+                        }
+                    }
+                }
+            }
+        }), encoding="utf-8")
+        return SimpleNamespace(returncode=0, stdout="coverage ok")
+
+    monkeypatch.setattr("src.optimization.runner.run_coverage", fake_run_coverage)
+    monkeypatch.setattr(
+        "src.optimization.runner.subprocess.run",
+        lambda *args, **kwargs: pytest.fail("CoverUp must not be invoked"),
+    )
+    runner = CoverUpExperimentRunner(ExperimentConfig(
+        project_root=tmp_path,
+        package_dir=alpha_pkg,
+        tests_dir=tmp_path / "repos" / "alpha" / "tests",
+        artifacts_dir=artifacts_dir,
+        coverup_model="fake-model",
+        projects={
+            "alpha": ProjectLayout(
+                package_dir=alpha_pkg,
+                tests_dir=tmp_path / "repos" / "alpha" / "tests",
+            ),
+            "beta": ProjectLayout(
+                package_dir=beta_pkg,
+                tests_dir=tmp_path / "repos" / "beta" / "tests",
+            ),
+        },
+    ))
+    targets = [
+        SymbolTarget("alpha", "alpha/a.py", "first", "validation"),
+        SymbolTarget("beta", "beta/b.py", "Second.method", "validation"),
+    ]
+
+    record = runner.evaluate_existing_tests_batch(
+        targets, baseline_tests, split="validation"
+    )
+
+    assert len(coverage_outputs) == 2
+    assert {
+        str(kwargs["tests_dir"].resolve()) for kwargs in coverage_outputs
+    } == {str(baseline_tests.resolve() / "alpha"), str(baseline_tests.resolve() / "beta")}
+    assert all(result.score["score"] == pytest.approx(0.5) for result in record.results)
+
+
+def test_resolve_project_layouts_requires_multi_project(tmp_path):
+    targets = [SymbolTarget("isort", "isort/a.py", "f", "train")]
+    assert _resolve_project_layouts(
+        tmp_path, targets, Path("src/sample_repo")
+    ) is None
+
+
+def test_resolve_project_layouts_builds_per_project_layouts(tmp_path):
+    repos = tmp_path / "src" / "sample_repo"
+    for project in ("isort", "mlxtend"):
+        (repos / project / project).mkdir(parents=True)
+        (repos / project / "tests").mkdir(parents=True)
+    targets = [
+        SymbolTarget("isort", "isort/a.py", "f", "train"),
+        SymbolTarget("mlxtend", "mlxtend/b.py", "g", "validation"),
+    ]
+
+    layouts = _resolve_project_layouts(
+        tmp_path, targets, Path("src/sample_repo")
+    )
+
+    assert set(layouts) == {"isort", "mlxtend"}
+    assert layouts["isort"].package_dir == repos / "isort" / "isort"
+    assert layouts["mlxtend"].tests_dir == repos / "mlxtend" / "tests"
+
+
+def test_resolve_project_layouts_fails_when_package_missing(tmp_path):
+    repos = tmp_path / "src" / "sample_repo"
+    (repos / "mlxtend" / "mlxtend").mkdir(parents=True)
+    (repos / "mlxtend" / "tests").mkdir(parents=True)
+    targets = [
+        SymbolTarget("isort", "isort/a.py", "f", "train"),
+        SymbolTarget("mlxtend", "mlxtend/b.py", "g", "train"),
+    ]
+
+    with pytest.raises(FileNotFoundError, match="isort"):
+        _resolve_project_layouts(tmp_path, targets, Path("src/sample_repo"))
+
+
+def _fake_batch(targets, *, workspace_kind):
+    statement = 0.5 if workspace_kind == "baseline" else 0.7
+    branch = 0.4 if workspace_kind == "baseline" else 0.6
+    return {
+        "results": [{"target": target.__dict__} for target in targets],
+        "aggregate": {
+            "score": statement,
+            "statement_coverage": statement,
+            "branch_coverage": branch,
+            "covered_statements": int(statement * 100),
+            "num_statements": 100,
+            "covered_branches": int(branch * 100),
+            "num_branches": 100,
+        },
+    }
+
+
+def test_build_coverage_report_aggregates_splits_and_prompts(monkeypatch):
+    baseline = baseline_bundle()
+    optimized = PromptBundle(
+        initial=baseline.initial + " Tighten the generated assertions.",
+        error=baseline.error,
+    )
+    targets = {
+        "train": [SymbolTarget("isort", "isort/a.py", "f", "train")],
+        "validation": [
+            SymbolTarget("mlxtend", "mlxtend/b.py", "g", "validation"),
+            SymbolTarget("mlxtend", "mlxtend/c.py", "h", "validation"),
+        ],
+    }
+    calls = []
+
+    def fake_evaluate_bundle_repeated(
+        runner, batch_targets, bundle, candidate_dir, *, split,
+        workspace_kind, replicates=1, reference_results=None,
+    ):
+        calls.append((split, workspace_kind))
+        return _fake_batch(batch_targets, workspace_kind=workspace_kind)
+
+    monkeypatch.setattr(
+        "src.optimization.gepa.evaluate_bundle_repeated",
+        fake_evaluate_bundle_repeated,
+    )
+
+    report = build_coverage_report(
+        runner=None,
+        targets_by_split=targets,
+        baseline=baseline,
+        optimized=optimized,
+        candidate_dir=Path("."),
+        evaluation_replicates=1,
+    )
+
+    assert set(report["splits"]) == {"train", "validation"}
+    assert calls == [
+        ("train", "baseline"),
+        ("train", "candidate"),
+        ("validation", "baseline"),
+        ("validation", "candidate"),
+    ]
+    train = report["splits"]["train"]
+    assert train["baseline"]["num_targets"] == 1
+    assert train["baseline"]["statement_coverage"] == pytest.approx(0.5)
+    assert train["optimized"]["branch_coverage"] == pytest.approx(0.6)
+    assert report["splits"]["validation"]["baseline"]["num_targets"] == 2
+    assert report["optimized_digest"] != report["baseline_digest"]
+
+
+def test_build_coverage_report_uses_baseline_kind_for_unchanged_prompt(monkeypatch):
+    baseline = baseline_bundle()
+    targets = {
+        "train": [SymbolTarget("isort", "isort/a.py", "f", "train")],
+    }
+    calls = []
+
+    def fake_evaluate_bundle_repeated(
+        runner, batch_targets, bundle, candidate_dir, *, split,
+        workspace_kind, replicates=1, reference_results=None,
+    ):
+        calls.append((split, workspace_kind))
+        return _fake_batch(batch_targets, workspace_kind=workspace_kind)
+
+    monkeypatch.setattr(
+        "src.optimization.gepa.evaluate_bundle_repeated",
+        fake_evaluate_bundle_repeated,
+    )
+
+    report = build_coverage_report(
+        runner=None,
+        targets_by_split=targets,
+        baseline=baseline,
+        optimized=baseline,
+        candidate_dir=Path("."),
+        evaluation_replicates=1,
+    )
+
+    assert calls == [("train", "baseline"), ("train", "baseline")]
+    assert report["optimized_digest"] == report["baseline_digest"]

@@ -21,6 +21,24 @@ def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
+def _test_environment(project_root: Path) -> dict[str, str]:
+    """Build the subprocess environment used for every test evaluation.
+
+    The Windows Store Python used by this workspace ships a broken Tcl/Tk, so
+    matplotlib's default TkAgg backend fails whenever a generated test creates
+    a figure (e.g. mlxtend plotting targets).  Forcing the headless Agg backend
+    keeps figure creation fully functional without a GUI session.
+    """
+
+    environment = os.environ.copy()
+    src_dir = project_root.resolve() / "src"
+    environment["PYTHONPATH"] = (
+        str(src_dir) + os.pathsep + environment.get("PYTHONPATH", "")
+    )
+    environment["MPLBACKEND"] = "Agg"
+    return environment
+
+
 def _zero_coverage_like(coverage: SymbolCoverage) -> SymbolCoverage:
     """Build the zero-coverage starting point for a from-scratch candidate."""
     return SymbolCoverage(
@@ -165,127 +183,175 @@ class CoverUpExperimentRunner:
         )
         run_dir.mkdir(parents=True, exist_ok=False)
 
-        after_json = run_dir / "coverage_after.json"
         stdout_file = run_dir / "coverup.stdout.log"
-        coverup_log = run_dir / "coverup.log"
         attempt_trace = run_dir / "attempt_trace.jsonl"
-        target_spec = run_dir / "target_spec.json"
         prompt_copy = run_dir / "prompt.json"
         shutil.copy2(prompt_template.resolve(), prompt_copy)
-        target_spec.write_text(
-            json.dumps(
-                [
-                    {
-                        "source_file": target.source_file,
-                        "symbol": target.symbol,
-                    }
-                    for target in targets
-                ],
-                indent=2,
-                ensure_ascii=False,
-            ),
-            encoding="utf-8",
-        )
 
-        environment = os.environ.copy()
-        src_dir = self.config.project_root.resolve() / "src"
-        environment["PYTHONPATH"] = str(src_dir) + os.pathsep + environment.get("PYTHONPATH", "")
+        environment = _test_environment(self.config.project_root)
 
-        symbols = list(dict.fromkeys(target.symbol for target in targets))
+        grouped: dict[str, list[SymbolTarget]] = {}
+        for target in targets:
+            grouped.setdefault(target.project, []).append(target)
+        projects = sorted(grouped)
+        multi_project = len(projects) > 1
+        package_dirs = {
+            project: self.config.package_dir_for(project).resolve()
+            for project in projects
+        }
+        missing_packages = [str(path) for path in package_dirs.values() if not path.is_dir()]
+        if missing_packages:
+            raise FileNotFoundError(
+                "Package directory does not exist for a target project: "
+                + ", ".join(missing_packages)
+            )
 
-        command = [
-            sys.executable, "-m", "coverup",
-            "--package-dir", str(self.config.package_dir.resolve()),
-            "--tests-dir", str(work_tests),
-            "--target-symbols", ",".join(symbols),
-            "--target-spec-file", str(target_spec),
-            "--prompt", "gpt-v2",
-            "--prompt-template-file", str(prompt_copy),
-            "--model", self.config.coverup_model,
-            "--max-attempts", str(self.config.max_attempts),
-            "--prefix", "opt",
-            "--log-file", str(coverup_log),
-            "--trace-file", str(attempt_trace),
-            "--no-checkpoint",
-        ]
-        if self.config.repeat_tests:
-            command.extend(["--repeat-tests", str(self.config.repeat_tests)])
-        else:
-            command.append("--no-repeat-tests")
-        if self.config.pytest_args:
-            command.extend(["--pytest-args", self.config.pytest_args])
-        command.extend(["--max-concurrency", str(self.config.max_concurrency)])
-        if self.config.rate_limit is not None:
-            command.extend(["--rate-limit", str(self.config.rate_limit)])
-
-        before_tests = {path.name for path in work_tests.glob("test_opt_*.py")}
+        stdout_parts: list[str] = []
+        generated_tests: list[str] = []
+        results: list[BatchTargetResult] = []
+        merged_attempt_traces: list[dict] = []
+        coverup_logs: list[Path] = []
+        project_traces: list[Path] = []
+        after_jsons: list[Path] = []
+        final_exit_code = 0
         started_at = _now()
         started = time.monotonic()
-        completed = subprocess.run(
-            command,
-            cwd=self.config.project_root.resolve(),
-            env=environment,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            check=False,
-        )
-        elapsed = time.monotonic() - started
-        stdout_file.write_text(completed.stdout, encoding="utf-8")
-        after_tests = sorted(
-            str(path.relative_to(self.config.project_root.resolve()))
-            for path in work_tests.glob("test_opt_*.py")
-            if path.name not in before_tests
-        )
-        attempt_traces = _load_attempt_traces(attempt_trace)
-
-        results: list[BatchTargetResult] = []
-        after = run_coverage(
-            project_root=self.config.project_root.resolve(),
-            package_dir=self.config.package_dir.resolve(),
-            tests_dir=work_tests,
-            output=after_json,
-            pytest_args=self.config.pytest_args,
-            env=environment,
-        )
-        if after.returncode:
-            feedback = (
-                "Score: 0. The generated test suite failed under coverage.py:\n"
-                f"{after.stdout[-4000:]}"
+        for project in projects:
+            group = grouped[project]
+            package_dir = package_dirs[project]
+            workspace = work_tests if not multi_project else work_tests / project
+            if multi_project:
+                workspace.mkdir(parents=True, exist_ok=False)
+            safe_project = re.sub(r"[^A-Za-z0-9_.-]+", "_", project).strip("._-")
+            suffix = "" if not multi_project else f"_{safe_project}"
+            coverup_log = run_dir / f"coverup{suffix}.log"
+            project_trace = run_dir / f"attempt_trace{suffix}.jsonl"
+            target_spec = run_dir / f"target_spec{suffix}.json"
+            after_json = run_dir / f"coverage_after{suffix}.json"
+            target_spec.write_text(
+                json.dumps(
+                    [
+                        {
+                            "source_file": target.source_file,
+                            "symbol": target.symbol,
+                        }
+                        for target in group
+                    ],
+                    indent=2,
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
             )
-            results = [BatchTargetResult(
-                target=target,
-                feedback=feedback,
-                attempt_traces=_traces_for_target(attempt_traces, target),
-            ) for target in targets]
-        else:
-            report = load_report(after_json)
-            for target in targets:
-                try:
-                    after_cov = symbol_coverage(report, target.source_file, target.symbol)
-                except KeyError as exc:
+
+            symbols = list(dict.fromkeys(target.symbol for target in group))
+            command = [
+                sys.executable, "-m", "coverup",
+                "--package-dir", str(package_dir),
+                "--tests-dir", str(workspace),
+                "--target-symbols", ",".join(symbols),
+                "--target-spec-file", str(target_spec),
+                "--prompt", "gpt-v2",
+                "--prompt-template-file", str(prompt_copy),
+                "--model", self.config.coverup_model,
+                "--max-attempts", str(self.config.max_attempts),
+                "--prefix", "opt",
+                "--log-file", str(coverup_log),
+                "--trace-file", str(project_trace),
+                "--no-checkpoint",
+            ]
+            if self.config.repeat_tests:
+                command.extend(["--repeat-tests", str(self.config.repeat_tests)])
+            else:
+                command.append("--no-repeat-tests")
+            if self.config.pytest_args:
+                command.extend(["--pytest-args", self.config.pytest_args])
+            command.extend(["--max-concurrency", str(self.config.max_concurrency)])
+            if self.config.rate_limit is not None:
+                command.extend(["--rate-limit", str(self.config.rate_limit)])
+
+            before_tests = {path.name for path in workspace.glob("test_opt_*.py")}
+            completed = subprocess.run(
+                command,
+                cwd=self.config.project_root.resolve(),
+                env=environment,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
+            final_exit_code = completed.returncode
+            stdout_parts.append(completed.stdout)
+            generated_tests.extend(
+                sorted(
+                    str(path.relative_to(self.config.project_root.resolve()))
+                    for path in workspace.glob("test_opt_*.py")
+                    if path.name not in before_tests
+                )
+            )
+            attempt_traces = _load_attempt_traces(project_trace)
+            merged_attempt_traces.extend(attempt_traces)
+
+            after = run_coverage(
+                project_root=self.config.project_root.resolve(),
+                package_dir=package_dir,
+                tests_dir=workspace,
+                output=after_json,
+                pytest_args=self.config.pytest_args,
+                env=environment,
+            )
+            if after.returncode:
+                feedback = (
+                    "Score: 0. The generated test suite failed under coverage.py:\n"
+                    f"{after.stdout[-4000:]}"
+                )
+                for target in group:
                     results.append(BatchTargetResult(
                         target=target,
-                        feedback=f"Score: 0. Coverage lookup failed: {exc}",
+                        feedback=feedback,
                         attempt_traces=_traces_for_target(attempt_traces, target),
                     ))
-                    continue
-                before_cov = _zero_coverage_like(after_cov)
-                metric_result = score_symbol(before_cov, after_cov)
-                score_data = metric_result.as_dict()
-                # The coverage run is the authority for test validity.  CoverUp may
-                # exit non-zero after some concurrent segments have already produced
-                # passing tests; invalidating the whole batch destroys useful signal.
-                score_data["valid"] = True
-                score_data["generator_exit_code"] = completed.returncode
-                results.append(BatchTargetResult(
-                    target=target,
-                    score=score_data,
-                    feedback=build_feedback(
-                        metric_result, coverup_exit_code=completed.returncode
-                    ),
-                    attempt_traces=_traces_for_target(attempt_traces, target),
-                ))
+            else:
+                report = load_report(after_json)
+                for target in group:
+                    try:
+                        after_cov = symbol_coverage(report, target.source_file, target.symbol)
+                    except KeyError as exc:
+                        results.append(BatchTargetResult(
+                            target=target,
+                            feedback=f"Score: 0. Coverage lookup failed: {exc}",
+                            attempt_traces=_traces_for_target(attempt_traces, target),
+                        ))
+                        continue
+                    before_cov = _zero_coverage_like(after_cov)
+                    metric_result = score_symbol(before_cov, after_cov)
+                    score_data = metric_result.as_dict()
+                    # The coverage run is the authority for test validity.  CoverUp may
+                    # exit non-zero after some concurrent segments have already produced
+                    # passing tests; invalidating the whole batch destroys useful signal.
+                    score_data["valid"] = True
+                    score_data["generator_exit_code"] = completed.returncode
+                    results.append(BatchTargetResult(
+                        target=target,
+                        score=score_data,
+                        feedback=build_feedback(
+                            metric_result, coverup_exit_code=completed.returncode
+                        ),
+                        attempt_traces=_traces_for_target(attempt_traces, target),
+                    ))
+            coverup_logs.append(coverup_log)
+            project_traces.append(project_trace)
+            after_jsons.append(after_json)
+        # Preserve the caller's target order in the merged results even though
+        # per-project batches are executed in sorted project order.
+        result_order = {id(target): index for index, target in enumerate(targets)}
+        results.sort(key=lambda result: result_order[id(result.target)])
+        elapsed = time.monotonic() - started
+        stdout_file.write_text("\n".join(stdout_parts), encoding="utf-8")
+        if multi_project:
+            attempt_trace.write_text(
+                "".join(json.dumps(trace) + "\n" for trace in merged_attempt_traces),
+                encoding="utf-8",
+            )
 
         record = BatchRunRecord(
             run_id=run_id,
@@ -294,14 +360,18 @@ class CoverUpExperimentRunner:
             command=command,
             started_at=started_at,
             finished_at=_now(),
-            exit_code=completed.returncode,
+            exit_code=final_exit_code,
             elapsed_seconds=elapsed,
             results=results,
-            generated_tests=after_tests,
+            generated_tests=generated_tests,
             tests_workspace=str(work_tests),
-            coverage_after=str(after_json.relative_to(run_dir)) if after_json.exists() else None,
+            coverage_after=(
+                str(after_jsons[0].relative_to(run_dir)) if after_jsons else None
+            ),
             stdout_file=str(stdout_file.relative_to(run_dir)),
-            coverup_log_file=str(coverup_log.relative_to(run_dir)),
+            coverup_log_file=(
+                str(coverup_logs[0].relative_to(run_dir)) if coverup_logs else ""
+            ),
             attempt_trace_file=(
                 str(attempt_trace.relative_to(run_dir)) if attempt_trace.exists() else ""
             ),
@@ -336,48 +406,73 @@ class CoverUpExperimentRunner:
             / run_id
         )
         run_dir.mkdir(parents=True, exist_ok=False)
-        after_json = run_dir / "coverage_after.json"
-        environment = os.environ.copy()
-        src_dir = self.config.project_root.resolve() / "src"
-        environment["PYTHONPATH"] = (
-            str(src_dir) + os.pathsep + environment.get("PYTHONPATH", "")
-        )
+        environment = _test_environment(self.config.project_root)
+        grouped: dict[str, list[SymbolTarget]] = {}
+        for target in targets:
+            grouped.setdefault(target.project, []).append(target)
+        projects = sorted(grouped)
+        multi_project = len(projects) > 1
+        if multi_project:
+            per_project_tests = {
+                project: (tests_dir / project).resolve()
+                for project in projects
+            }
+            missing_tests = [
+                str(path) for path in per_project_tests.values() if not path.is_dir()
+            ]
+            if missing_tests:
+                raise FileNotFoundError(
+                    "Multi-project baseline evaluation requires one tests "
+                    "subdirectory per project: " + ", ".join(missing_tests)
+                )
+        else:
+            per_project_tests = {projects[0]: tests_dir}
         started_at = _now()
         started = time.monotonic()
-        completed = run_coverage(
-            project_root=self.config.project_root.resolve(),
-            package_dir=self.config.package_dir.resolve(),
-            tests_dir=tests_dir,
-            output=after_json,
-            pytest_args=self.config.pytest_args,
-            env=environment,
-        )
-        elapsed = time.monotonic() - started
-        if completed.returncode:
-            raise RuntimeError(
-                "Existing baseline test suite failed under coverage.py:\n"
-                f"{completed.stdout}"
-            )
-        report = load_report(after_json)
         results: list[BatchTargetResult] = []
-        for target in targets:
-            try:
-                after_cov = symbol_coverage(report, target.source_file, target.symbol)
-            except KeyError as exc:
+        after_jsons: list[Path] = []
+        final_exit_code = 0
+        for project in projects:
+            group = grouped[project]
+            package_dir = self.config.package_dir_for(project).resolve()
+            safe_project = re.sub(r"[^A-Za-z0-9_.-]+", "_", project).strip("._-")
+            suffix = "" if not multi_project else f"_{safe_project}"
+            after_json = run_dir / f"coverage_after{suffix}.json"
+            completed = run_coverage(
+                project_root=self.config.project_root.resolve(),
+                package_dir=package_dir,
+                tests_dir=per_project_tests[project],
+                output=after_json,
+                pytest_args=self.config.pytest_args,
+                env=environment,
+            )
+            final_exit_code = completed.returncode
+            if completed.returncode:
+                raise RuntimeError(
+                    "Existing baseline test suite failed under coverage.py for "
+                    f"project {project!r}:\n{completed.stdout}"
+                )
+            report = load_report(after_json)
+            for target in group:
+                try:
+                    after_cov = symbol_coverage(report, target.source_file, target.symbol)
+                except KeyError as exc:
+                    results.append(BatchTargetResult(
+                        target=target,
+                        feedback=f"Score: 0. Coverage lookup failed: {exc}",
+                    ))
+                    continue
+                metric_result = score_symbol(_zero_coverage_like(after_cov), after_cov)
+                score_data = metric_result.as_dict()
+                score_data["valid"] = True
+                score_data["generator_exit_code"] = 0
                 results.append(BatchTargetResult(
                     target=target,
-                    feedback=f"Score: 0. Coverage lookup failed: {exc}",
+                    score=score_data,
+                    feedback=build_feedback(metric_result),
                 ))
-                continue
-            metric_result = score_symbol(_zero_coverage_like(after_cov), after_cov)
-            score_data = metric_result.as_dict()
-            score_data["valid"] = True
-            score_data["generator_exit_code"] = 0
-            results.append(BatchTargetResult(
-                target=target,
-                score=score_data,
-                feedback=build_feedback(metric_result),
-            ))
+            after_jsons.append(after_json)
+        elapsed = time.monotonic() - started
         record = BatchRunRecord(
             run_id=run_id,
             split=split,
@@ -385,14 +480,16 @@ class CoverUpExperimentRunner:
             command=["coverage.py", "pytest", str(tests_dir)],
             started_at=started_at,
             finished_at=_now(),
-            exit_code=completed.returncode,
+            exit_code=final_exit_code,
             elapsed_seconds=elapsed,
             results=results,
             generated_tests=[
                 str(path) for path in sorted(tests_dir.rglob("test_*.py"))
             ],
             tests_workspace=str(tests_dir),
-            coverage_after=str(after_json.relative_to(run_dir)),
+            coverage_after=(
+                str(after_jsons[0].relative_to(run_dir)) if after_jsons else None
+            ),
         )
         (run_dir / "record.json").write_text(
             json.dumps(record.as_dict(), indent=2, ensure_ascii=False), encoding="utf-8"

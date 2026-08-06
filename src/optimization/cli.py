@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 
 from .dataset import load_targets
 from .gepa import (
+    build_coverage_report,
     bundle_digest,
     evaluate_bundle_repeated,
     optimize,
@@ -18,7 +19,7 @@ from .gepa import (
     validate_reference_evaluation,
 )
 from .metrics import aggregate_coverage_score
-from .models import ExperimentConfig
+from .models import ExperimentConfig, ProjectLayout, SymbolTarget
 from .prompts import PromptBundle, baseline_bundle
 from .runner import CoverUpExperimentRunner
 
@@ -34,6 +35,15 @@ def parser() -> argparse.ArgumentParser:
         help=(
             "Score an existing baseline suite as an additional reference; prompt "
             "promotion still uses paired generated evaluations"
+        ),
+    )
+    result.add_argument(
+        "--sample-repos-dir",
+        type=Path,
+        default=Path("src/sample_repo"),
+        help=(
+            "Directory containing one subdirectory per project; used to resolve "
+            "per-project package/tests layouts for multi-project datasets"
         ),
     )
     result.add_argument("--artifacts-dir", type=Path, default=Path("eval/prompt_optimization"))
@@ -100,6 +110,22 @@ def should_promote(*, optimized_mean: float, baseline_mean: float) -> bool:
     return optimized_mean > baseline_mean
 
 
+def _print_coverage_report(report: dict) -> None:
+    """Print a compact per-split, per-prompt coverage summary table."""
+    header = f"{'split':<12}{'prompt':<10}{'stmt%':>8}{'branch%':>9}{'score':>8}"
+    print(header)
+    print("-" * len(header))
+    for split, entries in report["splits"].items():
+        for prompt in ("baseline", "optimized"):
+            row = entries[prompt]
+            print(
+                f"{split:<12}{prompt:<10}"
+                f"{row['statement_coverage'] * 100:>7.2f}%"
+                f"{row['branch_coverage'] * 100:>8.2f}%"
+                f"{row['score']:>8.4f}"
+            )
+
+
 def _top_isort_targets(coverage_path: Path, *, seed: int = 7) -> list[dict]:
     with coverage_path.open(encoding="utf-8") as file:
         report = json.load(file)
@@ -140,7 +166,40 @@ def _top_isort_targets(coverage_path: Path, *, seed: int = 7) -> list[dict]:
     ]
 
 
-def make_runner(args: argparse.Namespace) -> CoverUpExperimentRunner:
+def _resolve_project_layouts(
+    root: Path,
+    targets: list[SymbolTarget],
+    sample_repos_dir: Path,
+) -> dict[str, ProjectLayout] | None:
+    """Resolve per-project package/tests dirs for a multi-project dataset."""
+    projects = sorted({target.project for target in targets})
+    if len(projects) < 2:
+        return None
+    repos = _resolve(root, sample_repos_dir)
+    layouts: dict[str, ProjectLayout] = {}
+    for project in projects:
+        package = (repos / project / project).resolve()
+        tests = (repos / project / "tests").resolve()
+        if not package.is_dir():
+            raise FileNotFoundError(
+                f"Multi-project run needs package directory {package}"
+            )
+        if not tests.is_dir():
+            raise FileNotFoundError(
+                f"Multi-project run needs tests directory {tests}"
+            )
+        layouts[project] = ProjectLayout(package_dir=package, tests_dir=tests)
+    return layouts
+
+
+def _sample_repos_dir(args: argparse.Namespace) -> Path:
+    return getattr(args, "sample_repos_dir", Path("src/sample_repo"))
+
+
+def make_runner(
+    args: argparse.Namespace,
+    projects: dict[str, ProjectLayout] | None = None,
+) -> CoverUpExperimentRunner:
     if args.max_attempts < 1:
         raise ValueError("--max-attempts must be at least 1")
     if args.repeat_tests < 0:
@@ -161,6 +220,7 @@ def make_runner(args: argparse.Namespace) -> CoverUpExperimentRunner:
         max_concurrency=args.max_concurrency,
         rate_limit=args.rate_limit,
         pytest_args=args.pytest_args,
+        projects=projects,
     )
     for name, path in (("package", config.package_dir), ("tests", config.tests_dir)):
         if not path.is_dir():
@@ -172,7 +232,7 @@ def init_files(args: argparse.Namespace) -> None:
     root = args.project_root.resolve()
     artifacts = _resolve(root, args.artifacts_dir)
     prompt = artifacts / "prompts" / "gpt_v2_baseline.json"
-    dataset = artifacts / "datasets" / "isort_symbols.jsonl"
+    dataset = artifacts / "datasets" / "isort_mlxtend_symbols.jsonl"
     if not args.force and (prompt.exists() or dataset.exists()):
         raise FileExistsError("Initialization files already exist; pass --force to replace them")
     baseline_bundle().save(prompt)
@@ -184,13 +244,16 @@ def init_files(args: argparse.Namespace) -> None:
 
 
 def evaluate(args: argparse.Namespace) -> None:
-    runner = make_runner(args)
     prompt = PromptBundle.load(args.prompt.resolve())
     if error := validate_bundle(prompt):
         raise ValueError(error)
     targets = load_targets(args.dataset.resolve(), args.split)
     if not targets:
         raise ValueError(f"No targets found for split {args.split!r}")
+    projects = _resolve_project_layouts(
+        args.project_root.resolve(), targets, _sample_repos_dir(args)
+    )
+    runner = make_runner(args, projects=projects)
     batch = evaluate_bundle_repeated(
         runner, targets, prompt,
         runner.config.artifacts_dir.resolve() / "candidates",
@@ -208,13 +271,18 @@ def evaluate(args: argparse.Namespace) -> None:
 
 def tune(args: argparse.Namespace) -> None:
     load_dotenv(args.project_root.resolve() / ".env")
-    runner = make_runner(args)
     baseline = PromptBundle.load(args.prompt.resolve())
     train = load_targets(args.dataset.resolve(), "train")
     validation = load_targets(args.dataset.resolve(), "validation")
     if not train or not validation:
         raise ValueError("GEPA requires at least one train and one validation target")
     holdout = load_targets(args.dataset.resolve(), args.holdout_split)
+    projects = _resolve_project_layouts(
+        args.project_root.resolve(),
+        [*train, *validation, *holdout],
+        _sample_repos_dir(args),
+    )
+    runner = make_runner(args, projects=projects)
     final_targets = holdout or validation
     final_split = args.holdout_split if holdout else "validation"
     lm = dspy.LM(
@@ -385,6 +453,25 @@ def tune(args: argparse.Namespace) -> None:
         print(f"Promoted GEPA proposal to {final_path}")
     else:
         print(f"GEPA proposal did not improve; retained baseline at {final_path}")
+
+    targets_by_split = {"train": train, "validation": validation}
+    if final_split not in targets_by_split:
+        targets_by_split[final_split] = final_targets
+    coverage_report = build_coverage_report(
+        runner,
+        targets_by_split=targets_by_split,
+        baseline=baseline,
+        optimized=proposed_prompt,
+        candidate_dir=artifacts / "candidates",
+        evaluation_replicates=args.evaluation_replicates,
+    )
+    coverage_report_path = artifacts / "coverage_report.json"
+    coverage_report_path.write_text(
+        json.dumps(coverage_report, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    print(f"Saved coverage report to {coverage_report_path}")
+    _print_coverage_report(coverage_report)
 
 
 def main() -> None:
