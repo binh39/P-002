@@ -28,7 +28,51 @@ The Projects/upload API and production configuration are documented in [docs/bac
 
 ## Frontend status
 
-The frontend can be deployed before the backend in either of these combinations:
+The frontend is deployed at [https://vinaip002.web.app](https://vinaip002.web.app). It uses Firebase Authentication and a hybrid data mode: implemented Project features call the production API, while screens without a backend slice remain clearly marked as demo data.
+
+## Implemented web features
+
+### Authentication and workspace access
+
+- Email/password registration with display name.
+- Email/password login and logout.
+- Password reset email flow.
+- Google Sign-In.
+- Protected workspace routes: unauthenticated visitors are redirected to `/login`.
+- Firebase manages session refresh; the browser does not store an API token manually.
+
+### Python projects and source upload
+
+- Create a Python project with name, description, branch, commit and ZIP archive.
+- Upload ZIP files directly from the browser to a private Cloud Storage bucket through a short-lived signed URL.
+- Validate upload metadata and archive size before the project is created.
+- List projects and open a project detail page.
+- View project runtime, dependency, test, coverage and security settings in the UI.
+
+### Project analysis
+
+- Automatically start analysis after creating a project; users can also run **Re-analyze** from Project Detail.
+- Show queued/running/failed/ready states and poll only while analysis is running.
+- Process analysis asynchronously with Cloud Tasks, so the browser request returns immediately.
+- Safely inspect the uploaded ZIP and extract Python functions, methods, async functions, source ranges, LOC, statement count and branch candidates using Python AST.
+- View analyzed functions and open the exact extracted source for each function.
+
+### Available UI screens
+
+- Dashboard, Projects, Project Detail, Create Experiment, Experiments, Runs/Comparison, Prompt Registry, Playground, Datasets and Settings.
+- Only the Projects and Project Analysis flow currently uses production backend data. The remaining product screens are UI/demo workflows and do not silently fall back when a connected API call fails.
+
+### Current delivery status
+
+| Capability | Status |
+| --- | --- |
+| Firebase login, registration, reset password and Google Sign-In | Production |
+| Project ZIP upload and project metadata | Production |
+| Async Python AST analysis and function source viewer | Production |
+| Project settings UI | UI ready; persistence is available for project settings API |
+| Experiments, optimization runs, coverage execution and prompt optimization | UI/demo only; backend slice is next |
+
+The frontend can also run in these modes during development:
 
 | Auth mode | Data mode | Use case |
 | --- | --- | --- |
