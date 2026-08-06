@@ -17,8 +17,10 @@ from src.modules.analysis.repository import (
 from src.modules.analysis.service import AnalysisService
 from src.modules.experiments.dispatcher import (
     CloudTasksBaselineDispatcher,
+    CloudTasksComparisonDispatcher,
     CloudTasksOptimizationDispatcher,
     InlineBaselineDispatcher,
+    InlineComparisonDispatcher,
     InlineOptimizationDispatcher,
 )
 from src.modules.experiments.executor import DockerCoverUpExecutor
@@ -137,6 +139,7 @@ def build_services(settings: Settings) -> ServiceContainer:
         settings.optimize_model,
         settings.gepa_max_metric_calls,
         settings.optimize_model_allowlist_values,
+        settings.final_evaluation_replicates,
     )
     if settings.baseline_dispatcher == "cloud_tasks":
         experiments.set_dispatcher(
@@ -159,9 +162,20 @@ def build_services(settings: Settings) -> ServiceContainer:
                 settings.gcp_service_account_email,
             )
         )
+        experiments.set_comparison_dispatcher(
+            CloudTasksComparisonDispatcher(
+                settings.gcp_project_id,
+                settings.cloud_tasks_location,
+                settings.baseline_cloud_tasks_queue,
+                settings.baseline_worker_url,
+                settings.baseline_task_audience,
+                settings.gcp_service_account_email,
+            )
+        )
     else:
         experiments.set_dispatcher(InlineBaselineDispatcher(experiments.execute_baseline))
         experiments.set_optimization_dispatcher(InlineOptimizationDispatcher(experiments.execute_optimization))
+        experiments.set_comparison_dispatcher(InlineComparisonDispatcher(experiments.execute_comparison))
     return ServiceContainer(
         token_verifier=token_verifier,
         internal_token_verifier=internal_token_verifier,

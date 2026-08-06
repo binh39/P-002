@@ -2,11 +2,22 @@ from fastapi import APIRouter, Request, Response, status
 
 from src.api.dependencies import CurrentUser, InternalTask
 
-from .schemas import BaselineRunResponse, CreateExperimentRequest, ExperimentResponse, OptimizationRunResponse
+from .schemas import (
+    BaselineRunResponse,
+    ComparisonRunResponse,
+    CreateExperimentRequest,
+    ExperimentResponse,
+    OptimizationRunResponse,
+    PromptVersionResponse,
+    PromptVersionStatus,
+    ReviewPromptVersionRequest,
+)
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
 internal_router = APIRouter(prefix="/internal/v1/baseline-runs", tags=["internal"])
 optimization_internal_router = APIRouter(prefix="/internal/v1/optimization-runs", tags=["internal"])
+comparison_internal_router = APIRouter(prefix="/internal/v1/comparison-runs", tags=["internal"])
+prompt_router = APIRouter(prefix="/prompt-versions", tags=["prompt-versions"])
 
 
 @router.post("", response_model=ExperimentResponse, status_code=status.HTTP_201_CREATED)
@@ -34,6 +45,16 @@ async def get_optimization_run(run_id: str, user: CurrentUser, request: Request)
     return await request.app.state.services.experiments.get_optimization_run(run_id, user.uid)
 
 
+@router.post("/{experiment_id}/compare", response_model=ComparisonRunResponse, status_code=status.HTTP_202_ACCEPTED)
+async def request_comparison(experiment_id: str, user: CurrentUser, request: Request):
+    return await request.app.state.services.experiments.request_comparison(experiment_id, user.uid)
+
+
+@router.get("/comparison-runs/{run_id}", response_model=ComparisonRunResponse)
+async def get_comparison_run(run_id: str, user: CurrentUser, request: Request):
+    return await request.app.state.services.experiments.get_comparison_run(run_id, user.uid)
+
+
 @router.get("/{experiment_id}", response_model=ExperimentResponse)
 async def get_experiment(experiment_id: str, user: CurrentUser, request: Request):
     return await request.app.state.services.experiments.get(experiment_id, user.uid)
@@ -49,3 +70,32 @@ async def execute_baseline(run_id: str, _task: InternalTask, request: Request):
 async def execute_optimization(run_id: str, _task: InternalTask, request: Request):
     await request.app.state.services.experiments.execute_optimization(run_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@comparison_internal_router.post("/{run_id}/execute", status_code=status.HTTP_204_NO_CONTENT)
+async def execute_comparison(run_id: str, _task: InternalTask, request: Request):
+    await request.app.state.services.experiments.execute_comparison(run_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@prompt_router.get("/{version_id}", response_model=PromptVersionResponse)
+async def get_prompt_version(version_id: str, user: CurrentUser, request: Request):
+    return await request.app.state.services.experiments.get_prompt_version(version_id, user.uid)
+
+
+@prompt_router.post("/{version_id}/approve", response_model=PromptVersionResponse)
+async def approve_prompt_version(
+    version_id: str, payload: ReviewPromptVersionRequest, user: CurrentUser, request: Request
+):
+    return await request.app.state.services.experiments.review_prompt_version(
+        version_id, user.uid, PromptVersionStatus.APPROVED, payload.comment
+    )
+
+
+@prompt_router.post("/{version_id}/reject", response_model=PromptVersionResponse)
+async def reject_prompt_version(
+    version_id: str, payload: ReviewPromptVersionRequest, user: CurrentUser, request: Request
+):
+    return await request.app.state.services.experiments.review_prompt_version(
+        version_id, user.uid, PromptVersionStatus.REJECTED, payload.comment
+    )

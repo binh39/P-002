@@ -1,3 +1,4 @@
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
@@ -5,8 +6,8 @@ from src.config import Settings
 from src.main import create_app
 
 
-@pytest_asyncio.fixture
-async def client(tmp_path):
+@pytest.fixture
+def app(tmp_path):
     settings = Settings(
         _env_file=None,
         app_env="test",
@@ -15,7 +16,11 @@ async def client(tmp_path):
         storage_backend="local",
         local_upload_dir=str(tmp_path / "uploads"),
     )
-    app = create_app(settings)
+    return create_app(settings)
+
+
+@pytest_asyncio.fixture
+async def client(app):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as http_client:
         yield http_client

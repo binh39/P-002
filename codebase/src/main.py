@@ -14,10 +14,11 @@ from src.core.errors import AppError
 from src.core.logging import configure_logging
 from src.modules.analysis.router import internal_router
 from src.modules.experiments.router import (
-    internal_router as experiments_internal_router,
+    comparison_internal_router,
+    optimization_internal_router,
 )
 from src.modules.experiments.router import (
-    optimization_internal_router,
+    internal_router as experiments_internal_router,
 )
 from src.services.container import build_services
 
@@ -105,6 +106,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(internal_router)
     application.include_router(experiments_internal_router)
     application.include_router(optimization_internal_router)
+    application.include_router(comparison_internal_router)
 
     async def health():
         return {"status": "ok", "service": "promptopt-api", "env": settings.app_env}

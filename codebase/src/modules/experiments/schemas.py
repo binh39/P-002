@@ -18,6 +18,12 @@ class ExperimentStatus(StrEnum):
     OPTIMIZING = "optimizing"
     CANDIDATE_EVALUATING = "candidate_evaluating"
     OPTIMIZATION_SUCCEEDED = "optimization_succeeded"
+    COMPARISON_QUEUED = "comparison_queued"
+    COMPARING = "comparing"
+    COMPARISON_SUCCEEDED = "comparison_succeeded"
+    IN_REVIEW = "in_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
     TIMED_OUT = "timed_out"
     CANCELLED = "cancelled"
     FAILED = "failed"
@@ -40,6 +46,8 @@ class ExperimentResponse(StrictModel):
     status: ExperimentStatus
     baseline_run_id: str | None = None
     optimization_run_id: str | None = None
+    comparison_run_id: str | None = None
+    prompt_version_id: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -89,6 +97,61 @@ class OptimizationRunResponse(StrictModel):
 
 class OptimizationRunRecord(OptimizationRunResponse):
     pass
+
+
+class ComparisonRunResponse(StrictModel):
+    id: str
+    experiment_id: str
+    optimization_run_id: str
+    status: ExperimentStatus
+    baseline_prompt_digest: str
+    candidate_prompt_digest: str
+    test_target_ids: list[str]
+    replicate_count: int
+    baseline_metrics: dict = Field(default_factory=dict)
+    candidate_metrics: dict = Field(default_factory=dict)
+    absolute_gain: float | None = None
+    relative_gain: float | None = None
+    promotion_eligible: bool = False
+    decision_reason: str = ""
+    artifact_objects: dict[str, str] = Field(default_factory=dict)
+    prompt_version_id: str | None = None
+    error_message: str | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
+
+class ComparisonRunRecord(ComparisonRunResponse):
+    pass
+
+
+class PromptVersionStatus(StrEnum):
+    IN_REVIEW = "in_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class PromptVersionResponse(StrictModel):
+    id: str
+    experiment_id: str
+    comparison_run_id: str
+    parent_prompt_digest: str
+    prompt_digest: str
+    prompt: dict[str, str]
+    status: PromptVersionStatus
+    reviewer_id: str | None = None
+    review_comment: str = ""
+    reviewed_at: datetime | None = None
+    created_at: datetime
+
+
+class PromptVersionRecord(PromptVersionResponse):
+    pass
+
+
+class ReviewPromptVersionRequest(StrictModel):
+    comment: str = Field(default="", max_length=1000)
 
 
 def new_id() -> str:
