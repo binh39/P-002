@@ -431,10 +431,11 @@ Create experiment
 
 ### 10.4 Dataset và split chống data leakage
 
-- [ ] Tạo dataset snapshot từ function người dùng chọn, không hard-code isort.
+- [x] Tạo dataset snapshot từ function người dùng chọn, không hard-code isort.
 - [ ] Lưu project version, source checksum và settings checksum cùng dataset.
-- [ ] Chia `train`, `validation`, `test` bằng seed cố định và lưu split.
-- [ ] Định nghĩa minimum target count và fallback rõ ràng cho project nhỏ.
+- [x] Chia `train`, `validation`, `test` bằng seed cố định và lưu split trong experiment.
+- [x] Dataset dưới 3 targets được đánh dấu baseline-only, không giả lập validation/test.
+- [ ] Chốt minimum target count để cho phép bắt đầu GEPA optimization.
 - [ ] Không dùng locked `test` split trong GEPA search/candidate selection.
 - [ ] Không để cùng function/source version xuất hiện ở nhiều split.
 - [ ] Đóng băng denominator statement/branch từ baseline preflight.

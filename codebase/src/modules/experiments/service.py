@@ -5,6 +5,7 @@ from src.infrastructure.storage import ObjectStorage
 from src.modules.analysis.repository import FunctionRepository
 from src.modules.projects.service import ProjectService
 
+from .dataset import split_targets
 from .dispatcher import BaselineDispatcher
 from .executor import DockerCoverUpExecutor
 from .prompts import baseline_prompt
@@ -50,6 +51,7 @@ class ExperimentService:
             id=new_id(),
             owner_id=owner_id,
             **payload.model_dump(),
+            dataset_splits=split_targets(payload.target_function_ids),
             status=ExperimentStatus.DRAFT,
             created_at=now,
             updated_at=now,
