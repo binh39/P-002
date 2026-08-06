@@ -54,13 +54,14 @@ class CloudRunJobCoverUpExecutor:
                 "timeout": f"{self.timeout_seconds}s",
             },
         }
-        operation = await asyncio.to_thread(
-            self.client.run_job,
-            request=request,
-        )
         operation_error = None
+
+        def run_job_and_wait():
+            operation = self.client.run_job(request=request)
+            return operation.result(timeout=self.timeout_seconds + 60)
+
         try:
-            await asyncio.to_thread(operation.result, timeout=self.timeout_seconds + 60)
+            await asyncio.to_thread(run_job_and_wait)
         except TimeoutError as exc:
             raise RuntimeError("Cloud Run Job evaluation timed out") from exc
         except Exception as exc:
@@ -69,7 +70,10 @@ class CloudRunJobCoverUpExecutor:
             result = json.loads((await self.storage.read(f"{prefix}/result.json")).decode())
         except Exception as exc:
             if operation_error:
-                raise RuntimeError("Cloud Run Job failed before publishing a result manifest") from operation_error
+                detail = str(operation_error).strip() or type(operation_error).__name__
+                raise RuntimeError(
+                    f"Cloud Run Job failed before publishing a result manifest: {detail}"[-4000:]
+                ) from operation_error
             raise RuntimeError("Cloud Run Job did not publish a valid result manifest") from exc
         if result.get("status") != "succeeded":
             raise RuntimeError(str(result.get("error") or "Cloud Run Job evaluation failed")[-4000:])

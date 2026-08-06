@@ -22,10 +22,12 @@ class FakeOperation:
     def __init__(self):
         self.timeout = None
         self.thread_id = None
+        self.expected_thread_id = None
 
     def result(self, timeout):
         self.timeout = timeout
         self.thread_id = threading.get_ident()
+        assert self.thread_id == self.expected_thread_id
 
 
 class FakeJobsClient:
@@ -37,6 +39,7 @@ class FakeJobsClient:
 
     def run_job(self, request):
         self.thread_id = threading.get_ident()
+        self.operation.expected_thread_id = self.thread_id
         self.request = request
         environment = request["overrides"]["container_overrides"][0]["env"]
         prefix = next(item["value"] for item in environment if item["name"] == "PROMPTOPT_JOB_PREFIX")
