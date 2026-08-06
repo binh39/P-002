@@ -1,0 +1,21 @@
+# Controls what `gcloud builds submit` uploads.
+# Takes precedence over .dockerignore and .gitignore.
+#
+# IMPORTANT: do not exclude src/sample_repo — .gitignore excludes it and that
+# made the built image miss the sample repos, breaking the GEPA job.
+
+.gcloudignore
+.git/
+.gitignore
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.ai-log/
+data/
+docs/
+presentation/
+eval/
+*.md

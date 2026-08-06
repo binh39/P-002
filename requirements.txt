@@ -14,6 +14,12 @@ litellm[google]>=1.94.0
 dspy==3.2.1
 gepa==0.0.27
 
+# Sample repo evaluation (mlxtend targets) runtime dependencies
+matplotlib==3.11.1
+pandas==3.0.5
+scipy==1.18.0
+scikit-learn==1.9.0
+
 # Database (uncomment as needed)
 # sqlalchemy>=2.0.0
 # alembic>=1.14.0

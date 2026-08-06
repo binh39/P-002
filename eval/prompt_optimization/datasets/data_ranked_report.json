@@ -1,0 +1,33 @@
+{
+  "train_limit": 10,
+  "validation_limit": 20,
+  "test_limit": 20,
+  "selected_total": 50,
+  "projects": {
+    "isort": {
+      "functions": 188
+    },
+    "mlxtend": {
+      "functions": 339
+    },
+    "typesystem": {
+      "functions": 176
+    }
+  },
+  "excluded_dirs": [
+    "__pycache__",
+    "_vendored",
+    "externals",
+    "tests"
+  ],
+  "splits": {
+    "test": 20,
+    "train": 10,
+    "validation": 20
+  },
+  "outputs": {
+    "dataset": "D:\\Mon_Hoc\\Projects\\VINAI\\P-002\\eval\\prompt_optimization\\datasets\\data_symbols.jsonl",
+    "ranked": "D:\\Mon_Hoc\\Projects\\VINAI\\P-002\\eval\\prompt_optimization\\datasets\\data_ranked.csv",
+    "report": "D:\\Mon_Hoc\\Projects\\VINAI\\P-002\\eval\\prompt_optimization\\datasets\\data_ranked_report.json"
+  }
+}
