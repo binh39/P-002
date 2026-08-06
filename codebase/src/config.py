@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     optimize_model: str = ""
     optimize_model_allowlist: str = "vertex_ai/gemini-3.6-flash"
     gepa_max_metric_calls: int = Field(default=30, ge=3, le=1000)
+    final_evaluation_replicates: int = Field(default=2, ge=1, le=10)
     max_analysis_python_files: int = Field(default=5000, ge=1, le=20000)
     max_analysis_uncompressed_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
     signed_url_ttl_seconds: int = Field(default=900, ge=60, le=3600)

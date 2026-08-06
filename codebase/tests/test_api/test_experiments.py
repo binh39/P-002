@@ -1,5 +1,14 @@
+from datetime import UTC, datetime
+
 import pytest
 
+from src.modules.experiments.prompts import baseline_prompt
+from src.modules.experiments.schemas import (
+    ExperimentRecord,
+    ExperimentStatus,
+    PromptVersionRecord,
+    PromptVersionStatus,
+)
 from tests.test_api.test_analysis import AUTH_HEADERS, create_project, python_archive
 
 
@@ -21,6 +30,10 @@ async def test_create_experiment_and_queue_baseline(client):
     premature_optimization = await client.post(f"/api/v1/experiments/{experiment['id']}/optimize", headers=AUTH_HEADERS)
     assert premature_optimization.status_code == 409
     assert premature_optimization.json()["error"]["code"] == "BASELINE_NOT_READY"
+
+    premature_comparison = await client.post(f"/api/v1/experiments/{experiment['id']}/compare", headers=AUTH_HEADERS)
+    assert premature_comparison.status_code == 409
+    assert premature_comparison.json()["error"]["code"] == "OPTIMIZATION_NOT_READY"
 
     queued = await client.post(f"/api/v1/experiments/{experiment['id']}/runs", headers=AUTH_HEADERS)
     assert queued.status_code == 202
@@ -45,3 +58,59 @@ async def test_experiment_requires_analyzed_project(client):
     )
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "ANALYSIS_NOT_READY"
+
+
+@pytest.mark.asyncio
+async def test_prompt_version_review_api_is_idempotent_and_cannot_be_reversed(client, app):
+    repository = app.state.services.experiments.repository
+    now = datetime.now(UTC)
+    prompt = baseline_prompt()
+    await repository.create(
+        ExperimentRecord(
+            id="review-experiment",
+            owner_id="local-user",
+            project_id="project-1",
+            name="Review candidate",
+            target_function_ids=["fn-1"],
+            status=ExperimentStatus.IN_REVIEW,
+            prompt_version_id="version-1",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    await repository.create_prompt_version(
+        PromptVersionRecord(
+            id="version-1",
+            experiment_id="review-experiment",
+            comparison_run_id="comparison-1",
+            parent_prompt_digest="parent-digest",
+            prompt_digest=prompt.digest(),
+            prompt=prompt.as_candidate(),
+            status=PromptVersionStatus.IN_REVIEW,
+            created_at=now,
+        )
+    )
+
+    approved = await client.post(
+        "/api/v1/prompt-versions/version-1/approve",
+        headers=AUTH_HEADERS,
+        json={"comment": "Ready for controlled rollout"},
+    )
+    retried = await client.post(
+        "/api/v1/prompt-versions/version-1/approve",
+        headers=AUTH_HEADERS,
+        json={"comment": "duplicate request"},
+    )
+    reversed_decision = await client.post(
+        "/api/v1/prompt-versions/version-1/reject",
+        headers=AUTH_HEADERS,
+        json={"comment": "reverse"},
+    )
+
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+    assert approved.json()["reviewer_id"] == "local-user"
+    assert retried.json()["reviewed_at"] == approved.json()["reviewed_at"]
+    assert retried.json()["review_comment"] == "Ready for controlled rollout"
+    assert reversed_decision.status_code == 409
+    assert reversed_decision.json()["error"]["code"] == "PROMPT_VERSION_ALREADY_REVIEWED"

@@ -460,15 +460,15 @@ Create experiment
 
 ### 10.6 PR 4 — Paired comparison và promotion gate
 
-- [ ] Chọn candidate bằng validation rồi khóa candidate trước final evaluation.
-- [ ] Chạy baseline và candidate trên cùng locked test targets, runner config và replicate count.
+- [x] Chọn candidate bằng validation rồi khóa candidate trước final evaluation.
+- [x] Chạy baseline và candidate trên cùng locked test targets, runner config và replicate count.
 - [ ] So sánh paired statement/branch coverage, pass rate, cost và latency.
-- [ ] Chỉ promote khi candidate tốt hơn baseline và qua hard gate.
-- [ ] Hard gate: pytest hợp lệ, không flaky, không timeout và không giảm pass rate.
-- [ ] Nếu GEPA giữ nguyên baseline digest thì skip final evaluation và ghi rõ reason.
-- [ ] Lưu `final_validation.json`, absolute/relative gain và promotion decision.
-- [ ] Tạo prompt version `in_review`; không tự động chuyển production.
-- [ ] Thêm approve/reject API có reviewer, comment, audit timestamp và idempotency.
+- [x] Chỉ promote khi candidate tốt hơn baseline và qua hard gate.
+- [x] Hard gate: pytest hợp lệ, không flaky, không timeout và không giảm pass rate.
+- [x] Nếu GEPA giữ nguyên baseline digest thì skip final evaluation và ghi rõ reason.
+- [x] Lưu `final_validation.json`, absolute/relative gain và promotion decision.
+- [x] Tạo prompt version `in_review`; không tự động chuyển production.
+- [x] Thêm approve/reject API có reviewer, comment, audit timestamp và idempotency.
 
 ### 10.7 Production runner trên Google Cloud
 
@@ -496,8 +496,8 @@ Create experiment
 ### 10.9 Verification và Definition of Done
 
 - [x] Ruff format/check pass cho experiment foundation.
-- [x] Backend tests pass (`21 passed` sau target metrics và structured trace).
-- [x] Unit test score, cache key và prompt validation; promotion rule để PR 4.
+- [x] Backend tests pass (`29 passed` sau paired comparison và prompt review).
+- [x] Unit test score, cache key, prompt validation và promotion rule.
 - [ ] Contract/integration test cho experiment, run và artifact APIs bằng fake executor.
 - [ ] Docker smoke test fixture project và test timeout/retry/malformed response.
 - [ ] Test Firestore ownership isolation và GCS artifact authorization.

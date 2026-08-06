@@ -26,14 +26,18 @@ cd codebase
 
 The Projects/upload API and production configuration are documented in [docs/backend-projects-slice.md](docs/backend-projects-slice.md).
 
-## Experiment baseline API foundation
+## Experiment and prompt optimization pipeline
 
-This branch adds the durable first half of the experiment workflow: authenticated users
-can create an experiment from analyzed function IDs, enqueue one baseline run, and poll
-its run record. Records use Firestore in production and Cloud Tasks calls the internal,
-OIDC-protected worker endpoint. The execution endpoint deliberately does **not** execute
-an uploaded archive in the Cloud Run API container; the isolated CoverUp sandbox and its
-coverage artifacts are the next PR.
+The backend now supports the experiment lifecycle from an analyzed project through review:
+
+- Create a deterministic train/validation/locked-test dataset from selected functions.
+- Queue and poll an isolated CoverUp baseline run with structured coverage artifacts.
+- Run GEPA prompt search on train/validation only and persist the locked candidate prompt.
+- Queue a paired final comparison of baseline and candidate on the same locked test targets and replicates.
+- Block promotion when generated tests fail, time out, are flaky, reduce pass rate, or do not improve coverage.
+- Create an `in_review` prompt version and record an idempotent approve/reject decision with reviewer audit data.
+
+Firestore stores durable run and prompt-version records. Cloud Tasks invokes OIDC-protected internal worker endpoints. Local execution uses the isolated Docker runner. Production sandbox execution still requires the Cloud Run Job runner described in the checklist; the Cloud Run API service remains fail-closed and does not execute uploaded source directly.
 
 ## Frontend status
 
@@ -79,7 +83,7 @@ The frontend is deployed at [https://vinaip002.web.app](https://vinaip002.web.ap
 | Project ZIP upload and project metadata | Production |
 | Async Python AST analysis and function source viewer | Production |
 | Project settings UI | UI ready; persistence is available for project settings API |
-| Experiments, optimization runs, coverage execution and prompt optimization | UI/demo only; backend slice is next |
+| Experiment baseline, GEPA optimization, paired comparison and prompt review APIs | Backend implemented; frontend screens still use demo data |
 
 The frontend can also run in these modes during development:
 

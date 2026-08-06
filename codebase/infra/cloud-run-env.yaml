@@ -17,4 +17,5 @@ BASELINE_TASK_AUDIENCE: https://promptopt-api-891999064201.asia-southeast1.run.a
 OPTIMIZE_MODEL: vertex_ai/gemini-3.6-flash
 OPTIMIZE_MODEL_ALLOWLIST: vertex_ai/gemini-3.6-flash
 GEPA_MAX_METRIC_CALLS: "30"
+FINAL_EVALUATION_REPLICATES: "2"
 CORS_ORIGINS: https://vinaip002.web.app,https://c3-app-002.io.vn
