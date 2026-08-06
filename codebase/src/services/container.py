@@ -121,6 +121,7 @@ def build_services(settings: Settings) -> ServiceContainer:
             1,
             settings.max_runner_files,
             settings.max_runner_uncompressed_bytes,
+            settings.baseline_runner_network,
         )
     experiments = ExperimentService(experiment_repository, projects, function_repository, storage, executor)
     if settings.baseline_dispatcher == "cloud_tasks":

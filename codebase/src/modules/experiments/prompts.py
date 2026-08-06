@@ -27,7 +27,7 @@ def baseline_prompt() -> PromptBundle:
     return PromptBundle(
         initial="""You are an expert Python test-driven developer.
 The code below, extracted from {filename}, does not achieve full coverage:
-when tested, {coverage_targets} do not execute.
+when tested, {coverage_targets}.
 Create new pytest tests that execute all missing lines and branches. Tests must be deterministic,
 use meaningful assertions, clean up modified state, and return a complete Python test module only.
 Do not call pytest.main or execute tests at module import time.

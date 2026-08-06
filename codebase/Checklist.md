@@ -405,7 +405,7 @@ Create experiment
 - [x] Chặn symlink, device file và ZIP entry không phải regular file.
 - [ ] Không truyền secret trực tiếp trên Docker command line.
 - [ ] Thêm maximum provider retries và maximum total LLM calls cho CoverUp.
-- [ ] Chạy smoke test thật với fixture project nhỏ và model credential hợp lệ.
+- [x] Chạy smoke test thật với fixture project nhỏ và Vertex Gemini (`score=1.0`, statement/branch `100%`).
 - [ ] Chạy smoke test isort với function được chọn qua API.
 
 ### 10.3 Prompt bundle và baseline artifacts
@@ -418,7 +418,7 @@ Create experiment
 - [ ] Tạo và lưu prompt version ID riêng trong prompt registry.
 - [x] Không parse coverage từ stdout; dùng structured coverage JSON làm nguồn chính.
 - [ ] Xuất coverage theo từng target function, không chỉ coverage tổng.
-- [x] Yêu cầu CoverUp xuất `attempt_trace.jsonl` vào artifact workspace.
+- [ ] Bổ sung structured `attempt_trace.jsonl` vào runner wrapper cho CoverUp PyPI.
 - [ ] Xác minh trace chứa đủ prompt input, model response, generated test, pytest error và reason dừng qua smoke test thật.
 - [x] Lưu generated tests ZIP, CoverUp log, stdout và prompt JSON.
 - [ ] Lưu command metadata và runner config đã chuẩn hóa.

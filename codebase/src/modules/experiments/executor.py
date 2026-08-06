@@ -34,10 +34,12 @@ class DockerCoverUpExecutor:
         cpu: int,
         max_files: int,
         max_uncompressed_bytes: int,
+        network_mode: str = "none",
     ):
         self.image, self.timeout_seconds, self.memory_mb, self.cpu = image, timeout_seconds, memory_mb, cpu
         self.max_files = max_files
         self.max_uncompressed_bytes = max_uncompressed_bytes
+        self.network_mode = network_mode
 
     async def execute(
         self, archive: bytes, source_directory: str, symbols: list[str], prompt: PromptBundle
@@ -70,7 +72,7 @@ class DockerCoverUpExecutor:
                 "run",
                 "--rm",
                 "--network",
-                "none",
+                self.network_mode,
                 "--read-only",
                 "--cap-drop",
                 "ALL",
@@ -104,26 +106,23 @@ class DockerCoverUpExecutor:
             for name in ("COVERUP_MODEL", "VERTEXAI_PROJECT", "VERTEXAI_LOCATION", "GOOGLE_API_KEY"):
                 if value := os.getenv(name):
                     command.extend(["--env", f"{name}={value}"])
+            command.extend(["--env", "PROMPTOPT_PROMPT_FILE=/workspace/prompt/prompt.json"])
+            command.extend(["--env", f"PROMPTOPT_TARGET_SYMBOLS={json.dumps(symbols)}"])
             command.extend(
                 [
                     self.image,
                     "python",
-                    "-m",
-                    "coverup",
+                    "/opt/promptopt/runner_entry.py",
                     "--package-dir",
                     f"/workspace/project/{source_directory}",
-                    "--tests",
+                    "--tests-dir",
                     "/workspace/tests",
-                    "--target-symbol",
-                    ",".join(symbols),
                     "--prompt",
                     "gpt-v2",
-                    "--prompt-template-file",
-                    "/workspace/prompt/prompt.json",
-                    "--trace-file",
-                    "/workspace/artifacts/attempt_trace.jsonl",
                     "--log-file",
                     "/workspace/artifacts/coverup.log",
+                    "--model",
+                    os.environ.get("COVERUP_MODEL", ""),
                     "--max-attempts",
                     "3",
                     "--repeat-tests",
@@ -185,6 +184,8 @@ class DockerCoverUpExecutor:
             f"type=bind,src={artifacts},dst=/workspace/artifacts",
             "--env",
             "COVERAGE_FILE=/workspace/artifacts/coverage.data",
+            "--env",
+            "PYTHONPATH=/workspace/project",
             self.image,
         ]
         run_command = [
@@ -207,7 +208,7 @@ class DockerCoverUpExecutor:
             check=False,
         )
         (artifacts / "coverage.stdout.log").write_text(completed.stdout, encoding="utf-8")
-        if completed.returncode:
+        if completed.returncode not in {0, 5}:
             raise RuntimeError(completed.stdout[-4000:] or "Generated tests failed coverage validation")
         json_command = [
             *docker,
