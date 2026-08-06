@@ -9,6 +9,7 @@ on:
       - "codebase/requirements.txt"
       - "codebase/.dockerignore"
       - "codebase/infra/cloud-run-env.yaml"
+      - "codebase/sandbox/**"
       - ".github/workflows/backend-deploy.yml"
   workflow_dispatch:
 
@@ -27,6 +28,8 @@ env:
   SERVICE: promptopt-api
   RUNTIME_SERVICE_ACCOUNT: promptopt-api@vinaip002.iam.gserviceaccount.com
   SOURCE_BUCKET: vinaip002-promptopt-sources
+  RUNNER_JOB: promptopt-coverup-runner
+  RUNNER_SERVICE_ACCOUNT: promptopt-runner@vinaip002.iam.gserviceaccount.com
 
 jobs:
   deploy:
@@ -44,12 +47,37 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v3
       - name: Configure Docker authentication
         run: gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
-      - name: Build and push image
+      - name: Build and push images
         env:
-          IMAGE: asia-southeast1-docker.pkg.dev/vinaip002/promptopt/api:${{ github.sha }}
+          API_IMAGE: asia-southeast1-docker.pkg.dev/vinaip002/promptopt/api:${{ github.sha }}
+          RUNNER_IMAGE: asia-southeast1-docker.pkg.dev/vinaip002/promptopt/coverup-runner:${{ github.sha }}
         run: |
-          docker build --tag "$IMAGE" codebase
-          docker push "$IMAGE"
+          docker build --tag "$API_IMAGE" codebase
+          docker build --file codebase/sandbox/Dockerfile --tag "$RUNNER_IMAGE" codebase
+          docker push "$API_IMAGE"
+          docker push "$RUNNER_IMAGE"
+      - name: Deploy isolated CoverUp job
+        env:
+          RUNNER_IMAGE: asia-southeast1-docker.pkg.dev/vinaip002/promptopt/coverup-runner:${{ github.sha }}
+        run: |
+          gcloud run jobs deploy "$RUNNER_JOB" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --image "$RUNNER_IMAGE" \
+            --service-account "$RUNNER_SERVICE_ACCOUNT" \
+            --cpu 1 \
+            --memory 2Gi \
+            --tasks 1 \
+            --parallelism 1 \
+            --max-retries 0 \
+            --task-timeout 900s \
+            --set-env-vars "COVERUP_MODEL=vertex_ai/gemini-3.5-flash-lite,VERTEXAI_PROJECT=$PROJECT_ID,VERTEXAI_LOCATION=global,PROMPTOPT_RUNNER_TIMEOUT_SECONDS=900,PROMPTOPT_MAX_FILES=10000,PROMPTOPT_MAX_UNCOMPRESSED_BYTES=104857600"
+          gcloud run jobs add-iam-policy-binding "$RUNNER_JOB" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --member "serviceAccount:$RUNTIME_SERVICE_ACCOUNT" \
+            --role roles/run.developer \
+            --quiet
       - name: Deploy Cloud Run
         env:
           IMAGE: asia-southeast1-docker.pkg.dev/vinaip002/promptopt/api:${{ github.sha }}
@@ -63,7 +91,7 @@ jobs:
             --port 8080 \
             --cpu 1 \
             --memory 512Mi \
-            --timeout 600 \
+            --timeout 1800 \
             --min 0 \
             --max 3 \
             --concurrency 40 \

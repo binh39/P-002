@@ -1,0 +1,6 @@
+title: PromptOpt Runner Object IO
+description: Read immutable runner inputs and create runner outputs without list, update, or delete access.
+stage: GA
+includedPermissions:
+  - storage.objects.get
+  - storage.objects.create

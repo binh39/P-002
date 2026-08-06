@@ -37,8 +37,10 @@ class Settings(BaseSettings):
     baseline_cloud_tasks_queue: str = "promptopt-baseline"
     baseline_worker_url: str = ""
     baseline_task_audience: str = ""
-    baseline_execution_backend: Literal["disabled", "docker"] = "disabled"
+    baseline_execution_backend: Literal["disabled", "docker", "cloud_run_job"] = "disabled"
     baseline_runner_image: str = "promptopt-coverup-runner:local"
+    cloud_run_runner_job: str = "promptopt-coverup-runner"
+    cloud_run_runner_timeout_seconds: int = Field(default=900, ge=60, le=3600)
     max_runner_files: int = Field(default=10000, ge=1, le=50000)
     max_runner_uncompressed_bytes: int = Field(default=100 * 1024 * 1024, ge=1024)
     baseline_runner_network: str = "none"
@@ -79,6 +81,8 @@ class Settings(BaseSettings):
                 raise ValueError("BASELINE_DISPATCHER=cloud_tasks is required in production")
             if not self.baseline_worker_url or not self.baseline_task_audience:
                 raise ValueError("BASELINE_WORKER_URL and BASELINE_TASK_AUDIENCE are required in production")
+            if self.baseline_execution_backend != "cloud_run_job" or not self.cloud_run_runner_job:
+                raise ValueError("BASELINE_EXECUTION_BACKEND=cloud_run_job and CLOUD_RUN_RUNNER_JOB are required")
         return self
 
 
