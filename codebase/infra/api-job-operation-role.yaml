@@ -1,0 +1,5 @@
+title: PromptOpt API Job Operation Poller
+description: Poll Cloud Run long-running operations after starting an isolated runner job.
+stage: GA
+includedPermissions:
+  - run.operations.get

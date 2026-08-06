@@ -8,10 +8,14 @@ param(
 $ErrorActionPreference = "Stop"
 $RunnerAccountName = "promptopt-runner"
 $RunnerAccount = "$RunnerAccountName@$ProjectId.iam.gserviceaccount.com"
+$ApiAccount = "promptopt-api@$ProjectId.iam.gserviceaccount.com"
 $DeployAccount = "github-backend-deploy@$ProjectId.iam.gserviceaccount.com"
 $RunnerObjectRole = "promptoptRunnerObjectIO"
 $RunnerObjectRoleResource = "projects/$ProjectId/roles/$RunnerObjectRole"
 $RoleFile = Join-Path $PSScriptRoot "runner-object-role.yaml"
+$ApiOperationRole = "promptoptJobOperationPoller"
+$ApiOperationRoleResource = "projects/$ProjectId/roles/$ApiOperationRole"
+$ApiOperationRoleFile = Join-Path $PSScriptRoot "api-job-operation-role.yaml"
 
 function Invoke-Gcloud {
     & gcloud @args
@@ -42,9 +46,17 @@ else {
     Invoke-Gcloud iam roles update $RunnerObjectRole --project $ProjectId --file $RoleFile
 }
 
+if (-not (Test-GcloudResource iam roles describe $ApiOperationRole --project $ProjectId)) {
+    Invoke-Gcloud iam roles create $ApiOperationRole --project $ProjectId --file $ApiOperationRoleFile
+}
+else {
+    Invoke-Gcloud iam roles update $ApiOperationRole --project $ProjectId --file $ApiOperationRoleFile
+}
+
 $PrefixCondition = "expression=resource.name.startsWith('projects/_/buckets/$Bucket/objects/runner-jobs/'),title=PromptOptRunnerJobPrefix,description=Restrict runner access to opaque execution objects"
 Invoke-Gcloud storage buckets add-iam-policy-binding "gs://$Bucket" --member "serviceAccount:$RunnerAccount" --role $RunnerObjectRoleResource --condition $PrefixCondition
 Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$RunnerAccount" --role roles/aiplatform.user --condition None
+Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$ApiAccount" --role $ApiOperationRoleResource --condition None
 Invoke-Gcloud iam service-accounts add-iam-policy-binding $RunnerAccount --project $ProjectId --member "serviceAccount:$DeployAccount" --role roles/iam.serviceAccountUser
 
 if (-not (Test-GcloudResource tasks queues describe $Queue --location $Region --project $ProjectId)) {
