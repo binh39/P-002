@@ -1,5 +1,7 @@
 # Deploy GEPA/CoverUp pipeline to Google Cloud Run Jobs
 
+> `prompt_optimization_v3` là prefix benchmark batch đang vận hành. Web backend không được dùng prefix này; integration web dùng job `promptopt-gepa-runner` và prefix riêng `runner-jobs/gepa/<run-id>` trong bucket PromptOpt.
+
 Chạy lệnh optimization (GEPA + CoverUp) trên Google Cloud và lấy kết quả eval về máy.
 
 ## Các file

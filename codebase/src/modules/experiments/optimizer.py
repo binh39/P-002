@@ -19,6 +19,7 @@ class OptimizationTarget:
     symbol: str
     source: str
     split: str
+    source_file: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,7 +145,9 @@ def optimize_prompt(
     validation: list[OptimizationTarget],
     reflection_model: str,
     max_metric_calls: int,
+    holdout: list[OptimizationTarget] | None = None,
 ) -> OptimizationResult:
+    del holdout
     if not train or not validation:
         raise ValueError("GEPA requires non-empty train and validation splits")
     baseline.validate()

@@ -16,6 +16,7 @@ from src.modules.analysis.repository import (
 )
 from src.modules.analysis.service import AnalysisService
 from src.modules.experiments.cloud_executor import CloudRunJobCoverUpExecutor
+from src.modules.experiments.cloud_optimizer import CloudRunJobGepaOptimizer
 from src.modules.experiments.dispatcher import (
     CloudTasksBaselineDispatcher,
     CloudTasksComparisonDispatcher,
@@ -144,6 +145,23 @@ def build_services(settings: Settings) -> ServiceContainer:
             ),
             timeout_seconds=settings.cloud_run_runner_timeout_seconds,
         )
+    cloud_optimizer = None
+    if settings.optimization_execution_backend == "cloud_run_job":
+        from google.cloud import run_v2
+
+        cloud_optimizer = CloudRunJobGepaOptimizer(
+            client=run_v2.JobsClient(),
+            storage=storage,
+            bucket=settings.gcs_bucket,
+            job_name=(
+                f"projects/{settings.gcp_project_id}/locations/{settings.cloud_tasks_location}/jobs/"
+                f"{settings.cloud_run_gepa_job}"
+            ),
+            timeout_seconds=settings.cloud_run_gepa_timeout_seconds,
+            max_concurrency=settings.gepa_max_concurrency,
+            repeat_tests=settings.gepa_repeat_tests,
+            evaluation_replicates=settings.gepa_evaluation_replicates,
+        )
     experiments = ExperimentService(
         experiment_repository,
         projects,
@@ -154,6 +172,7 @@ def build_services(settings: Settings) -> ServiceContainer:
         settings.gepa_max_metric_calls,
         settings.optimize_model_allowlist_values,
         settings.final_evaluation_replicates,
+        cloud_optimizer,
     )
     if settings.baseline_dispatcher == "cloud_tasks":
         experiments.set_dispatcher(

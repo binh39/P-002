@@ -442,6 +442,9 @@ Create experiment
 
 ### 10.5 PR 3 — DSPy/GEPA prompt optimization
 
+- [x] Tích hợp pipeline GEPA của `duyvu1105` qua Cloud Run Job riêng `promptopt-gepa-runner`, dùng namespace `runner-jobs/gepa/<run-id>` và không truy cập `prompt_optimization_v3`.
+- [ ] Deploy image/job GEPA theo workflow mới và chạy authenticated smoke test với budget web giới hạn 30 metric calls.
+
 - [x] Pin `dspy==3.2.1` và `gepa==0.0.27`.
 - [x] Tách model sinh test (`COVERUP_MODEL`) và reflection (`OPTIMIZE_MODEL`).
 - [x] Validate Gemini/Vertex provider configuration và model allowlist.

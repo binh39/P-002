@@ -47,6 +47,7 @@ class ExperimentService:
         max_metric_calls: int = 30,
         allowed_reflection_models: set[str] | None = None,
         final_evaluation_replicates: int = 2,
+        cloud_optimizer=None,
     ):
         self.repository, self.projects, self.functions = repository, projects, functions
         self.storage, self.executor = storage, executor
@@ -56,6 +57,7 @@ class ExperimentService:
             {reflection_model} if reflection_model else set()
         )
         self.final_evaluation_replicates = final_evaluation_replicates
+        self.cloud_optimizer = cloud_optimizer
         self.dispatcher: BaselineDispatcher | None = None
         self.optimization_dispatcher: OptimizationDispatcher | None = None
         self.comparison_dispatcher: ComparisonDispatcher | None = None
@@ -317,23 +319,48 @@ class ExperimentService:
                         symbol=functions[function_id].qualified_name,
                         source=functions[function_id].source,
                         split=split,
+                        source_file=getattr(functions[function_id], "file", ""),
                     )
                     for function_id in item.dataset_splits[split]
                 ]
                 for split in ("train", "validation")
             }
-            optimize = partial(
-                optimize_prompt,
-                executor=self.executor,
-                archive=await self.storage.read(project.object_name),
-                source_directory=project.settings.runtime.source_directory,
-                baseline=parent,
-                train=targets["train"],
-                validation=targets["validation"],
-                reflection_model=self.reflection_model,
-                max_metric_calls=self.max_metric_calls,
-            )
-            result = await asyncio.to_thread(optimize)
+            archive = await self.storage.read(project.object_name)
+            if self.cloud_optimizer is not None:
+                holdout = [
+                    OptimizationTarget(
+                        id=function_id,
+                        symbol=functions[function_id].qualified_name,
+                        source=functions[function_id].source,
+                        split="test",
+                        source_file=getattr(functions[function_id], "file", ""),
+                    )
+                    for function_id in item.dataset_splits["test"]
+                ]
+                result = await self.cloud_optimizer.optimize(
+                    archive=archive,
+                    source_directory=project.settings.runtime.source_directory,
+                    baseline=parent,
+                    train=targets["train"],
+                    validation=targets["validation"],
+                    holdout=holdout,
+                    reflection_model=self.reflection_model,
+                    max_metric_calls=self.max_metric_calls,
+                )
+            else:
+                optimize = partial(
+                    optimize_prompt,
+                    executor=self.executor,
+                    archive=archive,
+                    source_directory=project.settings.runtime.source_directory,
+                    baseline=parent,
+                    train=targets["train"],
+                    validation=targets["validation"],
+                    holdout=None,
+                    reflection_model=self.reflection_model,
+                    max_metric_calls=self.max_metric_calls,
+                )
+                result = await asyncio.to_thread(optimize)
             artifact_payloads = {
                 "candidate_prompt.json": (result.candidate.as_json().encode(), "application/json"),
                 "gepa_result.json": (
@@ -464,6 +491,7 @@ class ExperimentService:
                     symbol=function.qualified_name,
                     source=function.source,
                     split="test",
+                    source_file=getattr(function, "file", ""),
                 )
                 for function in functions
                 if function
