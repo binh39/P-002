@@ -256,3 +256,52 @@ async def test_prompt_version_review_api_is_idempotent_and_cannot_be_reversed(cl
     assert retried.json()["review_comment"] == "Ready for controlled rollout"
     assert reversed_decision.status_code == 409
     assert reversed_decision.json()["error"]["code"] == "PROMPT_VERSION_ALREADY_REVIEWED"
+
+
+@pytest.mark.asyncio
+async def test_prompt_version_list_is_owned_and_filters_by_status(client, app):
+    repository = app.state.services.experiments.repository
+    now = datetime.now(UTC)
+    prompt = baseline_prompt()
+    for owner_id, experiment_id, version_id, version_status in (
+        ("local-user", "owned-review-experiment", "owned-review-version", PromptVersionStatus.IN_REVIEW),
+        ("local-user", "owned-approved-experiment", "owned-approved-version", PromptVersionStatus.APPROVED),
+        ("another-user", "foreign-experiment", "foreign-version", PromptVersionStatus.IN_REVIEW),
+    ):
+        await repository.create(
+            ExperimentRecord(
+                id=experiment_id,
+                owner_id=owner_id,
+                project_id="project-1",
+                name=experiment_id,
+                target_function_ids=["fn-1"],
+                status=ExperimentStatus.IN_REVIEW,
+                prompt_version_id=version_id,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        await repository.create_prompt_version(
+            PromptVersionRecord(
+                id=version_id,
+                experiment_id=experiment_id,
+                comparison_run_id=f"{version_id}-comparison",
+                parent_prompt_digest="parent-digest",
+                prompt_digest=prompt.digest(),
+                prompt=prompt.as_candidate(),
+                status=version_status,
+                created_at=now,
+            )
+        )
+
+    listed = await client.get("/api/v1/prompt-versions", headers=AUTH_HEADERS)
+    awaiting_review = await client.get("/api/v1/prompt-versions?status=in_review", headers=AUTH_HEADERS)
+
+    assert listed.status_code == 200
+    assert listed.json()["total"] == 2
+    assert {item["id"] for item in listed.json()["items"]} == {
+        "owned-review-version",
+        "owned-approved-version",
+    }
+    assert awaiting_review.json()["total"] == 1
+    assert awaiting_review.json()["items"][0]["id"] == "owned-review-version"

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { setTokenProvider } from "@/auth/tokenProvider";
 import { HttpExperimentRepository } from "@/repositories/http/HttpExperimentRepository";
+import { HttpPromptVersionRepository } from "@/repositories/http/HttpPromptVersionRepository";
 
 describe("HttpExperimentRepository", () => {
   afterEach(() => {
@@ -163,6 +164,60 @@ describe("HttpExperimentRepository", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/experiments/experiment-1/compare",
       expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("lists and reviews prompt versions through the authenticated API", async () => {
+    const version = {
+      id: "version-1",
+      experiment_id: "experiment-1",
+      comparison_run_id: "comparison-1",
+      parent_prompt_digest: "baseline-digest",
+      prompt_digest: "candidate-digest",
+      prompt: { system: "Generate robust tests." },
+      status: "in_review",
+      reviewer_id: null,
+      review_comment: "",
+      reviewed_at: null,
+      created_at: "2026-08-06T00:00:00Z",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ items: [version], total: 1, offset: 0, limit: 50 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ ...version, status: "approved", review_comment: "Looks good" }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const repository = new HttpPromptVersionRepository();
+
+    const listed = await repository.list("in_review");
+    const reviewed = await repository.review("version-1", "approve", "Looks good");
+
+    expect(listed.items[0].promptDigest).toBe("candidate-digest");
+    expect(reviewed.status).toBe("approved");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/v1/prompt-versions?limit=50&status=in_review",
+      expect.anything(),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/prompt-versions/version-1/approve",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ comment: "Looks good" }),
+      }),
     );
   });
 });

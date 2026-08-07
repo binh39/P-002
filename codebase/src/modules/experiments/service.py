@@ -27,6 +27,7 @@ from .schemas import (
     ExperimentStatus,
     OptimizationRunRecord,
     OptimizationRunResponse,
+    PromptVersionListResponse,
     PromptVersionRecord,
     PromptVersionResponse,
     PromptVersionStatus,
@@ -535,6 +536,37 @@ class ExperimentService:
             raise AppError(404, "PROMPT_VERSION_NOT_FOUND", "Prompt version was not found")
         await self._owned(version.experiment_id, owner_id)
         return PromptVersionResponse.model_validate(version)
+
+    async def list_prompt_versions(
+        self,
+        owner_id: str,
+        status: PromptVersionStatus | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> PromptVersionListResponse:
+        """List only versions belonging to the caller's experiments.
+
+        Prompt versions intentionally inherit ownership from their experiment.  Looking up the
+        owner's experiment records first keeps this safe for both the in-memory and Firestore
+        repositories, without exposing a cross-tenant collection query.
+        """
+        experiments = await self.repository.list_for_owner(owner_id)
+        versions = []
+        for experiment in experiments:
+            if not experiment.prompt_version_id:
+                continue
+            version = await self.repository.get_prompt_version(experiment.prompt_version_id)
+            if version is not None and (status is None or version.status == status):
+                versions.append(version)
+        versions.sort(key=lambda item: item.created_at, reverse=True)
+        total = len(versions)
+        page = versions[offset : offset + limit]
+        return PromptVersionListResponse(
+            items=[PromptVersionResponse.model_validate(item) for item in page],
+            total=total,
+            offset=offset,
+            limit=limit,
+        )
 
     async def review_prompt_version(
         self, version_id: str, owner_id: str, decision: PromptVersionStatus, comment: str

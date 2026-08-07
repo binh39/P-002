@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Response, status
+from fastapi import APIRouter, Query, Request, Response, status
 
 from src.api.dependencies import CurrentUser, InternalTask
 
@@ -9,6 +9,7 @@ from .schemas import (
     ExperimentListResponse,
     ExperimentResponse,
     OptimizationRunResponse,
+    PromptVersionListResponse,
     PromptVersionResponse,
     PromptVersionStatus,
     ReviewPromptVersionRequest,
@@ -128,6 +129,17 @@ async def execute_comparison(run_id: str, _task: InternalTask, request: Request)
 @prompt_router.get("/{version_id}", response_model=PromptVersionResponse)
 async def get_prompt_version(version_id: str, user: CurrentUser, request: Request):
     return await request.app.state.services.experiments.get_prompt_version(version_id, user.uid)
+
+
+@prompt_router.get("", response_model=PromptVersionListResponse)
+async def list_prompt_versions(
+    user: CurrentUser,
+    request: Request,
+    status_filter: PromptVersionStatus | None = Query(default=None, alias="status"),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+):
+    return await request.app.state.services.experiments.list_prompt_versions(user.uid, status_filter, offset, limit)
 
 
 @prompt_router.post("/{version_id}/approve", response_model=PromptVersionResponse)

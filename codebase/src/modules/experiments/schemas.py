@@ -151,6 +151,13 @@ class PromptVersionResponse(StrictModel):
     created_at: datetime
 
 
+class PromptVersionListResponse(StrictModel):
+    items: list[PromptVersionResponse]
+    total: int
+    offset: int
+    limit: int
+
+
 class PromptVersionRecord(PromptVersionResponse):
     pass
 

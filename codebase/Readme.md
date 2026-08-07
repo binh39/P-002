@@ -56,7 +56,7 @@ The backend is complete enough for the first end-to-end vertical slice, but it i
 | DSPy/GEPA optimization, candidate validation and prompt lineage | Implemented; candidate is kept separate from baseline |
 | Paired baseline-vs-candidate comparison and promotion gates | Implemented |
 | `final_validation.json` and ownership-checked run artifacts | Implemented |
-| Prompt version creation plus approve/reject API with audit fields | Implemented; frontend review screen is still pending |
+| Prompt version list, creation and approve/reject API with audit fields | Implemented; list is owner-scoped, filterable and paginated |
 | Firestore repositories, GCS storage and OIDC internal task authentication | Implemented |
 
 ### Backend work still required before calling it production-complete
@@ -111,11 +111,12 @@ The frontend is deployed at [https://vinaip002.web.app](https://vinaip002.web.ap
 - Start and poll the paired final comparison on the locked test split.
 - Display baseline/candidate score, statement and branch coverage, pass rate, absolute/relative gain and promotion-gate decision.
 - Download the ownership-checked `final_validation.json` comparison artifact.
+- Open an eligible prompt version directly from its paired comparison, inspect candidate prompt/lineage/metrics and approve or reject it with an audit comment.
 
 ### Available UI screens
 
 - Dashboard, Projects, Project Detail, Create Experiment, Experiments, Runs/Comparison, Prompt Registry, Playground, Datasets and Settings.
-- Projects, Project Analysis, Experiments, Baseline Runs, Optimization Runs and Paired Comparison use production backend data. Review, Dashboard and Datasets remain UI/demo workflows until their next vertical slices are connected.
+- Projects, Project Analysis, Experiments, Baseline Runs, Optimization Runs, Paired Comparison and Review & Approval use production backend data. Dashboard and Datasets remain UI/demo workflows until their next vertical slices are connected.
 
 ### Current delivery status
 
@@ -127,7 +128,7 @@ The frontend is deployed at [https://vinaip002.web.app](https://vinaip002.web.ap
 | Project settings UI | UI ready; persistence is available for project settings API |
 | Experiment creation, baseline run and GEPA optimization | Production API connected in frontend |
 | Paired comparison | Production API connected in frontend |
-| Prompt review and approve/reject | Backend implemented; frontend integration pending |
+| Prompt review queue, approve/reject and audit details | Production API connected in frontend |
 
 ### Frontend/API integration boundary
 
@@ -135,13 +136,13 @@ The following screens can use the real API now and should not reintroduce fixtur
 
 - Projects, ZIP upload, project detail/settings and Python function analysis.
 - Experiment creation, baseline run, optimization run and paired comparison.
+- Review & Approval, including prompt-version list, paired-comparison deep link and approve/reject decisions.
 
 The following screens still require an API slice before their mock data can be deleted:
 
 - Dashboard KPI/activity data: no dashboard aggregate endpoint exists yet.
 - Datasets: the UI currently imports `mocks/fixtures/platform`; experiment split data is returned inside an experiment but there is no standalone dataset repository/API.
-- Review & Approval: backend prompt-version GET/approve/reject exists, but the page still contains hard-coded review queue and prompt content.
-- Prompt Registry: no prompt-version list/search/archive endpoint is connected to the page.
+- Prompt Registry: prompt-version list API exists; the separate Registry screen still needs to be connected and archive/search semantics need to be defined.
 - Playground: currently a static UI/code example, not a persisted execution feature.
 
 `DemoAuthService` and `VITE_DATA_MODE=demo` may remain for local UI development. They are not production fallbacks. Production should use `VITE_AUTH_MODE=firebase` and `VITE_DATA_MODE=connected`; an API error must remain visible instead of silently switching to mock data.

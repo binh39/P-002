@@ -119,6 +119,29 @@ export interface ComparisonRun {
   finishedAt: string | null;
 }
 
+export type PromptVersionStatus = "in_review" | "approved" | "rejected";
+
+export interface PromptVersion {
+  id: string;
+  experimentId: string;
+  comparisonRunId: string;
+  parentPromptDigest: string;
+  promptDigest: string;
+  prompt: Record<string, string>;
+  status: PromptVersionStatus;
+  reviewerId: string | null;
+  reviewComment: string;
+  reviewedAt: string | null;
+  createdAt: string;
+}
+
+export interface PromptVersionList {
+  items: PromptVersion[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
 export const baselineRunIsActive = (status: ExperimentStatus) =>
   status === "baseline_queued" || status === "baseline_running";
 

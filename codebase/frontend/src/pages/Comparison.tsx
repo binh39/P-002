@@ -178,6 +178,21 @@ export default function Comparison() {
         </section>
       )}
 
+      {run.promptVersionId && (
+        <section className="comparison-decision is-promoted">
+          <div>
+            <strong>Prompt version is ready for human review</strong>
+            <p>Approve or reject the candidate after inspecting its locked paired evaluation.</p>
+          </div>
+          <button
+            className="primary-button"
+            onClick={() => navigate(`/review?versionId=${run.promptVersionId}`)}
+          >
+            Review prompt
+          </button>
+        </section>
+      )}
+
       <div className="platform-stats-grid baseline-metrics-grid">
         <StatCard
           label="Baseline score"

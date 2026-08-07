@@ -542,13 +542,13 @@ Create experiment
 
 #### Review & Approval
 
-- [ ] Tạo frontend `PromptVersionRepository` và domain types đúng backend contract.
-- [ ] Nối GET prompt version từ `comparison.promptVersionId` vào trang Review.
-- [ ] Nối approve/reject API, comment, loading/error state và chống double-submit.
-- [ ] Sau review, invalidate/refetch experiment, comparison và prompt version queries.
-- [ ] Hiển thị reviewer, review timestamp, comment và trạng thái quyết định cuối.
-- [ ] Thay toàn bộ prompt/review queue hard-code trong `ReviewApproval.tsx`.
-- [ ] Thêm frontend tests cho approve, reject, idempotent retry và API error.
+- [x] Tạo frontend `PromptVersionRepository` và domain types đúng backend contract.
+- [x] Nối prompt version từ `comparison.promptVersionId` vào trang Review.
+- [x] Nối approve/reject API, comment, loading/error state và chống double-submit.
+- [x] Sau review, invalidate/refetch experiment, comparison và prompt version queries.
+- [x] Hiển thị reviewer, review timestamp, comment và trạng thái quyết định cuối.
+- [x] Thay toàn bộ prompt/review queue hard-code trong `ReviewApproval.tsx`.
+- [x] Thêm frontend repository tests cho approve/reject API contract; backend test ownership, filter và idempotent retry.
 
 #### Prompt Registry
 
