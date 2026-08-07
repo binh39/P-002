@@ -535,6 +535,7 @@ Create experiment
 - [x] Firebase Hosting redeployed manually from `main` in `firebase + connected` mode. Production bundle contains `Comparison-CtGvmjBI.js` with paired-comparison API UI and no previous comparison fixture.
 - [x] `GET https://vinaip002.web.app/api/v1/health` returns 200; unauthenticated `GET /experiments` returns 401; CORS preflight allows `https://c3-app-002.io.vn` and rejects an untrusted origin.
 - [x] Existing authenticated baseline smoke evidence confirms upload → analysis → experiment → Cloud Tasks → Cloud Run Job → artifact result.
+- [x] `smoke_production.ps1 -FullPipeline` supports deterministic multi-target selection, optimization, comparison and optional approve/reject; its result is sanitized and written to ignored `codebase/.smoke-results/`.
 - [ ] Before marking P0 complete: run full authenticated smoke with a freshly generated Firebase ID token, then store a sanitized summary outside Git-tracked fixture/output paths.
 
 ### P1 — Hoàn tất frontend bằng API thật và loại bỏ mock production

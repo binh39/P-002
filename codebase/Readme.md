@@ -236,3 +236,17 @@ The script enables the required APIs, creates `promptopt-runner` when absent, an
 The API writes source, prompt and a versioned execution manifest under `runner-jobs/<execution-id>/` in the private bucket. The Cloud Run Job receives only the bucket and object prefix as overrides, uses its workload identity to read/write those objects, and publishes `result.json` plus artifacts. No Docker socket, ADC file or prompt/source payload is passed on the command line.
 
 Current limitation: each CoverUp evaluation is one Cloud Run Job execution. Baseline and paired comparison fit the Cloud Tasks 30-minute request deadline. A large GEPA search still needs durable checkpoint/resume orchestration before it should be enabled for high `max_metric_calls` in production.
+
+### Production smoke test
+
+Run the production smoke script from the repository root. It asks for a fresh Firebase **ID token**; Google Cloud CLI login alone is not a Firebase user session.
+
+```powershell
+# Upload → analysis → one-target baseline
+.\codebase\scripts\smoke_production.ps1
+
+# Upload → analysis → three-target baseline → optimize → paired comparison → review when eligible
+.\codebase\scripts\smoke_production.ps1 -FullPipeline -ReviewDecision approve
+```
+
+The full mode selects the requested target plus two deterministic valid functions, because optimization needs non-empty train, validation and locked-test splits. A candidate that fails the promotion gate finishes as `comparison_succeeded`; in that case review is intentionally not called and the script emits a warning. Results are sanitized and written under ignored `codebase/.smoke-results/`; do not commit raw smoke output, Firebase user identifiers, private artifact paths or fixture archives.
