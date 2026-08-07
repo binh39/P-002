@@ -39,6 +39,36 @@ The backend now supports the experiment lifecycle from an analyzed project throu
 
 Firestore stores durable run and prompt-version records. Cloud Tasks invokes OIDC-protected internal worker endpoints. Local execution uses the isolated Docker runner. Production sandbox execution still requires the Cloud Run Job runner described in the checklist; the Cloud Run API service remains fail-closed and does not execute uploaded source directly.
 
+## Backend readiness (2026-08-07)
+
+The backend is complete enough for the first end-to-end vertical slice, but it is not yet the complete product backend. The current production API is a FastAPI service with Firebase user authentication, OIDC-protected internal task endpoints, Firestore persistence, private GCS artifacts, Cloud Tasks dispatch and a Cloud Run Job execution boundary.
+
+### Implemented backend capabilities
+
+| Capability | API / infrastructure status |
+| --- | --- |
+| Firebase identity verification and user ownership checks | Implemented |
+| Signed ZIP upload, private object storage and upload completion | Implemented |
+| Python project CRUD and project settings persistence | Implemented |
+| Asynchronous AST analysis and function/source snapshots | Implemented; Cloud Tasks in production |
+| Experiment creation and deterministic train/validation/locked-test split | Implemented |
+| CoverUp baseline execution, polling, metrics and artifacts | Implemented; Cloud Run Job in production configuration |
+| DSPy/GEPA optimization, candidate validation and prompt lineage | Implemented; candidate is kept separate from baseline |
+| Paired baseline-vs-candidate comparison and promotion gates | Implemented |
+| `final_validation.json` and ownership-checked run artifacts | Implemented |
+| Prompt version creation plus approve/reject API with audit fields | Implemented; frontend review screen is still pending |
+| Firestore repositories, GCS storage and OIDC internal task authentication | Implemented |
+
+### Backend work still required before calling it production-complete
+
+- Push/deploy the latest backend workflow authentication fix and run the full production smoke path through review.
+- Add durable GEPA checkpoint/resume, explicit cancellation, retry/idempotency handling and isolated candidate/replicate workspaces.
+- Add workspace quotas and cost/concurrency limits, artifact retention/cleanup and operational monitoring/alerts.
+- Complete Firestore ownership/isolation tests, fake-executor contract tests and malformed/timeout runner tests.
+- Freeze dataset/project/settings checksums and baseline coverage denominators for reproducible comparisons.
+
+These items are hardening and scale work; they do not block connecting the already-implemented experiment vertical slice to the frontend.
+
 ## Frontend status
 
 The frontend is deployed at [https://vinaip002.web.app](https://vinaip002.web.app). It uses Firebase Authentication and a hybrid data mode: Project, Experiment, baseline, optimization and paired-comparison features call the production API, while screens without a connected backend slice remain demo data.
@@ -98,6 +128,23 @@ The frontend is deployed at [https://vinaip002.web.app](https://vinaip002.web.ap
 | Experiment creation, baseline run and GEPA optimization | Production API connected in frontend |
 | Paired comparison | Production API connected in frontend |
 | Prompt review and approve/reject | Backend implemented; frontend integration pending |
+
+### Frontend/API integration boundary
+
+The following screens can use the real API now and should not reintroduce fixture repositories:
+
+- Projects, ZIP upload, project detail/settings and Python function analysis.
+- Experiment creation, baseline run, optimization run and paired comparison.
+
+The following screens still require an API slice before their mock data can be deleted:
+
+- Dashboard KPI/activity data: no dashboard aggregate endpoint exists yet.
+- Datasets: the UI currently imports `mocks/fixtures/platform`; experiment split data is returned inside an experiment but there is no standalone dataset repository/API.
+- Review & Approval: backend prompt-version GET/approve/reject exists, but the page still contains hard-coded review queue and prompt content.
+- Prompt Registry: no prompt-version list/search/archive endpoint is connected to the page.
+- Playground: currently a static UI/code example, not a persisted execution feature.
+
+`DemoAuthService` and `VITE_DATA_MODE=demo` may remain for local UI development. They are not production fallbacks. Production should use `VITE_AUTH_MODE=firebase` and `VITE_DATA_MODE=connected`; an API error must remain visible instead of silently switching to mock data.
 
 The frontend can also run in these modes during development:
 
