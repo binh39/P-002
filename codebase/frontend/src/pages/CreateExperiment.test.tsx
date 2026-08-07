@@ -9,6 +9,7 @@ const navigate = vi.fn();
 const repositories = vi.hoisted(() => ({
   projects: {
     list: vi.fn(),
+    listSamples: vi.fn(),
     listFunctions: vi.fn(),
   },
   experiments: {
@@ -65,7 +66,7 @@ function Wrapper({ children }: PropsWithChildren) {
 describe("create experiment wizard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    repositories.projects.list.mockResolvedValue([project]);
+    repositories.projects.listSamples.mockResolvedValue([project]);
     repositories.projects.listFunctions.mockResolvedValue(functions);
     repositories.experiments.create.mockResolvedValue({ id: "experiment-1" });
     repositories.experiments.requestBaseline.mockResolvedValue({ id: "run-1" });

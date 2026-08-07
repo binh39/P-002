@@ -12,9 +12,11 @@ on:
       - "codebase/sandbox/**"
       - "src/coverup/**"
       - "src/optimization/**"
+      - "src/sample_repo/**"
       - "cloud/run_job.py"
       - "cloud/Dockerfile.web"
       - "Dockerfile"
+      - ".dockerignore"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/backend-deploy.yml"
@@ -66,8 +68,8 @@ jobs:
           RUNNER_IMAGE: asia-southeast1-docker.pkg.dev/vinaip002/promptopt/coverup-runner:${{ github.sha }}
           GEPA_IMAGE: asia-southeast1-docker.pkg.dev/vinaip002/promptopt/gepa-runner:${{ github.sha }}
         run: |
-          docker build --tag "$API_IMAGE" codebase
-          docker build --file codebase/sandbox/Dockerfile --tag "$RUNNER_IMAGE" codebase
+          docker build --file codebase/Dockerfile --tag "$API_IMAGE" .
+          docker build --file codebase/sandbox/Dockerfile --tag "$RUNNER_IMAGE" .
           docker build --file cloud/Dockerfile.web --tag "$GEPA_IMAGE" .
           docker push "$API_IMAGE"
           docker push "$RUNNER_IMAGE"

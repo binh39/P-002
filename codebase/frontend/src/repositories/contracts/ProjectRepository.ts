@@ -2,6 +2,7 @@ import type { CreateProjectInput, ProjectFunction, PythonProject } from "@/domai
 
 export interface ProjectRepository {
   list(signal?: AbortSignal): Promise<PythonProject[]>;
+  listSamples(signal?: AbortSignal): Promise<PythonProject[]>;
   get(projectId: string, signal?: AbortSignal): Promise<PythonProject>;
   listFunctions(projectId: string, signal?: AbortSignal): Promise<ProjectFunction[]>;
   getFunctionSource(projectId: string, functionId: string, signal?: AbortSignal): Promise<string>;

@@ -21,6 +21,11 @@ async def list_projects(user: CurrentUser, request: Request):
     return await request.app.state.services.projects.list(user.uid)
 
 
+@router.get("/samples", response_model=ProjectListResponse)
+async def list_sample_projects(user: CurrentUser, request: Request):
+    return await request.app.state.services.projects.list_samples(user.uid)
+
+
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(project_id: str, user: CurrentUser, request: Request):
     return await request.app.state.services.projects.get(project_id, user.uid)

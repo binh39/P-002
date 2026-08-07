@@ -8,6 +8,10 @@ __pycache__
 .ruff_cache
 docs/
 presentation/
+codebase/frontend/
+codebase/tests/
+eval/
+.ai-log/
 *.md
 !requirements.txt
 .dockerignore

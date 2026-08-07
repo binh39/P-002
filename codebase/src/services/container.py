@@ -33,6 +33,7 @@ from src.modules.projects.repository import (
     InMemoryProjectRepository,
     ProjectRepository,
 )
+from src.modules.projects.samples import SampleProjectCatalog
 from src.modules.projects.service import ProjectService
 from src.modules.uploads.repository import (
     FirestoreUploadRepository,
@@ -95,7 +96,12 @@ def build_services(settings: Settings) -> ServiceContainer:
         max_upload_bytes=settings.max_upload_bytes,
         signed_url_ttl_seconds=settings.signed_url_ttl_seconds,
     )
-    projects = ProjectService(project_repository, uploads)
+    samples = SampleProjectCatalog(
+        settings.sample_repos_dir,
+        settings.max_analysis_python_files,
+        settings.max_analysis_uncompressed_bytes,
+    )
+    projects = ProjectService(project_repository, uploads, samples)
     analysis = AnalysisService(
         project_repository,
         function_repository,
@@ -103,6 +109,7 @@ def build_services(settings: Settings) -> ServiceContainer:
         storage,
         settings.max_analysis_python_files,
         settings.max_analysis_uncompressed_bytes,
+        samples,
     )
     internal_token_verifier = None
     if settings.analysis_dispatcher == "cloud_tasks":
@@ -173,6 +180,7 @@ def build_services(settings: Settings) -> ServiceContainer:
         settings.optimize_model_allowlist_values,
         settings.final_evaluation_replicates,
         cloud_optimizer,
+        samples,
     )
     if settings.baseline_dispatcher == "cloud_tasks":
         experiments.set_dispatcher(

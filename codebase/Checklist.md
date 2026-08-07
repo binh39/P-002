@@ -543,6 +543,10 @@ Create experiment
 
 ### P1 — Hoàn tất frontend bằng API thật và loại bỏ mock production
 
+- [x] Thêm catalog chỉ đọc cho `isort`, `mlxtend`, `typesystem`; không ghi Upload/Project/Function sample vào Firestore.
+- [x] Nối Projects và Create Experiment vào `GET /projects/samples` và pipeline Cloud Run thật.
+- [ ] Deploy sample-project slice rồi chạy smoke từng repo; ưu tiên isort trước, sau đó typesystem và mlxtend.
+
 #### Review & Approval
 
 - [x] Tạo frontend `PromptVersionRepository` và domain types đúng backend contract.

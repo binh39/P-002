@@ -17,8 +17,8 @@ export default function CreateExperiment() {
   const [experimentName, setExperimentName] = useState("");
   const [selectedFunctionIds, setSelectedFunctionIds] = useState<string[]>([]);
   const projectsQuery = useQuery({
-    queryKey: ["projects"],
-    queryFn: ({ signal }) => projects.list(signal),
+    queryKey: ["sample-projects"],
+    queryFn: ({ signal }) => projects.listSamples(signal),
   });
   const functionsQuery = useQuery({
     queryKey: ["projects", projectId, "functions"],
@@ -82,7 +82,7 @@ export default function CreateExperiment() {
       <PageHeader
         eyebrow="New experiment"
         title="Create a baseline evaluation"
-        description="Select one analyzed project and the functions CoverUp should evaluate."
+        description="Select one bundled sample project and the functions CoverUp should evaluate."
       />
 
       <ol className="wizard-steps wizard-steps-compact">
@@ -224,7 +224,7 @@ function ProjectStep({
       <div className="wizard-heading">
         <span className="eyebrow">Step 1</span>
         <h2>Select a Python project</h2>
-        <p>Experiments use one immutable analyzed project snapshot.</p>
+        <p>Choose one of the three immutable sample repositories bundled with the runner.</p>
       </div>
       {selectable.length === 0 ? (
         <div className="empty-state">No analyzed project is ready for an experiment.</div>
