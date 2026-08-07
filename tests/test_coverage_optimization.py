@@ -203,11 +203,17 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
     ]
     assert command[command.index("--max-concurrency") + 1] == "10"
     assert "--trace-file" in command
-    assert record.tests_workspace.endswith(
-        "artifacts\\generated_tests\\train\\tests_candidate_candidate"
+    assert Path(record.tests_workspace).parts[-4:] == (
+        "artifacts",
+        "generated_tests",
+        "train",
+        "tests_candidate_candidate",
     )
-    assert baseline_record.tests_workspace.endswith(
-        "artifacts\\generated_tests\\train\\tests_base_line_baseline"
+    assert Path(baseline_record.tests_workspace).parts[-4:] == (
+        "artifacts",
+        "generated_tests",
+        "train",
+        "tests_base_line_baseline",
     )
     assert Path(record.tests_workspace).is_dir()
     assert len(record.results) == 2
@@ -799,6 +805,7 @@ def test_tune_skips_final_split_when_gepa_keeps_unchanged_baseline(
     targets = {"train": train, "validation": validation, "test": test}
 
     monkeypatch.setattr(cli, "load_dotenv", lambda *args, **kwargs: None)
+    monkeypatch.setenv("OPTIMIZE_MODEL", "vertex_ai/test-model")
     monkeypatch.setattr(
         cli,
         "make_runner",
@@ -1230,12 +1237,12 @@ def test_runner_partitions_targets_by_project(tmp_path, monkeypatch):
     assert Path(
         beta_command[beta_command.index("--package-dir") + 1]
     ).resolve() == beta_pkg.resolve()
-    assert alpha_command[
-        alpha_command.index("--tests-dir") + 1
-    ].endswith("candidate\\alpha")
-    assert beta_command[
-        beta_command.index("--tests-dir") + 1
-    ].endswith("candidate\\beta")
+    assert Path(
+        alpha_command[alpha_command.index("--tests-dir") + 1]
+    ).parts[-2:] == ("tests_candidate_candidate", "alpha")
+    assert Path(
+        beta_command[beta_command.index("--tests-dir") + 1]
+    ).parts[-2:] == ("tests_candidate_candidate", "beta")
     assert len(coverage_outputs) == 2
     assert {
         str(kwargs["package_dir"].resolve()) for kwargs in coverage_outputs
