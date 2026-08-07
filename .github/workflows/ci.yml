@@ -16,6 +16,7 @@ on:
       - "src/optimization/**"
       - "src/sample_repo/**"
       - "src/sample_repo.rar"
+      - "src/sample_repo.zip"
       - "tests/**"
       - "cloud/run_job.py"
       - "cloud/Dockerfile.web"
@@ -39,6 +40,7 @@ on:
       - "src/optimization/**"
       - "src/sample_repo/**"
       - "src/sample_repo.rar"
+      - "src/sample_repo.zip"
       - "tests/**"
       - "cloud/run_job.py"
       - "cloud/Dockerfile.web"
@@ -73,9 +75,7 @@ jobs:
       - name: Extract bundled sample repositories
         working-directory: ${{ github.workspace }}
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes unrar
-          unrar x -o+ src/sample_repo.rar src/
+          unzip -q -o src/sample_repo.zip -d src
           test -d src/sample_repo/isort
           test -d src/sample_repo/mlxtend
           test -d src/sample_repo/typesystem

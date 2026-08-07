@@ -14,6 +14,7 @@ on:
       - "src/optimization/**"
       - "src/sample_repo/**"
       - "src/sample_repo.rar"
+      - "src/sample_repo.zip"
       - "cloud/run_job.py"
       - "cloud/Dockerfile.web"
       - "Dockerfile"
@@ -59,9 +60,7 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v3
       - name: Extract bundled sample repositories
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes unrar
-          unrar x -o+ src/sample_repo.rar src/
+          unzip -q -o src/sample_repo.zip -d src
           test -d src/sample_repo/isort
           test -d src/sample_repo/mlxtend
           test -d src/sample_repo/typesystem
