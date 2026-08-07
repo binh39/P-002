@@ -473,30 +473,30 @@ Create experiment
 ### 10.7 Production runner trên Google Cloud
 
 - [x] Không dùng Docker socket/Docker-in-Docker trong Cloud Run API service.
-- [ ] Push runner image riêng lên Artifact Registry.
+- [x] Push runner image riêng lên Artifact Registry.
 - [x] Dùng Cloud Run Job cho execution; Cloud Tasks chỉ dispatch/orchestrate.
-- [ ] Tạo runner service account riêng với quyền tối thiểu trên source/artifact objects.
+- [x] Tạo runner service account riêng với quyền tối thiểu trên source/artifact objects.
 - [x] Dùng workload identity/Secret Manager; không mount ADC file trong production.
 - [ ] Cấu hình job timeout, retries, parallelism, maximum instances và cancellation.
 - [ ] Thêm quota theo user/workspace: concurrent runs, functions, LLM calls và cost ceiling.
 - [ ] Thêm retention policy và xóa artifacts theo project.
-- [ ] Provision queue `promptopt-baseline`, hoàn thiện OIDC/IAM và production smoke test.
+- [x] Provision queue `promptopt-baseline`, hoàn thiện OIDC/IAM và production smoke test baseline.
 
 ### 10.8 Frontend integration
 
-- [ ] Tạo `ExperimentRepository` HTTP và domain types đúng backend contract.
-- [ ] Chuyển Create Experiment từ mock sang project/functions thật.
-- [ ] Gọi create experiment/run và polling bằng TanStack Query.
-- [ ] Hiển thị state machine thật từ queued đến succeeded/failed.
-- [ ] Hiển thị baseline metrics theo function và aggregate.
+- [x] Tạo `ExperimentRepository` HTTP và domain types đúng backend contract.
+- [x] Chuyển Create Experiment từ mock sang project/functions thật.
+- [x] Gọi create experiment/run và polling bằng TanStack Query.
+- [x] Hiển thị state machine thật từ queued đến succeeded/failed.
+- [x] Hiển thị baseline metrics theo function và aggregate.
 - [ ] Hiển thị prompt diff, generated tests, coverage artifacts, logs và failure reason.
 - [ ] Hoàn thiện comparison và review/approve/reject bằng API thật.
-- [ ] Xóa mock experiment/run/comparison sau khi từng màn hình đã nối backend.
+- [x] Xóa mock experiment/run/comparison sau khi từng màn hình đã nối backend.
 
 ### 10.9 Verification và Definition of Done
 
 - [x] Ruff format/check pass cho experiment foundation.
-- [x] Backend tests pass (`33 passed` sau Cloud Run Job executor và production config gate).
+- [x] Backend tests pass (`36 passed` sau comparison artifact API).
 - [x] Unit test score, cache key, prompt validation và promotion rule.
 - [ ] Contract/integration test cho experiment, run và artifact APIs bằng fake executor.
 - [ ] Docker smoke test fixture project và test timeout/retry/malformed response.
@@ -505,3 +505,145 @@ Create experiment
 - [x] CI build cả API image và runner image khi source liên quan thay đổi.
 - [ ] Production smoke test baseline → optimize → locked comparison → review.
 - [ ] Chỉ merge GEPA khi report chứng minh baseline và optimized dùng cùng evaluation protocol.
+
+---
+
+## Phase 11 — Roadmap từ hiện tại đến production-complete
+
+> Đây là danh sách ưu tiên cập nhật ngày 2026-08-07 và là nguồn theo dõi chính cho phần việc còn lại. Các mục chưa hoàn thành ở Phase 1–10 vẫn giữ giá trị kỹ thuật, nhưng nên được thực hiện theo thứ tự P0 → P5 dưới đây.
+
+### P0 — Khôi phục release pipeline và xác nhận production hiện tại
+
+- [ ] Merge branch `fix/backend-artifact-registry-auth` vào `main`.
+- [ ] Xác nhận backend workflow dùng WIF access token và `docker/login-action`, không dùng user credential hoặc service-account key.
+- [ ] Xác nhận API image và runner image push thành công lên Artifact Registry.
+- [ ] Xác nhận Cloud Run API và Cloud Run Job cùng dùng image SHA của release mới nhất.
+- [ ] Chạy lại `Deploy frontend production` trên `main` sau sự cố GitHub Actions.
+- [ ] Xác nhận `Frontend CI`, backend `CI`, frontend deploy và backend deploy đều xanh trên cùng release.
+- [ ] Kiểm tra `/health`, Firebase Hosting rewrite `/api/v1`, Firebase login và CORS trên production.
+- [ ] Chạy smoke test authenticated: upload ZIP → create project → analysis → chọn functions → create experiment.
+- [ ] Chạy smoke test đầy đủ: baseline → optimize → paired comparison → tạo prompt version → approve/reject.
+- [ ] Lưu report smoke test đã loại token/sensitive data làm release evidence.
+- [ ] Ghi lại image SHA, Cloud Run revision và Firebase Hosting release để có điểm rollback.
+
+### P1 — Hoàn tất frontend bằng API thật và loại bỏ mock production
+
+#### Review & Approval
+
+- [ ] Tạo frontend `PromptVersionRepository` và domain types đúng backend contract.
+- [ ] Nối GET prompt version từ `comparison.promptVersionId` vào trang Review.
+- [ ] Nối approve/reject API, comment, loading/error state và chống double-submit.
+- [ ] Sau review, invalidate/refetch experiment, comparison và prompt version queries.
+- [ ] Hiển thị reviewer, review timestamp, comment và trạng thái quyết định cuối.
+- [ ] Thay toàn bộ prompt/review queue hard-code trong `ReviewApproval.tsx`.
+- [ ] Thêm frontend tests cho approve, reject, idempotent retry và API error.
+
+#### Prompt Registry
+
+- [ ] Thêm backend API list prompt versions theo owner, status, experiment và pagination.
+- [ ] Chốt semantics cho `active`, `approved`, `rejected`, `archived`; không dùng status chỉ tồn tại trong UI.
+- [ ] Nối Prompt Registry vào repository HTTP thật.
+- [ ] Hiển thị prompt lineage, source experiment, comparison metrics và audit decision.
+- [ ] Xóa danh sách prompt hard-code trong `Registry.tsx` sau khi API list hoạt động.
+
+#### Dashboard, Datasets, Settings và Playground
+
+- [ ] Thêm dashboard aggregate endpoint hoặc tổng hợp có kiểm soát từ API hiện có.
+- [ ] Nối Dashboard KPI, recent experiments và coverage trend vào dữ liệu thật.
+- [ ] Xóa `MockDashboardRepository` khỏi production path; chỉ giữ demo repository trong local demo mode.
+- [ ] Quyết định Datasets là resource độc lập hay chỉ là snapshot nằm trong Experiment.
+- [ ] Nếu giữ trang Datasets: thêm list/detail API, checksum, split seed và source version.
+- [ ] Nếu không giữ: bỏ route Datasets và hiển thị snapshot trong Experiment Detail.
+- [ ] Xóa import trực tiếp `mocks/fixtures/platform` khỏi `Datasets.tsx`.
+- [ ] Nối nút Save project settings với `PATCH /projects/{id}/settings`, có dirty/loading/success/error state.
+- [ ] Quyết định Playground là tính năng production hay trang demo; nếu production phải dùng cùng sandbox/quota với runner.
+- [ ] Không cho Playground chạy source người dùng trực tiếp trong API container.
+
+#### Production frontend mode
+
+- [ ] Build production với `VITE_AUTH_MODE=firebase` và `VITE_DATA_MODE=connected`.
+- [ ] API lỗi phải hiển thị lỗi thật, tuyệt đối không fallback âm thầm sang fixture.
+- [ ] Chỉ giữ `DemoAuthService` và fixture repositories cho local development/test có badge rõ ràng.
+- [ ] Xóa constants/sample records hard-code khỏi Review, Registry và các màn hình production đã nối API.
+- [ ] Kiểm tra loading, empty, error, retry, forbidden và expired-session state cho mọi trang thật.
+
+### P2 — Độ đúng và khả năng phục hồi của experiment pipeline
+
+- [ ] Tạo idempotency key/transaction cho create run, optimize, compare và Cloud Task retry.
+- [ ] Không tạo hai active run cùng loại cho một experiment khi user double-click hoặc task retry.
+- [ ] Thêm trạng thái và API cancellation cho baseline, optimization, comparison và Cloud Run Job.
+- [ ] Phân biệt rõ `failed`, `timed_out`, `cancelled`, queue failure và infrastructure failure.
+- [ ] Persist GEPA checkpoint và resume sau worker timeout/restart.
+- [ ] Tách workspace/artifact prefix theo candidate, target và replicate để không rò generated tests.
+- [ ] Đóng băng project/source/settings checksum khi tạo experiment.
+- [ ] Đóng băng statement/branch denominator và runner/model config cho protocol so sánh.
+- [ ] Ngăn cùng function/source version xuất hiện ở nhiều split.
+- [ ] Lưu model/provider, token usage, latency, estimated cost và normalized runner command metadata.
+- [ ] Lưu artifact manifest gồm checksum, size, content type, schema version và retention deadline.
+- [ ] Version schema cho execution manifest, result JSON, coverage JSON và final validation report.
+- [ ] Thêm migration/backward-compatibility strategy cho Firestore documents và artifacts cũ.
+- [ ] Xác minh paired comparison dùng đúng cùng targets, replicates, model và runner config.
+- [ ] Chốt promotion policy bằng config/version thay vì điều kiện không version hóa trong code.
+
+### P3 — Security, tenant isolation, quota và data lifecycle
+
+- [ ] Hoàn thành threat model cho upload, ZIP extraction, generated tests, Cloud Tasks, runner và artifact download.
+- [ ] Test path traversal, symlink, device file, ZIP bomb, oversized archive và malformed manifest.
+- [ ] Xác minh mọi public API đều kiểm tra Firebase user ownership ở service/repository boundary.
+- [ ] Test user A không đọc/sửa/chạy project, experiment, run, prompt version hoặc artifact của user B.
+- [ ] Xác minh internal endpoints chỉ nhận OIDC token đúng audience và service account.
+- [ ] Giới hạn số project, upload size, functions/experiment, active runs và concurrent jobs theo user/workspace.
+- [ ] Giới hạn CoverUp/GEPA total LLM calls, provider retries, metric calls, runtime và cost ceiling.
+- [ ] Thêm rate limiting cho upload, analysis, baseline, optimize, compare và review endpoints.
+- [ ] Đặt budget alert và kill switch để tắt optimize/runner khi vượt chi phí hoặc có abuse.
+- [ ] Thiết kế delete project/experiment có cascade an toàn cho Firestore, GCS và queued tasks.
+- [ ] Cấu hình retention policy cho source ZIP, runner exchange objects, logs và artifacts.
+- [ ] Tạo scheduled cleanup có dry-run, audit log và khả năng retry.
+- [ ] Rà IAM least privilege cho frontend deploy, backend deploy, API runtime và runner identities.
+- [ ] Xác nhận không có service-account key, Firebase token hoặc generated credential được commit/log.
+- [ ] Chốt egress policy cho runner để source/test người dùng không truy cập tùy ý ra ngoài.
+
+### P4 — Observability, vận hành và kiểm soát chi phí
+
+- [ ] Chuẩn hóa correlation IDs: request, user, project, experiment, run, task và job execution.
+- [ ] Structured log mọi state transition, dispatch, retry, runner result và review decision.
+- [ ] Không log Firebase token, source code, prompt nhạy cảm hoặc signed URL đầy đủ.
+- [ ] Tạo Cloud Monitoring dashboard cho API latency/error rate, Cloud Tasks depth/age và Cloud Run Job failures.
+- [ ] Tạo alert cho API 5xx, task retry/dead-letter, job timeout/failure, auth failure và quota exhaustion.
+- [ ] Theo dõi LLM call count, token usage, latency và estimated cost theo user/experiment/model.
+- [ ] Định nghĩa SLO ban đầu cho API availability, queue delay, baseline completion và optimization completion.
+- [ ] Viết runbook cho failed deploy, stuck task, failed job, missing artifact, Firestore/GCS incident và provider outage.
+- [ ] Thêm admin-safe diagnostic command/script theo run ID, không yêu cầu đọc dữ liệu tenant khác.
+- [ ] Thiết lập Firestore backup/export và kiểm thử restore.
+- [ ] Kiểm tra Artifact Registry cleanup policy và giữ đủ image SHA để rollback.
+
+### P5 — Test strategy, staging, release và rollback
+
+- [ ] Tạo GCP/Firebase staging tách production cho integration/E2E và preview frontend.
+- [ ] CI chạy Ruff, backend tests, frontend format/lint/typecheck/test/build và build cả hai container images.
+- [ ] Thêm contract tests cho upload, project, function, experiment, run, artifact và prompt-version APIs.
+- [ ] Thêm integration tests bằng fake executor cho baseline → optimize → compare → review.
+- [ ] Thêm Firestore emulator/repository tests cho transaction, ownership và concurrent update.
+- [ ] Thêm GCS fake/emulator tests cho signed upload, artifact manifest, authorization và missing object.
+- [ ] Thêm Cloud Task retry/idempotency và Cloud Run operation polling failure tests.
+- [ ] Thêm runner tests cho timeout, malformed CoverUp output, provider retry và partial artifact upload.
+- [ ] Thêm browser E2E cho auth, upload, analysis, create experiment, polling, comparison và review.
+- [ ] Chạy load test có giới hạn cho concurrent polling, list APIs và task enqueue; không load test LLM production tùy ý.
+- [ ] Kiểm tra accessibility, responsive layout, deep link, refresh và expired Firebase session.
+- [ ] Scan dependencies/container images và xử lý vulnerability mức critical/high trước release.
+- [ ] Pin/review version của actions, Python/Node dependencies, CoverUp, DSPy/GEPA và model names.
+- [ ] Viết rollback frontend Hosting release, Cloud Run revision và runner Job image bằng SHA.
+- [ ] Tạo release checklist có approver, migration step, smoke test, monitoring window và rollback owner.
+
+### Definition of Done — Production-complete v1
+
+- [ ] Không còn mock/fixture trên bất kỳ production route nào; demo mode chỉ bật rõ ràng ở local/test.
+- [ ] User có thể hoàn thành upload → analysis → baseline → optimize → compare → review trên production UI.
+- [ ] Mọi dữ liệu và artifact đều có ownership check, schema version, checksum và lifecycle policy.
+- [ ] Pipeline chịu được double-submit, task retry, timeout và worker restart mà không tạo state sai/duplicate run.
+- [ ] Quota, rate limit, concurrency limit, cost ceiling và emergency kill switch hoạt động.
+- [ ] CI/CD xanh, keyless, có staging, smoke test tự động và rollback đã diễn tập.
+- [ ] Dashboard/alerts/runbooks đủ để phát hiện và xử lý lỗi production mà không cần truy cập thủ công database.
+- [ ] Security, dependency/container scan và tenant-isolation tests không còn issue critical/high chưa xử lý.
+- [ ] Production smoke/E2E report chứng minh baseline và candidate dùng cùng locked evaluation protocol.
+- [ ] README, API contract, architecture, operations runbook và release checklist khớp với hệ thống đang deploy.
