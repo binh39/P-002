@@ -514,17 +514,28 @@ Create experiment
 
 ### P0 — Khôi phục release pipeline và xác nhận production hiện tại
 
-- [ ] Merge branch `fix/backend-artifact-registry-auth` vào `main`.
-- [ ] Xác nhận backend workflow dùng WIF access token và `docker/login-action`, không dùng user credential hoặc service-account key.
-- [ ] Xác nhận API image và runner image push thành công lên Artifact Registry.
-- [ ] Xác nhận Cloud Run API và Cloud Run Job cùng dùng image SHA của release mới nhất.
-- [ ] Chạy lại `Deploy frontend production` trên `main` sau sự cố GitHub Actions.
-- [ ] Xác nhận `Frontend CI`, backend `CI`, frontend deploy và backend deploy đều xanh trên cùng release.
-- [ ] Kiểm tra `/health`, Firebase Hosting rewrite `/api/v1`, Firebase login và CORS trên production.
-- [ ] Chạy smoke test authenticated: upload ZIP → create project → analysis → chọn functions → create experiment.
+- [x] Merge branch `fix/backend-artifact-registry-auth` vào `main`.
+- [x] Xác nhận backend workflow dùng WIF access token và `docker/login-action`, không dùng user credential hoặc service-account key.
+- [x] Xác nhận API image và runner image push thành công lên Artifact Registry.
+- [x] Xác nhận Cloud Run API và Cloud Run Job cùng dùng image SHA của release mới nhất.
+- [x] Chạy lại `Deploy frontend production` trên `main` sau sự cố GitHub Actions.
+- [ ] Xác nhận `Frontend CI`, backend `CI`, frontend deploy và backend deploy đều xanh trên cùng release (workflow có path filter; cần một run kiểm chứng riêng sau outage).
+- [x] Kiểm tra `/health`, Firebase Hosting rewrite `/api/v1`, Firebase login guard và CORS trên production.
+- [x] Chạy smoke test authenticated: upload ZIP → create project → analysis → chọn functions → create experiment.
 - [ ] Chạy smoke test đầy đủ: baseline → optimize → paired comparison → tạo prompt version → approve/reject.
-- [ ] Lưu report smoke test đã loại token/sensitive data làm release evidence.
-- [ ] Ghi lại image SHA, Cloud Run revision và Firebase Hosting release để có điểm rollback.
+- [ ] Lưu report smoke test đã loại token/sensitive data làm release evidence (không commit Firebase UID, private artifact path hoặc ZIP fixture lớn).
+- [x] Ghi lại image SHA, Cloud Run revision và Firebase Hosting release để có điểm rollback.
+
+#### P0 release evidence — 2026-08-07
+
+- [x] `main`: `085df3a`; backend deploy release: `fd8f3ce`.
+- [x] Backend deploy [#13](https://github.com/binh39/P-002/actions/runs/31138705068) thành công sau khi dùng WIF access token + `docker/login-action`.
+- [x] Cloud Run API revision: `promptopt-api-00014-j46`, 100% traffic, image `api:fd8f3ce85f222655f6fe8217abfb5701f3ba361f`.
+- [x] Cloud Run Job image: `coverup-runner:fd8f3ce85f222655f6fe8217abfb5701f3ba361f`; latest execution `promptopt-coverup-runner-qsqr7` succeeded.
+- [x] Firebase Hosting redeployed manually from `main` in `firebase + connected` mode. Production bundle contains `Comparison-CtGvmjBI.js` with paired-comparison API UI and no previous comparison fixture.
+- [x] `GET https://vinaip002.web.app/api/v1/health` returns 200; unauthenticated `GET /experiments` returns 401; CORS preflight allows `https://c3-app-002.io.vn` and rejects an untrusted origin.
+- [x] Existing authenticated baseline smoke evidence confirms upload → analysis → experiment → Cloud Tasks → Cloud Run Job → artifact result.
+- [ ] Before marking P0 complete: run full authenticated smoke with a freshly generated Firebase ID token, then store a sanitized summary outside Git-tracked fixture/output paths.
 
 ### P1 — Hoàn tất frontend bằng API thật và loại bỏ mock production
 
