@@ -59,9 +59,9 @@ def parser() -> argparse.ArgumentParser:
         default=["isort", "mlxtend", "typesystem"],
         help="Project names; each must contain a package directory with the same name",
     )
-    result.add_argument("--train-limit", type=int, default=10)
-    result.add_argument("--validation-limit", type=int, default=20)
-    result.add_argument("--test-limit", type=int, default=20)
+    result.add_argument("--train-limit", type=int, default=100)
+    result.add_argument("--validation-limit", type=int, default=200)
+    result.add_argument("--test-limit", type=int, default=200)
     result.add_argument(
         "--output",
         type=Path,

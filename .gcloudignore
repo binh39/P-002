@@ -14,7 +14,10 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .ai-log/
-data/
+# Root-local data only (docker-compose volume). A bare `data/` would also
+# exclude nested dirs such as src/sample_repo/mlxtend/mlxtend/data, silently
+# stripping the mlxtend data modules from the built image.
+/data/
 docs/
 presentation/
 eval/

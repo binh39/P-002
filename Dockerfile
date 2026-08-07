@@ -25,6 +25,12 @@ RUN useradd -m appuser
 # Copy application code
 COPY . .
 
+# Guard: the sample repos must arrive complete in the build context.
+# A bare `data/` pattern in .gcloudignore previously stripped
+# src/sample_repo/mlxtend/mlxtend/data, so every mlxtend data target
+# (e.g. make_multiplexer_dataset) was absent from coverage reports.
+RUN python -c "import pathlib; p = pathlib.Path('src/sample_repo/mlxtend/mlxtend'); assert p.is_dir() and (p / 'data').is_dir(), 'mlxtend data subpackage missing from build context; check .gcloudignore'"
+
 # Copy evaluation inputs (dataset + prompt) into the image
 COPY cloud/inputs /app/inputs
 
