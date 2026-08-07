@@ -60,8 +60,8 @@ jobs:
       - name: Extract bundled sample repositories
         run: |
           sudo apt-get update
-          sudo apt-get install --yes unar
-          unar -force-overwrite -output-directory src src/sample_repo.rar
+          sudo apt-get install --yes unrar
+          unrar x -o+ src/sample_repo.rar src/
           test -d src/sample_repo/isort
           test -d src/sample_repo/mlxtend
           test -d src/sample_repo/typesystem
