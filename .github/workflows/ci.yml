@@ -15,6 +15,7 @@ on:
       - "src/coverup/**"
       - "src/optimization/**"
       - "src/sample_repo/**"
+      - "src/sample_repo.rar"
       - "tests/**"
       - "cloud/run_job.py"
       - "cloud/Dockerfile.web"
@@ -37,6 +38,7 @@ on:
       - "src/coverup/**"
       - "src/optimization/**"
       - "src/sample_repo/**"
+      - "src/sample_repo.rar"
       - "tests/**"
       - "cloud/run_job.py"
       - "cloud/Dockerfile.web"
@@ -67,6 +69,16 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
+
+      - name: Extract bundled sample repositories
+        working-directory: ${{ github.workspace }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes unar
+          unar -force-overwrite -output-directory src src/sample_repo.rar
+          test -d src/sample_repo/isort
+          test -d src/sample_repo/mlxtend
+          test -d src/sample_repo/typesystem
 
       - name: Lint with ruff
         run: ruff format --check src/ tests/ sandbox/ && ruff check src/ tests/ sandbox/

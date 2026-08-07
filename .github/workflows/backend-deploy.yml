@@ -13,6 +13,7 @@ on:
       - "src/coverup/**"
       - "src/optimization/**"
       - "src/sample_repo/**"
+      - "src/sample_repo.rar"
       - "cloud/run_job.py"
       - "cloud/Dockerfile.web"
       - "Dockerfile"
@@ -56,6 +57,14 @@ jobs:
           service_account: github-backend-deploy@vinaip002.iam.gserviceaccount.com
           token_format: access_token
       - uses: google-github-actions/setup-gcloud@v3
+      - name: Extract bundled sample repositories
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes unar
+          unar -force-overwrite -output-directory src src/sample_repo.rar
+          test -d src/sample_repo/isort
+          test -d src/sample_repo/mlxtend
+          test -d src/sample_repo/typesystem
       - name: Authenticate Docker to Artifact Registry
         uses: docker/login-action@v4
         with:

@@ -41,6 +41,10 @@ new opaque `runner-jobs/...` prefix. Baseline runs use the CoverUp Cloud Run Job
 uses the isolated GEPA implementation in `cloud/run_job.py`. This path never reads or writes the
 protected standalone benchmark prefix `prompt_optimization_v3`.
 
+Git tracks the snapshots as `src/sample_repo.rar`; the expanded `src/sample_repo/` directory is
+intentionally ignored. Backend CI and deployment extract that archive before running tests and
+building the API image, so local-only expanded files are never assumed to exist on a clean runner.
+
 The backend now supports the experiment lifecycle from an analyzed project through review:
 
 - Create a deterministic train/validation/locked-test dataset from selected functions.
