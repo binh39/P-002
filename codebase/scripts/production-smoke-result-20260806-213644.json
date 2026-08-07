@@ -1,0 +1,57 @@
+﻿{
+    "api_base":  "https://vinaip002.web.app/api/v1",
+    "project_id":  "d020e4cb-7b7d-4988-a8ab-c706187760e8",
+    "experiment_id":  "eb5a330f-3be2-4686-b2aa-c60568726e06",
+    "run_id":  "64518bc7-c4e5-4157-b8ac-034d0a432e4b",
+    "target":  {
+                   "id":  "b402626e6659641d767f1dda",
+                   "project_id":  "d020e4cb-7b7d-4988-a8ab-c706187760e8",
+                   "file":  "isort/parse.py",
+                   "class_name":  "",
+                   "name":  "_infer_line_separator",
+                   "qualified_name":  "_infer_line_separator",
+                   "start_line":  31,
+                   "end_line":  36,
+                   "loc":  6,
+                   "statements":  6,
+                   "branches":  2,
+                   "status":  "Valid"
+               },
+    "run":  {
+                "id":  "64518bc7-c4e5-4157-b8ac-034d0a432e4b",
+                "experiment_id":  "eb5a330f-3be2-4686-b2aa-c60568726e06",
+                "status":  "baseline_succeeded",
+                "target_count":  1,
+                "coverage_score":  0.0,
+                "statement_coverage":  0.0,
+                "branch_coverage":  0.0,
+                "prompt_digest":  "c43235d3050b2f06",
+                "artifact_objects":  {
+                                         "coverage.data":  "artifacts/UJnevkYdZEN8CjFRiH5dRzw5wp73/d020e4cb-7b7d-4988-a8ab-c706187760e8/eb5a330f-3be2-4686-b2aa-c60568726e06/64518bc7-c4e5-4157-b8ac-034d0a432e4b/coverage.data",
+                                         "coverup.log":  "artifacts/UJnevkYdZEN8CjFRiH5dRzw5wp73/d020e4cb-7b7d-4988-a8ab-c706187760e8/eb5a330f-3be2-4686-b2aa-c60568726e06/64518bc7-c4e5-4157-b8ac-034d0a432e4b/coverup.log",
+                                         "coverage_after.json":  "artifacts/UJnevkYdZEN8CjFRiH5dRzw5wp73/d020e4cb-7b7d-4988-a8ab-c706187760e8/eb5a330f-3be2-4686-b2aa-c60568726e06/64518bc7-c4e5-4157-b8ac-034d0a432e4b/coverage_after.json",
+                                         "generated_tests.zip":  "artifacts/UJnevkYdZEN8CjFRiH5dRzw5wp73/d020e4cb-7b7d-4988-a8ab-c706187760e8/eb5a330f-3be2-4686-b2aa-c60568726e06/64518bc7-c4e5-4157-b8ac-034d0a432e4b/generated_tests.zip",
+                                         "target_coverage.json":  "artifacts/UJnevkYdZEN8CjFRiH5dRzw5wp73/d020e4cb-7b7d-4988-a8ab-c706187760e8/eb5a330f-3be2-4686-b2aa-c60568726e06/64518bc7-c4e5-4157-b8ac-034d0a432e4b/target_coverage.json",
+                                         "coverup.stdout.log":  "artifacts/UJnevkYdZEN8CjFRiH5dRzw5wp73/d020e4cb-7b7d-4988-a8ab-c706187760e8/eb5a330f-3be2-4686-b2aa-c60568726e06/64518bc7-c4e5-4157-b8ac-034d0a432e4b/coverup.stdout.log",
+                                         "attempt_trace.jsonl":  "artifacts/UJnevkYdZEN8CjFRiH5dRzw5wp73/d020e4cb-7b7d-4988-a8ab-c706187760e8/eb5a330f-3be2-4686-b2aa-c60568726e06/64518bc7-c4e5-4157-b8ac-034d0a432e4b/attempt_trace.jsonl",
+                                         "prompt.json":  "artifacts/UJnevkYdZEN8CjFRiH5dRzw5wp73/d020e4cb-7b7d-4988-a8ab-c706187760e8/eb5a330f-3be2-4686-b2aa-c60568726e06/64518bc7-c4e5-4157-b8ac-034d0a432e4b/prompt.json",
+                                         "coverage.stdout.log":  "artifacts/UJnevkYdZEN8CjFRiH5dRzw5wp73/d020e4cb-7b7d-4988-a8ab-c706187760e8/eb5a330f-3be2-4686-b2aa-c60568726e06/64518bc7-c4e5-4157-b8ac-034d0a432e4b/coverage.stdout.log"
+                                     },
+                "target_metrics":  {
+                                       "_infer_line_separator":  {
+                                                                     "score":  0.0,
+                                                                     "covered_statements":  0,
+                                                                     "num_statements":  5,
+                                                                     "num_branches":  4,
+                                                                     "valid":  true,
+                                                                     "statement_coverage":  0.0,
+                                                                     "branch_coverage":  0.0,
+                                                                     "covered_branches":  0
+                                                                 }
+                                   },
+                "error_message":  null,
+                "created_at":  "2026-08-06T14:36:55.590799Z",
+                "started_at":  "2026-08-06T14:36:55.842137Z",
+                "finished_at":  "2026-08-06T14:37:58.636033Z"
+            }
+}

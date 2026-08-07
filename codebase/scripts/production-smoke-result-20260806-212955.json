@@ -1,0 +1,40 @@
+﻿{
+    "api_base":  "https://vinaip002.web.app/api/v1",
+    "project_id":  "dced874c-d0e1-43d5-82a9-f51e4d93fbd5",
+    "experiment_id":  "17ec592b-7141-4493-8a8b-6397f2cab62d",
+    "run_id":  "8db0af26-ceed-4db7-a806-e4620f56a5a3",
+    "target":  {
+                   "id":  "b402626e6659641d767f1dda",
+                   "project_id":  "dced874c-d0e1-43d5-82a9-f51e4d93fbd5",
+                   "file":  "isort/parse.py",
+                   "class_name":  "",
+                   "name":  "_infer_line_separator",
+                   "qualified_name":  "_infer_line_separator",
+                   "start_line":  31,
+                   "end_line":  36,
+                   "loc":  6,
+                   "statements":  6,
+                   "branches":  2,
+                   "status":  "Valid"
+               },
+    "run":  {
+                "id":  "8db0af26-ceed-4db7-a806-e4620f56a5a3",
+                "experiment_id":  "17ec592b-7141-4493-8a8b-6397f2cab62d",
+                "status":  "failed",
+                "target_count":  1,
+                "coverage_score":  null,
+                "statement_coverage":  null,
+                "branch_coverage":  null,
+                "prompt_digest":  null,
+                "artifact_objects":  {
+
+                                     },
+                "target_metrics":  {
+
+                                   },
+                "error_message":  "Cloud Run Job failed before publishing a result manifest: 403 Permission \u0027run.operations.get\u0027 denied on resource \u0027projects/vinaip002/locations/asia-southeast1/operations/378e1555-e414-49ec-a905-ef27f0def144\u0027 (or resource may not exist).",
+                "created_at":  "2026-08-06T14:30:09.814913Z",
+                "started_at":  "2026-08-06T14:30:10.073020Z",
+                "finished_at":  "2026-08-06T14:30:17.501162Z"
+            }
+}
