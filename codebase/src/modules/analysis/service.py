@@ -12,6 +12,7 @@ from src.modules.analysis.schemas import (
     ProjectFunctionResponse,
 )
 from src.modules.projects.repository import ProjectRepository
+from src.modules.projects.samples import SampleProjectCatalog
 from src.modules.projects.schemas import ProjectResponse, ProjectStatus
 from src.modules.projects.service import ProjectService
 
@@ -25,6 +26,7 @@ class AnalysisService:
         storage: ObjectStorage,
         max_python_files: int,
         max_uncompressed_bytes: int,
+        samples: SampleProjectCatalog | None = None,
     ):
         self.projects = project_repository
         self.functions = function_repository
@@ -32,12 +34,15 @@ class AnalysisService:
         self.storage = storage
         self.max_python_files = max_python_files
         self.max_uncompressed_bytes = max_uncompressed_bytes
+        self.samples = samples
         self.dispatcher: AnalysisDispatcher | None = None
 
     def set_dispatcher(self, dispatcher: AnalysisDispatcher) -> None:
         self.dispatcher = dispatcher
 
     async def request(self, project_id: str, owner_id: str) -> ProjectResponse:
+        if self.project_service.is_sample(project_id):
+            raise AppError(409, "SAMPLE_PROJECT_READ_ONLY", "Bundled samples are already analyzed")
         project = await self.project_service.require_owned(project_id, owner_id)
         if self.dispatcher is None:
             raise RuntimeError("Analysis dispatcher is not configured")
@@ -88,7 +93,11 @@ class AnalysisService:
         project = await self.project_service.require_owned(project_id, owner_id)
         if project.status in {ProjectStatus.UPLOADED, ProjectStatus.ANALYZING}:
             raise AppError(409, "ANALYSIS_NOT_READY", "Project analysis has not completed")
-        functions = await self.functions.list_for_project(project_id)
+        functions = (
+            self.samples.functions(project_id)
+            if self.samples and self.samples.contains(project_id)
+            else await self.functions.list_for_project(project_id)
+        )
         return ProjectFunctionListResponse(
             items=[
                 ProjectFunctionResponse.model_validate(item.model_dump(exclude={"source", "analyzed_at"}))
@@ -99,7 +108,11 @@ class AnalysisService:
 
     async def get_source(self, project_id: str, function_id: str, owner_id: str) -> FunctionSourceResponse:
         await self.project_service.require_owned(project_id, owner_id)
-        function = await self.functions.get(project_id, function_id)
+        function = (
+            self.samples.function(project_id, function_id)
+            if self.samples and self.samples.contains(project_id)
+            else await self.functions.get(project_id, function_id)
+        )
         if function is None:
             raise AppError(404, "FUNCTION_NOT_FOUND", "Analyzed function was not found")
         return FunctionSourceResponse(source=function.source)

@@ -1,4 +1,9 @@
+import io
+import zipfile
+
 import pytest
+
+from src.modules.experiments.executor import BaselineExecution
 
 AUTH_HEADERS = {"Authorization": "Bearer dev-token"}
 
@@ -10,6 +15,78 @@ async def test_projects_require_authentication(client):
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"
     assert response.headers["X-Request-ID"]
+
+
+@pytest.mark.asyncio
+async def test_sample_catalog_creates_experiment_without_persisting_projects(client, app):
+    samples_response = await client.get("/api/v1/projects/samples", headers=AUTH_HEADERS)
+
+    assert samples_response.status_code == 200
+    samples = samples_response.json()["items"]
+    assert [item["id"] for item in samples] == [
+        "sample:isort",
+        "sample:mlxtend",
+        "sample:typesystem",
+    ]
+    assert all(item["status"] in {"ready", "warning"} for item in samples)
+
+    functions_response = await client.get(
+        "/api/v1/projects/sample:isort/functions",
+        headers=AUTH_HEADERS,
+    )
+    assert functions_response.status_code == 200
+    functions = functions_response.json()["items"]
+    assert len(functions) >= 3
+    assert all(item["project_id"] == "sample:isort" for item in functions)
+
+    created = await client.post(
+        "/api/v1/experiments",
+        headers=AUTH_HEADERS,
+        json={
+            "project_id": "sample:isort",
+            "name": "Bundled isort experiment",
+            "target_function_ids": [item["id"] for item in functions[:3]],
+        },
+    )
+    assert created.status_code == 201
+    assert created.json()["project_id"] == "sample:isort"
+    assert created.json()["optimization_eligible"] is True
+
+    captured = {}
+
+    class SampleExecutor:
+        async def execute(self, archive, source_directory, symbols, prompt):
+            captured.update(
+                archive=archive,
+                source_directory=source_directory,
+                symbols=symbols,
+                prompt=prompt,
+            )
+            return BaselineExecution(0.5, 0.5, 0.5, {}, {})
+
+    app.state.services.experiments.executor = SampleExecutor()
+    baseline = await client.post(
+        f"/api/v1/experiments/{created.json()['id']}/runs",
+        headers=AUTH_HEADERS,
+    )
+    assert baseline.status_code == 202
+    assert baseline.json()["status"] == "baseline_succeeded"
+    assert captured["source_directory"] == "isort"
+    assert len(captured["symbols"]) == 3
+    with zipfile.ZipFile(io.BytesIO(captured["archive"])) as bundle:
+        assert "isort/__init__.py" in bundle.namelist()
+
+    persisted_projects = await client.get("/api/v1/projects", headers=AUTH_HEADERS)
+    assert persisted_projects.status_code == 200
+    assert persisted_projects.json()["total"] == 0
+
+    read_only = await client.patch(
+        "/api/v1/projects/sample:isort/settings",
+        headers=AUTH_HEADERS,
+        json={"runtime": {"memory_mb": 4096}},
+    )
+    assert read_only.status_code == 409
+    assert read_only.json()["error"]["code"] == "SAMPLE_PROJECT_READ_ONLY"
 
 
 @pytest.mark.asyncio

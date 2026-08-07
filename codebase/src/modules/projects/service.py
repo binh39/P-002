@@ -14,11 +14,19 @@ from src.modules.projects.schemas import (
 )
 from src.modules.uploads.service import UploadService
 
+from .samples import SampleProjectCatalog
+
 
 class ProjectService:
-    def __init__(self, repository: ProjectRepository, uploads: UploadService):
+    def __init__(
+        self,
+        repository: ProjectRepository,
+        uploads: UploadService,
+        samples: SampleProjectCatalog | None = None,
+    ):
         self.repository = repository
         self.uploads = uploads
+        self.samples = samples
 
     async def create(self, owner_id: str, payload: CreateProjectRequest) -> ProjectResponse:
         upload = await self.uploads.require_ready(payload.upload_id, owner_id)
@@ -44,6 +52,10 @@ class ProjectService:
         projects = await self.repository.list_for_owner(owner_id)
         return ProjectListResponse(items=[self._response(project) for project in projects], total=len(projects))
 
+    async def list_samples(self, owner_id: str) -> ProjectListResponse:
+        projects = self.samples.list(owner_id) if self.samples else []
+        return ProjectListResponse(items=[self._response(project) for project in projects], total=len(projects))
+
     async def get(self, project_id: str, owner_id: str) -> ProjectResponse:
         return self._response(await self.require_owned(project_id, owner_id))
 
@@ -53,6 +65,8 @@ class ProjectService:
         owner_id: str,
         patch: ProjectSettingsPatch,
     ) -> ProjectResponse:
+        if self.samples and self.samples.contains(project_id):
+            raise AppError(409, "SAMPLE_PROJECT_READ_ONLY", "Bundled sample settings are immutable")
         project = await self.require_owned(project_id, owner_id)
         updates = patch.model_dump(exclude_none=True)
         if not updates:
@@ -66,10 +80,20 @@ class ProjectService:
         return self._response(project)
 
     async def require_owned(self, project_id: str, owner_id: str) -> ProjectRecord:
+        if self.samples and (sample := self.samples.get(project_id, owner_id)):
+            return sample
         project = await self.repository.get(project_id)
         if project is None or project.owner_id != owner_id:
             raise AppError(404, "PROJECT_NOT_FOUND", "Project was not found")
         return project
+
+    async def read_archive(self, project: ProjectRecord, storage) -> bytes:
+        if self.samples and self.samples.contains(project.id):
+            return self.samples.archive(project.id)
+        return await storage.read(project.object_name)
+
+    def is_sample(self, project_id: str) -> bool:
+        return bool(self.samples and self.samples.contains(project_id))
 
     @staticmethod
     def _response(project: ProjectRecord) -> ProjectResponse:

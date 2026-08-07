@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     signed_url_ttl_seconds: int = Field(default=900, ge=60, le=3600)
     max_upload_bytes: int = Field(default=100 * 1024 * 1024, ge=1024)
     local_upload_dir: str = "./data/uploads"
+    sample_repos_dir: str = "../src/sample_repo"
 
     @property
     def cors_origin_list(self) -> list[str]:

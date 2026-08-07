@@ -6,6 +6,7 @@ ANALYSIS_DISPATCHER: cloud_tasks
 GCP_PROJECT_ID: vinaip002
 GCP_SERVICE_ACCOUNT_EMAIL: promptopt-api@vinaip002.iam.gserviceaccount.com
 GCS_BUCKET: vinaip002-promptopt-sources
+SAMPLE_REPOS_DIR: /app/sample_repo
 CLOUD_TASKS_LOCATION: asia-southeast1
 CLOUD_TASKS_QUEUE: promptopt-analysis
 ANALYSIS_WORKER_URL: https://promptopt-api-891999064201.asia-southeast1.run.app

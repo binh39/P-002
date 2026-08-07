@@ -14,10 +14,12 @@ on:
       - "codebase/sandbox/**"
       - "src/coverup/**"
       - "src/optimization/**"
+      - "src/sample_repo/**"
       - "tests/**"
       - "cloud/run_job.py"
       - "cloud/Dockerfile.web"
       - "Dockerfile"
+      - ".dockerignore"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/ci.yml"
@@ -34,10 +36,12 @@ on:
       - "codebase/sandbox/**"
       - "src/coverup/**"
       - "src/optimization/**"
+      - "src/sample_repo/**"
       - "tests/**"
       - "cloud/run_job.py"
       - "cloud/Dockerfile.web"
       - "Dockerfile"
+      - ".dockerignore"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/ci.yml"
@@ -74,8 +78,8 @@ jobs:
 
       - name: Build API and runner images
         run: |
-          docker build --tag promptopt-api:ci .
-          docker build --file sandbox/Dockerfile --tag promptopt-coverup-runner:ci .
+          docker build --file Dockerfile --tag promptopt-api:ci ..
+          docker build --file sandbox/Dockerfile --tag promptopt-coverup-runner:ci ..
 
   gepa-lint-test-and-build:
     runs-on: ubuntu-latest

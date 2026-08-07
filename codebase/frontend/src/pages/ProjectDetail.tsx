@@ -66,6 +66,7 @@ export default function ProjectDetail() {
     );
 
   const project = projectQuery.data;
+  const isSample = project.id.startsWith("sample:");
 
   return (
     <div className="platform-page">
@@ -77,8 +78,9 @@ export default function ProjectDetail() {
         title={project.name}
         description={project.description}
         actions={
-          <>
-            <button className="secondary-button">Validate</button>
+          isSample ? (
+            <StatusBadge tone="info">Read-only sample</StatusBadge>
+          ) : (
             <button
               className="primary-button"
               disabled={analyzeMutation.isPending || project.status === "analyzing"}
@@ -88,7 +90,7 @@ export default function ProjectDetail() {
                 ? "Analyzing..."
                 : "Re-analyze"}
             </button>
-          </>
+          )
         }
       />
 
@@ -287,7 +289,7 @@ export default function ProjectDetail() {
         </section>
       )}
 
-      {tab === "settings" && <ProjectSettings project={project} />}
+      {tab === "settings" && <ProjectSettings project={project} readOnly={isSample} />}
 
       {tab === "versions" && (
         <section className="platform-card table-card">
@@ -380,7 +382,7 @@ export default function ProjectDetail() {
   );
 }
 
-function ProjectSettings({ project }: { project: PythonProject }) {
+function ProjectSettings({ project, readOnly }: { project: PythonProject; readOnly: boolean }) {
   const [section, setSection] = useState("runtime");
   const sections = ["runtime", "dependencies", "tests", "coverage", "security"];
   return (
@@ -402,7 +404,9 @@ function ProjectSettings({ project }: { project: PythonProject }) {
             <h2>{section[0].toUpperCase() + section.slice(1)} settings</h2>
             <p>Project overrides are versioned with every analysis.</p>
           </div>
-          <StatusBadge tone="info">Overrides workspace defaults</StatusBadge>
+          <StatusBadge tone="info">
+            {readOnly ? "Bundled configuration" : "Overrides workspace defaults"}
+          </StatusBadge>
         </div>
         {section === "runtime" && (
           <div className="form-grid">
@@ -537,9 +541,15 @@ function ProjectSettings({ project }: { project: PythonProject }) {
           </div>
         )}
         <div className="settings-actions">
-          <button className="secondary-button">Reset to workspace defaults</button>
-          <button className="secondary-button">Validate configuration</button>
-          <button className="primary-button">Save settings</button>
+          {readOnly ? (
+            <span className="muted-copy">Sample settings are immutable.</span>
+          ) : (
+            <>
+              <button className="secondary-button">Reset to workspace defaults</button>
+              <button className="secondary-button">Validate configuration</button>
+              <button className="primary-button">Save settings</button>
+            </>
+          )}
         </div>
       </section>
     </div>

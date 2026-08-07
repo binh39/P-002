@@ -6,6 +6,7 @@ from functools import partial
 from src.core.errors import AppError
 from src.infrastructure.storage import ObjectStorage
 from src.modules.analysis.repository import FunctionRepository
+from src.modules.projects.samples import SampleProjectCatalog
 from src.modules.projects.service import ProjectService
 
 from .comparison import compare_prompts
@@ -48,6 +49,7 @@ class ExperimentService:
         allowed_reflection_models: set[str] | None = None,
         final_evaluation_replicates: int = 2,
         cloud_optimizer=None,
+        samples: SampleProjectCatalog | None = None,
     ):
         self.repository, self.projects, self.functions = repository, projects, functions
         self.storage, self.executor = storage, executor
@@ -58,6 +60,7 @@ class ExperimentService:
         )
         self.final_evaluation_replicates = final_evaluation_replicates
         self.cloud_optimizer = cloud_optimizer
+        self.samples = samples
         self.dispatcher: BaselineDispatcher | None = None
         self.optimization_dispatcher: OptimizationDispatcher | None = None
         self.comparison_dispatcher: ComparisonDispatcher | None = None
@@ -75,7 +78,7 @@ class ExperimentService:
         project = await self.projects.require_owned(payload.project_id, owner_id)
         if project.status not in {"ready", "warning"}:
             raise AppError(409, "ANALYSIS_NOT_READY", "Project analysis must finish before creating an experiment")
-        available = {item.id for item in await self.functions.list_for_project(project.id)}
+        available = {item.id for item in await self._list_functions(project.id)}
         if missing := set(payload.target_function_ids) - available:
             raise AppError(
                 422, "UNKNOWN_TARGET_FUNCTION", f"Selected functions were not found: {', '.join(sorted(missing))}"
@@ -164,12 +167,12 @@ class ExperimentService:
             if item is None or self.executor is None:
                 raise RuntimeError("Baseline sandbox is not configured")
             project = await self.projects.require_owned(item.project_id, item.owner_id)
-            selected = [await self.functions.get(project.id, function_id) for function_id in item.target_function_ids]
+            selected = [await self._get_function(project.id, function_id) for function_id in item.target_function_ids]
             if any(function is None for function in selected):
                 raise RuntimeError("A selected function is no longer available")
             prompt = baseline_prompt()
             result = await self.executor.execute(
-                await self.storage.read(project.object_name),
+                await self._read_project_archive(project),
                 project.settings.runtime.source_directory,
                 [function.qualified_name for function in selected if function],
                 prompt,
@@ -306,7 +309,7 @@ class ExperimentService:
                 raise RuntimeError("Baseline prompt version is unavailable or has changed")
             project = await self.projects.require_owned(item.project_id, item.owner_id)
             functions = {
-                function_id: await self.functions.get(project.id, function_id)
+                function_id: await self._get_function(project.id, function_id)
                 for function_id in item.target_function_ids
             }
             if any(function is None for function in functions.values()):
@@ -325,7 +328,7 @@ class ExperimentService:
                 ]
                 for split in ("train", "validation")
             }
-            archive = await self.storage.read(project.object_name)
+            archive = await self._read_project_archive(project)
             if self.cloud_optimizer is not None:
                 holdout = [
                     OptimizationTarget(
@@ -482,7 +485,7 @@ class ExperimentService:
             if candidate.digest() != run.candidate_prompt_digest:
                 raise RuntimeError("Candidate prompt digest changed before final evaluation")
             project = await self.projects.require_owned(item.project_id, item.owner_id)
-            functions = [await self.functions.get(project.id, function_id) for function_id in run.test_target_ids]
+            functions = [await self._get_function(project.id, function_id) for function_id in run.test_target_ids]
             if any(function is None for function in functions):
                 raise RuntimeError("A locked test function is no longer available")
             targets = [
@@ -498,7 +501,7 @@ class ExperimentService:
             ]
             comparison = await compare_prompts(
                 executor=self.executor,
-                archive=await self.storage.read(project.object_name),
+                archive=await self._read_project_archive(project),
                 source_directory=project.settings.runtime.source_directory,
                 targets=targets,
                 baseline=baseline,
@@ -628,3 +631,18 @@ class ExperimentService:
         if item is None or item.owner_id != owner_id:
             raise AppError(404, "EXPERIMENT_NOT_FOUND", "Experiment was not found")
         return item
+
+    async def _list_functions(self, project_id: str):
+        if self.samples and self.samples.contains(project_id):
+            return self.samples.functions(project_id)
+        return await self.functions.list_for_project(project_id)
+
+    async def _get_function(self, project_id: str, function_id: str):
+        if self.samples and self.samples.contains(project_id):
+            return self.samples.function(project_id, function_id)
+        return await self.functions.get(project_id, function_id)
+
+    async def _read_project_archive(self, project) -> bytes:
+        if self.samples and self.samples.contains(project.id):
+            return self.samples.archive(project.id)
+        return await self.storage.read(project.object_name)

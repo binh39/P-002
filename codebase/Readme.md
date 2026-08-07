@@ -28,6 +28,19 @@ The Projects/upload API and production configuration are documented in [docs/bac
 
 ## Experiment and prompt optimization pipeline
 
+### Bundled sample-project mode
+
+The production experiment wizard currently uses three pinned, read-only repositories from
+`src/sample_repo`: `isort`, `mlxtend` and `typesystem`. The API exposes them through
+`GET /api/v1/projects/samples` and analyzes their functions in memory. Listing or selecting a
+sample does not create Upload, Project or Function documents in Firestore. Only the user's
+Experiment, Run, Comparison and Prompt Version records are persisted.
+
+At execution time the API creates an ephemeral ZIP from the pinned snapshot and stages it under a
+new opaque `runner-jobs/...` prefix. Baseline runs use the CoverUp Cloud Run Job and optimization
+uses the isolated GEPA implementation in `cloud/run_job.py`. This path never reads or writes the
+protected standalone benchmark prefix `prompt_optimization_v3`.
+
 The backend now supports the experiment lifecycle from an analyzed project through review:
 
 - Create a deterministic train/validation/locked-test dataset from selected functions.
@@ -226,7 +239,7 @@ Project analysis runs asynchronously through Cloud Tasks. Production extracts Py
 
 ### Provision the production runner once
 
-The deployment workflow builds separate API, CoverUp and GEPA images. The web GEPA image uses `cloud/Dockerfile.web`, receives project ZIPs at runtime, and does not depend on ignored local `src/sample_repo` data. It deploys two isolated Cloud Run Jobs with dedicated runtime identity. Before the first merge that contains the runner workflow, a project administrator must run:
+The deployment workflow builds separate API, CoverUp and GEPA images. The API image contains the three read-only sample snapshots; the web GEPA image uses `cloud/Dockerfile.web` and receives the selected snapshot ZIP at runtime. It deploys two isolated Cloud Run Jobs with dedicated runtime identity. Before the first merge that contains the runner workflow, a project administrator must run:
 
 ```powershell
 cd codebase

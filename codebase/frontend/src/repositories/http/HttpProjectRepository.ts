@@ -109,6 +109,11 @@ export class HttpProjectRepository implements ProjectRepository {
     return response.items.map(mapProject);
   }
 
+  async listSamples(signal?: AbortSignal) {
+    const response = await apiRequest<ApiProjectList>("/projects/samples", { signal });
+    return response.items.map(mapProject);
+  }
+
   async get(projectId: string, signal?: AbortSignal) {
     return mapProject(await apiRequest<ApiProject>(`/projects/${projectId}`, { signal }));
   }
