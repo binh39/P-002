@@ -39,6 +39,8 @@ data/
 logs/
 *.log
 .firebase/
+codebase/.smoke-results/
+codebase/scripts/production-smoke-result-*.json
 
 # Test coverage
 htmlcov/
