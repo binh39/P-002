@@ -53,7 +53,7 @@ The backend is complete enough for the first end-to-end vertical slice, but it i
 | Asynchronous AST analysis and function/source snapshots | Implemented; Cloud Tasks in production |
 | Experiment creation and deterministic train/validation/locked-test split | Implemented |
 | CoverUp baseline execution, polling, metrics and artifacts | Implemented; Cloud Run Job in production configuration |
-| DSPy/GEPA optimization, candidate validation and prompt lineage | Implemented; candidate is kept separate from baseline |
+| DSPy/GEPA optimization, candidate validation and prompt lineage | Implemented; production uses the isolated `promptopt-gepa-runner` job and keeps the candidate separate from baseline |
 | Paired baseline-vs-candidate comparison and promotion gates | Implemented |
 | `final_validation.json` and ownership-checked run artifacts | Implemented |
 | Prompt version list, creation and approve/reject API with audit fields | Implemented; list is owner-scoped, filterable and paginated |
@@ -215,6 +215,7 @@ The first vertical slice is deployed in Singapore:
 | Analysis task queue | `promptopt-analysis` |
 | Experiment task queue | `promptopt-baseline` |
 | CoverUp Cloud Run Job | `promptopt-coverup-runner` |
+| GEPA Cloud Run Job | `promptopt-gepa-runner` |
 | Runner identity | `promptopt-runner@vinaip002.iam.gserviceaccount.com` |
 | Runtime identity | `promptopt-api@vinaip002.iam.gserviceaccount.com` |
 | Deploy identity | `github-backend-deploy@vinaip002.iam.gserviceaccount.com` |
@@ -225,7 +226,7 @@ Project analysis runs asynchronously through Cloud Tasks. Production extracts Py
 
 ### Provision the production runner once
 
-The deployment workflow builds separate API and CoverUp images. It deploys the CoverUp image as a Cloud Run Job with one task, no retries, a 15-minute timeout and a dedicated runtime identity. Before the first merge that contains the runner workflow, a project administrator must run:
+The deployment workflow builds separate API, CoverUp and GEPA images. The web GEPA image uses `cloud/Dockerfile.web`, receives project ZIPs at runtime, and does not depend on ignored local `src/sample_repo` data. It deploys two isolated Cloud Run Jobs with dedicated runtime identity. Before the first merge that contains the runner workflow, a project administrator must run:
 
 ```powershell
 cd codebase
@@ -234,9 +235,9 @@ cd codebase
 
 The script enables the required APIs, creates `promptopt-runner` when absent, and creates a custom object role containing only `storage.objects.get/create`. An IAM condition restricts that role to the opaque `runner-jobs/` prefix; the runner cannot list, overwrite or delete bucket objects and cannot read original uploads outside this prefix. A second project-level custom role grants the API only `run.operations.get`, which is required to poll the long-running operation after starting a job; permission to run with overrides remains scoped to the individual runner Job by the deployment workflow. The script also grants Vertex AI access, lets the GitHub deploy identity attach the runner account, and creates or limits the `promptopt-baseline` queue. It does not create service-account keys or store credentials.
 
-The API writes source, prompt and a versioned execution manifest under `runner-jobs/<execution-id>/` in the private bucket. The Cloud Run Job receives only the bucket and object prefix as overrides, uses its workload identity to read/write those objects, and publishes `result.json` plus artifacts. No Docker socket, ADC file or prompt/source payload is passed on the command line.
+The API writes source, prompt and versioned execution inputs under `runner-jobs/<execution-id>/` for CoverUp and `runner-jobs/gepa/<execution-id>/` for GEPA in the private PromptOpt bucket. Jobs receive only opaque object references, use workload identity, and publish manifests plus artifacts. The web integration cannot use or overwrite the standalone benchmark prefix `prompt_optimization_v3`.
 
-Current limitation: each CoverUp evaluation is one Cloud Run Job execution. Baseline and paired comparison fit the Cloud Tasks 30-minute request deadline. A large GEPA search still needs durable checkpoint/resume orchestration before it should be enabled for high `max_metric_calls` in production.
+Current limitation: the web GEPA job is capped below the Cloud Tasks 30-minute deadline (`GEPA_MAX_METRIC_CALLS=30`, job timeout 28 minutes). Large searches such as the standalone 2,200-call benchmark still need durable start/poll/checkpoint orchestration and must not be routed through the synchronous web worker.
 
 ### Production smoke test
 

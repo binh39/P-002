@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     optimize_model: str = ""
     optimize_model_allowlist: str = "vertex_ai/gemini-3.6-flash"
     gepa_max_metric_calls: int = Field(default=30, ge=3, le=1000)
+    optimization_execution_backend: Literal["inline", "cloud_run_job"] = "inline"
+    cloud_run_gepa_job: str = "promptopt-gepa-runner"
+    cloud_run_gepa_timeout_seconds: int = Field(default=1800, ge=300, le=3600)
+    gepa_max_concurrency: int = Field(default=10, ge=1, le=32)
+    gepa_repeat_tests: int = Field(default=2, ge=0, le=20)
+    gepa_evaluation_replicates: int = Field(default=1, ge=1, le=10)
     final_evaluation_replicates: int = Field(default=2, ge=1, le=10)
     max_analysis_python_files: int = Field(default=5000, ge=1, le=20000)
     max_analysis_uncompressed_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
@@ -83,6 +89,8 @@ class Settings(BaseSettings):
                 raise ValueError("BASELINE_WORKER_URL and BASELINE_TASK_AUDIENCE are required in production")
             if self.baseline_execution_backend != "cloud_run_job" or not self.cloud_run_runner_job:
                 raise ValueError("BASELINE_EXECUTION_BACKEND=cloud_run_job and CLOUD_RUN_RUNNER_JOB are required")
+            if self.optimization_execution_backend != "cloud_run_job" or not self.cloud_run_gepa_job:
+                raise ValueError("OPTIMIZATION_EXECUTION_BACKEND=cloud_run_job and CLOUD_RUN_GEPA_JOB are required")
         return self
 
 

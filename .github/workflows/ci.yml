@@ -12,6 +12,14 @@ on:
       - "codebase/Dockerfile"
       - "codebase/.dockerignore"
       - "codebase/sandbox/**"
+      - "src/coverup/**"
+      - "src/optimization/**"
+      - "tests/**"
+      - "cloud/run_job.py"
+      - "cloud/Dockerfile.web"
+      - "Dockerfile"
+      - "pyproject.toml"
+      - "uv.lock"
       - ".github/workflows/ci.yml"
   pull_request:
     branches: [main]
@@ -24,6 +32,14 @@ on:
       - "codebase/Dockerfile"
       - "codebase/.dockerignore"
       - "codebase/sandbox/**"
+      - "src/coverup/**"
+      - "src/optimization/**"
+      - "tests/**"
+      - "cloud/run_job.py"
+      - "cloud/Dockerfile.web"
+      - "Dockerfile"
+      - "pyproject.toml"
+      - "uv.lock"
       - ".github/workflows/ci.yml"
 
 jobs:
@@ -60,3 +76,21 @@ jobs:
         run: |
           docker build --tag promptopt-api:ci .
           docker build --file sandbox/Dockerfile --tag promptopt-coverup-runner:ci .
+
+  gepa-lint-test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.9.13"
+          enable-cache: true
+      - name: Install locked GEPA environment
+        run: uv sync --frozen --group dev
+      - name: Check GEPA pipeline
+        run: |
+          uv run ruff check src/optimization tests/test_coverage_optimization.py tests/test_dataset_builder.py cloud/run_job.py
+          uv run python -m py_compile src/coverup/coverup.py src/optimization/gepa.py src/optimization/metrics.py src/optimization/cli.py src/optimization/runner.py src/optimization/prompts.py cloud/run_job.py
+          uv run pytest -p no:pytest_isolate tests -q
+      - name: Build GEPA runner image
+        run: docker build --file cloud/Dockerfile.web --tag promptopt-gepa-runner:ci .
