@@ -120,6 +120,18 @@ describe("HttpExperimentRepository", () => {
     );
   });
 
+  it("deletes an experiment through the authenticated API", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await new HttpExperimentRepository().delete("experiment-1");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/experiments/experiment-1",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
   it("starts and maps a paired comparison run", async () => {
     const response = {
       id: "comparison-1",

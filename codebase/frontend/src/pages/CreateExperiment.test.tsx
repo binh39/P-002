@@ -29,7 +29,7 @@ const project = {
   commit: "9262aa8",
   branch: "main",
   files: 10,
-  functions: 2,
+  functions: 3,
   statements: 50,
   branches: 12,
   status: "ready" as const,
@@ -38,20 +38,18 @@ const project = {
   sourceDir: "isort",
   testDir: "tests",
 };
-const functions = [
-  {
-    id: "fn-1",
-    project: "project-1",
-    file: "isort/api.py",
-    className: "",
-    name: "sort_code_string",
-    lines: "10-20",
-    loc: 11,
-    statements: 8,
-    branches: 2,
-    status: "Valid" as const,
-  },
-];
+const functions = Array.from({ length: 3 }, (_, index) => ({
+  id: `fn-${index + 1}`,
+  project: "project-1",
+  file: "isort/api.py",
+  className: "",
+  name: `sort_code_string_${index + 1}`,
+  lines: "10-20",
+  loc: 11,
+  statements: 8 + index,
+  branches: 2 + index,
+  status: "Valid" as const,
+}));
 
 function Wrapper({ children }: PropsWithChildren) {
   return (
@@ -77,16 +75,20 @@ describe("create experiment wizard", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /isort/i }));
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    fireEvent.click(await screen.findByRole("checkbox", { name: /sort_code_string/i }));
+    await screen.findByText(/3 valid functions available/i);
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     fireEvent.click(screen.getByRole("button", { name: /create and run baseline/i }));
 
     await waitFor(() =>
-      expect(repositories.experiments.create).toHaveBeenCalledWith({
-        projectId: "project-1",
-        name: "isort baseline",
-        targetFunctionIds: ["fn-1"],
-      }),
+      expect(repositories.experiments.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: "project-1",
+          name: "isort prompt optimization",
+          targetFunctionIds: expect.arrayContaining(["fn-1", "fn-2", "fn-3"]),
+        }),
+      ),
     );
     expect(repositories.experiments.requestBaseline).toHaveBeenCalledWith("experiment-1");
     expect(navigate).toHaveBeenCalledWith("/runs/run-1");

@@ -41,6 +41,7 @@ async function authenticatedFetch(path: string, init?: RequestInit) {
 
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await authenticatedFetch(path, init);
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 

@@ -242,6 +242,10 @@ export class HttpExperimentRepository implements ExperimentRepository {
     );
   }
 
+  async delete(experimentId: string) {
+    await apiRequest<void>(`/experiments/${experimentId}`, { method: "DELETE" });
+  }
+
   async get(experimentId: string, signal?: AbortSignal) {
     return mapExperiment(
       await apiRequest<ApiExperiment>(`/experiments/${experimentId}`, { signal }),

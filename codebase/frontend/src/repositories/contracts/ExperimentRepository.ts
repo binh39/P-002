@@ -9,6 +9,7 @@ import type {
 export interface ExperimentRepository {
   list(signal?: AbortSignal): Promise<Experiment[]>;
   create(input: CreateExperimentInput): Promise<Experiment>;
+  delete(experimentId: string): Promise<void>;
   get(experimentId: string, signal?: AbortSignal): Promise<Experiment>;
   requestBaseline(experimentId: string): Promise<BaselineRun>;
   getBaselineRun(runId: string, signal?: AbortSignal): Promise<BaselineRun>;

@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { useLocation } from "wouter";
 
 import { useRepositories } from "@/app/providers";
@@ -26,6 +27,8 @@ function formatStatus(status: ExperimentStatus) {
 export default function Experiments() {
   const [, navigate] = useLocation();
   const { experiments } = useRepositories();
+  const queryClient = useQueryClient();
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const query = useQuery({
     queryKey: ["experiments"],
     queryFn: ({ signal }) => experiments.list(signal),
@@ -43,6 +46,16 @@ export default function Experiments() {
       )
         ? 3_000
         : false,
+  });
+  const deleteExperiment = useMutation({
+    mutationFn: (experimentId: string) => experiments.delete(experimentId),
+    onSuccess: async () => {
+      setDeleteTarget(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["experiments"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+      ]);
+    },
   });
 
   if (query.isPending)
@@ -152,30 +165,41 @@ export default function Experiments() {
                       }).format(new Date(item.updatedAt))}
                     </td>
                     <td>
-                      {item.comparisonRunId ? (
+                      <div className="experiment-row-actions">
+                        {item.comparisonRunId ? (
+                          <button
+                            className="table-action"
+                            onClick={() => navigate(`/comparison-runs/${item.comparisonRunId}`)}
+                          >
+                            Open comparison
+                          </button>
+                        ) : item.optimizationRunId ? (
+                          <button
+                            className="table-action"
+                            onClick={() => navigate(`/optimization-runs/${item.optimizationRunId}`)}
+                          >
+                            Open optimization
+                          </button>
+                        ) : item.baselineRunId ? (
+                          <button
+                            className="table-action"
+                            onClick={() => navigate(`/runs/${item.baselineRunId}`)}
+                          >
+                            Open baseline
+                          </button>
+                        ) : (
+                          <span className="muted-cell">Draft</span>
+                        )}
                         <button
-                          className="table-action"
-                          onClick={() => navigate(`/comparison-runs/${item.comparisonRunId}`)}
+                          className="table-action danger-action"
+                          onClick={() => {
+                            deleteExperiment.reset();
+                            setDeleteTarget({ id: item.id, name: item.name });
+                          }}
                         >
-                          Open comparison
+                          Delete
                         </button>
-                      ) : item.optimizationRunId ? (
-                        <button
-                          className="table-action"
-                          onClick={() => navigate(`/optimization-runs/${item.optimizationRunId}`)}
-                        >
-                          Open optimization
-                        </button>
-                      ) : item.baselineRunId ? (
-                        <button
-                          className="table-action"
-                          onClick={() => navigate(`/runs/${item.baselineRunId}`)}
-                        >
-                          Open baseline
-                        </button>
-                      ) : (
-                        <span className="muted-cell">Draft</span>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -184,6 +208,51 @@ export default function Experiments() {
           </div>
         )}
       </section>
+      {deleteTarget && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={() => setDeleteTarget(null)}
+        >
+          <section
+            className="delete-experiment-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-experiment-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <span className="delete-dialog-icon">!</span>
+            <h2 id="delete-experiment-title">Delete experiment?</h2>
+            <p>
+              <strong>{deleteTarget.name}</strong> and its run references will be permanently
+              removed. Cloud artifacts are retained according to the backend retention policy.
+            </p>
+            {deleteExperiment.isError && (
+              <div className="inline-validation-error" role="alert">
+                {deleteExperiment.error instanceof Error
+                  ? deleteExperiment.error.message
+                  : "The experiment could not be deleted."}
+              </div>
+            )}
+            <div className="delete-dialog-actions">
+              <button
+                className="secondary-button"
+                disabled={deleteExperiment.isPending}
+                onClick={() => setDeleteTarget(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="danger-button"
+                disabled={deleteExperiment.isPending}
+                onClick={() => deleteExperiment.mutate(deleteTarget.id)}
+              >
+                {deleteExperiment.isPending ? "Deleting…" : "Delete experiment"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
