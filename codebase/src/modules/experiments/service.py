@@ -1,7 +1,8 @@
-import asyncio
+import io
 import json
+import re
+import zipfile
 from datetime import UTC, datetime
-from functools import partial
 
 from src.core.errors import AppError
 from src.infrastructure.storage import ObjectStorage
@@ -9,11 +10,10 @@ from src.modules.analysis.repository import FunctionRepository
 from src.modules.projects.samples import SampleProjectCatalog
 from src.modules.projects.service import ProjectService
 
-from .comparison import compare_prompts
-from .dataset import split_targets
+from .dataset import select_targets, split_targets, validate_manual_splits
 from .dispatcher import BaselineDispatcher, ComparisonDispatcher, OptimizationDispatcher
 from .executor import DockerCoverUpExecutor
-from .optimizer import OptimizationTarget, optimize_prompt
+from .optimizer import OptimizationTarget
 from .prompts import PromptBundle, baseline_prompt
 from .repository import ExperimentRepository
 from .schemas import (
@@ -28,10 +28,13 @@ from .schemas import (
     ExperimentStatus,
     OptimizationRunRecord,
     OptimizationRunResponse,
+    ProjectSnapshot,
     PromptVersionListResponse,
     PromptVersionRecord,
     PromptVersionResponse,
     PromptVersionStatus,
+    SamplingMethod,
+    TargetReference,
     new_id,
 )
 
@@ -44,21 +47,11 @@ class ExperimentService:
         functions: FunctionRepository,
         storage: ObjectStorage,
         executor: DockerCoverUpExecutor | None = None,
-        reflection_model: str = "",
-        max_metric_calls: int = 30,
-        allowed_reflection_models: set[str] | None = None,
-        final_evaluation_replicates: int = 2,
         cloud_optimizer=None,
         samples: SampleProjectCatalog | None = None,
     ):
         self.repository, self.projects, self.functions = repository, projects, functions
         self.storage, self.executor = storage, executor
-        self.reflection_model = reflection_model
-        self.max_metric_calls = max_metric_calls
-        self.allowed_reflection_models = allowed_reflection_models or (
-            {reflection_model} if reflection_model else set()
-        )
-        self.final_evaluation_replicates = final_evaluation_replicates
         self.cloud_optimizer = cloud_optimizer
         self.samples = samples
         self.dispatcher: BaselineDispatcher | None = None
@@ -75,22 +68,70 @@ class ExperimentService:
         self.comparison_dispatcher = dispatcher
 
     async def create(self, owner_id: str, payload: CreateExperimentRequest) -> ExperimentResponse:
-        project = await self.projects.require_owned(payload.project_id, owner_id)
-        if project.status not in {"ready", "warning"}:
-            raise AppError(409, "ANALYSIS_NOT_READY", "Project analysis must finish before creating an experiment")
-        available = {item.id for item in await self._list_functions(project.id)}
-        if missing := set(payload.target_function_ids) - available:
-            raise AppError(
-                422, "UNKNOWN_TARGET_FUNCTION", f"Selected functions were not found: {', '.join(sorted(missing))}"
+        projects = [await self.projects.require_owned(project_id, owner_id) for project_id in payload.project_ids]
+        if any(project.status not in {"ready", "warning"} for project in projects):
+            raise AppError(409, "ANALYSIS_NOT_READY", "Every project must finish analysis first")
+        snapshots = []
+        available: dict[str, TargetReference] = {}
+        used_runner_names: set[str] = set()
+        for index, project in enumerate(projects):
+            runner_project = self._runner_project_name(project, index, used_runner_names)
+            used_runner_names.add(runner_project)
+            snapshots.append(
+                ProjectSnapshot(
+                    project_id=project.id,
+                    name=project.name,
+                    commit=project.commit,
+                    source_directory=project.settings.runtime.source_directory,
+                    test_directory=project.settings.tests.test_directory,
+                    runner_project=runner_project,
+                )
             )
+            for function in await self._list_functions(project.id):
+                if function.status != "Valid":
+                    continue
+                target = TargetReference(
+                    project_id=project.id,
+                    function_id=function.id,
+                    project=runner_project,
+                    source_file=function.file,
+                    symbol=function.qualified_name,
+                    statements=function.statements,
+                    branches=function.branches,
+                    loc=function.loc,
+                )
+                available[target.key] = target
+        if len(available) < 3:
+            raise AppError(422, "DATASET_TOO_SMALL", "At least three valid functions are required")
+        try:
+            if payload.sampling_method == SamplingMethod.MANUAL:
+                selected, dataset_splits = validate_manual_splits(payload.manual_splits or {}, available)
+            else:
+                selected = select_targets(
+                    available.values(), payload.sampling_method, payload.random_seed, payload.max_targets
+                )
+                dataset_splits = split_targets(selected, payload.split_percentages, payload.random_seed)
+        except ValueError as exc:
+            raise AppError(422, "INVALID_EXPERIMENT_DATASET", str(exc)) from exc
+        if not all(dataset_splits[name] for name in ("train", "validation", "test")):
+            raise AppError(422, "DATASET_SPLIT_EMPTY", "Train, validation, and test must all be non-empty")
         now = datetime.now(UTC)
-        dataset_splits = split_targets(payload.target_function_ids)
         item = ExperimentRecord(
             id=new_id(),
             owner_id=owner_id,
-            **payload.model_dump(),
+            project_id=projects[0].id,
+            project_ids=[project.id for project in projects],
+            project_snapshots=snapshots,
+            name=payload.name,
+            target_function_ids=[target.key for target in selected],
+            targets=selected,
+            sampling_method=payload.sampling_method,
+            max_targets=payload.max_targets,
             dataset_splits=dataset_splits,
-            optimization_eligible=all(dataset_splits[name] for name in ("train", "validation", "test")),
+            split_percentages=payload.split_percentages,
+            split_seed=payload.random_seed,
+            settings=payload.settings,
+            optimization_eligible=True,
             status=ExperimentStatus.DRAFT,
             created_at=now,
             updated_at=now,
@@ -107,6 +148,21 @@ class ExperimentService:
             items=[ExperimentResponse.model_validate(item) for item in items],
             total=len(items),
         )
+
+    async def delete(self, experiment_id: str, owner_id: str) -> None:
+        item = await self._owned(experiment_id, owner_id)
+        active = {
+            ExperimentStatus.BASELINE_QUEUED,
+            ExperimentStatus.BASELINE_RUNNING,
+            ExperimentStatus.OPTIMIZATION_QUEUED,
+            ExperimentStatus.OPTIMIZING,
+            ExperimentStatus.CANDIDATE_EVALUATING,
+            ExperimentStatus.COMPARISON_QUEUED,
+            ExperimentStatus.COMPARING,
+        }
+        if item.status in active:
+            raise AppError(409, "EXPERIMENT_ACTIVE", "A running experiment cannot be deleted")
+        await self.repository.delete(item.id)
 
     async def request_baseline(self, experiment_id: str, owner_id: str) -> BaselineRunResponse:
         item = await self._owned(experiment_id, owner_id)
@@ -166,18 +222,28 @@ class ExperimentService:
         try:
             if item is None or self.executor is None:
                 raise RuntimeError("Baseline sandbox is not configured")
-            project = await self.projects.require_owned(item.project_id, item.owner_id)
-            selected = [await self._get_function(project.id, function_id) for function_id in item.target_function_ids]
-            if any(function is None for function in selected):
-                raise RuntimeError("A selected function is no longer available")
             prompt = baseline_prompt()
-            result = await self.executor.execute(
-                await self._read_project_archive(project),
-                project.settings.runtime.source_directory,
-                [function.qualified_name for function in selected if function],
-                prompt,
-            )
-            artifact_objects = {}
+            targets_by_project: dict[str, list[TargetReference]] = {}
+            for target in item.targets:
+                targets_by_project.setdefault(target.project_id, []).append(target)
+            executions = []
+            for snapshot in item.project_snapshots:
+                project_targets = targets_by_project.get(snapshot.project_id, [])
+                if not project_targets:
+                    continue
+                project = await self.projects.require_owned(snapshot.project_id, item.owner_id)
+                execution = await self.executor.execute(
+                    await self._read_project_archive(project),
+                    snapshot.source_directory,
+                    [target.symbol for target in project_targets],
+                    prompt,
+                    item.settings,
+                )
+                executions.append((snapshot, project_targets, execution))
+            if not executions:
+                raise RuntimeError("No baseline targets are available")
+            artifact_objects: dict[str, str] = {}
+            target_metrics: dict[str, dict] = {}
             content_types = {
                 "coverage_after.json": "application/json",
                 "prompt.json": "application/json",
@@ -185,10 +251,15 @@ class ExperimentService:
                 "generated_tests.zip": "application/zip",
                 "target_coverage.json": "application/json",
             }
-            for name, content in result.artifacts.items():
-                object_name = f"artifacts/{item.owner_id}/{item.project_id}/{item.id}/{run.id}/{name}"
-                await self.storage.write(object_name, content, content_types.get(name, "text/plain"))
-                artifact_objects[name] = object_name
+            for snapshot, project_targets, execution in executions:
+                for target in project_targets:
+                    target_metrics[target.key] = execution.target_metrics.get(target.symbol, {})
+                for name, content in execution.artifacts.items():
+                    artifact_name = f"{snapshot.runner_project}__{name}"
+                    object_name = f"artifacts/{item.owner_id}/{item.id}/{run.id}/{artifact_name}"
+                    await self.storage.write(object_name, content, content_types.get(name, "text/plain"))
+                    artifact_objects[artifact_name] = object_name
+            statement, branch, score = self._aggregate_target_metrics(target_metrics)
             (
                 run.status,
                 run.coverage_score,
@@ -200,12 +271,12 @@ class ExperimentService:
                 run.finished_at,
             ) = (
                 ExperimentStatus.BASELINE_SUCCEEDED,
-                result.coverage_score,
-                result.statement_coverage,
-                result.branch_coverage,
+                score,
+                statement,
+                branch,
                 prompt.digest(),
                 artifact_objects,
-                result.target_metrics,
+                target_metrics,
                 datetime.now(UTC),
             )
             item.status, item.updated_at = ExperimentStatus.BASELINE_SUCCEEDED, run.finished_at
@@ -294,76 +365,52 @@ class ExperimentService:
         await self.repository.save_optimization_run(run)
         item = await self.repository.get(run.experiment_id)
         try:
-            if item is None or self.executor is None:
-                raise RuntimeError("Optimization sandbox is not configured")
-            if not self.reflection_model:
-                raise RuntimeError("OPTIMIZE_MODEL is not configured")
-            if (
-                not self.reflection_model.startswith(("vertex_ai/", "gemini/"))
-                or self.reflection_model not in self.allowed_reflection_models
-            ):
-                raise RuntimeError("OPTIMIZE_MODEL is not in the configured Gemini/Vertex allowlist")
+            if item is None or self.cloud_optimizer is None:
+                raise RuntimeError("Cloud GEPA optimizer is not configured")
             baseline_run = await self.repository.get_run(item.baseline_run_id or "")
             parent = baseline_prompt()
             if baseline_run is None or baseline_run.prompt_digest != parent.digest():
                 raise RuntimeError("Baseline prompt version is unavailable or has changed")
-            project = await self.projects.require_owned(item.project_id, item.owner_id)
-            functions = {
-                function_id: await self._get_function(project.id, function_id)
-                for function_id in item.target_function_ids
-            }
-            if any(function is None for function in functions.values()):
-                raise RuntimeError("A selected function is no longer available")
-
+            references = {target.key: target for target in item.targets}
+            if set(item.target_function_ids) != set(references):
+                raise RuntimeError("The immutable target snapshot is incomplete")
             targets = {
                 split: [
                     OptimizationTarget(
-                        id=function_id,
-                        symbol=functions[function_id].qualified_name,
-                        source=functions[function_id].source,
+                        id=target_key,
+                        project=references[target_key].project,
+                        symbol=references[target_key].symbol,
+                        source=(
+                            await self._require_target_source(references[target_key], item.owner_id)
+                        ),
                         split=split,
-                        source_file=getattr(functions[function_id], "file", ""),
+                        source_file=references[target_key].source_file,
                     )
-                    for function_id in item.dataset_splits[split]
+                    for target_key in item.dataset_splits[split]
                 ]
                 for split in ("train", "validation")
             }
-            archive = await self._read_project_archive(project)
-            if self.cloud_optimizer is not None:
-                holdout = [
-                    OptimizationTarget(
-                        id=function_id,
-                        symbol=functions[function_id].qualified_name,
-                        source=functions[function_id].source,
-                        split="test",
-                        source_file=getattr(functions[function_id], "file", ""),
-                    )
-                    for function_id in item.dataset_splits["test"]
-                ]
-                result = await self.cloud_optimizer.optimize(
-                    archive=archive,
-                    source_directory=project.settings.runtime.source_directory,
-                    baseline=parent,
-                    train=targets["train"],
-                    validation=targets["validation"],
-                    holdout=holdout,
-                    reflection_model=self.reflection_model,
-                    max_metric_calls=self.max_metric_calls,
+            holdout = [
+                OptimizationTarget(
+                    id=target_key,
+                    project=references[target_key].project,
+                    symbol=references[target_key].symbol,
+                    source=await self._require_target_source(references[target_key], item.owner_id),
+                    split="test",
+                    source_file=references[target_key].source_file,
                 )
-            else:
-                optimize = partial(
-                    optimize_prompt,
-                    executor=self.executor,
-                    archive=archive,
-                    source_directory=project.settings.runtime.source_directory,
-                    baseline=parent,
-                    train=targets["train"],
-                    validation=targets["validation"],
-                    holdout=None,
-                    reflection_model=self.reflection_model,
-                    max_metric_calls=self.max_metric_calls,
-                )
-                result = await asyncio.to_thread(optimize)
+                for target_key in item.dataset_splits["test"]
+            ]
+            archive, project_layouts = await self._build_cloud_archive(item)
+            result = await self.cloud_optimizer.optimize(
+                archive=archive,
+                project_layouts=project_layouts,
+                baseline=parent,
+                train=targets["train"],
+                validation=targets["validation"],
+                holdout=holdout,
+                settings=item.settings,
+            )
             artifact_payloads = {
                 "candidate_prompt.json": (result.candidate.as_json().encode(), "application/json"),
                 "gepa_result.json": (
@@ -373,7 +420,7 @@ class ExperimentService:
             }
             artifact_objects = {}
             for name, (content, content_type) in artifact_payloads.items():
-                object_name = f"artifacts/{item.owner_id}/{item.project_id}/{item.id}/{run.id}/{name}"
+                object_name = f"artifacts/{item.owner_id}/{item.id}/{run.id}/{name}"
                 await self.storage.write(object_name, content, content_type)
                 artifact_objects[name] = object_name
             run.status = ExperimentStatus.OPTIMIZATION_SUCCEEDED
@@ -383,6 +430,7 @@ class ExperimentService:
             run.candidate_validation_score = result.score
             run.candidate_count = result.candidate_count
             run.metric_calls = result.metric_calls
+            run.final_validation = result.gepa_result.get("final_validation", {})
             run.artifact_objects = artifact_objects
             run.finished_at = datetime.now(UTC)
             item.status = ExperimentStatus.OPTIMIZATION_SUCCEEDED
@@ -422,7 +470,7 @@ class ExperimentService:
             baseline_prompt_digest=optimization.parent_prompt_digest,
             candidate_prompt_digest=optimization.candidate_prompt_digest,
             test_target_ids=list(item.dataset_splits.get("test", [])),
-            replicate_count=self.final_evaluation_replicates,
+            replicate_count=item.settings.evaluation_replicates,
             created_at=now,
         )
         if not run.test_target_ids:
@@ -473,64 +521,47 @@ class ExperimentService:
         await self.repository.save_comparison_run(run)
         item = await self.repository.get(run.experiment_id)
         try:
-            if item is None or self.executor is None:
-                raise RuntimeError("Comparison sandbox is not configured")
+            if item is None:
+                raise RuntimeError("Experiment is unavailable")
             optimization = await self.repository.get_optimization_run(run.optimization_run_id)
             if optimization is None or not optimization.candidate_prompt:
                 raise RuntimeError("The locked candidate prompt is unavailable")
-            baseline = baseline_prompt()
             candidate = PromptBundle.from_candidate(optimization.candidate_prompt)
-            if baseline.digest() != run.baseline_prompt_digest:
-                raise RuntimeError("Baseline prompt digest changed before final evaluation")
             if candidate.digest() != run.candidate_prompt_digest:
                 raise RuntimeError("Candidate prompt digest changed before final evaluation")
-            project = await self.projects.require_owned(item.project_id, item.owner_id)
-            functions = [await self._get_function(project.id, function_id) for function_id in run.test_target_ids]
-            if any(function is None for function in functions):
-                raise RuntimeError("A locked test function is no longer available")
-            targets = [
-                OptimizationTarget(
-                    id=function.id,
-                    symbol=function.qualified_name,
-                    source=function.source,
-                    split="test",
-                    source_file=getattr(function, "file", ""),
-                )
-                for function in functions
-                if function
-            ]
-            comparison = await compare_prompts(
-                executor=self.executor,
-                archive=await self._read_project_archive(project),
-                source_directory=project.settings.runtime.source_directory,
-                targets=targets,
-                baseline=baseline,
-                candidate=candidate,
-                replicates=run.replicate_count,
+            report = optimization.final_validation
+            if not report:
+                raise RuntimeError("Cloud GEPA final validation is unavailable")
+            baseline_metrics = self._comparison_metrics(report.get("baseline_aggregate_coverage"))
+            candidate_metrics = self._comparison_metrics(report.get("optimized_aggregate_coverage"))
+            absolute_gain = report.get("absolute_gain")
+            promoted = bool(report.get("promoted"))
+            baseline_score = baseline_metrics.get("score")
+            relative_gain = (
+                float(absolute_gain) / float(baseline_score)
+                if absolute_gain is not None and baseline_score
+                else None
             )
-            report = {
-                "protocol_version": 1,
-                "baseline_prompt_digest": run.baseline_prompt_digest,
-                "candidate_prompt_digest": run.candidate_prompt_digest,
-                "test_target_ids": run.test_target_ids,
-                "replicate_count": run.replicate_count,
-                **comparison.as_dict(),
-            }
-            object_name = f"artifacts/{item.owner_id}/{item.project_id}/{item.id}/{run.id}/final_validation.json"
+            reason = (
+                "Candidate strictly improved paired coverage on the locked holdout"
+                if promoted
+                else report.get("skip_reason") or "Candidate did not strictly improve the locked holdout"
+            )
+            object_name = f"artifacts/{item.owner_id}/{item.id}/{run.id}/final_validation.json"
             await self.storage.write(
                 object_name,
                 json.dumps(report, ensure_ascii=False, indent=2).encode(),
                 "application/json",
             )
-            run.baseline_metrics = comparison.baseline
-            run.candidate_metrics = comparison.candidate
-            run.absolute_gain = comparison.absolute_gain
-            run.relative_gain = comparison.relative_gain
-            run.promotion_eligible = comparison.promotion_eligible
-            run.decision_reason = comparison.decision_reason
+            run.baseline_metrics = baseline_metrics
+            run.candidate_metrics = candidate_metrics
+            run.absolute_gain = absolute_gain
+            run.relative_gain = relative_gain
+            run.promotion_eligible = promoted
+            run.decision_reason = reason
             run.artifact_objects = {"final_validation.json": object_name}
             run.finished_at = datetime.now(UTC)
-            if comparison.promotion_eligible:
+            if promoted:
                 version = PromptVersionRecord(
                     id=new_id(),
                     experiment_id=item.id,
@@ -646,3 +677,67 @@ class ExperimentService:
         if self.samples and self.samples.contains(project.id):
             return self.samples.archive(project.id)
         return await self.storage.read(project.object_name)
+
+    @staticmethod
+    def _runner_project_name(project, index: int, used: set[str]) -> str:
+        base = re.sub(r"[^A-Za-z0-9_.-]+", "-", project.name.lower()).strip(".-") or f"project-{index + 1}"
+        candidate = base
+        suffix = 2
+        while candidate in used:
+            candidate = f"{base}-{suffix}"
+            suffix += 1
+        return candidate
+
+    async def _require_target_source(self, target: TargetReference, owner_id: str) -> str:
+        await self.projects.require_owned(target.project_id, owner_id)
+        function = await self._get_function(target.project_id, target.function_id)
+        if function is None:
+            raise RuntimeError(f"Target is no longer available: {target.key}")
+        return function.source
+
+    async def _build_cloud_archive(self, item: ExperimentRecord) -> tuple[bytes, dict[str, dict[str, str]]]:
+        output = io.BytesIO()
+        layouts: dict[str, dict[str, str]] = {}
+        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as destination:
+            for snapshot in item.project_snapshots:
+                project = await self.projects.require_owned(snapshot.project_id, item.owner_id)
+                archive = await self._read_project_archive(project)
+                with zipfile.ZipFile(io.BytesIO(archive)) as source:
+                    for entry in source.infolist():
+                        if entry.is_dir():
+                            continue
+                        normalized = entry.filename.replace("\\", "/").lstrip("/")
+                        if ".." in normalized.split("/"):
+                            raise RuntimeError("Project archive contains an unsafe path")
+                        destination.writestr(f"projects/{snapshot.runner_project}/{normalized}", source.read(entry))
+                root = f"projects/{snapshot.runner_project}"
+                layouts[snapshot.runner_project] = {
+                    "package_dir": f"{root}/{snapshot.source_directory.strip('/')}",
+                    "tests_dir": f"{root}/{snapshot.test_directory.strip('/')}",
+                }
+        return output.getvalue(), layouts
+
+    @staticmethod
+    def _aggregate_target_metrics(metrics: dict[str, dict]) -> tuple[float | None, float | None, float]:
+        valid = [metric for metric in metrics.values() if metric.get("valid")]
+        covered_statements = sum(int(metric.get("covered_statements", 0)) for metric in valid)
+        statements = sum(int(metric.get("num_statements", 0)) for metric in valid)
+        covered_branches = sum(int(metric.get("covered_branches", 0)) for metric in valid)
+        branches = sum(int(metric.get("num_branches", 0)) for metric in valid)
+        statement = covered_statements / statements if statements else None
+        branch = covered_branches / branches if branches else None
+        score = statement if branch is None else 0.4 * (statement or 0.0) + 0.6 * branch
+        return statement, branch, score or 0.0
+
+    @staticmethod
+    def _comparison_metrics(coverage: dict | None) -> dict:
+        coverage = coverage or {}
+        return {
+            "score": coverage.get("score"),
+            "statement_coverage": coverage.get("statement_coverage"),
+            "branch_coverage": coverage.get("branch_coverage"),
+            "pass_rate": coverage.get("pass_rate"),
+            "sample_count": coverage.get("sample_count"),
+            "timeout_count": coverage.get("timeout_count"),
+            "flaky_targets": coverage.get("flaky_targets", []),
+        }

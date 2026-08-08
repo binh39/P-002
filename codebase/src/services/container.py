@@ -165,22 +165,15 @@ def build_services(settings: Settings) -> ServiceContainer:
                 f"{settings.cloud_run_gepa_job}"
             ),
             timeout_seconds=settings.cloud_run_gepa_timeout_seconds,
-            max_concurrency=settings.gepa_max_concurrency,
-            repeat_tests=settings.gepa_repeat_tests,
-            evaluation_replicates=settings.gepa_evaluation_replicates,
         )
     experiments = ExperimentService(
         experiment_repository,
         projects,
         function_repository,
         storage,
-        executor,
-        settings.optimize_model,
-        settings.gepa_max_metric_calls,
-        settings.optimize_model_allowlist_values,
-        settings.final_evaluation_replicates,
-        cloud_optimizer,
-        samples,
+        executor=executor,
+        cloud_optimizer=cloud_optimizer,
+        samples=samples,
     )
     if settings.baseline_dispatcher == "cloud_tasks":
         experiments.set_dispatcher(

@@ -32,6 +32,12 @@ async def list_experiments(user: CurrentUser, request: Request):
     return await request.app.state.services.experiments.list(user.uid)
 
 
+@router.delete("/{experiment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_experiment(experiment_id: str, user: CurrentUser, request: Request):
+    await request.app.state.services.experiments.delete(experiment_id, user.uid)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post("/{experiment_id}/runs", response_model=BaselineRunResponse, status_code=status.HTTP_202_ACCEPTED)
 async def request_baseline(experiment_id: str, user: CurrentUser, request: Request):
     return await request.app.state.services.experiments.request_baseline(experiment_id, user.uid)

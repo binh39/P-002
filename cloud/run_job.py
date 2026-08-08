@@ -80,12 +80,15 @@ def main() -> int:
     parser.add_argument("--source-object")
     parser.add_argument("--dataset-object")
     parser.add_argument("--prompt-object")
-    parser.add_argument("--source-directory")
-    parser.add_argument("--tests-directory", default="tests")
+    parser.add_argument("--project-layouts-object")
     parser.add_argument("--metric-calls", type=int, default=30)
     parser.add_argument("--evaluation-replicates", type=int, default=1)
     parser.add_argument("--max-concurrency", type=int, default=10)
     parser.add_argument("--repeat-tests", type=int, default=2)
+    parser.add_argument("--max-attempts", type=int, default=3)
+    parser.add_argument("--rate-limit", type=int)
+    parser.add_argument("--pytest-args", default="")
+    parser.add_argument("--reflection-temperature", type=float, default=0.7)
     parser.add_argument("--max-files", type=int, default=10_000)
     parser.add_argument("--max-uncompressed-bytes", type=int, default=100 * 1024 * 1024)
     parser.add_argument("cli_args", nargs=argparse.REMAINDER)
@@ -94,10 +97,15 @@ def main() -> int:
     if cli_args and cli_args[0] == "--":
         cli_args = cli_args[1:]
 
-    dynamic_values = (args.source_object, args.dataset_object, args.prompt_object, args.source_directory)
+    dynamic_values = (
+        args.source_object,
+        args.dataset_object,
+        args.prompt_object,
+        args.project_layouts_object,
+    )
     dynamic_mode = any(dynamic_values)
     if dynamic_mode and not all(dynamic_values):
-        parser.error("dynamic mode requires source, dataset, prompt, and source-directory")
+        parser.error("dynamic mode requires source, dataset, prompt, and project layouts")
     if dynamic_mode and args.artifacts_name.strip("/").startswith("prompt_optimization_v3"):
         parser.error("dynamic web runs may not write to the protected prompt_optimization_v3 prefix")
 
@@ -116,18 +124,24 @@ def main() -> int:
             source_archive = temporary_root / "source.zip"
             dataset = temporary_root / "dataset.jsonl"
             prompt = temporary_root / "prompt.json"
+            layouts = temporary_root / "project-layouts.json"
             _download_object(args.bucket, args.source_object, source_archive)
             _download_object(args.bucket, args.dataset_object, dataset)
             _download_object(args.bucket, args.prompt_object, prompt)
+            _download_object(args.bucket, args.project_layouts_object, layouts)
             project.mkdir()
             _extract_archive(source_archive.read_bytes(), project, args.max_files, args.max_uncompressed_bytes)
-            package_dir = (project / args.source_directory).resolve()
-            tests_dir = (project / args.tests_directory).resolve()
-            if project not in package_dir.parents or not package_dir.is_dir():
-                raise RuntimeError("Configured source directory is absent from the archive")
-            if project not in tests_dir.parents:
-                raise RuntimeError("Configured tests directory escapes the project archive")
-            tests_dir.mkdir(parents=True, exist_ok=True)
+            layout_values = json.loads(layouts.read_text(encoding="utf-8"))
+            if not layout_values:
+                raise RuntimeError("At least one project layout is required")
+            first = next(iter(layout_values.values()))
+            package_dir = (project / first["package_dir"]).resolve()
+            tests_dir = (project / first["tests_dir"]).resolve()
+            for value in layout_values.values():
+                for field in ("package_dir", "tests_dir"):
+                    path = (project / value[field]).resolve()
+                    if project not in path.parents or not path.is_dir():
+                        raise RuntimeError(f"Configured {field} is absent from the archive")
             cli_args = [
                 "--project-root",
                 str(project),
@@ -135,20 +149,34 @@ def main() -> int:
                 str(package_dir),
                 "--tests-dir",
                 str(tests_dir),
+                "--project-layouts",
+                str(layouts),
+                "--max-attempts",
+                str(args.max_attempts),
                 "--max-concurrency",
                 str(args.max_concurrency),
                 "--repeat-tests",
                 str(args.repeat_tests),
-                "optimize",
-                "--dataset",
-                str(dataset),
-                "--prompt",
-                str(prompt),
-                "--max-metric-calls",
-                str(args.metric_calls),
-                "--evaluation-replicates",
-                str(args.evaluation_replicates),
             ]
+            if args.rate_limit:
+                cli_args.extend(["--rate-limit", str(args.rate_limit)])
+            if args.pytest_args:
+                cli_args.extend(["--pytest-args", args.pytest_args])
+            cli_args.extend(
+                [
+                    "optimize",
+                    "--dataset",
+                    str(dataset),
+                    "--prompt",
+                    str(prompt),
+                    "--max-metric-calls",
+                    str(args.metric_calls),
+                    "--evaluation-replicates",
+                    str(args.evaluation_replicates),
+                    "--reflection-temperature",
+                    str(args.reflection_temperature),
+                ]
+            )
 
         command = [
             sys.executable,
@@ -161,7 +189,12 @@ def main() -> int:
         print(f"==> Running: {' '.join(command)}", flush=True)
         return_code = subprocess.call(command)
         local_dir.mkdir(parents=True, exist_ok=True)
-        required = ("optimized_program.json", "prompts/gepa_proposed.json", "final_validation.json")
+        required = (
+            "optimized_program.json",
+            "prompts/gepa_proposed.json",
+            "prompts/gepa_optimized.json",
+            "final_validation.json",
+        )
         missing = [name for name in required if not (local_dir / name).is_file()]
         status = "succeeded" if return_code == 0 and not missing else "failed"
         (local_dir / "job_result.json").write_text(

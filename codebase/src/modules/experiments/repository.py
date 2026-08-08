@@ -15,6 +15,7 @@ class ExperimentRepository(Protocol):
     async def get(self, experiment_id: str) -> ExperimentRecord | None: ...
     async def list_for_owner(self, owner_id: str) -> list[ExperimentRecord]: ...
     async def save(self, item: ExperimentRecord) -> ExperimentRecord: ...
+    async def delete(self, experiment_id: str) -> None: ...
     async def create_run(self, item: BaselineRunRecord) -> BaselineRunRecord: ...
     async def get_run(self, run_id: str) -> BaselineRunRecord | None: ...
     async def save_run(self, item: BaselineRunRecord) -> BaselineRunRecord: ...
@@ -57,6 +58,19 @@ class InMemoryExperimentRepository:
     async def save(self, item):
         self.experiments[item.id] = item
         return item
+
+    async def delete(self, experiment_id):
+        self.experiments.pop(experiment_id, None)
+        self.runs = {key: item for key, item in self.runs.items() if item.experiment_id != experiment_id}
+        self.optimization_runs = {
+            key: item for key, item in self.optimization_runs.items() if item.experiment_id != experiment_id
+        }
+        self.comparison_runs = {
+            key: item for key, item in self.comparison_runs.items() if item.experiment_id != experiment_id
+        }
+        self.prompt_versions = {
+            key: item for key, item in self.prompt_versions.items() if item.experiment_id != experiment_id
+        }
 
     async def create_run(self, item):
         self.runs[item.id] = item
@@ -151,6 +165,26 @@ class FirestoreExperimentRepository:
     async def save(self, item):
         await self._experiments().document(item.id).set(item.model_dump(mode="python"))
         return item
+
+    async def delete(self, experiment_id):
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        references = [self._experiments().document(experiment_id)]
+        for collection in (
+            self._runs(),
+            self._optimization_runs(),
+            self._comparison_runs(),
+            self._prompt_versions(),
+        ):
+            snapshots = collection.where(
+                filter=FieldFilter("experiment_id", "==", experiment_id)
+            ).stream()
+            references.extend([snapshot.reference async for snapshot in snapshots])
+        for offset in range(0, len(references), 400):
+            batch = self.client.batch()
+            for reference in references[offset : offset + 400]:
+                batch.delete(reference)
+            await batch.commit()
 
     async def create_run(self, item):
         await self._runs().document(item.id).create(item.model_dump(mode="python"))

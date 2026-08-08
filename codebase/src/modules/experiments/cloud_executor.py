@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from .executor import BaselineExecution
 from .prompts import PromptBundle
+from .schemas import ExperimentSettings
 
 
 class CloudRunJobCoverUpExecutor:
@@ -21,9 +22,15 @@ class CloudRunJobCoverUpExecutor:
         self.network_mode = "cloud-run-job"
 
     async def execute(
-        self, archive: bytes, source_directory: str, symbols: list[str], prompt: PromptBundle
+        self,
+        archive: bytes,
+        source_directory: str,
+        symbols: list[str],
+        prompt: PromptBundle,
+        settings: ExperimentSettings | None = None,
     ) -> BaselineExecution:
         prompt.validate()
+        settings = settings or ExperimentSettings()
         execution_id = uuid4().hex
         prefix = f"runner-jobs/{execution_id}"
         spec = {
@@ -31,6 +38,7 @@ class CloudRunJobCoverUpExecutor:
             "source_directory": source_directory,
             "symbols": symbols,
             "prompt_digest": prompt.digest(),
+            "settings": settings.model_dump(),
         }
         await self.storage.write(f"{prefix}/source.zip", archive, "application/zip")
         await self.storage.write(f"{prefix}/prompt.json", prompt.as_json().encode(), "application/json")
@@ -47,6 +55,7 @@ class CloudRunJobCoverUpExecutor:
                         "env": [
                             {"name": "PROMPTOPT_JOB_BUCKET", "value": self.bucket},
                             {"name": "PROMPTOPT_JOB_PREFIX", "value": prefix},
+                            {"name": "COVERUP_MODEL", "value": settings.coverup_model},
                         ]
                     }
                 ],

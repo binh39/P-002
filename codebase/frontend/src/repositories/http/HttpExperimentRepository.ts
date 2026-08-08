@@ -14,9 +14,26 @@ import type { ExperimentRepository } from "@/repositories/contracts/ExperimentRe
 interface ApiExperiment {
   id: string;
   project_id: string;
+  project_ids: string[];
   name: string;
   target_function_ids: string[];
   dataset_splits: Record<string, string[]>;
+  sampling_method: Experiment["samplingMethod"];
+  max_targets: number | null;
+  split_seed: number;
+  split_percentages: { train: number; validation: number; test: number };
+  settings: {
+    coverup_model: string;
+    optimize_model: string;
+    max_attempts: number;
+    repeat_tests: number;
+    max_concurrency: number;
+    rate_limit: number | null;
+    pytest_args: string;
+    max_metric_calls: number;
+    evaluation_replicates: number;
+    reflection_temperature: number;
+  };
   optimization_eligible: boolean;
   status: ExperimentStatus;
   baseline_run_id: string | null;
@@ -116,9 +133,27 @@ function mapExperiment(item: ApiExperiment): Experiment {
   return {
     id: item.id,
     projectId: item.project_id,
+    projectIds: item.project_ids,
     name: item.name,
     targetFunctionIds: item.target_function_ids,
     datasetSplits: item.dataset_splits,
+    samplingMethod: item.sampling_method,
+    maxTargets: item.max_targets,
+    splitSeed: item.split_seed,
+    splitPercentages: item.split_percentages,
+    settings: {
+      coverupModel: item.settings.coverup_model,
+      optimizeModel: item.settings.optimize_model,
+      maxAttempts: item.settings.max_attempts,
+      repeatTests: item.settings.repeat_tests,
+      maxConcurrency: item.settings.max_concurrency,
+      rateLimit: item.settings.rate_limit,
+      pytestArgs: item.settings.pytest_args,
+      budgetMode: "custom",
+      maxMetricCalls: item.settings.max_metric_calls,
+      evaluationReplicates: item.settings.evaluation_replicates,
+      reflectionTemperature: item.settings.reflection_temperature,
+    },
     optimizationEligible: item.optimization_eligible,
     status: item.status,
     baselineRunId: item.baseline_run_id,
@@ -234,9 +269,25 @@ export class HttpExperimentRepository implements ExperimentRepository {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          project_id: input.projectId,
+          project_ids: input.projectIds,
           name: input.name,
-          target_function_ids: input.targetFunctionIds,
+          sampling_method: input.samplingMethod,
+          max_targets: input.maxTargets,
+          random_seed: input.randomSeed,
+          split_percentages: input.splitPercentages,
+          manual_splits: input.manualSplits,
+          settings: {
+            coverup_model: input.settings.coverupModel,
+            optimize_model: input.settings.optimizeModel,
+            max_attempts: input.settings.maxAttempts,
+            repeat_tests: input.settings.repeatTests,
+            max_concurrency: input.settings.maxConcurrency,
+            rate_limit: input.settings.rateLimit,
+            pytest_args: input.settings.pytestArgs,
+            max_metric_calls: input.settings.maxMetricCalls,
+            evaluation_replicates: input.settings.evaluationReplicates,
+            reflection_temperature: input.settings.reflectionTemperature,
+          },
         }),
       }),
     );

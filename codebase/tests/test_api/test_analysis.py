@@ -15,6 +15,10 @@ def python_archive() -> bytes:
     return left + right
 
 
+def subtract(left, right):
+    return left - right
+
+
 class Calculator:
     async def choose(self, value):
         if value > 0:
@@ -62,7 +66,7 @@ async def test_project_analysis_lifecycle(client):
     project_response = await client.get(f"/api/v1/projects/{project_id}", headers=AUTH_HEADERS)
     project = project_response.json()
     assert project["python_file_count"] == 1
-    assert project["function_count"] == 2
+    assert project["function_count"] == 3
     assert project["statement_count"] >= 5
     assert project["branch_count"] == 1
     assert project["analyzed_at"]
@@ -72,7 +76,7 @@ async def test_project_analysis_lifecycle(client):
         headers=AUTH_HEADERS,
     )
     functions = functions_response.json()
-    assert functions["total"] == 2
+    assert functions["total"] == 3
     method = next(item for item in functions["items"] if item["name"] == "choose")
     assert method["class_name"] == "Calculator"
     assert method["start_line"] < method["end_line"]

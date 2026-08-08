@@ -20,9 +20,15 @@ export type ExperimentStatus =
 export interface Experiment {
   id: string;
   projectId: string;
+  projectIds: string[];
   name: string;
   targetFunctionIds: string[];
   datasetSplits: Record<string, string[]>;
+  samplingMethod: import("@/domain/experimentConfiguration").SamplingMethod;
+  maxTargets: number | null;
+  splitSeed: number;
+  splitPercentages: import("@/domain/experimentConfiguration").DatasetPercentages;
+  settings: import("@/domain/experimentConfiguration").CloudExperimentSettings;
   optimizationEligible: boolean;
   status: ExperimentStatus;
   baselineRunId: string | null;
@@ -34,9 +40,14 @@ export interface Experiment {
 }
 
 export interface CreateExperimentInput {
-  projectId: string;
+  projectIds: string[];
   name: string;
-  targetFunctionIds: string[];
+  samplingMethod: import("@/domain/experimentConfiguration").SamplingMethod;
+  maxTargets: number | null;
+  randomSeed: number;
+  splitPercentages: import("@/domain/experimentConfiguration").DatasetPercentages;
+  manualSplits: Record<string, string[]> | null;
+  settings: import("@/domain/experimentConfiguration").CloudExperimentSettings;
 }
 
 export interface TargetMetric {

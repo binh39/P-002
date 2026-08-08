@@ -43,9 +43,9 @@ async def test_sample_catalog_creates_experiment_without_persisting_projects(cli
         "/api/v1/experiments",
         headers=AUTH_HEADERS,
         json={
-            "project_id": "sample:isort",
-            "name": "Bundled isort experiment",
-            "target_function_ids": [item["id"] for item in functions[:3]],
+                "project_ids": ["sample:isort"],
+                "name": "Bundled isort experiment",
+                "max_targets": 3,
         },
     )
     assert created.status_code == 201
@@ -55,12 +55,13 @@ async def test_sample_catalog_creates_experiment_without_persisting_projects(cli
     captured = {}
 
     class SampleExecutor:
-        async def execute(self, archive, source_directory, symbols, prompt):
+        async def execute(self, archive, source_directory, symbols, prompt, settings):
             captured.update(
                 archive=archive,
                 source_directory=source_directory,
                 symbols=symbols,
                 prompt=prompt,
+                settings=settings,
             )
             return BaselineExecution(0.5, 0.5, 0.5, {}, {})
 

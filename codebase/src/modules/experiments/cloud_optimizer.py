@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from .optimizer import OptimizationResult, OptimizationTarget
 from .prompts import PromptBundle
+from .schemas import ExperimentSettings
 
 
 class CloudRunJobGepaOptimizer:
@@ -22,32 +23,24 @@ class CloudRunJobGepaOptimizer:
         bucket: str,
         job_name: str,
         timeout_seconds: int,
-        max_concurrency: int = 10,
-        repeat_tests: int = 2,
-        evaluation_replicates: int = 1,
     ):
         self.client = client
         self.storage = storage
         self.bucket = bucket
         self.job_name = job_name
         self.timeout_seconds = timeout_seconds
-        self.max_concurrency = max_concurrency
-        self.repeat_tests = repeat_tests
-        self.evaluation_replicates = evaluation_replicates
 
     async def optimize(
         self,
         *,
         archive: bytes,
-        source_directory: str,
+        project_layouts: dict[str, dict[str, str]],
         baseline: PromptBundle,
         train: list[OptimizationTarget],
         validation: list[OptimizationTarget],
         holdout: list[OptimizationTarget] | None,
-        reflection_model: str,
-        max_metric_calls: int,
+        settings: ExperimentSettings,
     ) -> OptimizationResult:
-        del reflection_model  # The deployed job owns its allowlisted Vertex model configuration.
         if not train or not validation:
             raise ValueError("GEPA requires non-empty train and validation splits")
         baseline.validate()
@@ -57,13 +50,14 @@ class CloudRunJobGepaOptimizer:
         source_object = f"{prefix}/inputs/source.zip"
         dataset_object = f"{prefix}/inputs/dataset.jsonl"
         prompt_object = f"{prefix}/inputs/prompt.json"
+        layouts_object = f"{prefix}/inputs/project-layouts.json"
         targets = [*train, *validation, *(holdout or [])]
         if any(not target.source_file for target in targets):
             raise ValueError("Cloud GEPA targets require analyzed source-file paths")
         dataset = "".join(
             json.dumps(
                 {
-                    "project": "uploaded",
+                    "project": target.project,
                     "source_file": target.source_file,
                     "symbol": target.symbol,
                     "split": target.split,
@@ -76,6 +70,11 @@ class CloudRunJobGepaOptimizer:
         await self.storage.write(source_object, archive, "application/zip")
         await self.storage.write(dataset_object, dataset, "application/x-ndjson")
         await self.storage.write(prompt_object, baseline.as_json().encode(), "application/json")
+        await self.storage.write(
+            layouts_object,
+            json.dumps(project_layouts, separators=(",", ":")).encode(),
+            "application/json",
+        )
 
         args = [
             "-m",
@@ -90,21 +89,37 @@ class CloudRunJobGepaOptimizer:
             dataset_object,
             "--prompt-object",
             prompt_object,
-            "--source-directory",
-            source_directory,
+            "--project-layouts-object",
+            layouts_object,
             "--metric-calls",
-            str(max_metric_calls),
+            str(settings.max_metric_calls),
             "--evaluation-replicates",
-            str(self.evaluation_replicates),
+            str(settings.evaluation_replicates),
             "--max-concurrency",
-            str(self.max_concurrency),
+            str(settings.max_concurrency),
             "--repeat-tests",
-            str(self.repeat_tests),
+            str(settings.repeat_tests),
+            "--max-attempts",
+            str(settings.max_attempts),
+            "--reflection-temperature",
+            str(settings.reflection_temperature),
         ]
+        if settings.rate_limit:
+            args.extend(["--rate-limit", str(settings.rate_limit)])
+        if settings.pytest_args:
+            args.extend(["--pytest-args", settings.pytest_args])
         request = {
             "name": self.job_name,
             "overrides": {
-                "container_overrides": [{"args": args}],
+                "container_overrides": [
+                    {
+                        "args": args,
+                        "env": [
+                            {"name": "COVERUP_MODEL", "value": settings.coverup_model},
+                            {"name": "OPTIMIZE_MODEL", "value": settings.optimize_model},
+                        ],
+                    }
+                ],
                 "task_count": 1,
                 "timeout": f"{self.timeout_seconds}s",
             },
@@ -134,7 +149,10 @@ class CloudRunJobGepaOptimizer:
 
         program = json.loads((await self.storage.read(f"{artifacts_prefix}/optimized_program.json")).decode())
         final_validation = json.loads((await self.storage.read(f"{artifacts_prefix}/final_validation.json")).decode())
-        candidate = PromptBundle.from_candidate(program["best_candidate"])
+        production_prompt = json.loads(
+            (await self.storage.read(f"{artifacts_prefix}/prompts/gepa_optimized.json")).decode()
+        )
+        candidate = PromptBundle.from_candidate(production_prompt)
         candidate.validate()
         scores = [float(value) for value in program.get("validation_scores", [])]
         best_index = int(program.get("best_index", 0))

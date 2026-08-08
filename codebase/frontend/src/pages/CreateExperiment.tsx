@@ -20,10 +20,18 @@ import type { PythonProject } from "@/domain/projects";
 
 const steps = ["Projects", "Functions", "Dataset", "Settings", "Review"];
 const splitNames: DatasetSplit[] = ["train", "validation", "test"];
-const maximumTargetsPerApiExperiment = 50;
-
+const geminiModels = [
+  "vertex_ai/gemini-2.5-flash",
+  "vertex_ai/gemini-2.5-flash-lite",
+  "vertex_ai/gemini-2.5-pro",
+  "vertex_ai/gemini-3.1-flash-lite",
+  "vertex_ai/gemini-3.1-pro-preview",
+  "vertex_ai/gemini-3.5-flash",
+  "vertex_ai/gemini-3.5-flash-lite",
+  "vertex_ai/gemini-3.6-flash",
+] as const;
 function projectFunctionKey(projectId: string, functionId: string) {
-  return `${projectId}:${functionId}`;
+  return `${projectId}::${functionId}`;
 }
 
 function formatSamplingMethod(method: SamplingMethod) {
@@ -42,7 +50,7 @@ export default function CreateExperiment() {
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const [experimentName, setExperimentName] = useState("");
   const [samplingMethod, setSamplingMethod] = useState<SamplingMethod>("random");
-  const [sampleLimit, setSampleLimit] = useState(12);
+  const [sampleLimit, setSampleLimit] = useState<number | null>(null);
   const [randomSeed, setRandomSeed] = useState(7);
   const [manualAssignments, setManualAssignments] = useState<Record<string, DatasetSplit>>({});
   const [percentages, setPercentages] = useState<DatasetPercentages>(defaultDatasetPercentages);
@@ -90,7 +98,7 @@ export default function CreateExperiment() {
     return selectCandidateFunctions(
       validFunctions,
       samplingMethod,
-      Math.min(sampleLimit, validFunctions.length),
+      sampleLimit === null ? null : Math.min(sampleLimit, validFunctions.length),
       randomSeed,
     );
   }, [manualAssignments, randomSeed, sampleLimit, samplingMethod, validFunctions]);
@@ -112,7 +120,7 @@ export default function CreateExperiment() {
     selectedFunctions.length >= 3 &&
     Number.isInteger(randomSeed) &&
     randomSeed >= 0 &&
-    (samplingMethod === "manual" || (Number.isInteger(sampleLimit) && sampleLimit >= 3));
+    (samplingMethod === "manual" || sampleLimit === null || (Number.isInteger(sampleLimit) && sampleLimit >= 3));
   const datasetValid =
     percentagesAreValid(percentages) && splitNames.every((name) => dataset[name].length > 0);
   const settingsValid =
@@ -124,7 +132,6 @@ export default function CreateExperiment() {
     settings.maxConcurrency <= 32 &&
     settings.maxMetricCalls >= 3 &&
     settings.evaluationReplicates >= 1 &&
-    settings.finalEvaluationReplicates >= 1 &&
     settings.reflectionTemperature >= 0 &&
     settings.reflectionTemperature <= 2;
   const canContinue = [
@@ -135,24 +142,20 @@ export default function CreateExperiment() {
     false,
   ][step];
 
-  // The deployed API still stores one project per experiment and owns Cloud settings globally.
-  // Keep the legacy-compatible path operational without pretending advanced configuration was saved.
-  const apiCompatible =
-    selectedProjectIds.length === 1 &&
-    selectedFunctions.length <= maximumTargetsPerApiExperiment &&
-    percentages.train === 60 &&
-    percentages.validation === 20 &&
-    percentages.test === 20 &&
-    randomSeed === 7 &&
-    JSON.stringify(settings) === JSON.stringify(defaultCloudSettings);
-
   const startBaseline = useMutation({
     mutationFn: async () => {
-      const projectId = selectedProjectIds[0];
       const experiment = await experiments.create({
-        projectId,
+        projectIds: selectedProjectIds,
         name: experimentName.trim(),
-        targetFunctionIds: selectedFunctions.map((item) => item.id),
+        samplingMethod,
+        maxTargets: samplingMethod === "manual" ? null : sampleLimit,
+        randomSeed,
+        splitPercentages: percentages,
+        manualSplits:
+          samplingMethod === "manual"
+            ? Object.fromEntries(splitNames.map((name) => [name, dataset[name].map((item) => item.key)]))
+            : null,
+        settings,
       });
       return experiments.requestBaseline(experiment.id);
     },
@@ -164,7 +167,7 @@ export default function CreateExperiment() {
       if (current.includes(project.id)) {
         setManualAssignments((assignments) =>
           Object.fromEntries(
-            Object.entries(assignments).filter(([key]) => !key.startsWith(`${project.id}:`)),
+            Object.entries(assignments).filter(([key]) => !key.startsWith(`${project.id}::`)),
           ),
         );
         return current.filter((id) => id !== project.id);
@@ -263,7 +266,6 @@ export default function CreateExperiment() {
               randomSeed={randomSeed}
               percentages={percentages}
               settings={settings}
-              apiCompatible={apiCompatible}
             />
           )}
         </section>
@@ -309,10 +311,7 @@ export default function CreateExperiment() {
         ) : (
           <button
             className="primary-button"
-            disabled={startBaseline.isPending || !experimentName.trim() || !apiCompatible}
-            title={
-              apiCompatible ? undefined : "The backend configuration API must be upgraded first"
-            }
+            disabled={startBaseline.isPending || !experimentName.trim() || !settingsValid || !datasetValid}
             onClick={() => startBaseline.mutate()}
           >
             {startBaseline.isPending ? "Creating and queueing…" : "Create and run baseline"}
@@ -421,8 +420,8 @@ function FunctionsStep({
   error: unknown;
   samplingMethod: SamplingMethod;
   setSamplingMethod: (method: SamplingMethod) => void;
-  sampleLimit: number;
-  setSampleLimit: (limit: number) => void;
+  sampleLimit: number | null;
+  setSampleLimit: (limit: number | null) => void;
   randomSeed: number;
   setRandomSeed: (seed: number) => void;
   assignments: Record<string, DatasetSplit>;
@@ -492,16 +491,15 @@ function FunctionsStep({
         <>
           <div className="experiment-inline-fields">
             {samplingMethod !== "manual" && (
-              <Field
-                label="Candidate functions"
-                hint={`${functions.length} valid functions available`}
-              >
+              <Field label="Candidate functions" hint={`${functions.length} valid functions available; leave blank to use all.`}>
                 <input
                   type="number"
                   min={3}
-                  max={Math.max(3, functions.length)}
-                  value={sampleLimit}
-                  onChange={(event) => setSampleLimit(Number(event.target.value))}
+                  value={sampleLimit ?? ""}
+                  placeholder="All valid functions"
+                  onChange={(event) =>
+                    setSampleLimit(event.target.value === "" ? null : Number(event.target.value))
+                  }
                 />
               </Field>
             )}
@@ -750,24 +748,21 @@ function SettingsStep({
         </div>
         <div className="settings-form-grid">
           <Field label="COVERUP_MODEL" hint="Generates candidate unit tests.">
-            <input
-              list="experiment-models"
+            <select
               value={settings.coverupModel}
               onChange={(event) => update("coverupModel", event.target.value)}
-            />
+            >
+              {geminiModels.map((model) => <option key={model} value={model}>{model}</option>)}
+            </select>
           </Field>
           <Field label="OPTIMIZE_MODEL" hint="Reflects and proposes prompt changes.">
-            <input
-              list="experiment-models"
+            <select
               value={settings.optimizeModel}
               onChange={(event) => update("optimizeModel", event.target.value)}
-            />
+            >
+              {geminiModels.map((model) => <option key={model} value={model}>{model}</option>)}
+            </select>
           </Field>
-          <datalist id="experiment-models">
-            <option value="vertex_ai/gemini-3.6-flash" />
-            <option value="vertex_ai/gemini-2.5-flash" />
-            <option value="vertex_ai/gemini-2.5-pro" />
-          </datalist>
         </div>
       </section>
       <section className="settings-section">
@@ -868,13 +863,6 @@ function SettingsStep({
             max={10}
             onChange={(value) => update("evaluationReplicates", value)}
           />
-          <NumberField
-            label="Final test replicates"
-            value={settings.finalEvaluationReplicates}
-            min={1}
-            max={10}
-            onChange={(value) => update("finalEvaluationReplicates", value)}
-          />
           <Field label="Reflection temperature" hint="0.7 is recommended for proposal diversity.">
             <input
               type="number"
@@ -959,7 +947,6 @@ function ReviewStep({
   randomSeed,
   percentages,
   settings,
-  apiCompatible,
 }: {
   experimentName: string;
   setExperimentName: (name: string) => void;
@@ -969,7 +956,6 @@ function ReviewStep({
   randomSeed: number;
   percentages: DatasetPercentages;
   settings: CloudExperimentSettings;
-  apiCompatible: boolean;
 }) {
   return (
     <>
@@ -985,16 +971,6 @@ function ReviewStep({
           onChange={(event) => setExperimentName(event.target.value)}
         />
       </Field>
-      {!apiCompatible && (
-        <div className="api-compatibility-warning" role="alert">
-          <strong>Backend contract update required</strong>
-          <p>
-            The current API accepts one project, up to 50 targets, a fixed 60/20/20 split with seed
-            7, and deployed global model settings. This advanced configuration is intentionally not
-            submitted as if it were supported.
-          </p>
-        </div>
-      )}
       <div className="review-grid experiment-review-grid">
         <ReviewCard
           title="Project snapshots"
@@ -1016,8 +992,7 @@ function ReviewStep({
           rows={[
             ["CoverUp", settings.coverupModel],
             ["Optimizer", settings.optimizeModel],
-            ["Replicates", String(settings.evaluationReplicates)],
-            ["Final replicates", String(settings.finalEvaluationReplicates)],
+            ["Evaluation replicates", String(settings.evaluationReplicates)],
           ]}
         />
         <ReviewCard

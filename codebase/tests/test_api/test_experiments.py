@@ -18,16 +18,37 @@ from tests.test_api.test_analysis import AUTH_HEADERS, create_project, python_ar
 async def test_create_experiment_and_queue_baseline(client):
     project_id = await create_project(client, python_archive())
     await client.post(f"/api/v1/projects/{project_id}/analyze", headers=AUTH_HEADERS)
-    functions = (await client.get(f"/api/v1/projects/{project_id}/functions", headers=AUTH_HEADERS)).json()["items"]
 
     created = await client.post(
         "/api/v1/experiments",
         headers=AUTH_HEADERS,
-        json={"project_id": project_id, "name": "Calculator baseline", "target_function_ids": [functions[0]["id"]]},
+        json={
+            "project_ids": [project_id],
+            "name": "Calculator baseline",
+            "max_targets": 3,
+            "random_seed": 91,
+            "split_percentages": {"train": 34, "validation": 33, "test": 33},
+            "settings": {
+                "coverup_model": "vertex_ai/gemini-2.5-flash-lite",
+                "optimize_model": "vertex_ai/gemini-3.5-flash",
+                "max_attempts": 4,
+                "repeat_tests": 3,
+                "max_concurrency": 6,
+                "rate_limit": 12000,
+                "pytest_args": "-m not_slow",
+                "max_metric_calls": 41,
+                "evaluation_replicates": 2,
+                "reflection_temperature": 0.5,
+            },
+        },
     )
     assert created.status_code == 201
     experiment = created.json()
     assert experiment["status"] == "draft"
+    assert experiment["split_seed"] == 91
+    assert experiment["split_percentages"] == {"train": 34, "validation": 33, "test": 33}
+    assert experiment["settings"]["coverup_model"] == "vertex_ai/gemini-2.5-flash-lite"
+    assert experiment["settings"]["optimize_model"] == "vertex_ai/gemini-3.5-flash"
 
     listed = await client.get("/api/v1/experiments", headers=AUTH_HEADERS)
     assert listed.status_code == 200
@@ -45,7 +66,7 @@ async def test_create_experiment_and_queue_baseline(client):
     queued = await client.post(f"/api/v1/experiments/{experiment['id']}/runs", headers=AUTH_HEADERS)
     assert queued.status_code == 202
     run = queued.json()
-    assert run["target_count"] == 1
+    assert run["target_count"] == 3
     # The inline development worker refuses to execute user Python in the API container.
     assert run["status"] == "failed"
     assert run["error_message"] == "Baseline sandbox is not configured"
@@ -59,15 +80,14 @@ async def test_create_experiment_and_queue_baseline(client):
 async def test_download_baseline_artifact_checks_run_manifest(client, app):
     project_id = await create_project(client, python_archive())
     await client.post(f"/api/v1/projects/{project_id}/analyze", headers=AUTH_HEADERS)
-    functions = (await client.get(f"/api/v1/projects/{project_id}/functions", headers=AUTH_HEADERS)).json()["items"]
     experiment = (
         await client.post(
             "/api/v1/experiments",
             headers=AUTH_HEADERS,
             json={
-                "project_id": project_id,
+                "project_ids": [project_id],
                 "name": "Artifact baseline",
-                "target_function_ids": [functions[0]["id"]],
+                "max_targets": 3,
             },
         )
     ).json()
@@ -196,7 +216,7 @@ async def test_experiment_requires_analyzed_project(client):
     response = await client.post(
         "/api/v1/experiments",
         headers=AUTH_HEADERS,
-        json={"project_id": project_id, "name": "Blocked", "target_function_ids": ["missing"]},
+        json={"project_ids": [project_id], "name": "Blocked"},
     )
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "ANALYSIS_NOT_READY"

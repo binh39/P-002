@@ -13,6 +13,7 @@ from pathlib import Path, PurePosixPath
 from src.core.errors import AppError
 
 from .prompts import PromptBundle
+from .schemas import ExperimentSettings
 from .traces import as_jsonl, parse_coverup_log
 
 
@@ -44,12 +45,24 @@ class DockerCoverUpExecutor:
         self.network_mode = network_mode
 
     async def execute(
-        self, archive: bytes, source_directory: str, symbols: list[str], prompt: PromptBundle
+        self,
+        archive: bytes,
+        source_directory: str,
+        symbols: list[str],
+        prompt: PromptBundle,
+        settings: ExperimentSettings | None = None,
     ) -> BaselineExecution:
-        return await asyncio.to_thread(self._execute_sync, archive, source_directory, symbols, prompt)
+        return await asyncio.to_thread(
+            self._execute_sync, archive, source_directory, symbols, prompt, settings or ExperimentSettings()
+        )
 
     def _execute_sync(
-        self, archive: bytes, source_directory: str, symbols: list[str], prompt: PromptBundle
+        self,
+        archive: bytes,
+        source_directory: str,
+        symbols: list[str],
+        prompt: PromptBundle,
+        settings: ExperimentSettings,
     ) -> BaselineExecution:
         prompt.validate()
         with tempfile.TemporaryDirectory(prefix="promptopt-baseline-") as temp:
@@ -105,9 +118,10 @@ class DockerCoverUpExecutor:
                         "GOOGLE_APPLICATION_CREDENTIALS=/var/run/google-credentials.json",
                     ]
                 )
-            for name in ("COVERUP_MODEL", "VERTEXAI_PROJECT", "VERTEXAI_LOCATION", "GOOGLE_API_KEY"):
+            for name in ("VERTEXAI_PROJECT", "VERTEXAI_LOCATION", "GOOGLE_API_KEY"):
                 if value := os.getenv(name):
                     command.extend(["--env", f"{name}={value}"])
+            command.extend(["--env", f"COVERUP_MODEL={settings.coverup_model}"])
             command.extend(["--env", "PROMPTOPT_PROMPT_FILE=/workspace/prompt/prompt.json"])
             command.extend(["--env", f"PROMPTOPT_TARGET_SYMBOLS={json.dumps(symbols)}"])
             command.extend(
@@ -124,16 +138,20 @@ class DockerCoverUpExecutor:
                     "--log-file",
                     "/workspace/artifacts/coverup.log",
                     "--model",
-                    os.environ.get("COVERUP_MODEL", ""),
+                    settings.coverup_model,
                     "--max-attempts",
-                    "3",
+                    str(settings.max_attempts),
                     "--repeat-tests",
-                    "2",
+                    str(settings.repeat_tests),
                     "--max-concurrency",
-                    "1",
+                    str(settings.max_concurrency),
                     "--no-checkpoint",
                 ]
             )
+            if settings.rate_limit:
+                command.extend(["--rate-limit", str(settings.rate_limit)])
+            if settings.pytest_args:
+                command.extend(["--pytest-args", settings.pytest_args])
             try:
                 completed = subprocess.run(
                     command,

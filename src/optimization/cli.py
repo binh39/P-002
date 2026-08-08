@@ -38,6 +38,11 @@ def parser() -> argparse.ArgumentParser:
         ),
     )
     result.add_argument(
+        "--project-layouts",
+        type=Path,
+        help="JSON mapping project names to package_dir/tests_dir paths for web multi-project runs",
+    )
+    result.add_argument(
         "--sample-repos-dir",
         type=Path,
         default=Path("src/sample_repo"),
@@ -170,9 +175,24 @@ def _resolve_project_layouts(
     root: Path,
     targets: list[SymbolTarget],
     sample_repos_dir: Path,
+    project_layouts: Path | None = None,
 ) -> dict[str, ProjectLayout] | None:
     """Resolve per-project package/tests dirs for a multi-project dataset."""
     projects = sorted({target.project for target in targets})
+    if project_layouts is not None:
+        configured_path = _resolve(root, project_layouts)
+        values = json.loads(configured_path.read_text(encoding="utf-8"))
+        missing = sorted(set(projects) - set(values))
+        if missing:
+            raise ValueError(f"Project layouts are missing: {', '.join(missing)}")
+        layouts = {}
+        for project in projects:
+            package = _resolve(root, Path(values[project]["package_dir"])).resolve()
+            tests = _resolve(root, Path(values[project]["tests_dir"])).resolve()
+            if not package.is_dir() or not tests.is_dir():
+                raise FileNotFoundError(f"Configured project layout is incomplete: {project}")
+            layouts[project] = ProjectLayout(package_dir=package, tests_dir=tests)
+        return layouts
     if len(projects) < 2:
         return None
     repos = _resolve(root, sample_repos_dir)
@@ -251,7 +271,7 @@ def evaluate(args: argparse.Namespace) -> None:
     if not targets:
         raise ValueError(f"No targets found for split {args.split!r}")
     projects = _resolve_project_layouts(
-        args.project_root.resolve(), targets, _sample_repos_dir(args)
+        args.project_root.resolve(), targets, _sample_repos_dir(args), getattr(args, "project_layouts", None)
     )
     runner = make_runner(args, projects=projects)
     batch = evaluate_bundle_repeated(
@@ -281,6 +301,7 @@ def tune(args: argparse.Namespace) -> None:
         args.project_root.resolve(),
         [*train, *validation, *holdout],
         _sample_repos_dir(args),
+        getattr(args, "project_layouts", None),
     )
     runner = make_runner(args, projects=projects)
     final_targets = holdout or validation

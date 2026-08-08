@@ -43,6 +43,7 @@ def main() -> int:
                 int(os.getenv("PROMPTOPT_MAX_UNCOMPRESSED_BYTES", str(100 * 1024 * 1024))),
             )
             source_directory = spec["source_directory"]
+            settings = spec.get("settings", {})
             source = (project / source_directory).resolve()
             if project not in source.parents or not source.is_dir():
                 raise RuntimeError("Configured source directory is absent from the archive")
@@ -65,12 +66,22 @@ def main() -> int:
                     "--model",
                     os.environ["COVERUP_MODEL"],
                     "--max-attempts",
-                    "3",
+                    str(settings.get("max_attempts", 3)),
                     "--repeat-tests",
-                    "2",
+                    str(settings.get("repeat_tests", 2)),
                     "--max-concurrency",
-                    "1",
+                    str(settings.get("max_concurrency", 10)),
                     "--no-checkpoint",
+                    *(
+                        ["--rate-limit", str(settings["rate_limit"])]
+                        if settings.get("rate_limit")
+                        else []
+                    ),
+                    *(
+                        ["--pytest-args", settings["pytest_args"]]
+                        if settings.get("pytest_args")
+                        else []
+                    ),
                 ],
                 environment,
                 int(os.getenv("PROMPTOPT_RUNNER_TIMEOUT_SECONDS", "900")),

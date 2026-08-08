@@ -6,6 +6,7 @@ import pytest
 from src.modules.experiments.cloud_optimizer import CloudRunJobGepaOptimizer
 from src.modules.experiments.optimizer import OptimizationTarget
 from src.modules.experiments.prompts import baseline_prompt
+from src.modules.experiments.schemas import ExperimentSettings
 
 
 class FakeStorage:
@@ -47,6 +48,7 @@ class FakeJobsClient:
                 "candidates": [prompt.as_candidate(), candidate],
             },
             "final_validation.json": {"promoted": True, "absolute_gain": 0.5},
+            "prompts/gepa_optimized.json": candidate,
         }
         for name, payload in payloads.items():
             self.storage.objects[f"{prefix}/{name}"] = (json.dumps(payload).encode(), "application/json")
@@ -80,13 +82,16 @@ async def test_cloud_gepa_optimizer_uses_isolated_web_prefix_and_maps_result():
 
     result = await optimizer.optimize(
         archive=b"zip",
-        source_directory="pkg",
+        project_layouts={"uploaded": {"package_dir": "pkg", "tests_dir": "tests"}},
         baseline=baseline_prompt(),
         train=targets["train"],
         validation=targets["validation"],
         holdout=targets["test"],
-        reflection_model="vertex_ai/gemini-3.6-flash",
-        max_metric_calls=30,
+        settings=ExperimentSettings(
+            coverup_model="vertex_ai/gemini-2.5-flash-lite",
+            optimize_model="vertex_ai/gemini-3.5-flash",
+            max_metric_calls=30,
+        ),
     )
 
     request_text = json.dumps(client.request)
@@ -94,6 +99,11 @@ async def test_cloud_gepa_optimizer_uses_isolated_web_prefix_and_maps_result():
     assert "runner-jobs/gepa/" in request_text
     assert client.request["name"].endswith("/promptopt-gepa-runner")
     assert client.thread_id != event_loop_thread
+    environment = client.request["overrides"]["container_overrides"][0]["env"]
+    assert environment == [
+        {"name": "COVERUP_MODEL", "value": "vertex_ai/gemini-2.5-flash-lite"},
+        {"name": "OPTIMIZE_MODEL", "value": "vertex_ai/gemini-3.5-flash"},
+    ]
     assert result.score == 0.7
     assert result.baseline_score == 0.2
     assert result.candidate_count == 2

@@ -25,7 +25,6 @@ export interface CloudExperimentSettings {
   budgetMode: "light" | "medium" | "heavy" | "custom";
   maxMetricCalls: number;
   evaluationReplicates: number;
-  finalEvaluationReplicates: number;
   reflectionTemperature: number;
 }
 
@@ -46,7 +45,6 @@ export const defaultCloudSettings: CloudExperimentSettings = {
   budgetMode: "custom",
   maxMetricCalls: 30,
   evaluationReplicates: 1,
-  finalEvaluationReplicates: 2,
   reflectionTemperature: 0.7,
 };
 
@@ -83,12 +81,13 @@ export function deterministicShuffle<T>(items: T[], seed: number): T[] {
 export function selectCandidateFunctions(
   functions: ExperimentFunction[],
   method: Exclude<SamplingMethod, "manual">,
-  limit: number,
+  limit: number | null,
   seed: number,
 ) {
   const valid = functions.filter((item) => item.status === "Valid");
   const stable = [...valid].sort((left, right) => left.key.localeCompare(right.key));
-  if (method === "random") return deterministicShuffle(stable, seed).slice(0, limit);
+  const selectedCount = limit ?? stable.length;
+  if (method === "random") return deterministicShuffle(stable, seed).slice(0, selectedCount);
 
   const ranked = stable.sort((left, right) => {
     if (method === "most_branches") {
@@ -108,7 +107,7 @@ export function selectCandidateFunctions(
   });
 
   // Ranking chooses the candidate pool. Only then is it shuffled for unbiased splitting.
-  return deterministicShuffle(ranked.slice(0, limit), seed);
+  return deterministicShuffle(ranked.slice(0, selectedCount), seed);
 }
 
 function allocateCounts(total: number, percentages: DatasetPercentages) {

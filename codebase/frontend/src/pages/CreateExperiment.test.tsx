@@ -84,9 +84,11 @@ describe("create experiment wizard", () => {
     await waitFor(() =>
       expect(repositories.experiments.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          projectId: "project-1",
+          projectIds: ["project-1"],
           name: "isort prompt optimization",
-          targetFunctionIds: expect.arrayContaining(["fn-1", "fn-2", "fn-3"]),
+          samplingMethod: "random",
+          maxTargets: null,
+          randomSeed: 7,
         }),
       ),
     );

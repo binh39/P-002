@@ -15,9 +15,26 @@ describe("HttpExperimentRepository", () => {
       {
         id: "experiment-1",
         project_id: "project-1",
+        project_ids: ["project-1"],
         name: "isort baseline",
         target_function_ids: ["fn-1"],
         dataset_splits: { train: [], validation: [], test: ["fn-1"] },
+        sampling_method: "random",
+        max_targets: null,
+        split_seed: 7,
+        split_percentages: { train: 60, validation: 20, test: 20 },
+        settings: {
+          coverup_model: "vertex_ai/gemini-3.6-flash",
+          optimize_model: "vertex_ai/gemini-3.6-flash",
+          max_attempts: 3,
+          repeat_tests: 2,
+          max_concurrency: 10,
+          rate_limit: null,
+          pytest_args: "",
+          max_metric_calls: 30,
+          evaluation_replicates: 1,
+          reflection_temperature: 0.7,
+        },
         optimization_eligible: false,
         status: "draft",
         baseline_run_id: null,
@@ -56,9 +73,20 @@ describe("HttpExperimentRepository", () => {
     const repository = new HttpExperimentRepository();
 
     const experiment = await repository.create({
-      projectId: "project-1",
+      projectIds: ["project-1"],
       name: "isort baseline",
-      targetFunctionIds: ["fn-1"],
+      samplingMethod: "random",
+      maxTargets: null,
+      randomSeed: 7,
+      splitPercentages: { train: 60, validation: 20, test: 20 },
+      manualSplits: null,
+      settings: {
+        coverupModel: "vertex_ai/gemini-3.6-flash",
+        optimizeModel: "vertex_ai/gemini-3.6-flash",
+        maxAttempts: 3, repeatTests: 2, maxConcurrency: 10, rateLimit: null,
+        pytestArgs: "", budgetMode: "custom", maxMetricCalls: 30,
+        evaluationReplicates: 1, reflectionTemperature: 0.7,
+      },
     });
     const run = await repository.requestBaseline(experiment.id);
 
@@ -70,9 +98,20 @@ describe("HttpExperimentRepository", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
-          project_id: "project-1",
+          project_ids: ["project-1"],
           name: "isort baseline",
-          target_function_ids: ["fn-1"],
+          sampling_method: "random",
+          max_targets: null,
+          random_seed: 7,
+          split_percentages: { train: 60, validation: 20, test: 20 },
+          manual_splits: null,
+          settings: {
+            coverup_model: "vertex_ai/gemini-3.6-flash",
+            optimize_model: "vertex_ai/gemini-3.6-flash",
+            max_attempts: 3, repeat_tests: 2, max_concurrency: 10, rate_limit: null,
+            pytest_args: "", max_metric_calls: 30, evaluation_replicates: 1,
+            reflection_temperature: 0.7,
+          },
         }),
       }),
     );

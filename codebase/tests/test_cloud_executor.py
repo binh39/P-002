@@ -94,7 +94,9 @@ async def test_cloud_run_job_executor_uses_gcs_manifest_and_environment_referenc
     assert overrides["task_count"] == 1
     assert overrides["timeout"] == "900s"
     environment = overrides["container_overrides"][0]["env"]
-    assert {item["name"] for item in environment} == {"PROMPTOPT_JOB_BUCKET", "PROMPTOPT_JOB_PREFIX"}
+    assert {item["name"] for item in environment} == {
+        "PROMPTOPT_JOB_BUCKET", "PROMPTOPT_JOB_PREFIX", "COVERUP_MODEL"
+    }
     prefix = next(item["value"] for item in environment if item["name"] == "PROMPTOPT_JOB_PREFIX")
     spec = json.loads(storage.objects[f"{prefix}/spec.json"][0])
     assert spec["symbols"] == ["pkg.fn"]
