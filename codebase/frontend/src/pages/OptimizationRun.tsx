@@ -50,10 +50,11 @@ export default function OptimizationRun() {
     queryKey: ["experiments", runQuery.data?.experimentId],
     queryFn: ({ signal }) => experiments.get(runQuery.data?.experimentId ?? "", signal),
     enabled: runQuery.data !== undefined,
-  });
-  const compare = useMutation({
-    mutationFn: (experimentId: string) => experiments.requestComparison(experimentId),
-    onSuccess: (comparison) => navigate(`/comparison-runs/${comparison.id}`),
+    refetchInterval: (query) =>
+      runQuery.data &&
+      (optimizationRunIsActive(runQuery.data.status) || !query.state.data?.comparisonRunId)
+        ? 3_000
+        : false,
   });
   const download = useMutation({
     mutationFn: async (artifactName: string) => ({
@@ -101,15 +102,8 @@ export default function OptimizationRun() {
 
   return (
     <div className="platform-page optimization-run-page">
-      <button
-        className="back-link"
-        onClick={() =>
-          experiment?.baselineRunId
-            ? navigate(`/runs/${experiment.baselineRunId}`)
-            : navigate("/experiments")
-        }
-      >
-        ← Baseline result
+      <button className="back-link" onClick={() => navigate("/experiments")}>
+        ← Experiments
       </button>
       <PageHeader
         eyebrow={`Optimization run · ${run.id.slice(0, 8)}`}
@@ -142,36 +136,22 @@ export default function OptimizationRun() {
       {run.status === "optimization_succeeded" && (
         <section className="optimization-ready-callout">
           <div>
-            <strong>Candidate prompt is locked</strong>
-            <p>The candidate is ready for an isolated paired comparison against the baseline.</p>
+            <strong>Baseline and optimized results are ready</strong>
+            <p>
+              GEPA used the baseline prompt as candidate zero and completed the locked paired
+              comparison in the same cloud job.
+            </p>
           </div>
-          {experiment?.comparisonRunId && experiment.status !== "optimization_succeeded" ? (
+          {experiment?.comparisonRunId ? (
             <button
               className="primary-button"
               onClick={() => navigate(`/comparison-runs/${experiment.comparisonRunId}`)}
             >
-              Open comparison
+              Open paired results
             </button>
           ) : (
-            <button
-              className="primary-button"
-              disabled={!experiment || compare.isPending}
-              onClick={() => experiment && compare.mutate(experiment.id)}
-            >
-              {compare.isPending
-                ? "Queueing comparison…"
-                : experiment?.comparisonRunId
-                  ? "Retry paired comparison"
-                  : "Start paired comparison"}
-            </button>
+            <StatusBadge tone="info">Finalizing paired result…</StatusBadge>
           )}
-        </section>
-      )}
-
-      {compare.isError && (
-        <section className="baseline-error" role="alert">
-          <strong>Comparison could not be started</strong>
-          <pre>{compare.error.message}</pre>
         </section>
       )}
 
@@ -200,6 +180,56 @@ export default function OptimizationRun() {
           tone="orange"
         />
       </div>
+
+      {run.finalComparison && (
+        <section className="platform-card">
+          <div className="card-heading">
+            <div>
+              <h2>Locked baseline vs optimized result</h2>
+              <p>
+                Final paired coverage from the cloud pipeline; this is not a second frontend-run
+                comparison.
+              </p>
+            </div>
+            <StatusBadge tone={run.finalComparison.promoted ? "success" : "warning"}>
+              {run.finalComparison.promoted ? "Optimized prompt promoted" : "Baseline retained"}
+            </StatusBadge>
+          </div>
+          <div className="platform-stats-grid baseline-metrics-grid">
+            <StatCard
+              label="Baseline final score"
+              value={score(run.finalComparison.baselineMetrics.score)}
+              detail="Candidate zero on locked split"
+            />
+            <StatCard
+              label="Optimized final score"
+              value={score(run.finalComparison.candidateMetrics.score)}
+              detail="GEPA proposal on the same split"
+              tone="violet"
+            />
+            <StatCard
+              label="Final absolute gain"
+              value={
+                run.finalComparison.absoluteGain === null
+                  ? "—"
+                  : `${run.finalComparison.absoluteGain >= 0 ? "+" : ""}${run.finalComparison.absoluteGain.toFixed(3)}`
+              }
+              detail="Optimized minus baseline"
+              tone="green"
+            />
+            <StatCard
+              label="Decision"
+              value={run.finalComparison.promoted ? "Promote" : "Retain baseline"}
+              detail={
+                run.finalComparison.skipped
+                  ? run.finalComparison.reason || "Unchanged candidate"
+                  : "Strictly-better promotion gate"
+              }
+              tone="orange"
+            />
+          </div>
+        </section>
+      )}
 
       <div className="platform-two-column optimization-details-grid">
         <section className="platform-card">

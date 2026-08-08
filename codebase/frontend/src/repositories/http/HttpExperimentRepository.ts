@@ -88,6 +88,14 @@ interface ApiOptimizationRun {
   candidate_validation_score: number | null;
   candidate_count: number;
   metric_calls: number;
+  final_validation: {
+    baseline_aggregate_coverage?: ApiComparisonMetrics | null;
+    optimized_aggregate_coverage?: ApiComparisonMetrics | null;
+    absolute_gain?: number | null;
+    promoted?: boolean;
+    final_evaluation_skipped?: boolean;
+    skip_reason?: string | null;
+  };
   artifact_objects: Record<string, string>;
   error_message: string | null;
   created_at: string;
@@ -166,6 +174,7 @@ function mapExperiment(item: ApiExperiment): Experiment {
 }
 
 function mapOptimizationRun(item: ApiOptimizationRun): OptimizationRun {
+  const final = item.final_validation;
   return {
     id: item.id,
     experimentId: item.experiment_id,
@@ -177,6 +186,17 @@ function mapOptimizationRun(item: ApiOptimizationRun): OptimizationRun {
     candidateValidationScore: item.candidate_validation_score,
     candidateCount: item.candidate_count,
     metricCalls: item.metric_calls,
+    finalComparison:
+      final && Object.keys(final).length > 0
+        ? {
+            baselineMetrics: mapComparisonMetrics(final.baseline_aggregate_coverage ?? {}),
+            candidateMetrics: mapComparisonMetrics(final.optimized_aggregate_coverage ?? {}),
+            absoluteGain: final.absolute_gain ?? null,
+            promoted: final.promoted ?? false,
+            skipped: final.final_evaluation_skipped ?? false,
+            reason: final.skip_reason ?? null,
+          }
+        : null,
     artifacts: Object.keys(item.artifact_objects).sort(),
     errorMessage: item.error_message,
     createdAt: item.created_at,

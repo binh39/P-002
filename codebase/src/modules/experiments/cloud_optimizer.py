@@ -149,10 +149,13 @@ class CloudRunJobGepaOptimizer:
 
         program = json.loads((await self.storage.read(f"{artifacts_prefix}/optimized_program.json")).decode())
         final_validation = json.loads((await self.storage.read(f"{artifacts_prefix}/final_validation.json")).decode())
-        production_prompt = json.loads(
-            (await self.storage.read(f"{artifacts_prefix}/prompts/gepa_optimized.json")).decode()
+        # ``gepa_optimized.json`` is the production decision and falls back to the
+        # baseline when the proposal does not win.  The web comparison must retain
+        # the actual proposal, which is always published separately.
+        proposed_prompt = json.loads(
+            (await self.storage.read(f"{artifacts_prefix}/prompts/gepa_proposed.json")).decode()
         )
-        candidate = PromptBundle.from_candidate(production_prompt)
+        candidate = PromptBundle.from_candidate(proposed_prompt)
         candidate.validate()
         scores = [float(value) for value in program.get("validation_scores", [])]
         best_index = int(program.get("best_index", 0))

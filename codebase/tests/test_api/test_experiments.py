@@ -56,8 +56,9 @@ async def test_create_experiment_and_queue_baseline(client):
     assert listed.json()["items"][0]["id"] == experiment["id"]
 
     premature_optimization = await client.post(f"/api/v1/experiments/{experiment['id']}/optimize", headers=AUTH_HEADERS)
-    assert premature_optimization.status_code == 409
-    assert premature_optimization.json()["error"]["code"] == "BASELINE_NOT_READY"
+    assert premature_optimization.status_code == 202
+    assert premature_optimization.json()["status"] == "failed"
+    assert "Cloud GEPA optimizer is not configured" in premature_optimization.json()["error_message"]
 
     premature_comparison = await client.post(f"/api/v1/experiments/{experiment['id']}/compare", headers=AUTH_HEADERS)
     assert premature_comparison.status_code == 409

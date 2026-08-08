@@ -144,7 +144,7 @@ export default function CreateExperiment() {
     false,
   ][step];
 
-  const startBaseline = useMutation({
+  const startOptimization = useMutation({
     mutationFn: async () => {
       const experiment = await experiments.create({
         projectIds: selectedProjectIds,
@@ -161,9 +161,9 @@ export default function CreateExperiment() {
             : null,
         settings,
       });
-      return experiments.requestBaseline(experiment.id);
+      return experiments.requestOptimization(experiment.id);
     },
-    onSuccess: (run) => navigate(`/runs/${run.id}`),
+    onSuccess: (run) => navigate(`/optimization-runs/${run.id}`),
   });
 
   const toggleProject = (project: PythonProject) => {
@@ -285,10 +285,10 @@ export default function CreateExperiment() {
         />
       </div>
 
-      {startBaseline.isError && (
+      {startOptimization.isError && (
         <div className="auth-error wizard-submit-error" role="alert">
-          {startBaseline.error instanceof Error
-            ? startBaseline.error.message
+          {startOptimization.error instanceof Error
+            ? startOptimization.error.message
             : "The experiment could not be started."}
         </div>
       )}
@@ -296,7 +296,7 @@ export default function CreateExperiment() {
       <div className="wizard-actions">
         <button
           className="secondary-button"
-          disabled={step === 0 || startBaseline.isPending}
+          disabled={step === 0 || startOptimization.isPending}
           onClick={() => setStep((value) => Math.max(0, value - 1))}
         >
           Back
@@ -316,11 +316,14 @@ export default function CreateExperiment() {
           <button
             className="primary-button"
             disabled={
-              startBaseline.isPending || !experimentName.trim() || !settingsValid || !datasetValid
+              startOptimization.isPending ||
+              !experimentName.trim() ||
+              !settingsValid ||
+              !datasetValid
             }
-            onClick={() => startBaseline.mutate()}
+            onClick={() => startOptimization.mutate()}
           >
-            {startBaseline.isPending ? "Creating and queueing…" : "Create and run baseline"}
+            {startOptimization.isPending ? "Creating and queueing…" : "Create and optimize"}
           </button>
         )}
       </div>

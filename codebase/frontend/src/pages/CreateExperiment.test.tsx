@@ -14,7 +14,7 @@ const repositories = vi.hoisted(() => ({
   },
   experiments: {
     create: vi.fn(),
-    requestBaseline: vi.fn(),
+    requestOptimization: vi.fn(),
   },
 }));
 
@@ -67,10 +67,10 @@ describe("create experiment wizard", () => {
     repositories.projects.listSamples.mockResolvedValue([project]);
     repositories.projects.listFunctions.mockResolvedValue(functions);
     repositories.experiments.create.mockResolvedValue({ id: "experiment-1" });
-    repositories.experiments.requestBaseline.mockResolvedValue({ id: "run-1" });
+    repositories.experiments.requestOptimization.mockResolvedValue({ id: "optimization-1" });
   });
 
-  it("creates a real experiment and queues its baseline", async () => {
+  it("creates an experiment and queues optimization with baseline as candidate zero", async () => {
     render(<CreateExperiment />, { wrapper: Wrapper });
 
     fireEvent.click(await screen.findByRole("button", { name: /isort/i }));
@@ -79,7 +79,7 @@ describe("create experiment wizard", () => {
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    fireEvent.click(screen.getByRole("button", { name: /create and run baseline/i }));
+    fireEvent.click(screen.getByRole("button", { name: /create and optimize/i }));
 
     await waitFor(() =>
       expect(repositories.experiments.create).toHaveBeenCalledWith(
@@ -92,8 +92,8 @@ describe("create experiment wizard", () => {
         }),
       ),
     );
-    expect(repositories.experiments.requestBaseline).toHaveBeenCalledWith("experiment-1");
-    expect(navigate).toHaveBeenCalledWith("/runs/run-1");
+    expect(repositories.experiments.requestOptimization).toHaveBeenCalledWith("experiment-1");
+    expect(navigate).toHaveBeenCalledWith("/optimization-runs/optimization-1");
   });
 
   it("requires an analyzed project before continuing", async () => {

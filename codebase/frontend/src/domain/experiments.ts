@@ -89,6 +89,14 @@ export interface OptimizationRun {
   candidateValidationScore: number | null;
   candidateCount: number;
   metricCalls: number;
+  finalComparison: {
+    baselineMetrics: ComparisonMetrics;
+    candidateMetrics: ComparisonMetrics;
+    absoluteGain: number | null;
+    promoted: boolean;
+    skipped: boolean;
+    reason: string | null;
+  } | null;
   artifacts: string[];
   errorMessage: string | null;
   createdAt: string;

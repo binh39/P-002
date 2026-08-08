@@ -302,8 +302,9 @@ class ExperimentService:
 
     async def request_optimization(self, experiment_id: str, owner_id: str) -> OptimizationRunResponse:
         item = await self._owned(experiment_id, owner_id)
-        if item.status != ExperimentStatus.BASELINE_SUCCEEDED:
-            raise AppError(409, "BASELINE_NOT_READY", "A successful baseline is required before optimization")
+        previous_status = item.status
+        if previous_status not in {ExperimentStatus.DRAFT, ExperimentStatus.BASELINE_SUCCEEDED}:
+            raise AppError(409, "OPTIMIZATION_ALREADY_REQUESTED", "Optimization has already been requested")
         if not item.optimization_eligible:
             raise AppError(
                 409,
@@ -312,12 +313,13 @@ class ExperimentService:
             )
         if self.optimization_dispatcher is None:
             raise RuntimeError("Optimization dispatcher is not configured")
-        baseline_run = await self.repository.get_run(item.baseline_run_id or "")
-        if baseline_run is None or baseline_run.status != ExperimentStatus.BASELINE_SUCCEEDED:
-            raise AppError(409, "BASELINE_NOT_READY", "The baseline result is unavailable")
         parent = baseline_prompt()
-        if parent.digest() != baseline_run.prompt_digest:
-            raise AppError(409, "BASELINE_PROMPT_CHANGED", "The baseline prompt version no longer matches this run")
+        if item.baseline_run_id:
+            baseline_run = await self.repository.get_run(item.baseline_run_id)
+            if baseline_run is None or baseline_run.status != ExperimentStatus.BASELINE_SUCCEEDED:
+                raise AppError(409, "BASELINE_NOT_READY", "The legacy baseline result is unavailable")
+            if parent.digest() != baseline_run.prompt_digest:
+                raise AppError(409, "BASELINE_PROMPT_CHANGED", "The baseline prompt version no longer matches this run")
 
         now = datetime.now(UTC)
         run = OptimizationRunRecord(
@@ -338,7 +340,7 @@ class ExperimentService:
             run.status = ExperimentStatus.FAILED
             run.error_message = "Optimization job could not be queued"
             run.finished_at = datetime.now(UTC)
-            item.status = ExperimentStatus.BASELINE_SUCCEEDED
+            item.status = previous_status
             item.optimization_run_id = None
             item.updated_at = run.finished_at
             await self.repository.save_optimization_run(run)
@@ -366,7 +368,14 @@ class ExperimentService:
 
     async def execute_optimization(self, run_id: str) -> None:
         run = await self.repository.get_optimization_run(run_id)
-        if run is None or run.status != ExperimentStatus.OPTIMIZATION_QUEUED:
+        if run is None:
+            return
+        if run.status == ExperimentStatus.OPTIMIZATION_SUCCEEDED:
+            item = await self.repository.get(run.experiment_id)
+            if item is not None:
+                await self._materialize_cloud_comparison(item, run)
+            return
+        if run.status != ExperimentStatus.OPTIMIZATION_QUEUED:
             return
         run.status = ExperimentStatus.OPTIMIZING
         run.started_at = datetime.now(UTC)
@@ -375,10 +384,9 @@ class ExperimentService:
         try:
             if item is None or self.cloud_optimizer is None:
                 raise RuntimeError("Cloud GEPA optimizer is not configured")
-            baseline_run = await self.repository.get_run(item.baseline_run_id or "")
             parent = baseline_prompt()
-            if baseline_run is None or baseline_run.prompt_digest != parent.digest():
-                raise RuntimeError("Baseline prompt version is unavailable or has changed")
+            if run.parent_prompt_digest != parent.digest():
+                raise RuntimeError("The candidate-zero baseline prompt has changed")
             references = {target.key: target for target in item.targets}
             if set(item.target_function_ids) != set(references):
                 raise RuntimeError("The immutable target snapshot is incomplete")
@@ -446,15 +454,70 @@ class ExperimentService:
             run.error_message = str(exc)[-4000:]
             run.finished_at = datetime.now(UTC)
             if item:
-                # A failed search does not invalidate the immutable baseline and may be retried.
-                item.status = ExperimentStatus.BASELINE_SUCCEEDED
+                # A failed search does not invalidate candidate zero and may be retried.
+                item.status = (
+                    ExperimentStatus.BASELINE_SUCCEEDED
+                    if item.baseline_run_id
+                    else ExperimentStatus.DRAFT
+                )
                 item.updated_at = run.finished_at
         await self.repository.save_optimization_run(run)
         if item:
             await self.repository.save(item)
+        if item and run.status == ExperimentStatus.OPTIMIZATION_SUCCEEDED:
+            await self._materialize_cloud_comparison(item, run)
+
+    async def _materialize_cloud_comparison(
+        self,
+        item: ExperimentRecord,
+        optimization: OptimizationRunRecord,
+    ) -> ComparisonRunRecord:
+        """Persist the paired result already produced inside the GEPA Cloud Run job.
+
+        GEPA evaluates the immutable baseline as candidate zero and owns the locked
+        final comparison. Creating another worker job here would only duplicate that
+        work, so the API turns the existing final-validation artifact into the normal
+        comparison/review records immediately.
+        """
+        if item.comparison_run_id:
+            existing = await self.repository.get_comparison_run(item.comparison_run_id)
+            if existing is not None:
+                if existing.status == ExperimentStatus.COMPARISON_QUEUED:
+                    await self.execute_comparison(existing.id)
+                    return (await self.repository.get_comparison_run(existing.id)) or existing
+                return existing
+        if not optimization.final_validation:
+            raise RuntimeError("Cloud GEPA final validation is unavailable")
+        if not optimization.candidate_prompt or not optimization.candidate_prompt_digest:
+            raise RuntimeError("The GEPA proposal prompt is unavailable")
+        now = datetime.now(UTC)
+        comparison = ComparisonRunRecord(
+            id=new_id(),
+            experiment_id=item.id,
+            optimization_run_id=optimization.id,
+            status=ExperimentStatus.COMPARISON_QUEUED,
+            baseline_prompt_digest=optimization.parent_prompt_digest,
+            candidate_prompt_digest=optimization.candidate_prompt_digest,
+            test_target_ids=list(item.dataset_splits.get("test", [])),
+            replicate_count=item.settings.evaluation_replicates,
+            created_at=now,
+        )
+        if not comparison.test_target_ids:
+            raise RuntimeError("The experiment has no locked test targets")
+        await self.repository.create_comparison_run(comparison)
+        item.status = ExperimentStatus.COMPARISON_QUEUED
+        item.comparison_run_id = comparison.id
+        item.updated_at = now
+        await self.repository.save(item)
+        await self.execute_comparison(comparison.id)
+        return (await self.repository.get_comparison_run(comparison.id)) or comparison
 
     async def request_comparison(self, experiment_id: str, owner_id: str) -> ComparisonRunResponse:
         item = await self._owned(experiment_id, owner_id)
+        if item.comparison_run_id:
+            existing = await self.repository.get_comparison_run(item.comparison_run_id)
+            if existing is not None:
+                return ComparisonRunResponse.model_validate(existing)
         if item.status != ExperimentStatus.OPTIMIZATION_SUCCEEDED:
             raise AppError(409, "OPTIMIZATION_NOT_READY", "A successful optimization is required before comparison")
         if self.comparison_dispatcher is None:

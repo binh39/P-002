@@ -10,7 +10,6 @@ from src.modules.experiments.optimizer import OptimizationResult
 from src.modules.experiments.prompts import PromptBundle, baseline_prompt
 from src.modules.experiments.repository import InMemoryExperimentRepository
 from src.modules.experiments.schemas import (
-    BaselineRunRecord,
     ExperimentRecord,
     ExperimentStatus,
     ProjectSnapshot,
@@ -78,36 +77,36 @@ async def test_optimization_passes_locked_multi_project_snapshot_to_cloud():
         target_function_ids=keys,
         dataset_splits={"train": [keys[0]], "validation": [keys[1]], "test": [keys[2]]},
         optimization_eligible=True,
-        status=ExperimentStatus.BASELINE_SUCCEEDED,
-        baseline_run_id="baseline-1",
+        status=ExperimentStatus.DRAFT,
         created_at=now,
         updated_at=now,
     )
     await repository.create(experiment)
-    await repository.create_run(
-        BaselineRunRecord(
-            id="baseline-1",
-            experiment_id=experiment.id,
-            status=ExperimentStatus.BASELINE_SUCCEEDED,
-            target_count=3,
-            coverage_score=0.4,
-            prompt_digest=prompt.digest(),
-            created_at=now,
-            finished_at=now,
-        )
-    )
 
     class FakeCloudOptimizer:
         calls = []
 
         async def optimize(self, **kwargs):
             self.calls.append(kwargs)
+            assert kwargs["baseline"].digest() == prompt.digest()
             assert [target.id for target in kwargs["train"]] == [keys[0]]
             assert [target.id for target in kwargs["validation"]] == [keys[1]]
             assert [target.id for target in kwargs["holdout"]] == [keys[2]]
             candidate = PromptBundle(initial=prompt.initial + "\nPrefer boundary cases.", error=prompt.error)
             return OptimizationResult(
-                candidate, 0.8, 0.4, 2, 5, {"final_validation": {"promoted": True, "absolute_gain": 0.4}}
+                candidate,
+                0.8,
+                0.4,
+                2,
+                5,
+                {
+                    "final_validation": {
+                        "promoted": True,
+                        "absolute_gain": 0.4,
+                        "baseline_aggregate_coverage": {"score": 0.4},
+                        "optimized_aggregate_coverage": {"score": 0.8},
+                    }
+                },
             )
 
     cloud = FakeCloudOptimizer()
@@ -125,3 +124,11 @@ async def test_optimization_passes_locked_multi_project_snapshot_to_cloud():
     assert run.candidate_validation_score == 0.8
     assert run.final_validation["promoted"] is True
     assert len(cloud.calls) == 1
+    stored_experiment = await repository.get(experiment.id)
+    assert stored_experiment.baseline_run_id is None
+    assert stored_experiment.comparison_run_id is not None
+    comparison = await repository.get_comparison_run(stored_experiment.comparison_run_id)
+    assert comparison.status == ExperimentStatus.IN_REVIEW
+    await service.execute_optimization(run.id)
+    assert len(repository.comparison_runs) == 1
+    assert len(repository.prompt_versions) == 1

@@ -48,7 +48,10 @@ class FakeJobsClient:
                 "candidates": [prompt.as_candidate(), candidate],
             },
             "final_validation.json": {"promoted": True, "absolute_gain": 0.5},
-            "prompts/gepa_optimized.json": candidate,
+            "prompts/gepa_proposed.json": candidate,
+            # Production can retain baseline even though the proposal must remain
+            # available to the web comparison.
+            "prompts/gepa_optimized.json": prompt.as_candidate(),
         }
         for name, payload in payloads.items():
             self.storage.objects[f"{prefix}/{name}"] = (json.dumps(payload).encode(), "application/json")
@@ -108,6 +111,8 @@ async def test_cloud_gepa_optimizer_uses_isolated_web_prefix_and_maps_result():
     assert result.baseline_score == 0.2
     assert result.candidate_count == 2
     assert result.metric_calls == 12
+    assert result.candidate.initial.endswith("Prefer explicit boundary assertions.")
+    assert result.candidate.digest() != baseline_prompt().digest()
     dataset_object = next(name for name in storage.objects if name.endswith("inputs/dataset.jsonl"))
     rows = [json.loads(line) for line in storage.objects[dataset_object][0].decode().splitlines()]
     assert {row["split"] for row in rows} == {"train", "validation", "test"}

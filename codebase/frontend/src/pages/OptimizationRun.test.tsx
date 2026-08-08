@@ -43,6 +43,14 @@ describe("optimization run", () => {
       candidateValidationScore: 0.7,
       candidateCount: 4,
       metricCalls: 8,
+      finalComparison: {
+        baselineMetrics: { score: 0.3 },
+        candidateMetrics: { score: 0.6 },
+        absoluteGain: 0.3,
+        promoted: true,
+        skipped: false,
+        reason: null,
+      },
       artifacts: ["candidate_prompt.json"],
       errorMessage: null,
       createdAt: "2026-08-06T00:00:00Z",
@@ -53,6 +61,7 @@ describe("optimization run", () => {
       id: "experiment-1",
       name: "isort optimization",
       baselineRunId: "baseline-1",
+      comparisonRunId: "comparison-1",
     });
   });
 
@@ -64,6 +73,8 @@ describe("optimization run", () => {
       screen.getByText("Generate focused tests for the selected function."),
     ).toBeInTheDocument();
     expect(screen.getByText("+0.500")).toBeInTheDocument();
+    expect(screen.getByText("Locked baseline vs optimized result")).toBeInTheDocument();
+    expect(screen.getByText("Optimized prompt promoted")).toBeInTheDocument();
     expect(screen.getByText("candidate_prompt.json")).toBeInTheDocument();
   });
 });

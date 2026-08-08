@@ -1,5 +1,5 @@
 {
-  "sort_file": {
+  "isort/api.py::sort_file": {
     "valid": true,
     "covered_statements": 0,
     "num_statements": 52,
@@ -9,7 +9,7 @@
     "branch_coverage": 0.0,
     "score": 0.0
   },
-  "sorted_imports": {
+  "isort/output.py::sorted_imports": {
     "valid": true,
     "covered_statements": 0,
     "num_statements": 135,
@@ -19,7 +19,7 @@
     "branch_coverage": 0.0,
     "score": 0.0
   },
-  "file_contents": {
+  "isort/parse.py::file_contents": {
     "valid": true,
     "covered_statements": 0,
     "num_statements": 245,
@@ -29,7 +29,7 @@
     "branch_coverage": 0.0,
     "score": 0.0
   },
-  "Config.__init__": {
+  "isort/settings.py::Config.__init__": {
     "valid": true,
     "covered_statements": 0,
     "num_statements": 133,
@@ -39,7 +39,7 @@
     "branch_coverage": 0.0,
     "score": 0.0
   },
-  "_get_config_data": {
+  "isort/settings.py::_get_config_data": {
     "valid": true,
     "covered_statements": 0,
     "num_statements": 66,
@@ -49,7 +49,7 @@
     "branch_coverage": 0.0,
     "score": 0.0
   },
-  "process": {
+  "isort/core.py::process": {
     "valid": true,
     "covered_statements": 0,
     "num_statements": 281,
@@ -59,7 +59,7 @@
     "branch_coverage": 0.0,
     "score": 0.0
   },
-  "line": {
+  "isort/wrap.py::line": {
     "valid": true,
     "covered_statements": 0,
     "num_statements": 43,
@@ -69,7 +69,7 @@
     "branch_coverage": 0.0,
     "score": 0.0
   },
-  "imports": {
+  "isort/identify.py::imports": {
     "valid": true,
     "covered_statements": 0,
     "num_statements": 102,
@@ -79,7 +79,7 @@
     "branch_coverage": 0.0,
     "score": 0.0
   },
-  "main": {
+  "isort/main.py::main": {
     "valid": true,
     "covered_statements": 0,
     "num_statements": 139,
@@ -89,7 +89,7 @@
     "branch_coverage": 0.0,
     "score": 0.0
   },
-  "_with_from_imports": {
+  "isort/output.py::_with_from_imports": {
     "valid": true,
     "covered_statements": 0,
     "num_statements": 115,
