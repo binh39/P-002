@@ -1,4 +1,5 @@
 import io
+import json
 import zipfile
 
 import pytest
@@ -38,6 +39,8 @@ async def test_sample_catalog_creates_experiment_without_persisting_projects(cli
     functions = functions_response.json()["items"]
     assert len(functions) >= 3
     assert all(item["project_id"] == "sample:isort" for item in functions)
+    assert all("/_vendored/" not in f"/{item['file']}" for item in functions)
+    assert all("/deprecated/" not in f"/{item['file']}" for item in functions)
 
     created = await client.post(
         "/api/v1/experiments",
@@ -76,6 +79,9 @@ async def test_sample_catalog_creates_experiment_without_persisting_projects(cli
     assert len(captured["symbols"]) == 3
     with zipfile.ZipFile(io.BytesIO(captured["archive"])) as bundle:
         assert "isort/__init__.py" in bundle.namelist()
+        setup = json.loads(bundle.read(".promptopt/setup.json"))
+        assert setup["distribution_name"] == "isort"
+        assert setup["required_imports"] == ["tomli"]
 
     persisted_projects = await client.get("/api/v1/projects", headers=AUTH_HEADERS)
     assert persisted_projects.status_code == 200

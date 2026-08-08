@@ -17,6 +17,7 @@ COPY src/coverup /opt/promptopt/coverup
 COPY codebase/sandbox/runner_entry.py /opt/promptopt/runner_entry.py
 COPY codebase/sandbox/cloud_job_entry.py /opt/promptopt/cloud_job_entry.py
 COPY codebase/src/modules/experiments/traces.py /opt/promptopt/traces.py
+COPY src/optimization/project_setup.py /opt/promptopt/project_setup.py
 
 USER runner
 CMD ["python", "/opt/promptopt/cloud_job_entry.py"]

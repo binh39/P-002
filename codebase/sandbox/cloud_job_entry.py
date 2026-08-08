@@ -11,6 +11,7 @@ import zipfile
 from pathlib import Path, PurePosixPath
 
 from google.cloud import storage
+from project_setup import prepare_project
 from traces import as_jsonl, parse_coverup_log
 
 
@@ -48,7 +49,11 @@ def main() -> int:
             if project not in source.parents or not source.is_dir():
                 raise RuntimeError("Configured source directory is absent from the archive")
 
-            environment = os.environ.copy()
+            setup_report, environment = prepare_project(project, source, os.environ.copy())
+            (artifacts / "project_setup.json").write_text(
+                json.dumps(setup_report.as_dict(), indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
             environment["PROMPTOPT_PROMPT_FILE"] = str(prompt_file)
             environment["PROMPTOPT_TARGET_SYMBOLS"] = json.dumps(spec["symbols"])
             coverup = _run(
@@ -205,6 +210,8 @@ def _target_metrics(report: dict, symbols: list[str]) -> dict[str, dict]:
         covered_statements = int(summary.get("covered_lines", 0))
         num_statements = int(summary.get("num_statements", 0))
         covered_branches = int(summary.get("covered_branches", 0))
+        if covered_statements == 0:
+            covered_branches = 0
         num_branches = int(summary.get("num_branches", 0))
         statement = covered_statements / num_statements if num_statements else None
         branch = covered_branches / num_branches if num_branches else None

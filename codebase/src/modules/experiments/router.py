@@ -56,6 +56,7 @@ async def get_baseline_artifact(run_id: str, artifact_name: str, user: CurrentUs
         "attempt_trace.jsonl": "application/x-ndjson",
         "generated_tests.zip": "application/zip",
         "target_coverage.json": "application/json",
+        "project_setup.json": "application/json",
         "coverage.data": "application/octet-stream",
     }
     content = await request.app.state.services.experiments.get_baseline_artifact(run_id, artifact_name, user.uid)

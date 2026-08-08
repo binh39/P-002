@@ -122,6 +122,10 @@ class DockerCoverUpExecutor:
                 if value := os.getenv(name):
                     command.extend(["--env", f"{name}={value}"])
             command.extend(["--env", f"COVERUP_MODEL={settings.coverup_model}"])
+            command.extend(["--env", "PROMPTOPT_PROJECT_ROOT=/workspace/project"])
+            command.extend(["--env", f"PROMPTOPT_PACKAGE_DIR=/workspace/project/{source_directory}"])
+            command.extend(["--env", "PROMPTOPT_SETUP_SITE=/workspace/tests/.promptopt-site"])
+            command.extend(["--env", "PROMPTOPT_SETUP_REPORT=/workspace/artifacts/project_setup.json"])
             command.extend(["--env", "PROMPTOPT_PROMPT_FILE=/workspace/prompt/prompt.json"])
             command.extend(["--env", f"PROMPTOPT_TARGET_SYMBOLS={json.dumps(symbols)}"])
             command.extend(
@@ -211,6 +215,8 @@ class DockerCoverUpExecutor:
             covered_statements = int(summary.get("covered_lines", 0))
             num_statements = int(summary.get("num_statements", 0))
             covered_branches = int(summary.get("covered_branches", 0))
+            if covered_statements == 0:
+                covered_branches = 0
             num_branches = int(summary.get("num_branches", 0))
             statement = cls._ratio(covered_statements, num_statements)
             branch = cls._ratio(covered_branches, num_branches)
@@ -268,7 +274,7 @@ class DockerCoverUpExecutor:
             "--env",
             "COVERAGE_FILE=/workspace/artifacts/coverage.data",
             "--env",
-            "PYTHONPATH=/workspace/project",
+            "PYTHONPATH=/workspace/tests/.promptopt-site:/workspace/project",
             self.image,
         ]
         run_command = [

@@ -38,3 +38,29 @@ def test_target_metrics_are_micro_aggregated():
     assert statement == 5 / 7
     assert branch == 0.5
     assert score == 0.4 * (5 / 7) + 0.6 * 0.5
+
+
+def test_target_metrics_zero_spurious_branches_when_no_statements_execute():
+    report = {
+        "files": {
+            "pkg/module.py": {
+                "functions": {
+                    "pkg.module.target": {
+                        "summary": {
+                            "covered_lines": 0,
+                            "num_statements": 4,
+                            "covered_branches": 2,
+                            "num_branches": 2,
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    metric = DockerCoverUpExecutor._target_metrics(report, ["target"])["target"]
+
+    assert metric["valid"] is True
+    assert metric["covered_statements"] == 0
+    assert metric["covered_branches"] == 0
+    assert metric["score"] == 0.0

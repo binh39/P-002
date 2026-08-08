@@ -250,6 +250,7 @@ class ExperimentService:
                 "attempt_trace.jsonl": "application/x-ndjson",
                 "generated_tests.zip": "application/zip",
                 "target_coverage.json": "application/json",
+                "project_setup.json": "application/json",
             }
             for snapshot, project_targets, execution in executions:
                 for target in project_targets:

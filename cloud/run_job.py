@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import os
 import shutil
 import stat
 import subprocess
@@ -23,6 +24,8 @@ import sys
 import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
+
+from src.optimization.project_setup import prepare_project
 
 
 def _upload_dir(bucket: str, prefix: str, local_dir: Path) -> None:
@@ -137,11 +140,25 @@ def main() -> int:
             first = next(iter(layout_values.values()))
             package_dir = (project / first["package_dir"]).resolve()
             tests_dir = (project / first["tests_dir"]).resolve()
-            for value in layout_values.values():
+            setup_reports = {}
+            prepared_environment = os.environ.copy()
+            for project_name, value in layout_values.items():
                 for field in ("package_dir", "tests_dir"):
                     path = (project / value[field]).resolve()
                     if project not in path.parents or not path.is_dir():
                         raise RuntimeError(f"Configured {field} is absent from the archive")
+                report, prepared_environment = prepare_project(
+                    project,
+                    (project / value["package_dir"]).resolve(),
+                    prepared_environment,
+                )
+                setup_reports[project_name] = report.as_dict()
+            os.environ.update(prepared_environment)
+            local_dir.mkdir(parents=True, exist_ok=True)
+            (local_dir / "project_setup.json").write_text(
+                json.dumps(setup_reports, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
             cli_args = [
                 "--project-root",
                 str(project),

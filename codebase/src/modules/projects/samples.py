@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import io
+import json
 import zipfile
 from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from src.modules.analysis.analyzer import AnalysisResult, analyze_zip
 from src.modules.analysis.schemas import ProjectFunctionRecord
@@ -21,7 +22,14 @@ from src.modules.projects.schemas import (
 
 SAMPLE_PROJECT_PREFIX = "sample:"
 _SNAPSHOT_TIME = datetime(2026, 1, 1, tzinfo=UTC)
-_IGNORED_PARTS = {".git", ".venv", "__pycache__", ".pytest_cache", ".ruff_cache"}
+_IGNORED_PARTS = {
+    ".git",
+    ".venv",
+    ".promptopt-site",
+    "__pycache__",
+    ".pytest_cache",
+    ".ruff_cache",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +43,8 @@ class SampleDefinition:
     function_count: int
     statement_count: int
     branch_count: int
+    required_imports: tuple[str, ...]
+    excluded_source_parts: tuple[str, ...]
 
     @property
     def project_id(self) -> str:
@@ -52,6 +62,8 @@ SAMPLE_DEFINITIONS = (
         function_count=226,
         statement_count=3344,
         branch_count=970,
+        required_imports=("tomli",),
+        excluded_source_parts=("_vendored", "deprecated"),
     ),
     SampleDefinition(
         slug="mlxtend",
@@ -63,6 +75,8 @@ SAMPLE_DEFINITIONS = (
         function_count=411,
         statement_count=5443,
         branch_count=1202,
+        required_imports=("numpy", "scipy", "pandas", "sklearn", "matplotlib", "joblib"),
+        excluded_source_parts=(),
     ),
     SampleDefinition(
         slug="typesystem",
@@ -74,6 +88,8 @@ SAMPLE_DEFINITIONS = (
         function_count=176,
         statement_count=1448,
         branch_count=357,
+        required_imports=("jinja2", "yaml"),
+        excluded_source_parts=(),
     ),
 )
 
@@ -125,6 +141,17 @@ class SampleProjectCatalog:
                 if not path.is_file() or any(part in _IGNORED_PARTS for part in path.parts):
                     continue
                 bundle.write(path, path.relative_to(repository).as_posix())
+            bundle.writestr(
+                ".promptopt/setup.json",
+                json.dumps(
+                    {
+                        "distribution_name": definition.slug,
+                        "import_name": definition.source_directory,
+                        "required_imports": definition.required_imports,
+                    },
+                    separators=(",", ":"),
+                ),
+            )
         archive = buffer.getvalue()
         analyzed = analyze_zip(
             project_id,
@@ -136,7 +163,9 @@ class SampleProjectCatalog:
         functions = [
             item
             for item in analyzed.functions
-            if item.file.startswith(source_prefix) and "/tests/" not in f"/{item.file}/"
+            if item.file.startswith(source_prefix)
+            and "/tests/" not in f"/{item.file}/"
+            and not any(part in PurePosixPath(item.file).parts for part in definition.excluded_source_parts)
         ]
         symbol_counts = Counter(item.qualified_name for item in functions)
         functions = [item for item in functions if symbol_counts[item.qualified_name] == 1]
