@@ -120,7 +120,9 @@ export default function CreateExperiment() {
     selectedFunctions.length >= 3 &&
     Number.isInteger(randomSeed) &&
     randomSeed >= 0 &&
-    (samplingMethod === "manual" || sampleLimit === null || (Number.isInteger(sampleLimit) && sampleLimit >= 3));
+    (samplingMethod === "manual" ||
+      sampleLimit === null ||
+      (Number.isInteger(sampleLimit) && sampleLimit >= 3));
   const datasetValid =
     percentagesAreValid(percentages) && splitNames.every((name) => dataset[name].length > 0);
   const settingsValid =
@@ -153,7 +155,9 @@ export default function CreateExperiment() {
         splitPercentages: percentages,
         manualSplits:
           samplingMethod === "manual"
-            ? Object.fromEntries(splitNames.map((name) => [name, dataset[name].map((item) => item.key)]))
+            ? Object.fromEntries(
+                splitNames.map((name) => [name, dataset[name].map((item) => item.key)]),
+              )
             : null,
         settings,
       });
@@ -311,7 +315,9 @@ export default function CreateExperiment() {
         ) : (
           <button
             className="primary-button"
-            disabled={startBaseline.isPending || !experimentName.trim() || !settingsValid || !datasetValid}
+            disabled={
+              startBaseline.isPending || !experimentName.trim() || !settingsValid || !datasetValid
+            }
             onClick={() => startBaseline.mutate()}
           >
             {startBaseline.isPending ? "Creating and queueing…" : "Create and run baseline"}
@@ -491,7 +497,10 @@ function FunctionsStep({
         <>
           <div className="experiment-inline-fields">
             {samplingMethod !== "manual" && (
-              <Field label="Candidate functions" hint={`${functions.length} valid functions available; leave blank to use all.`}>
+              <Field
+                label="Candidate functions"
+                hint={`${functions.length} valid functions available; leave blank to use all.`}
+              >
                 <input
                   type="number"
                   min={3}
@@ -752,7 +761,11 @@ function SettingsStep({
               value={settings.coverupModel}
               onChange={(event) => update("coverupModel", event.target.value)}
             >
-              {geminiModels.map((model) => <option key={model} value={model}>{model}</option>)}
+              {geminiModels.map((model) => (
+                <option key={model} value={model}>
+                  {model}
+                </option>
+              ))}
             </select>
           </Field>
           <Field label="OPTIMIZE_MODEL" hint="Reflects and proposes prompt changes.">
@@ -760,7 +773,11 @@ function SettingsStep({
               value={settings.optimizeModel}
               onChange={(event) => update("optimizeModel", event.target.value)}
             >
-              {geminiModels.map((model) => <option key={model} value={model}>{model}</option>)}
+              {geminiModels.map((model) => (
+                <option key={model} value={model}>
+                  {model}
+                </option>
+              ))}
             </select>
           </Field>
         </div>

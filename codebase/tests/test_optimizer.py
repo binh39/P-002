@@ -48,27 +48,54 @@ class FakeStorage:
 async def test_optimization_passes_locked_multi_project_snapshot_to_cloud():
     repository, storage = InMemoryExperimentRepository(), FakeStorage()
     now, prompt = datetime.now(UTC), baseline_prompt()
-    refs = [TargetReference(
-        project_id="project-1", function_id=name, project="project",
-        source_file="src/pkg.py", symbol=f"pkg.{name}",
-    ) for name in ("train_fn", "validation_fn", "test_fn")]
+    refs = [
+        TargetReference(
+            project_id="project-1",
+            function_id=name,
+            project="project",
+            source_file="src/pkg.py",
+            symbol=f"pkg.{name}",
+        )
+        for name in ("train_fn", "validation_fn", "test_fn")
+    ]
     keys = [ref.key for ref in refs]
     experiment = ExperimentRecord(
-        id="experiment-1", owner_id="owner-1", project_id="project-1", project_ids=["project-1"],
-        project_snapshots=[ProjectSnapshot(
-            project_id="project-1", name="Project", source_directory="src",
-            test_directory="tests", runner_project="project",
-        )],
-        targets=refs, name="GEPA search", target_function_ids=keys,
+        id="experiment-1",
+        owner_id="owner-1",
+        project_id="project-1",
+        project_ids=["project-1"],
+        project_snapshots=[
+            ProjectSnapshot(
+                project_id="project-1",
+                name="Project",
+                source_directory="src",
+                test_directory="tests",
+                runner_project="project",
+            )
+        ],
+        targets=refs,
+        name="GEPA search",
+        target_function_ids=keys,
         dataset_splits={"train": [keys[0]], "validation": [keys[1]], "test": [keys[2]]},
-        optimization_eligible=True, status=ExperimentStatus.BASELINE_SUCCEEDED,
-        baseline_run_id="baseline-1", created_at=now, updated_at=now,
+        optimization_eligible=True,
+        status=ExperimentStatus.BASELINE_SUCCEEDED,
+        baseline_run_id="baseline-1",
+        created_at=now,
+        updated_at=now,
     )
     await repository.create(experiment)
-    await repository.create_run(BaselineRunRecord(
-        id="baseline-1", experiment_id=experiment.id, status=ExperimentStatus.BASELINE_SUCCEEDED,
-        target_count=3, coverage_score=0.4, prompt_digest=prompt.digest(), created_at=now, finished_at=now,
-    ))
+    await repository.create_run(
+        BaselineRunRecord(
+            id="baseline-1",
+            experiment_id=experiment.id,
+            status=ExperimentStatus.BASELINE_SUCCEEDED,
+            target_count=3,
+            coverage_score=0.4,
+            prompt_digest=prompt.digest(),
+            created_at=now,
+            finished_at=now,
+        )
+    )
 
     class FakeCloudOptimizer:
         calls = []
@@ -79,13 +106,17 @@ async def test_optimization_passes_locked_multi_project_snapshot_to_cloud():
             assert [target.id for target in kwargs["validation"]] == [keys[1]]
             assert [target.id for target in kwargs["holdout"]] == [keys[2]]
             candidate = PromptBundle(initial=prompt.initial + "\nPrefer boundary cases.", error=prompt.error)
-            return OptimizationResult(candidate, 0.8, 0.4, 2, 5, {
-                "final_validation": {"promoted": True, "absolute_gain": 0.4}
-            })
+            return OptimizationResult(
+                candidate, 0.8, 0.4, 2, 5, {"final_validation": {"promoted": True, "absolute_gain": 0.4}}
+            )
 
     cloud = FakeCloudOptimizer()
     service = ExperimentService(
-        repository, FakeProjects(), FakeFunctions(), storage, cloud_optimizer=cloud,
+        repository,
+        FakeProjects(),
+        FakeFunctions(),
+        storage,
+        cloud_optimizer=cloud,
     )
     service.set_optimization_dispatcher(InlineOptimizationDispatcher(service.execute_optimization))
     run = await service.request_optimization(experiment.id, experiment.owner_id)

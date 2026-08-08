@@ -26,13 +26,9 @@ def select_targets(
         rng.shuffle(candidates)
         return candidates[:max_targets]
     if method == SamplingMethod.MOST_BRANCHES:
-        candidates.sort(
-            key=lambda item: (-item.branches, -item.statements, -item.loc, _stable_key(item))
-        )
+        candidates.sort(key=lambda item: (-item.branches, -item.statements, -item.loc, _stable_key(item)))
     elif method == SamplingMethod.MOST_STATEMENTS:
-        candidates.sort(
-            key=lambda item: (-item.statements, -item.branches, -item.loc, _stable_key(item))
-        )
+        candidates.sort(key=lambda item: (-item.statements, -item.branches, -item.loc, _stable_key(item)))
     else:
         raise ValueError("Manual targets must be supplied as explicit dataset splits")
     selected = candidates[:max_targets]

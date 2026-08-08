@@ -176,9 +176,7 @@ class FirestoreExperimentRepository:
             self._comparison_runs(),
             self._prompt_versions(),
         ):
-            snapshots = collection.where(
-                filter=FieldFilter("experiment_id", "==", experiment_id)
-            ).stream()
+            snapshots = collection.where(filter=FieldFilter("experiment_id", "==", experiment_id)).stream()
             references.extend([snapshot.reference async for snapshot in snapshots])
         for offset in range(0, len(references), 400):
             batch = self.client.batch()

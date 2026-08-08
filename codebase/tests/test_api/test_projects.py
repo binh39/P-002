@@ -43,9 +43,9 @@ async def test_sample_catalog_creates_experiment_without_persisting_projects(cli
         "/api/v1/experiments",
         headers=AUTH_HEADERS,
         json={
-                "project_ids": ["sample:isort"],
-                "name": "Bundled isort experiment",
-                "max_targets": 3,
+            "project_ids": ["sample:isort"],
+            "name": "Bundled isort experiment",
+            "max_targets": 3,
         },
     )
     assert created.status_code == 201

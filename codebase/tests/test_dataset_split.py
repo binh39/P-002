@@ -4,8 +4,11 @@ from src.modules.experiments.schemas import DatasetPercentages, SamplingMethod, 
 
 def target(index: int) -> TargetReference:
     return TargetReference(
-        project_id="project", function_id=f"function-{index}", project="project",
-        source_file="pkg/module.py", symbol=f"function_{index}",
+        project_id="project",
+        function_id=f"function-{index}",
+        project="project",
+        source_file="pkg/module.py",
+        symbol=f"function_{index}",
     )
 
 
@@ -15,9 +18,7 @@ def test_split_is_stable_disjoint_complete_and_uses_percentages():
     first = split_targets(targets, percentages, seed=19)
     second = split_targets(list(reversed(targets)), percentages, seed=19)
     assert first == second
-    assert {name: len(values) for name, values in first.items()} == {
-        "train": 5, "validation": 3, "test": 2
-    }
+    assert {name: len(values) for name, values in first.items()} == {"train": 5, "validation": 3, "test": 2}
     values = [value for split in first.values() for value in split]
     assert set(values) == {item.key for item in targets}
     assert len(values) == len(set(values))
@@ -25,9 +26,7 @@ def test_split_is_stable_disjoint_complete_and_uses_percentages():
 
 def test_random_seed_changes_the_snapshot():
     targets = [target(index) for index in range(12)]
-    assert split_targets(targets, DatasetPercentages(), seed=1) != split_targets(
-        targets, DatasetPercentages(), seed=2
-    )
+    assert split_targets(targets, DatasetPercentages(), seed=1) != split_targets(targets, DatasetPercentages(), seed=2)
 
 
 def test_selection_has_no_implicit_fifty_target_cap():

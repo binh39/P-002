@@ -380,9 +380,7 @@ class ExperimentService:
                         id=target_key,
                         project=references[target_key].project,
                         symbol=references[target_key].symbol,
-                        source=(
-                            await self._require_target_source(references[target_key], item.owner_id)
-                        ),
+                        source=(await self._require_target_source(references[target_key], item.owner_id)),
                         split=split,
                         source_file=references[target_key].source_file,
                     )
@@ -538,9 +536,7 @@ class ExperimentService:
             promoted = bool(report.get("promoted"))
             baseline_score = baseline_metrics.get("score")
             relative_gain = (
-                float(absolute_gain) / float(baseline_score)
-                if absolute_gain is not None and baseline_score
-                else None
+                float(absolute_gain) / float(baseline_score) if absolute_gain is not None and baseline_score else None
             )
             reason = (
                 "Candidate strictly improved paired coverage on the locked holdout"

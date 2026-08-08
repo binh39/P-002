@@ -72,16 +72,8 @@ def main() -> int:
                     "--max-concurrency",
                     str(settings.get("max_concurrency", 10)),
                     "--no-checkpoint",
-                    *(
-                        ["--rate-limit", str(settings["rate_limit"])]
-                        if settings.get("rate_limit")
-                        else []
-                    ),
-                    *(
-                        ["--pytest-args", settings["pytest_args"]]
-                        if settings.get("pytest_args")
-                        else []
-                    ),
+                    *(["--rate-limit", str(settings["rate_limit"])] if settings.get("rate_limit") else []),
+                    *(["--pytest-args", settings["pytest_args"]] if settings.get("pytest_args") else []),
                 ],
                 environment,
                 int(os.getenv("PROMPTOPT_RUNNER_TIMEOUT_SECONDS", "900")),
