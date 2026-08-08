@@ -1,0 +1,102 @@
+{
+  "sort_file": {
+    "valid": true,
+    "covered_statements": 0,
+    "num_statements": 52,
+    "covered_branches": 0,
+    "num_branches": 30,
+    "statement_coverage": 0.0,
+    "branch_coverage": 0.0,
+    "score": 0.0
+  },
+  "sorted_imports": {
+    "valid": true,
+    "covered_statements": 0,
+    "num_statements": 135,
+    "covered_branches": 0,
+    "num_branches": 94,
+    "statement_coverage": 0.0,
+    "branch_coverage": 0.0,
+    "score": 0.0
+  },
+  "file_contents": {
+    "valid": true,
+    "covered_statements": 0,
+    "num_statements": 245,
+    "covered_branches": 0,
+    "num_branches": 154,
+    "statement_coverage": 0.0,
+    "branch_coverage": 0.0,
+    "score": 0.0
+  },
+  "Config.__init__": {
+    "valid": true,
+    "covered_statements": 0,
+    "num_statements": 133,
+    "covered_branches": 0,
+    "num_branches": 90,
+    "statement_coverage": 0.0,
+    "branch_coverage": 0.0,
+    "score": 0.0
+  },
+  "_get_config_data": {
+    "valid": true,
+    "covered_statements": 0,
+    "num_statements": 66,
+    "covered_branches": 0,
+    "num_branches": 50,
+    "statement_coverage": 0.0,
+    "branch_coverage": 0.0,
+    "score": 0.0
+  },
+  "process": {
+    "valid": true,
+    "covered_statements": 0,
+    "num_statements": 281,
+    "covered_branches": 0,
+    "num_branches": 176,
+    "statement_coverage": 0.0,
+    "branch_coverage": 0.0,
+    "score": 0.0
+  },
+  "line": {
+    "valid": true,
+    "covered_statements": 0,
+    "num_statements": 43,
+    "covered_branches": 0,
+    "num_branches": 26,
+    "statement_coverage": 0.0,
+    "branch_coverage": 0.0,
+    "score": 0.0
+  },
+  "imports": {
+    "valid": true,
+    "covered_statements": 0,
+    "num_statements": 102,
+    "covered_branches": 0,
+    "num_branches": 50,
+    "statement_coverage": 0.0,
+    "branch_coverage": 0.0,
+    "score": 0.0
+  },
+  "main": {
+    "valid": true,
+    "covered_statements": 0,
+    "num_statements": 139,
+    "covered_branches": 0,
+    "num_branches": 84,
+    "statement_coverage": 0.0,
+    "branch_coverage": 0.0,
+    "score": 0.0
+  },
+  "_with_from_imports": {
+    "valid": true,
+    "covered_statements": 0,
+    "num_statements": 115,
+    "covered_branches": 0,
+    "num_branches": 86,
+    "statement_coverage": 0.0,
+    "branch_coverage": 0.0,
+    "score": 0.0
+  }
+}

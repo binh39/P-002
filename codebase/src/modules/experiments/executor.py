@@ -51,9 +51,16 @@ class DockerCoverUpExecutor:
         symbols: list[str],
         prompt: PromptBundle,
         settings: ExperimentSettings | None = None,
+        target_specs: list[dict[str, str]] | None = None,
     ) -> BaselineExecution:
         return await asyncio.to_thread(
-            self._execute_sync, archive, source_directory, symbols, prompt, settings or ExperimentSettings()
+            self._execute_sync,
+            archive,
+            source_directory,
+            symbols,
+            prompt,
+            settings or ExperimentSettings(),
+            target_specs,
         )
 
     def _execute_sync(
@@ -63,6 +70,7 @@ class DockerCoverUpExecutor:
         symbols: list[str],
         prompt: PromptBundle,
         settings: ExperimentSettings,
+        target_specs: list[dict[str, str]] | None,
     ) -> BaselineExecution:
         prompt.validate()
         with tempfile.TemporaryDirectory(prefix="promptopt-baseline-") as temp:
@@ -76,6 +84,11 @@ class DockerCoverUpExecutor:
             prompt_dir.mkdir()
             artifacts_dir.mkdir()
             (prompt_dir / "prompt.json").write_text(prompt.as_json(), encoding="utf-8")
+            if target_specs:
+                (prompt_dir / "targets.json").write_text(
+                    json.dumps(target_specs, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
             self._extract_archive(archive, project)
             source = (project / source_directory).resolve()
             if project not in source.parents or not source.is_dir():
@@ -126,8 +139,6 @@ class DockerCoverUpExecutor:
             command.extend(["--env", f"PROMPTOPT_PACKAGE_DIR=/workspace/project/{source_directory}"])
             command.extend(["--env", "PROMPTOPT_SETUP_SITE=/workspace/tests/.promptopt-site"])
             command.extend(["--env", "PROMPTOPT_SETUP_REPORT=/workspace/artifacts/project_setup.json"])
-            command.extend(["--env", "PROMPTOPT_PROMPT_FILE=/workspace/prompt/prompt.json"])
-            command.extend(["--env", f"PROMPTOPT_TARGET_SYMBOLS={json.dumps(symbols)}"])
             command.extend(
                 [
                     self.image,
@@ -139,8 +150,14 @@ class DockerCoverUpExecutor:
                     "/workspace/tests",
                     "--prompt",
                     "gpt-v2",
+                    "--prompt-template-file",
+                    "/workspace/prompt/prompt.json",
                     "--log-file",
                     "/workspace/artifacts/coverup.log",
+                    "--trace-file",
+                    "/workspace/artifacts/attempt_trace.jsonl",
+                    "--prefix",
+                    "opt",
                     "--model",
                     settings.coverup_model,
                     "--max-attempts",
@@ -152,6 +169,10 @@ class DockerCoverUpExecutor:
                     "--no-checkpoint",
                 ]
             )
+            if target_specs:
+                command.extend(["--target-spec-file", "/workspace/prompt/targets.json"])
+            else:
+                command.extend(["--target-symbols", ",".join(symbols)])
             if settings.rate_limit:
                 command.extend(["--rate-limit", str(settings.rate_limit)])
             if settings.pytest_args:
@@ -174,13 +195,14 @@ class DockerCoverUpExecutor:
             (artifacts_dir / "coverup.stdout.log").write_text(completed.stdout, encoding="utf-8")
             (artifacts_dir / "prompt.json").write_text(prompt.as_json(), encoding="utf-8")
             coverup_log = artifacts_dir / "coverup.log"
-            if coverup_log.is_file():
+            attempt_trace = artifacts_dir / "attempt_trace.jsonl"
+            if coverup_log.is_file() and not attempt_trace.is_file():
                 (artifacts_dir / "attempt_trace.jsonl").write_bytes(
                     as_jsonl(parse_coverup_log(coverup_log.read_text(encoding="utf-8")))
                 )
             shutil.make_archive(str(artifacts_dir / "generated_tests"), "zip", tests)
             report = self._run_coverage(project, tests, artifacts_dir, source_directory)
-            target_metrics = self._target_metrics(report, symbols)
+            target_metrics = self._target_metrics(report, target_specs or [{"symbol": item} for item in symbols])
             (artifacts_dir / "target_coverage.json").write_text(
                 json.dumps(target_metrics, indent=2, ensure_ascii=False), encoding="utf-8"
             )
@@ -189,18 +211,30 @@ class DockerCoverUpExecutor:
             return BaselineExecution(score, statement, branch, artifacts, target_metrics)
 
     @classmethod
-    def _target_metrics(cls, report: dict, symbols: list[str]) -> dict[str, dict[str, float | int | None]]:
-        functions = [
-            (name, data)
-            for file_data in report.get("files", {}).values()
-            for name, data in file_data.get("functions", {}).items()
-            if name
-        ]
+    def _target_metrics(
+        cls, report: dict, targets: list[dict[str, str]] | list[str]
+    ) -> dict[str, dict[str, float | int | None]]:
         result = {}
-        for symbol in symbols:
-            matches = [data for name, data in functions if name == symbol or name.endswith(f".{symbol}")]
+        for target in targets:
+            if isinstance(target, str):
+                target = {"symbol": target}
+            symbol = target["symbol"]
+            source_file = target.get("source_file")
+            metric_key = f"{source_file}::{symbol}" if source_file else symbol
+            matches = []
+            for report_file, file_data in report.get("files", {}).items():
+                normalized_report_file = report_file.replace("\\", "/").lower()
+                normalized_source_file = (source_file or "").replace("\\", "/").lower()
+                if source_file and not (
+                    normalized_report_file == normalized_source_file
+                    or normalized_report_file.endswith(f"/{normalized_source_file}")
+                ):
+                    continue
+                for name, data in file_data.get("functions", {}).items():
+                    if name == symbol or (not source_file and name.endswith(f".{symbol}")):
+                        matches.append(data)
             if len(matches) != 1:
-                result[symbol] = {
+                result[metric_key] = {
                     "valid": False,
                     "covered_statements": 0,
                     "num_statements": 0,
@@ -221,7 +255,7 @@ class DockerCoverUpExecutor:
             statement = cls._ratio(covered_statements, num_statements)
             branch = cls._ratio(covered_branches, num_branches)
             score = statement if branch is None else 0.4 * (statement or 0.0) + 0.6 * branch
-            result[symbol] = {
+            result[metric_key] = {
                 "valid": True,
                 "covered_statements": covered_statements,
                 "num_statements": num_statements,

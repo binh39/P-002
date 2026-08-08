@@ -238,6 +238,9 @@ class ExperimentService:
                     [target.symbol for target in project_targets],
                     prompt,
                     item.settings,
+                    target_specs=[
+                        {"source_file": target.source_file, "symbol": target.symbol} for target in project_targets
+                    ],
                 )
                 executions.append((snapshot, project_targets, execution))
             if not executions:
@@ -254,7 +257,11 @@ class ExperimentService:
             }
             for snapshot, project_targets, execution in executions:
                 for target in project_targets:
-                    target_metrics[target.key] = execution.target_metrics.get(target.symbol, {})
+                    execution_key = f"{target.source_file}::{target.symbol}"
+                    target_metrics[target.key] = execution.target_metrics.get(
+                        execution_key,
+                        execution.target_metrics.get(target.symbol, {}),
+                    )
                 for name, content in execution.artifacts.items():
                     artifact_name = f"{snapshot.runner_project}__{name}"
                     object_name = f"artifacts/{item.owner_id}/{item.id}/{run.id}/{artifact_name}"

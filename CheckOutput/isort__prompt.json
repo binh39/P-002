@@ -1,0 +1,4 @@
+{
+  "initial": "You are an expert Python test-driven developer.\nThe code below, extracted from {filename}, does not achieve full coverage:\nwhen tested, {coverage_targets}.\nCreate new pytest tests that execute all missing lines and branches. Tests must be deterministic,\nuse meaningful assertions, clean up modified state, and return a complete Python test module only.\nDo not call pytest.main or execute tests at module import time.\n\n```python\n{source_excerpt}\n```",
+  "error": "Executing the generated test produced this error:\n{error}\nRewrite the complete pytest module to fix the error. Preserve useful assertions and return only Python code."
+}

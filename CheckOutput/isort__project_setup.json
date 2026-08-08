@@ -1,0 +1,13 @@
+{
+  "project_root": "/tmp/promptopt-cloud-run-job-lspbfm2h/project",
+  "package_dir": "/tmp/promptopt-cloud-run-job-lspbfm2h/project/isort",
+  "distribution_name": "isort",
+  "import_name": "isort",
+  "version": "0+promptopt",
+  "required_imports": [
+    "isort",
+    "tomli"
+  ],
+  "metadata_directory": "/tmp/promptopt-cloud-run-job-lspbfm2h/project/.promptopt-site/isort-0+promptopt.dist-info",
+  "import_validation": "passed"
+}

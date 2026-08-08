@@ -54,8 +54,14 @@ def main() -> int:
                 json.dumps(setup_report.as_dict(), indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
-            environment["PROMPTOPT_PROMPT_FILE"] = str(prompt_file)
-            environment["PROMPTOPT_TARGET_SYMBOLS"] = json.dumps(spec["symbols"])
+            target_specs = spec.get("targets") or [{"symbol": symbol} for symbol in spec["symbols"]]
+            target_spec_file = root / "target_specs.json"
+            exact_targets = all(target.get("source_file") for target in target_specs)
+            if exact_targets:
+                target_spec_file.write_text(
+                    json.dumps(target_specs, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
             coverup = _run(
                 [
                     sys.executable,
@@ -66,8 +72,14 @@ def main() -> int:
                     str(tests),
                     "--prompt",
                     "gpt-v2",
+                    "--prompt-template-file",
+                    str(prompt_file),
                     "--log-file",
                     str(artifacts / "coverup.log"),
+                    "--trace-file",
+                    str(artifacts / "attempt_trace.jsonl"),
+                    "--prefix",
+                    "opt",
                     "--model",
                     os.environ["COVERUP_MODEL"],
                     "--max-attempts",
@@ -77,6 +89,11 @@ def main() -> int:
                     "--max-concurrency",
                     str(settings.get("max_concurrency", 10)),
                     "--no-checkpoint",
+                    *(
+                        ["--target-spec-file", str(target_spec_file)]
+                        if exact_targets
+                        else ["--target-symbols", ",".join(spec["symbols"])]
+                    ),
                     *(["--rate-limit", str(settings["rate_limit"])] if settings.get("rate_limit") else []),
                     *(["--pytest-args", settings["pytest_args"]] if settings.get("pytest_args") else []),
                 ],
@@ -88,13 +105,14 @@ def main() -> int:
                 raise RuntimeError(coverup.stdout[-4000:] or "CoverUp execution failed")
             shutil.copyfile(prompt_file, artifacts / "prompt.json")
             coverup_log = artifacts / "coverup.log"
-            if coverup_log.is_file():
+            attempt_trace = artifacts / "attempt_trace.jsonl"
+            if coverup_log.is_file() and not attempt_trace.is_file():
                 (artifacts / "attempt_trace.jsonl").write_bytes(
                     as_jsonl(parse_coverup_log(coverup_log.read_text(encoding="utf-8")))
                 )
             shutil.make_archive(str(artifacts / "generated_tests"), "zip", tests)
             report = _coverage(project, tests, artifacts, source_directory, environment)
-            target_metrics = _target_metrics(report, spec["symbols"])
+            target_metrics = _target_metrics(report, target_specs)
             (artifacts / "target_coverage.json").write_text(
                 json.dumps(target_metrics, indent=2, ensure_ascii=False), encoding="utf-8"
             )
@@ -184,18 +202,28 @@ def _coverage(project: Path, tests: Path, artifacts: Path, source_directory: str
     return json.loads((artifacts / "coverage_after.json").read_text(encoding="utf-8"))
 
 
-def _target_metrics(report: dict, symbols: list[str]) -> dict[str, dict]:
-    functions = [
-        (name, data)
-        for file_data in report.get("files", {}).values()
-        for name, data in file_data.get("functions", {}).items()
-        if name
-    ]
+def _target_metrics(report: dict, targets: list[dict[str, str]] | list[str]) -> dict[str, dict]:
     result = {}
-    for symbol in symbols:
-        matches = [data for name, data in functions if name == symbol or name.endswith(f".{symbol}")]
+    for target in targets:
+        if isinstance(target, str):
+            target = {"symbol": target}
+        symbol = target["symbol"]
+        source_file = target.get("source_file")
+        metric_key = f"{source_file}::{symbol}" if source_file else symbol
+        matches = []
+        for report_file, file_data in report.get("files", {}).items():
+            normalized_report_file = report_file.replace("\\", "/").lower()
+            normalized_source_file = (source_file or "").replace("\\", "/").lower()
+            if source_file and not (
+                normalized_report_file == normalized_source_file
+                or normalized_report_file.endswith(f"/{normalized_source_file}")
+            ):
+                continue
+            for name, data in file_data.get("functions", {}).items():
+                if name == symbol or (not source_file and name.endswith(f".{symbol}")):
+                    matches.append(data)
         if len(matches) != 1:
-            result[symbol] = {
+            result[metric_key] = {
                 "valid": False,
                 "covered_statements": 0,
                 "num_statements": 0,
@@ -216,7 +244,7 @@ def _target_metrics(report: dict, symbols: list[str]) -> dict[str, dict]:
         statement = covered_statements / num_statements if num_statements else None
         branch = covered_branches / num_branches if num_branches else None
         score = statement if branch is None else 0.4 * (statement or 0.0) + 0.6 * branch
-        result[symbol] = {
+        result[metric_key] = {
             "valid": True,
             "covered_statements": covered_statements,
             "num_statements": num_statements,

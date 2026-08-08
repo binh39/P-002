@@ -85,7 +85,8 @@ async def test_cloud_run_job_executor_uses_gcs_manifest_and_environment_referenc
         timeout_seconds=900,
     )
 
-    result = await executor.execute(b"source archive", "src", ["pkg.fn"], baseline_prompt())
+    targets = [{"source_file": "src/pkg.py", "symbol": "pkg.fn"}]
+    result = await executor.execute(b"source archive", "src", ["pkg.fn"], baseline_prompt(), target_specs=targets)
 
     assert result.coverage_score == 0.75
     assert result.artifacts == {"coverage_after.json": b"{}"}
@@ -97,7 +98,9 @@ async def test_cloud_run_job_executor_uses_gcs_manifest_and_environment_referenc
     assert {item["name"] for item in environment} == {"PROMPTOPT_JOB_BUCKET", "PROMPTOPT_JOB_PREFIX", "COVERUP_MODEL"}
     prefix = next(item["value"] for item in environment if item["name"] == "PROMPTOPT_JOB_PREFIX")
     spec = json.loads(storage.objects[f"{prefix}/spec.json"][0])
+    assert spec["protocol_version"] == 2
     assert spec["symbols"] == ["pkg.fn"]
+    assert spec["targets"] == targets
     assert "source archive" not in json.dumps(client.request)
     assert "initial" not in json.dumps(client.request)
     assert client.operation.timeout == 960

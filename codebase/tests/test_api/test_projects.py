@@ -58,13 +58,14 @@ async def test_sample_catalog_creates_experiment_without_persisting_projects(cli
     captured = {}
 
     class SampleExecutor:
-        async def execute(self, archive, source_directory, symbols, prompt, settings):
+        async def execute(self, archive, source_directory, symbols, prompt, settings, target_specs=None):
             captured.update(
                 archive=archive,
                 source_directory=source_directory,
                 symbols=symbols,
                 prompt=prompt,
                 settings=settings,
+                target_specs=target_specs,
             )
             return BaselineExecution(0.5, 0.5, 0.5, {}, {})
 
@@ -77,6 +78,8 @@ async def test_sample_catalog_creates_experiment_without_persisting_projects(cli
     assert baseline.json()["status"] == "baseline_succeeded"
     assert captured["source_directory"] == "isort"
     assert len(captured["symbols"]) == 3
+    available_specs = {(item["file"], item["qualified_name"]) for item in functions}
+    assert {(item["source_file"], item["symbol"]) for item in captured["target_specs"]}.issubset(available_specs)
     with zipfile.ZipFile(io.BytesIO(captured["archive"])) as bundle:
         assert "isort/__init__.py" in bundle.namelist()
         setup = json.loads(bundle.read(".promptopt/setup.json"))

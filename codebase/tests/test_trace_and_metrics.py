@@ -64,3 +64,44 @@ def test_target_metrics_zero_spurious_branches_when_no_statements_execute():
     assert metric["covered_statements"] == 0
     assert metric["covered_branches"] == 0
     assert metric["score"] == 0.0
+
+
+def test_target_metrics_use_source_file_and_qualified_name():
+    report = {
+        "files": {
+            "/workspace/project/pkg/a.py": {
+                "functions": {
+                    "Thing.run": {
+                        "summary": {
+                            "covered_lines": 2,
+                            "num_statements": 4,
+                            "covered_branches": 1,
+                            "num_branches": 2,
+                        }
+                    }
+                }
+            },
+            "/workspace/project/pkg/b.py": {
+                "functions": {
+                    "Thing.run": {
+                        "summary": {
+                            "covered_lines": 0,
+                            "num_statements": 8,
+                            "covered_branches": 0,
+                            "num_branches": 4,
+                        }
+                    }
+                }
+            },
+        }
+    }
+
+    metrics = DockerCoverUpExecutor._target_metrics(
+        report,
+        [{"source_file": "pkg/a.py", "symbol": "Thing.run"}],
+    )
+
+    metric = metrics["pkg/a.py::Thing.run"]
+    assert metric["valid"] is True
+    assert metric["covered_statements"] == 2
+    assert metric["num_statements"] == 4

@@ -28,15 +28,17 @@ class CloudRunJobCoverUpExecutor:
         symbols: list[str],
         prompt: PromptBundle,
         settings: ExperimentSettings | None = None,
+        target_specs: list[dict[str, str]] | None = None,
     ) -> BaselineExecution:
         prompt.validate()
         settings = settings or ExperimentSettings()
         execution_id = uuid4().hex
         prefix = f"runner-jobs/{execution_id}"
         spec = {
-            "protocol_version": 1,
+            "protocol_version": 2,
             "source_directory": source_directory,
             "symbols": symbols,
+            "targets": target_specs or [],
             "prompt_digest": prompt.digest(),
             "settings": settings.model_dump(),
         }

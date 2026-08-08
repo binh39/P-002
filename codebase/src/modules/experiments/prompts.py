@@ -38,15 +38,20 @@ def baseline_prompt() -> PromptBundle:
     return PromptBundle(
         initial="""You are an expert Python test-driven developer.
 The code below, extracted from {filename}, does not achieve full coverage:
-when tested, {coverage_targets}.
-Create new pytest tests that execute all missing lines and branches. Tests must be deterministic,
-use meaningful assertions, clean up modified state, and return a complete Python test module only.
-Do not call pytest.main or execute tests at module import time.
+when tested, {coverage_targets} not execute.
+Create new pytest test functions that execute all missing lines and branches. Each test must
+be correct, deterministic, contain meaningful assertions, and clean up all modified state.
+Use the get_info tool function as necessary. Always return an entire Python test module.
+Do not call pytest.main and do not execute tests at module import time.
+Respond only with Python code enclosed in a python markdown code block.
 
 ```python
 {source_excerpt}
 ```""",
-        error="""Executing the generated test produced this error:
-{error}
-Rewrite the complete pytest module to fix the error. Preserve useful assertions and return only Python code.""",
+        error="""Executing the test yields an error, shown below.
+Modify or rewrite the test to correct it. Return the complete Python test module, not a patch.
+Preserve useful assertions from the previous test and use get_info when more source context is needed.
+Respond only with Python code enclosed in a python markdown code block.
+
+{error}""",
     )
