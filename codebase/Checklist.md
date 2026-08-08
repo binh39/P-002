@@ -1,5 +1,144 @@
 # PromptOpt Delivery Checklist
 
+## Current handoff — 2026-08-08 (authoritative)
+
+> Đây là trạng thái hiện tại và thứ tự thực hiện được đề xuất. Nếu một mục lịch sử phía dưới mâu
+> thuẫn với phần này hoặc `Readme.md`, dùng phần Current handoff làm nguồn đúng. Các phase cũ được
+> giữ lại để bảo toàn lịch sử quyết định.
+
+### Đã hoàn thành: nền tảng và production vertical slice
+
+- [x] Frontend React/Vite đã deploy tại `https://vinaip002.web.app`.
+- [x] Firebase Email/Password, Google Sign-In, register, login, logout và reset password.
+- [x] FastAPI production chạy trên Cloud Run, được Firebase Hosting rewrite qua `/api/v1`.
+- [x] Firebase token verification, owner-scoped API, Firestore repositories và private GCS.
+- [x] Signed ZIP upload, project CRUD/settings, async AST analysis và function source viewer.
+- [x] Cloud Tasks + OIDC internal endpoints cho analysis/baseline orchestration.
+- [x] API container không chạy source người dùng; CoverUp và GEPA chạy trong hai Cloud Run Jobs riêng.
+- [x] GitHub Actions dùng Workload Identity Federation; không dùng service-account JSON key.
+- [x] Frontend và backend CI/deploy độc lập theo path filter; merge vào `main` deploy production.
+
+### Đã hoàn thành: Experiment UI và backend contract
+
+- [x] Chọn nhiều project, không giới hạn cứng 50 target ở request contract.
+- [x] Sampling random/most branches/most statements/manual hoạt động ở backend.
+- [x] `random_seed`, custom train/validation/test percentages và manual splits được lưu/chạy thật.
+- [x] Dropdown COVERUP_MODEL/OPTIMIZE_MODEL; selected models được truyền xuống jobs.
+- [x] Max attempts, repeat tests, concurrency, rate limit, pytest args, max metric calls,
+  evaluation replicates và reflection temperature được nối frontend -> API -> runner.
+- [x] Review cấu hình, create experiment, delete experiment và owner-scoped experiment list.
+- [x] Queue/poll baseline, optimization và paired comparison bằng API thật.
+- [x] Metrics, artifacts, candidate prompt, lineage và promotion decision hiển thị trên frontend.
+- [x] Prompt review queue và approve/reject có comment/audit/idempotent decision.
+
+### Đã hoàn thành: sample repositories và auto-setup
+
+- [x] Catalog read-only cho `isort`, `mlxtend`, `typesystem`; không ghi sample Project/Function dư
+  vào Firestore.
+- [x] Sample snapshots được deploy từ `src/sample_repo.zip`; CI tự extract trước test/build.
+- [x] Preflight không chạy setup script của repo; tạo minimal distribution metadata và validate imports
+  trước khi gọi Gemini.
+- [x] isort: cung cấp metadata + `tomli`; loại `_vendored` và `deprecated` theo coverage config.
+- [x] mlxtend: validate NumPy, SciPy, Pandas, scikit-learn, Matplotlib và joblib.
+- [x] typesystem: validate Jinja2 và YAML.
+- [x] Lưu `project_setup.json` làm artifact chẩn đoán cho baseline/GEPA.
+- [x] Cùng setup environment được dùng khi sinh test và khi đo coverage cuối.
+
+### Đã hoàn thành trong code: exact-target baseline fix
+
+- [x] Phân tích artifact isort 10 target: setup pass nhưng `G=0, F=19, U=4`, không có accepted
+  `.py`; 0% khi đó là kết quả thật, không phải lỗi công thức coverage.
+- [x] Xác định runner cũ match 10 target thành 9 segment; `Config.__init__` bị bỏ vì chỉ lọc tên hàm.
+- [x] Thay contract protocol v1 bằng protocol v2 có exact `source_file + qualified_name`.
+- [x] Baseline web dùng `--target-spec-file` và `--prompt-template-file` giống pipeline `cloud`.
+- [x] Loại wrapper `VersionedPrompter/get_missing_coverage` cũ khỏi sandbox entrypoint.
+- [x] Đồng bộ baseline/error prompt với prompt chuẩn của GEPA, gồm hướng dẫn dùng `get_info`.
+- [x] Metrics map theo `source_file::qualified_name`, không nhầm function trùng tên giữa các file.
+- [x] Giữ structured attempt trace của CoverUp; chỉ parse raw log làm fallback.
+- [x] Zero-test baseline giữ denominator hợp lệ và không báo covered branch khi covered statements = 0.
+- [x] Backend test **38 passed**, optimizer invariant test **51 passed**, Ruff/py_compile/diff check pass.
+- [x] Build local thành công API image và CoverUp runner image sau bản sửa.
+- [ ] Merge/deploy bản exact-target fix lên `main`; production hiện chưa được xem là đã xác nhận cho
+  tới khi backend deploy workflow xanh.
+
+### P0 — Xác nhận runner mới trên production
+
+- [ ] Xác nhận CI backend và backend deployment đều xanh trên cùng commit.
+- [ ] Xác nhận `promptopt-api` revision, `promptopt-coverup-runner` và `promptopt-gepa-runner` cùng
+  dùng image SHA của release mới.
+- [ ] Tạo **experiment mới** cho isort; không dùng lại run/artifact trước exact-target fix.
+- [ ] Smoke 10 random/manual target bằng `gemini-2.5-flash`, `max_attempts=5`, `repeat_tests=2`.
+- [ ] Xác nhận số exact target trong spec bằng số target đã chọn; không còn 10 -> 9 ngoài trường hợp
+  nhiều targets chủ động trỏ cùng một function.
+- [ ] Xác nhận `project_setup.json.import_validation=passed`.
+- [ ] Xác nhận `attempt_trace.jsonl` có outcome theo target; nếu có test tốt phải thấy
+  `coverage_gain_saved`.
+- [ ] Xác nhận `generated_tests.zip` chứa `test_opt_*.py` khi G > 0.
+- [ ] Xác nhận `target_coverage.json` dùng key `source_file::qualified_name` và aggregate khớp raw units.
+- [ ] Smoke `typesystem`, sau đó `mlxtend`; ghi lại model/settings/cost/latency và failure categories.
+- [ ] Chạy full production pipeline baseline -> optimize -> locked comparison -> review.
+- [ ] Lưu sanitized release evidence; không commit UID, token, signed URL, private object path hoặc
+  raw `CheckOutput`.
+
+### P1 — Tăng chất lượng baseline và khả năng chẩn đoán
+
+- [ ] Hiển thị trực tiếp trên UI số `G/F/U/R`, accepted test count và nguyên nhân attempt thất bại.
+- [ ] Hiển thị cảnh báo khi chọn “most statements” với function quá lớn; không tự thay đổi lựa chọn
+  hoặc model của người dùng.
+- [ ] Thêm artifact manifest version/checksum/size/content type cho mọi baseline output.
+- [ ] Thêm runner tests cho malformed model response, empty response, timeout, partial artifact upload
+  và target không tồn tại.
+- [ ] Đánh giá cơ chế giữ các test function pass khi một generated module có cả test pass và fail;
+  chỉ triển khai nếu vẫn đảm bảo isolation/determinism và có regression tests.
+- [ ] Thêm controlled benchmark matrix cho sample repo/model/sampling method; mỗi lần benchmark dùng
+  artifacts directory mới và budget được phê duyệt.
+- [ ] Không coi unit tests pass là bằng chứng prompt/model tạo coverage tốt; chỉ kết luận bằng live
+  benchmark cùng evaluation protocol.
+
+### P2 — Correctness và recovery
+
+- [ ] Idempotency key/transaction cho create baseline, optimize, compare và Cloud Task retry.
+- [ ] Chặn double-click tạo hai active runs cùng loại cho một experiment.
+- [ ] Cancellation API/state cho baseline, optimization, comparison và Cloud Run Job execution.
+- [ ] Phân biệt rõ failed/timed_out/cancelled/queue failure/provider failure.
+- [ ] Durable GEPA checkpoint/resume vượt giới hạn Cloud Tasks 30 phút.
+- [ ] Freeze project/source/settings checksum, dataset checksum và baseline denominators.
+- [ ] Version execution/result/coverage/final-validation schemas và migration strategy cho document cũ.
+- [ ] Persist model/provider, token usage, estimated cost, latency và normalized runner config.
+
+### P3 — Hoàn thiện frontend không mock
+
+- [ ] Thêm Dashboard aggregate API rồi chuyển workflow production sang `VITE_DATA_MODE=connected`.
+- [ ] Quyết định Datasets là resource độc lập hay experiment snapshot; nối API hoặc bỏ route.
+- [ ] Xóa import trực tiếp `mocks/fixtures/platform` khỏi `Datasets.tsx`.
+- [ ] Quyết định Playground là production feature hay demo-only; nếu production phải dùng isolated
+  runner, auth, quota và cost ceiling.
+- [ ] Nối/kiểm tra Save project settings end-to-end.
+- [ ] Kiểm tra loading/empty/error/retry/403/expired-session cho mọi production screen.
+- [ ] Responsive, keyboard navigation, focus, labels, contrast và browser E2E.
+
+### P4 — Security, quota, observability và lifecycle
+
+- [ ] Tenant-isolation tests cho project/experiment/run/prompt/artifact giữa user A và user B.
+- [ ] Threat model và tests cho traversal, symlink, device file, ZIP bomb và malicious generated test.
+- [ ] Quota theo user/workspace: uploads, targets, active jobs, LLM calls, runtime và cost ceiling.
+- [ ] Rate limit, budget alert và emergency kill switch cho CoverUp/GEPA.
+- [ ] Artifact/source retention, cascade delete và scheduled cleanup có dry-run/audit/retry.
+- [ ] Correlation IDs và structured logs xuyên request -> task -> job -> artifact.
+- [ ] Cloud Monitoring dashboard/alerts cho API, queue, job, provider và cost.
+- [ ] Staging riêng, Firestore backup/restore, dependency/container scans và rollback drill.
+
+### Definition of Done gần nhất
+
+- [ ] Ba sample repo có production smoke evidence sau exact-target fix.
+- [ ] User hoàn thành được baseline -> optimize -> compare -> review trên UI production.
+- [ ] Không còn mock trên production routes hoặc mock được gắn nhãn demo-only rõ ràng.
+- [ ] Retry/double-submit/timeout/restart không tạo duplicate hoặc state sai.
+- [ ] Quota, cost controls, monitoring, alerts, retention và tenant isolation được kiểm chứng.
+- [ ] CI/CD xanh, keyless, có staging/E2E/rollback evidence.
+
+---
+
 > Mục tiêu hiện tại: biến frontend prototype thành frontend production-ready, vẫn demo được khi backend chưa hoàn thiện, sau đó deploy Firebase Hosting. Backend chỉ deploy khi có vertical slice đầu tiên hoạt động; không deploy boilerplate hiện tại.
 
 ## Nguyên tắc đã chốt

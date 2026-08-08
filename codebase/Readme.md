@@ -1,271 +1,367 @@
-# PromptOpt application
+# PromptOpt
+
+PromptOpt là web app tối ưu prompt cho bài toán sinh Python unit test. Người dùng chọn project và
+function, cấu hình dataset/model/CoverUp/GEPA, chạy baseline, tối ưu prompt, so sánh paired trên
+locked test split, sau đó approve hoặc reject prompt candidate.
+
+Tài liệu này là điểm bắt đầu cho người tiếp tục phát triển dự án. Trạng thái được cập nhật lần cuối
+ngày **2026-08-08**.
+
+## Trạng thái hiện tại
+
+Ứng dụng đã có vertical slice chạy từ frontend đến Google Cloud:
+
+1. Firebase Authentication xác thực người dùng.
+2. Frontend gọi FastAPI qua Firebase Hosting rewrite `/api/**`.
+3. Người dùng chọn sample repo hoặc upload ZIP, phân tích source và tạo experiment.
+4. Cloud Tasks điều phối baseline sang CoverUp Cloud Run Job.
+5. Optimization chạy DSPy/GEPA trong Cloud Run Job riêng.
+6. Baseline và candidate được so sánh trên locked test split.
+7. Prompt đủ điều kiện được tạo ở trạng thái `in_review`, rồi approve/reject có audit data.
+
+Production hiện tại: [https://vinaip002.web.app](https://vinaip002.web.app).
+
+Ứng dụng **chưa production-complete**. Các phần còn thiếu quan trọng nhất là production smoke cho
+ba sample repo sau bản runner mới, idempotency/cancellation/checkpoint, quota/cost controls,
+observability, tenant-isolation tests và xóa mock khỏi các màn hình phụ.
+
+## Quy tắc source code
+
+- Application backend FastAPI chỉ đặt trong `codebase/src`.
+- Frontend React chỉ đặt trong `codebase/frontend`.
+- Không xóa root `src/`: production runner đang dùng `src/coverup`, `src/optimization` và
+  `src/sample_repo.zip`.
+- `cloud/` chứa entrypoint và deployment scripts cho GEPA Cloud Run Job.
+- Không sửa, ghi đè hoặc dùng prefix benchmark độc lập `prompt_optimization_v3` cho web workflow.
+- Không commit `.env`, `.env.local`, Firebase token, service-account key, signed URL, raw smoke
+  output hoặc `CheckOutput/`.
 
 ## Repository layout
 
 ```text
-codebase/
-  src/          # FastAPI backend (the only backend source root)
-  tests/        # Backend tests
-  frontend/     # React/Vite frontend
-  Dockerfile
-  requirements.txt
+P-002/
+  codebase/
+    frontend/                 React/Vite frontend
+    src/                      FastAPI application backend
+      api/                    public API dependencies/router assembly
+      modules/                auth, uploads, projects, analysis, experiments
+      infrastructure/         Firestore, GCS, Cloud Tasks, Cloud Run clients
+    sandbox/                  isolated CoverUp baseline job entrypoints
+    tests/                    backend tests
+    infra/                    Google Cloud provisioning and runtime env
+    scripts/                  local/production smoke scripts
+    Dockerfile                API image
+    Readme.md                 current architecture and handoff guide
+    Checklist.md              delivery history and prioritized backlog
+  src/
+    coverup/                  project-owned CoverUp engine
+    optimization/             DSPy/GEPA runner, metrics, cache and promotion logic
+    sample_repo.zip           deployable isort/mlxtend/typesystem snapshots
+    sample_repo/              expanded local snapshots; generated/ignored in clean CI
+  cloud/
+    run_job.py                GEPA Cloud Run Job entrypoint
+    Dockerfile.web            GEPA runner image
+    deploy_gepa_job.ps1       standalone GEPA deployment helper
+    run_gepa_job.ps1          standalone GEPA execution/download helper
+  tests/                      CoverUp/GEPA invariant and dataset tests
+  .github/workflows/          CI and keyless production deployment
 ```
 
-The legacy repository-level `src/` is not used by PromptOpt development and can be removed later. All new backend code must be placed under `codebase/src`.
+## Technology stack
+
+| Layer | Technology |
+| --- | --- |
+| Frontend | React 19, TypeScript 5.7, Vite 8, Tailwind CSS 4 |
+| Routing/state | Wouter 3, TanStack Query 5, React local state |
+| Validation/charts | Zod 4, Recharts 3 |
+| Frontend quality | Oxfmt, ESLint 10, Vitest 4, React Testing Library |
+| Authentication | Firebase Authentication: Email/Password, Google Sign-In, reset password |
+| API | FastAPI, Uvicorn, Pydantic v2, pydantic-settings |
+| Persistence | Firestore Native mode; in-memory repositories for tests/local mode |
+| Object storage | Private Google Cloud Storage with short-lived signed upload URLs |
+| Async orchestration | Cloud Tasks with OIDC-protected internal endpoints |
+| Isolated execution | Docker locally; Cloud Run Jobs in production |
+| Test generation | Project-owned CoverUp, LiteLLM/Vertex AI Gemini, SlipCover and coverage.py |
+| Prompt optimization | DSPy 3.2.1 and GEPA 0.0.27 |
+| Hosting | Firebase Hosting with `/api/**` rewrite to Cloud Run |
+| CI/CD | GitHub Actions, Workload Identity Federation, Artifact Registry |
+| Runtime versions | Node >=22.12; API image Python 3.11; CoverUp/GEPA images Python 3.12 |
+
+## Architecture
+
+```text
+Browser
+  -> Firebase Hosting
+     -> React SPA
+     -> /api/** rewrite -> FastAPI Cloud Run service
+                          -> Firebase token verification
+                          -> Firestore metadata/state
+                          -> private GCS source/artifacts
+                          -> Cloud Tasks
+                             -> OIDC internal worker endpoint
+                                -> CoverUp Cloud Run Job (baseline)
+                                -> GEPA Cloud Run Job (optimization/comparison)
+                                   -> Vertex AI Gemini
+                                   -> pytest + SlipCover/coverage.py
+                                   -> result manifest/artifacts in GCS
+```
+
+FastAPI không chạy source của người dùng trực tiếp trong API container. Production phải fail closed
+nếu isolated runner chưa được cấu hình.
+
+### Public API groups
+
+Tất cả public business endpoints nằm dưới `/api/v1` và yêu cầu Firebase bearer token, trừ health:
+
+| Nhóm | Endpoints chính |
+| --- | --- |
+| Upload | `POST /uploads`, `POST /uploads/{id}/complete` |
+| Project | `GET/POST /projects`, `GET /projects/samples`, `PATCH /projects/{id}/settings` |
+| Analysis | `POST /projects/{id}/analyze`, `GET /projects/{id}/functions`, function source endpoint |
+| Experiment | `GET/POST /experiments`, `GET/DELETE /experiments/{id}` |
+| Baseline | `POST /experiments/{id}/runs`, run polling và authenticated artifact download |
+| Optimization | `POST /experiments/{id}/optimize`, optimization polling/artifacts |
+| Comparison | `POST /experiments/{id}/compare`, comparison polling/artifacts |
+| Prompt version | owner-scoped list/detail và `POST .../{id}/approve|reject` |
+
+Các `/internal/v1/**` endpoints chỉ dành cho Cloud Tasks và phải xác minh OIDC audience/service
+account; frontend không được gọi trực tiếp.
+
+## Chức năng đã implement
+
+### Authentication
+
+- Register bằng email/password và display name.
+- Login, logout, reset-password email và Google Sign-In.
+- Protected routes và tự refresh Firebase ID token.
+- API ownership checks; token không được lưu thủ công vào local/session storage.
+
+### Projects và analysis
+
+- Tạo/list/detail/delete project.
+- Signed ZIP upload trực tiếp từ browser vào private GCS.
+- Lưu runtime, dependency, test, coverage và security settings.
+- Cloud Tasks chạy AST analysis bất đồng bộ.
+- Phát hiện function, method, async function, qualified name, source range, LOC, statements và
+  branch candidates.
+- Xem source chính xác của function và chạy re-analysis.
+- Catalog read-only cho `isort`, `mlxtend`, `typesystem`; chọn sample không tạo Project/Function
+  documents dư thừa trong Firestore.
+
+### Experiment configuration
+
+- Chọn một hoặc nhiều project; backend không đặt giới hạn cứng 50 target.
+- Sampling: random, nhiều branch nhất, nhiều statement nhất hoặc manual.
+- `random_seed` và tỷ lệ train/validation/test do người dùng chọn, tổng phải bằng 100 và test split
+  phải khác rỗng.
+- Manual split được validate để target không xuất hiện ở nhiều split.
+- Dropdown Gemini cho `COVERUP_MODEL` và `OPTIMIZE_MODEL`; model chọn trong UI được lưu trong
+  experiment settings và truyền xuống runner.
+- Cấu hình thật: max attempts, repeat tests, concurrency, rate limit, pytest args, max metric calls,
+  evaluation replicates và reflection temperature.
+- Review cấu hình và xóa experiment.
+
+### Baseline CoverUp
+
+- Queue/poll baseline qua Cloud Tasks và isolated CoverUp Cloud Run Job.
+- Auto-setup ba sample repo trước khi gọi model:
+  - tạo distribution metadata an toàn mà không chạy setup script của repo;
+  - kiểm tra import package và dependency bắt buộc;
+  - `isort`: metadata + `tomli`, bỏ `_vendored` và `deprecated` theo coverage config;
+  - `mlxtend`: kiểm tra NumPy/SciPy/Pandas/scikit-learn/Matplotlib/joblib;
+  - `typesystem`: kiểm tra Jinja2 và YAML.
+- Target contract dùng chính xác `source_file + qualified_name`, không match rộng theo tên hàm.
+- Web runner dùng cùng `--target-spec-file` và `--prompt-template-file` với pipeline GEPA.
+- Structured attempt trace giữ outcome như `test_error`, `coverage_gain_saved` và
+  `max_attempts_exhausted`.
+- Pytest exit code 5 là zero-test baseline hợp lệ nếu denominator của mọi target vẫn hợp lệ.
+- Không báo branch coverage ảo khi không statement nào được chạy.
+- Artifacts gồm prompt, setup report, CoverUp logs, stdout, structured trace, generated-tests ZIP,
+  coverage report/data và per-target coverage.
+
+### DSPy/GEPA optimization
+
+- Train/validation search; locked test split không được dùng để chọn candidate.
+- Seed candidate luôn là baseline prompt thật.
+- Cache tách theo prompt digest, evaluation digest, split và replicate.
+- Workspace tách theo candidate/split; target được xác định bằng source file + qualname.
+- Candidate prompt chỉ gồm `initial` và `error`, giữ placeholder bắt buộc.
+- Candidate và baseline prompt được lưu riêng; optimization không tự ghi đè production prompt.
+- Production web GEPA job dùng giới hạn thấp hơn standalone benchmark để nằm trong task timeout.
+
+### Comparison và prompt review
+
+- Paired baseline/candidate evaluation trên cùng locked targets và replicates.
+- Strict promotion gate: candidate phải tốt hơn baseline và không fail/timeout/flaky/regress pass rate.
+- Nếu GEPA giữ nguyên baseline digest thì skip final comparison không cần thiết.
+- Lưu `final_validation.json`, absolute/relative gain và promotion decision.
+- Prompt version `in_review`, owner-scoped list/filter/pagination, approve/reject idempotent với
+  reviewer/comment/timestamp.
+
+### Frontend screens
+
+- Login/Register, Dashboard, Projects, Project Detail/Analysis, Create Experiment, Experiments,
+  Run/Comparison, Review & Approval, Prompt Registry, Datasets, Playground và Settings.
+- Projects, experiments, baseline, optimization, comparison và prompt review luôn dùng HTTP
+  repositories.
+- `VITE_DATA_MODE` hiện chỉ quyết định Dashboard dùng mock hay HTTP. Workflow production đang build
+  với `VITE_DATA_MODE=demo`, nên production là **hybrid**: Dashboard dùng fixture; các workflow chính
+  vẫn gọi API thật.
+- Datasets vẫn import fixture trực tiếp. Playground vẫn là UI tĩnh. Đây là mock còn lại cần xử lý.
+
+## Experiment execution contract
+
+Một experiment lưu snapshot bất biến đủ để tái hiện lựa chọn:
+
+- project IDs và runner-safe project names;
+- source file, function ID và qualified symbol;
+- sampling method, seed và dataset splits;
+- CoverUp/GEPA settings và selected models;
+- baseline, optimization, comparison và prompt-version IDs.
+
+Baseline runner exchange dùng prefix mới dưới `runner-jobs/<execution-id>/`. GEPA web workflow dùng
+`runner-jobs/gepa/<execution-id>/`. Không dùng prefix `prompt_optimization_v3`.
+
+Khi đọc baseline artifact:
+
+- `project_setup.json`: môi trường/import preflight;
+- `attempt_trace.jsonl`: outcome từng attempt;
+- `generated_tests.zip`: phải có `test_opt_*.py` nếu CoverUp chấp nhận test;
+- `coverage_after.json`: raw coverage report;
+- `target_coverage.json`: metrics theo `source_file::qualified_name`.
+
+`baseline_succeeded` với 0% không đồng nghĩa hạ tầng lỗi: đó có thể là zero-test baseline hợp lệ.
+Kiểm tra `G/F/U/R`, `coverage_gain_saved` và generated-tests ZIP trước khi kết luận. Với model Lite và
+nhóm “nhiều statement nhất”, 0% vẫn có thể là kết quả chất lượng model vì các function rất lớn.
+
+## Frontend development
+
+```powershell
+cd codebase\frontend
+npm ci
+npm run format:check
+npm run lint
+npm run typecheck
+npm run test
+npm run build
+npm run dev
+```
+
+Local environment nằm trong `codebase/frontend/.env.local` và không được commit. Các mode:
+
+| Auth | Data | Ý nghĩa |
+| --- | --- | --- |
+| `demo` | `demo` | Local UI/demo auth; Dashboard fixture |
+| `firebase` | `demo` | Firebase auth; Dashboard fixture; core repositories vẫn dùng API |
+| `firebase` | `connected` | Firebase auth và Dashboard API |
 
 ## Backend development
 
 ```powershell
 cd codebase
 ..\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-..\.venv\Scripts\python.exe -m ruff format --check src tests
-..\.venv\Scripts\python.exe -m ruff check src tests
-..\.venv\Scripts\python.exe -m pytest tests
+$env:PYTHONPATH = (Resolve-Path .).Path
+..\.venv\Scripts\python.exe -m ruff format --check src tests sandbox
+..\.venv\Scripts\python.exe -m ruff check src tests sandbox
+..\.venv\Scripts\python.exe -m pytest tests -q
 ..\.venv\Scripts\python.exe -m uvicorn src.main:app --reload --port 8000
 ```
 
-The Projects/upload API and production configuration are documented in [docs/backend-projects-slice.md](docs/backend-projects-slice.md).
+Mặc định local dùng auth disabled, memory repositories, local storage và inline dispatch. Xem
+`codebase/.env.example` và `codebase/src/config.py` trước khi đổi backend mode.
 
-## Experiment and prompt optimization pipeline
+## CoverUp/GEPA development
 
-### Bundled sample-project mode
+```powershell
+cd D:\VinAI\P-002
+uv sync --frozen --group dev
+uv run ruff check src/optimization tests/test_coverage_optimization.py tests/test_dataset_builder.py cloud/run_job.py
+uv run python -m py_compile src/coverup/coverup.py src/optimization/gepa.py src/optimization/metrics.py src/optimization/cli.py src/optimization/runner.py src/optimization/prompts.py cloud/run_job.py
+uv run pytest -p no:pytest_isolate tests -q
+```
 
-The production experiment wizard currently uses three pinned, read-only repositories from
-`src/sample_repo`: `isort`, `mlxtend` and `typesystem`. The API exposes them through
-`GET /api/v1/projects/samples` and analyzes their functions in memory. Listing or selecting a
-sample does not create Upload, Project or Function documents in Firestore. Only the user's
-Experiment, Run, Comparison and Prompt Version records are persisted.
+Đọc `Agent.md` trước khi sửa optimizer. Các invariant quan trọng gồm locked holdout, strict promotion,
+per-target feedback, exact target identity, cache isolation và zero-test denominator validity.
 
-At execution time the API creates an ephemeral ZIP from the pinned snapshot and stages it under a
-new opaque `runner-jobs/...` prefix. Baseline runs use the CoverUp Cloud Run Job and optimization
-uses the isolated GEPA implementation in `cloud/run_job.py`. This path never reads or writes the
-protected standalone benchmark prefix `prompt_optimization_v3`.
+Không tự chạy live Gemini benchmark vì phát sinh chi phí. Unit test pass không chứng minh prompt mới
+tốt hơn; benchmark quyết định phải dùng artifacts directory mới và cùng evaluation protocol.
 
-Git tracks the deployable snapshots as `src/sample_repo.zip`; the expanded `src/sample_repo/` directory is
-intentionally ignored. Backend CI and deployment extract that archive before running tests and
-building the API image, so local-only expanded files are never assumed to exist on a clean runner.
+## Docker verification
 
-The backend now supports the experiment lifecycle from an analyzed project through review:
+Chạy từ repository root:
 
-- Create a deterministic train/validation/locked-test dataset from selected functions.
-- Queue and poll an isolated CoverUp baseline run with structured coverage artifacts.
-- Run GEPA prompt search on train/validation only and persist the locked candidate prompt.
-- Queue a paired final comparison of baseline and candidate on the same locked test targets and replicates.
-- Block promotion when generated tests fail, time out, are flaky, reduce pass rate, or do not improve coverage.
-- Create an `in_review` prompt version and record an idempotent approve/reject decision with reviewer audit data.
+```powershell
+docker build --file codebase/Dockerfile --tag promptopt-api:local .
+docker build --file codebase/sandbox/Dockerfile --tag promptopt-coverup-runner:local .
+docker build --file cloud/Dockerfile.web --tag promptopt-gepa-runner:local .
+```
 
-Firestore stores durable run and prompt-version records. Cloud Tasks invokes OIDC-protected internal worker endpoints. Local execution uses the isolated Docker runner. Production sandbox execution still requires the Cloud Run Job runner described in the checklist; the Cloud Run API service remains fail-closed and does not execute uploaded source directly.
+API container không cần Docker socket. Docker chỉ cần cho local isolated baseline/build verification;
+commit/push không yêu cầu Docker vì GitHub Actions tự build image.
 
-## Backend readiness (2026-08-07)
+## CI/CD
 
-The backend is complete enough for the first end-to-end vertical slice, but it is not yet the complete product backend. The current production API is a FastAPI service with Firebase user authentication, OIDC-protected internal task endpoints, Firestore persistence, private GCS artifacts, Cloud Tasks dispatch and a Cloud Run Job execution boundary.
-
-### Implemented backend capabilities
-
-| Capability | API / infrastructure status |
-| --- | --- |
-| Firebase identity verification and user ownership checks | Implemented |
-| Signed ZIP upload, private object storage and upload completion | Implemented |
-| Python project CRUD and project settings persistence | Implemented |
-| Asynchronous AST analysis and function/source snapshots | Implemented; Cloud Tasks in production |
-| Experiment creation and deterministic train/validation/locked-test split | Implemented |
-| CoverUp baseline execution, polling, metrics and artifacts | Implemented; Cloud Run Job in production configuration |
-| DSPy/GEPA optimization, candidate validation and prompt lineage | Implemented; production uses the isolated `promptopt-gepa-runner` job and keeps the candidate separate from baseline |
-| Paired baseline-vs-candidate comparison and promotion gates | Implemented |
-| `final_validation.json` and ownership-checked run artifacts | Implemented |
-| Prompt version list, creation and approve/reject API with audit fields | Implemented; list is owner-scoped, filterable and paginated |
-| Firestore repositories, GCS storage and OIDC internal task authentication | Implemented |
-
-### Backend work still required before calling it production-complete
-
-- Push/deploy the latest backend workflow authentication fix and run the full production smoke path through review.
-- Add durable GEPA checkpoint/resume, explicit cancellation, retry/idempotency handling and isolated candidate/replicate workspaces.
-- Add workspace quotas and cost/concurrency limits, artifact retention/cleanup and operational monitoring/alerts.
-- Complete Firestore ownership/isolation tests, fake-executor contract tests and malformed/timeout runner tests.
-- Freeze dataset/project/settings checksums and baseline coverage denominators for reproducible comparisons.
-
-These items are hardening and scale work; they do not block connecting the already-implemented experiment vertical slice to the frontend.
-
-## Frontend status
-
-The frontend is deployed at [https://vinaip002.web.app](https://vinaip002.web.app). It uses Firebase Authentication and a hybrid data mode: Project, Experiment, baseline, optimization and paired-comparison features call the production API, while screens without a connected backend slice remain demo data.
-
-## Implemented web features
-
-### Authentication and workspace access
-
-- Email/password registration with display name.
-- Email/password login and logout.
-- Password reset email flow.
-- Google Sign-In.
-- Protected workspace routes: unauthenticated visitors are redirected to `/login`.
-- Firebase manages session refresh; the browser does not store an API token manually.
-
-### Python projects and source upload
-
-- Create a Python project with name, description, branch, commit and ZIP archive.
-- Upload ZIP files directly from the browser to a private Cloud Storage bucket through a short-lived signed URL.
-- Validate upload metadata and archive size before the project is created.
-- List projects and open a project detail page.
-- View project runtime, dependency, test, coverage and security settings in the UI.
-
-### Project analysis
-
-- Automatically start analysis after creating a project; users can also run **Re-analyze** from Project Detail.
-- Show queued/running/failed/ready states and poll only while analysis is running.
-- Process analysis asynchronously with Cloud Tasks, so the browser request returns immediately.
-- Safely inspect the uploaded ZIP and extract Python functions, methods, async functions, source ranges, LOC, statement count and branch candidates using Python AST.
-- View analyzed functions and open the exact extracted source for each function.
-
-### Experiments, baseline, optimization and comparison
-
-- List experiments owned by the signed-in user without fixture fallback.
-- Create an experiment from one analyzed project and up to 50 selected functions.
-- Queue and poll the isolated baseline run, then display aggregate and per-target coverage metrics.
-- Download baseline artifacts through authenticated ownership-checked API endpoints.
-- Start GEPA optimization only for experiments with non-empty train, validation and locked test splits.
-- Poll optimization status and display the selected candidate prompt, validation scores, prompt lineage and artifacts.
-- Start and poll the paired final comparison on the locked test split.
-- Display baseline/candidate score, statement and branch coverage, pass rate, absolute/relative gain and promotion-gate decision.
-- Download the ownership-checked `final_validation.json` comparison artifact.
-- Open an eligible prompt version directly from its paired comparison, inspect candidate prompt/lineage/metrics and approve or reject it with an audit comment.
-
-### Available UI screens
-
-- Dashboard, Projects, Project Detail, Create Experiment, Experiments, Runs/Comparison, Prompt Registry, Playground, Datasets and Settings.
-- Projects, Project Analysis, Experiments, Baseline Runs, Optimization Runs, Paired Comparison and Review & Approval use production backend data. Dashboard and Datasets remain UI/demo workflows until their next vertical slices are connected.
-
-### Current delivery status
-
-| Capability | Status |
-| --- | --- |
-| Firebase login, registration, reset password and Google Sign-In | Production |
-| Project ZIP upload and project metadata | Production |
-| Async Python AST analysis and function source viewer | Production |
-| Project settings UI | UI ready; persistence is available for project settings API |
-| Experiment creation, baseline run and GEPA optimization | Production API connected in frontend |
-| Paired comparison | Production API connected in frontend |
-| Prompt review queue, approve/reject and audit details | Production API connected in frontend |
-
-### Frontend/API integration boundary
-
-The following screens can use the real API now and should not reintroduce fixture repositories:
-
-- Projects, ZIP upload, project detail/settings and Python function analysis.
-- Experiment creation, baseline run, optimization run and paired comparison.
-- Review & Approval, including prompt-version list, paired-comparison deep link and approve/reject decisions.
-
-The following screens still require an API slice before their mock data can be deleted:
-
-- Dashboard KPI/activity data: no dashboard aggregate endpoint exists yet.
-- Datasets: the UI currently imports `mocks/fixtures/platform`; experiment split data is returned inside an experiment but there is no standalone dataset repository/API.
-- Prompt Registry: prompt-version list API exists; the separate Registry screen still needs to be connected and archive/search semantics need to be defined.
-- Playground: currently a static UI/code example, not a persisted execution feature.
-
-`DemoAuthService` and `VITE_DATA_MODE=demo` may remain for local UI development. They are not production fallbacks. Production should use `VITE_AUTH_MODE=firebase` and `VITE_DATA_MODE=connected`; an API error must remain visible instead of silently switching to mock data.
-
-The frontend can also run in these modes during development:
-
-| Auth mode | Data mode | Use case |
+| Workflow | Trigger | Việc thực hiện |
 | --- | --- | --- |
-| `demo` | `demo` | Local development and UI review |
-| `firebase` | `demo` | Public frontend with real login before backend APIs exist |
-| `firebase` | `connected` | Production frontend connected to `/api/v1` |
+| `frontend-ci.yml` | PR/main khi frontend đổi | format, lint, typecheck, test, build, npm audit |
+| `frontend-deploy.yml` | merge/push main khi frontend đổi | WIF auth, lấy Firebase web config, build và deploy Hosting |
+| `ci.yml` | PR/main khi backend/runner đổi | backend tests, optimizer tests, build API/CoverUp/GEPA images |
+| `backend-deploy.yml` | merge/push main khi backend/runner đổi | WIF auth, push 3 images, deploy 2 Jobs và API |
 
-## Connect a Firebase project
+Feature branch chỉ CI; `main` là production. Deployment dùng Workload Identity Federation, không dùng
+service-account JSON key.
 
-The first production project is connected:
-
-| Resource | Value |
-| --- | --- |
-| Firebase project | `vinaip002` |
-| Firebase Web App | `PromptOpt Frontend` |
-| Web App ID | `1:891999064201:web:69022a3951a6ff42eaf658` |
-| Hosting site | `vinaip002` |
-| Live URL | `https://vinaip002.web.app` |
-| Preview channels | None; feature branches are tested locally |
-
-Firebase Authentication supports Google Sign-In and Email/Password login, registration and password reset. The production Hosting domain is authorized. Production uses real Firebase authentication and a hybrid data mode: Projects uses the real API, while modules without backend slices continue to use explicit demo repositories.
-
-The ignored `codebase/frontend/.env.local` contains the Firebase Web App configuration. Feature branches are reviewed locally:
-
-```powershell
-cd codebase\frontend
-npm ci
-npm run dev
-```
-
-Do not commit `.env.local`, service-account JSON files, generated credentials or OAuth client secrets. Firebase Web App values are public identifiers, but deployment credentials must use Workload Identity Federation.
-
-Merges to `main` deploy automatically. A manual production deploy, when explicitly needed, uses:
-
-```powershell
-firebase deploy --only hosting:frontend --project vinaip002
-```
-
-## GitHub production deployment
-
-The production workflow is fully configured with keyless Google Cloud authentication:
-
-```text
-Workload Identity Pool: github-actions
-Provider: p002-main
-Allowed identity: binh39/P-002 on refs/heads/main
-Service account: github-frontend-deploy@vinaip002.iam.gserviceaccount.com
-Project roles: roles/firebasehosting.admin, roles/run.viewer
-```
-
-`frontend-deploy.yml` retrieves the Firebase Web App config at runtime after WIF authentication, then builds and deploys Hosting after a merge to `main`. It does not require a service-account key or GitHub secret. Create the optional GitHub Environment named `production` only when you want approval gates or environment protection rules.
-
-## Backend production
-
-The first vertical slice is deployed in Singapore:
+## Production resources
 
 | Resource | Value |
 | --- | --- |
-| Cloud Run | `promptopt-api` |
+| GCP/Firebase project | `vinaip002` |
 | Region | `asia-southeast1` |
-| API through Hosting | `https://vinaip002.web.app/api/v1` |
-| Firestore | `(default)`, Native mode, `asia-southeast1` |
+| Hosting/API | `https://vinaip002.web.app`, `/api/v1` |
+| Cloud Run API | `promptopt-api` |
+| CoverUp Job | `promptopt-coverup-runner` |
+| GEPA Job | `promptopt-gepa-runner` |
 | Artifact Registry | `asia-southeast1-docker.pkg.dev/vinaip002/promptopt` |
-| Private source bucket | `vinaip002-promptopt-sources` |
-| Analysis task queue | `promptopt-analysis` |
-| Experiment task queue | `promptopt-baseline` |
-| CoverUp Cloud Run Job | `promptopt-coverup-runner` |
-| GEPA Cloud Run Job | `promptopt-gepa-runner` |
-| Runner identity | `promptopt-runner@vinaip002.iam.gserviceaccount.com` |
+| Private bucket | `vinaip002-promptopt-sources` |
+| Cloud Tasks queues | `promptopt-analysis`, `promptopt-baseline` |
 | Runtime identity | `promptopt-api@vinaip002.iam.gserviceaccount.com` |
-| Deploy identity | `github-backend-deploy@vinaip002.iam.gserviceaccount.com` |
+| Runner identity | `promptopt-runner@vinaip002.iam.gserviceaccount.com` |
 
-The bucket has public access prevention and only permits browser `PUT` requests from the production domains through short-lived signed URLs. Firebase Hosting rewrites `/api/**` to Cloud Run. Backend changes under `codebase/src/**` build and deploy independently after merging to `main` through `.github/workflows/backend-deploy.yml`.
+Firebase Hosting rewrite là public, nhưng API business endpoints vẫn yêu cầu Firebase bearer token.
+Runner identity chỉ được cấp quyền tối thiểu trên opaque runner exchange objects và Vertex AI.
 
-Project analysis runs asynchronously through Cloud Tasks. Production extracts Python functions and source ranges with `ast`, stores function snapshots below each Firestore project, and exposes them through the authenticated Projects API. The frontend polls only while a project is analyzing and does not fall back to fixture data when an API call fails.
+## Production smoke
 
-### Provision the production runner once
-
-The deployment workflow builds separate API, CoverUp and GEPA images. The API image contains the three read-only sample snapshots; the web GEPA image uses `cloud/Dockerfile.web` and receives the selected snapshot ZIP at runtime. It deploys two isolated Cloud Run Jobs with dedicated runtime identity. Before the first merge that contains the runner workflow, a project administrator must run:
-
-```powershell
-cd codebase
-.\infra\provision-production-runner.ps1
-```
-
-The script enables the required APIs, creates `promptopt-runner` when absent, and creates a custom object role containing only `storage.objects.get/create`. An IAM condition restricts that role to the opaque `runner-jobs/` prefix; the runner cannot list, overwrite or delete bucket objects and cannot read original uploads outside this prefix. A second project-level custom role grants the API only `run.operations.get`, which is required to poll the long-running operation after starting a job; permission to run with overrides remains scoped to the individual runner Job by the deployment workflow. The script also grants Vertex AI access, lets the GitHub deploy identity attach the runner account, and creates or limits the `promptopt-baseline` queue. It does not create service-account keys or store credentials.
-
-The API writes source, prompt and versioned execution inputs under `runner-jobs/<execution-id>/` for CoverUp and `runner-jobs/gepa/<execution-id>/` for GEPA in the private PromptOpt bucket. Jobs receive only opaque object references, use workload identity, and publish manifests plus artifacts. The web integration cannot use or overwrite the standalone benchmark prefix `prompt_optimization_v3`.
-
-Current limitation: the web GEPA job is capped below the Cloud Tasks 30-minute deadline (`GEPA_MAX_METRIC_CALLS=30`, job timeout 28 minutes). Large searches such as the standalone 2,200-call benchmark still need durable start/poll/checkpoint orchestration and must not be routed through the synchronous web worker.
-
-### Production smoke test
-
-Run the production smoke script from the repository root. It asks for a fresh Firebase **ID token**; Google Cloud CLI login alone is not a Firebase user session.
+Script cần Firebase **ID token**; `gcloud auth login` không tạo Firebase user session.
 
 ```powershell
-# Upload → analysis → one-target baseline
+# Baseline smoke
 .\codebase\scripts\smoke_production.ps1
 
-# Upload → analysis → three-target baseline → optimize → paired comparison → review when eligible
+# Baseline -> optimize -> compare -> optional review
 .\codebase\scripts\smoke_production.ps1 -FullPipeline -ReviewDecision approve
 ```
 
-The full mode selects the requested target plus two deterministic valid functions, because optimization needs non-empty train, validation and locked-test splits. A candidate that fails the promotion gate finishes as `comparison_succeeded`; in that case review is intentionally not called and the script emits a warning. Results are sanitized and written under ignored `codebase/.smoke-results/`; do not commit raw smoke output, Firebase user identifiers, private artifact paths or fixture archives.
+Sanitized output được ghi vào ignored `codebase/.smoke-results/`. Không commit raw response hoặc UID.
+
+## Verification snapshot
+
+Tại lần cập nhật 2026-08-08:
+
+- Backend Ruff/pytest: **38 passed**.
+- CoverUp/GEPA invariant tests: **51 passed**.
+- API image và CoverUp runner image build local thành công sau exact-target fix.
+- Production vẫn cần deploy commit mới và chạy lại smoke 10-target/ba sample repo.
+- Live Gemini benchmark không được chạy tự động trong lần kiểm tra tài liệu.
+
+## Việc tiếp theo
+
+Thứ tự ưu tiên được theo dõi chi tiết trong `Checklist.md`:
+
+1. Deploy exact-target/prompt-contract runner và smoke isort mới; không tái sử dụng experiment cũ.
+2. Smoke `typesystem`, rồi `mlxtend`; xác nhận setup report, accepted tests và metrics.
+3. Chạy full baseline -> optimize -> comparison -> review trên production.
+4. Hoàn thiện idempotency, cancellation, GEPA checkpoint/resume và immutable checksums.
+5. Thêm quota, cost ceiling, artifact retention, structured monitoring và alerts.
+6. Xóa mock Dashboard/Datasets/Playground hoặc định nghĩa API/product semantics tương ứng.
+7. Thêm staging, browser E2E, tenant-isolation/security tests và rollback drill.
