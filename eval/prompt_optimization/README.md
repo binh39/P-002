@@ -428,7 +428,7 @@ example, pipeline lấy đúng score từ workspace cô lập của symbol đó 
 test suite dùng chung. Cache per-example nội bộ của GEPA được tắt để ID integer của train
 không thể va chạm với validation; cache artifact phía adapter vẫn được giữ nguyên.
 
-Evaluation isolation và generated workspace layout hiện dùng cache schema 9. Artifact từ schema cũ không được tái sử
+Evaluation isolation, generated workspace layout và deterministic Python hash ordering hiện dùng cache schema 10. Artifact từ schema cũ không được tái sử
 dụng; với benchmark quyết định vẫn nên chọn một `--artifacts-dir` mới.
 
 Sau khi compile xong, pipeline lưu:

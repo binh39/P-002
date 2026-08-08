@@ -57,6 +57,11 @@ def _test_environment(
         os.pathsep.join(roots) + os.pathsep + environment.get("PYTHONPATH", "")
     )
     environment["MPLBACKEND"] = "Agg"
+    # Generated tests may iterate over sets or otherwise depend on Python's
+    # randomized hash order. CoverUp validates a test in one subprocess and the
+    # runner measures the saved suite in another; without a fixed seed, a test
+    # can pass generation and fail final coverage with different input ordering.
+    environment["PYTHONHASHSEED"] = "0"
     return environment
 
 

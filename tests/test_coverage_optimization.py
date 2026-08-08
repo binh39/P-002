@@ -28,7 +28,11 @@ from src.optimization.gepa import (
 from src.optimization.metrics import aggregate_coverage_score, build_feedback, score_symbol
 from src.optimization.models import ExperimentConfig, ProjectLayout, SymbolTarget
 from src.optimization.prompts import PromptBundle, baseline_bundle
-from src.optimization.runner import CoverUpExperimentRunner, _zero_coverage_like
+from src.optimization.runner import (
+    CoverUpExperimentRunner,
+    _test_environment,
+    _zero_coverage_like,
+)
 
 
 def coverage(*, executed_lines=(), missing_lines=(), executed_branches=(), missing_branches=()):
@@ -58,6 +62,14 @@ def test_zero_coverage_start_preserves_all_targets():
     assert before.covered_branches == 0
     assert before.missing_lines == (1, 2, 3)
     assert before.missing_branches == ((1, 2), (1, 3))
+
+
+def test_test_environment_fixes_python_hash_seed(tmp_path, monkeypatch):
+    monkeypatch.setenv("PYTHONHASHSEED", "random")
+
+    environment = _test_environment(tmp_path)
+
+    assert environment["PYTHONHASHSEED"] == "0"
 
 
 def test_run_coverage_exports_zero_coverage_when_pytest_collects_no_tests(

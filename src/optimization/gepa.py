@@ -115,10 +115,10 @@ def _evaluation_digest(
                     path.read_bytes()
                 ).hexdigest()
     payload = {
-        # Schema 9 evaluates every symbol in an isolated workspace rooted under
-        # the artifacts directory. Older caches either leak coverage across
-        # examples or point at sibling test directories outside the run tree.
-        "cache_schema": 9,
+        # Schema 10 also fixes PYTHONHASHSEED across CoverUp and coverage
+        # subprocesses so a generated test cannot pass under one set ordering
+        # and fail under another. Older caches predate that reproducibility rule.
+        "cache_schema": 10,
         "config": config_values,
         "targets": [_target_identity(target) for target in targets],
         "sources": source_hashes,

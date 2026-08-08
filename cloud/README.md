@@ -141,12 +141,12 @@ Sau khi job chạy xong, script tải toàn bộ `gs://p002-gepa-artifacts/promp
 ## Lệnh xóa Storage
 gcloud storage rm -r gs://p002-gepa-artifacts/prompt_optimization_v3
 
-.\cloud\deploy_gepa_job.ps1 -MetricCalls 1500 -Execute
+.\cloud\deploy_gepa_job.ps1 -MetricCalls 4500 -Execute
 
 ```powershell
 # Lúc bắt đầu — có thể đóng terminal ngay sau đó
 .\cloud\run_gepa_job.ps1 -NoWait
 
 # Lúc quay lại — chờ + tải kết quả của đúng execution đó
-.\cloud\run_gepa_job.ps1 -ExecutionName p002-gepa-jm7jq
+.\cloud\run_gepa_job.ps1 -ExecutionName p002-gepa-gmg8w
 ```
