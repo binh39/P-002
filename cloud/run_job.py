@@ -14,18 +14,9 @@ Usage (as the job command):
 from __future__ import annotations
 
 import argparse
-import io
-import json
-import os
-import shutil
-import stat
 import subprocess
 import sys
-import tempfile
-import zipfile
-from pathlib import Path, PurePosixPath
-
-from src.optimization.project_setup import prepare_project
+from pathlib import Path
 
 
 def _upload_dir(bucket: str, prefix: str, local_dir: Path) -> None:
@@ -43,197 +34,41 @@ def _upload_dir(bucket: str, prefix: str, local_dir: Path) -> None:
             print(f"uploaded {index}/{len(files)} files", flush=True)
 
 
-def _download_object(bucket: str, object_name: str, destination: Path) -> None:
-    from google.cloud import storage
-
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    storage.Client().bucket(bucket).blob(object_name).download_to_filename(str(destination))
-
-
-def _extract_archive(content: bytes, destination: Path, max_files: int, max_bytes: int) -> None:
-    try:
-        bundle = zipfile.ZipFile(io.BytesIO(content))
-    except zipfile.BadZipFile as exc:
-        raise RuntimeError("Project archive is not a valid ZIP") from exc
-    entries = [entry for entry in bundle.infolist() if not entry.is_dir()]
-    if len(entries) > max_files:
-        raise RuntimeError("Project archive contains too many files")
-    if sum(entry.file_size for entry in entries) > max_bytes:
-        raise RuntimeError("Project archive exceeds the extraction limit")
-    for entry in entries:
-        path = PurePosixPath(entry.filename.replace("\\", "/"))
-        mode = entry.external_attr >> 16
-        if mode and stat.S_IFMT(mode) not in {0, stat.S_IFREG}:
-            raise RuntimeError("Project archive contains a non-regular file")
-        if path.is_absolute() or ".." in path.parts:
-            raise RuntimeError("Project archive contains an unsafe path")
-        target = (destination / path.as_posix()).resolve()
-        if destination not in target.parents:
-            raise RuntimeError("Project archive contains an unsafe path")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with bundle.open(entry) as source, target.open("wb") as output:
-            shutil.copyfileobj(source, output)
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bucket", required=True)
     parser.add_argument("--artifacts-name", required=True)
     parser.add_argument("--local-root", default="/app/artifacts")
-    parser.add_argument("--source-object")
-    parser.add_argument("--dataset-object")
-    parser.add_argument("--prompt-object")
-    parser.add_argument("--project-layouts-object")
-    parser.add_argument("--metric-calls", type=int, default=30)
-    parser.add_argument("--evaluation-replicates", type=int, default=1)
-    parser.add_argument("--max-concurrency", type=int, default=10)
-    parser.add_argument("--repeat-tests", type=int, default=2)
-    parser.add_argument("--max-attempts", type=int, default=3)
-    parser.add_argument("--rate-limit", type=int)
-    parser.add_argument("--pytest-args", default="")
-    parser.add_argument("--reflection-temperature", type=float, default=0.7)
-    parser.add_argument("--max-files", type=int, default=10_000)
-    parser.add_argument("--max-uncompressed-bytes", type=int, default=100 * 1024 * 1024)
     parser.add_argument("cli_args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     cli_args = list(args.cli_args)
     if cli_args and cli_args[0] == "--":
         cli_args = cli_args[1:]
 
-    dynamic_values = (
-        args.source_object,
-        args.dataset_object,
-        args.prompt_object,
-        args.project_layouts_object,
-    )
-    dynamic_mode = any(dynamic_values)
-    if dynamic_mode and not all(dynamic_values):
-        parser.error("dynamic mode requires source, dataset, prompt, and project layouts")
-    if dynamic_mode and args.artifacts_name.strip("/").startswith("prompt_optimization_v3"):
-        parser.error("dynamic web runs may not write to the protected prompt_optimization_v3 prefix")
+    local_dir = (Path(args.local_root) / args.artifacts_name).resolve()
+    print(f"==> Artifacts will be written to {local_dir} (local disk)", flush=True)
+    print(f"==> Upload target: gs://{args.bucket}/{args.artifacts_name}/", flush=True)
 
-    with tempfile.TemporaryDirectory(prefix="promptopt-gepa-job-") as temporary:
-        temporary_root = Path(temporary).resolve()
-        local_dir = (
-            (temporary_root / "artifacts").resolve()
-            if dynamic_mode
-            else (Path(args.local_root) / args.artifacts_name).resolve()
-        )
-        print(f"==> Artifacts will be written to {local_dir} (local disk)", flush=True)
-        print(f"==> Upload target: gs://{args.bucket}/{args.artifacts_name}/", flush=True)
+    command = [
+        sys.executable, "-m", "src.optimization.cli",
+        "--artifacts-dir", str(local_dir),
+        *cli_args,
+    ]
+    print(f"==> Running: {' '.join(command)}", flush=True)
+    return_code = subprocess.call(command)
 
-        if dynamic_mode:
-            project = temporary_root / "project"
-            source_archive = temporary_root / "source.zip"
-            dataset = temporary_root / "dataset.jsonl"
-            prompt = temporary_root / "prompt.json"
-            layouts = temporary_root / "project-layouts.json"
-            _download_object(args.bucket, args.source_object, source_archive)
-            _download_object(args.bucket, args.dataset_object, dataset)
-            _download_object(args.bucket, args.prompt_object, prompt)
-            _download_object(args.bucket, args.project_layouts_object, layouts)
-            project.mkdir()
-            _extract_archive(source_archive.read_bytes(), project, args.max_files, args.max_uncompressed_bytes)
-            layout_values = json.loads(layouts.read_text(encoding="utf-8"))
-            if not layout_values:
-                raise RuntimeError("At least one project layout is required")
-            first = next(iter(layout_values.values()))
-            package_dir = (project / first["package_dir"]).resolve()
-            tests_dir = (project / first["tests_dir"]).resolve()
-            setup_reports = {}
-            prepared_environment = os.environ.copy()
-            for project_name, value in layout_values.items():
-                for field in ("package_dir", "tests_dir"):
-                    path = (project / value[field]).resolve()
-                    if project not in path.parents or not path.is_dir():
-                        raise RuntimeError(f"Configured {field} is absent from the archive")
-                report, prepared_environment = prepare_project(
-                    project,
-                    (project / value["package_dir"]).resolve(),
-                    prepared_environment,
-                )
-                setup_reports[project_name] = report.as_dict()
-            os.environ.update(prepared_environment)
-            local_dir.mkdir(parents=True, exist_ok=True)
-            (local_dir / "project_setup.json").write_text(
-                json.dumps(setup_reports, indent=2, ensure_ascii=False),
-                encoding="utf-8",
-            )
-            cli_args = [
-                "--project-root",
-                str(project),
-                "--package-dir",
-                str(package_dir),
-                "--tests-dir",
-                str(tests_dir),
-                "--project-layouts",
-                str(layouts),
-                "--max-attempts",
-                str(args.max_attempts),
-                "--max-concurrency",
-                str(args.max_concurrency),
-                "--repeat-tests",
-                str(args.repeat_tests),
-            ]
-            if args.rate_limit:
-                cli_args.extend(["--rate-limit", str(args.rate_limit)])
-            if args.pytest_args:
-                cli_args.extend(["--pytest-args", args.pytest_args])
-            cli_args.extend(
-                [
-                    "optimize",
-                    "--dataset",
-                    str(dataset),
-                    "--prompt",
-                    str(prompt),
-                    "--max-metric-calls",
-                    str(args.metric_calls),
-                    "--evaluation-replicates",
-                    str(args.evaluation_replicates),
-                    "--reflection-temperature",
-                    str(args.reflection_temperature),
-                ]
-            )
-
-        command = [
-            sys.executable,
-            "-m",
-            "src.optimization.cli",
-            "--artifacts-dir",
-            str(local_dir),
-            *cli_args,
-        ]
-        print(f"==> Running: {' '.join(command)}", flush=True)
-        return_code = subprocess.call(command)
-        local_dir.mkdir(parents=True, exist_ok=True)
-        required = (
-            "optimized_program.json",
-            "prompts/gepa_proposed.json",
-            "prompts/gepa_optimized.json",
-            "final_validation.json",
-        )
-        missing = [name for name in required if not (local_dir / name).is_file()]
-        status = "succeeded" if return_code == 0 and not missing else "failed"
-        (local_dir / "job_result.json").write_text(
-            json.dumps(
-                {
-                    "status": status,
-                    "return_code": return_code,
-                    "missing_artifacts": missing,
-                    "protocol_version": 1,
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+    if local_dir.exists():
         try:
             print("==> Uploading results to GCS ...", flush=True)
             _upload_dir(args.bucket, args.artifacts_name, local_dir)
             print("==> Upload complete.", flush=True)
         except Exception as error:  # noqa: BLE001 - surface upload failures clearly
             print(f"==> ERROR: upload failed: {error}", file=sys.stderr, flush=True)
-            return 1
-        return 0 if status == "succeeded" else (return_code or 1)
+            return 1 if return_code == 0 else return_code
+    else:
+        print("==> No artifacts directory produced; nothing to upload.", flush=True)
+
+    return return_code
 
 
 if __name__ == "__main__":

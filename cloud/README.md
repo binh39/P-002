@@ -1,7 +1,5 @@
 # Deploy GEPA/CoverUp pipeline to Google Cloud Run Jobs
 
-> `prompt_optimization_v3` là prefix benchmark batch đang vận hành. Web backend không được dùng prefix này; integration web dùng job `promptopt-gepa-runner` và prefix riêng `runner-jobs/gepa/<run-id>` trong bucket PromptOpt.
-
 Chạy lệnh optimization (GEPA + CoverUp) trên Google Cloud và lấy kết quả eval về máy.
 
 ## Các file
@@ -143,12 +141,12 @@ Sau khi job chạy xong, script tải toàn bộ `gs://p002-gepa-artifacts/promp
 ## Lệnh xóa Storage
 gcloud storage rm -r gs://p002-gepa-artifacts/prompt_optimization_v3
 
-.\cloud\deploy_gepa_job.ps1 -MetricCalls 2200 -Execute
+.\cloud\deploy_gepa_job.ps1 -MetricCalls 4500 -Execute
 
 ```powershell
 # Lúc bắt đầu — có thể đóng terminal ngay sau đó
 .\cloud\run_gepa_job.ps1 -NoWait
 
 # Lúc quay lại — chờ + tải kết quả của đúng execution đó
-.\cloud\run_gepa_job.ps1 -ExecutionName p002-gepa-jm7jq
+.\cloud\run_gepa_job.ps1 -ExecutionName p002-gepa-gmg8w
 ```

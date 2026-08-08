@@ -18,8 +18,8 @@ BASELINE_TASK_AUDIENCE: https://promptopt-api-891999064201.asia-southeast1.run.a
 BASELINE_EXECUTION_BACKEND: cloud_run_job
 CLOUD_RUN_RUNNER_JOB: promptopt-coverup-runner
 CLOUD_RUN_RUNNER_TIMEOUT_SECONDS: "900"
-OPTIMIZE_MODEL: vertex_ai/gemini-3.6-flash
-OPTIMIZE_MODEL_ALLOWLIST: vertex_ai/gemini-3.6-flash
+OPTIMIZE_MODEL: vertex_ai/gemini-3.1-pro-preview
+OPTIMIZE_MODEL_ALLOWLIST: vertex_ai/gemini-3.1-pro-preview
 GEPA_MAX_METRIC_CALLS: "30"
 OPTIMIZATION_EXECUTION_BACKEND: cloud_run_job
 CLOUD_RUN_GEPA_JOB: promptopt-gepa-runner

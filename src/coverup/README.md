@@ -9,6 +9,8 @@ python -m coverup --package-dir sample_repo\mlxtend\mlxtend --tests sample_repo\
 
 python -m coverup --package-dir sample_repo\typesystem\typesystem --tests sample_repo\typesystem\tests --target-symbol tokenize_json --repeat-tests 1 --max-attempts 1
 
+python -m coverup --package-dir sample_repo\mimesis\mimesis --tests sample_repo\mimesis\tests --target-symbol Choice.__call__ --repeat-tests 1 --max-attempts 2
+
 ## Coverage 
 coverage run --branch --source=sample_repo/isort -m pytest sample_repo/isort/tests
 coverage json --pretty-print

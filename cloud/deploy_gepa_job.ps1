@@ -158,7 +158,7 @@ if ($SkipBuild) {
 $coverupModel = Get-EnvValue "COVERUP_MODEL"
 if (-not $coverupModel) { $coverupModel = "vertex_ai/gemini-3.5-flash-lite" }
 $optimizeModel = Get-EnvValue "OPTIMIZE_MODEL"
-if (-not $optimizeModel) { $optimizeModel = "vertex_ai/gemini-3.6-flash" }
+if (-not $optimizeModel) { $optimizeModel = "vertex_ai/gemini-3.1-pro-preview" }
 $vertexLocation = Get-EnvValue "VERTEXAI_LOCATION"
 if (-not $vertexLocation) { $vertexLocation = "global" }
 

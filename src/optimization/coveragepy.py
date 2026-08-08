@@ -105,8 +105,10 @@ def run_coverage(
     # collection errors and failing tests must remain invalid evaluations.
     if completed.returncode not in (0, _NO_TESTS_COLLECTED):
         return completed
+    # Compact JSON (no --pretty-print): the report is only used to score the
+    # batch and is deleted afterwards, so pretty-printing just wastes disk.
     report = subprocess.run(
-        [sys.executable, "-m", "coverage", "json", "--pretty-print", "-o", str(output.resolve())],
+        [sys.executable, "-m", "coverage", "json", "-o", str(output.resolve())],
         cwd=project_root, env=run_env, text=True,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
     )

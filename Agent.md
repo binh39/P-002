@@ -43,7 +43,7 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
 - `coverage run --source=...` still creates coverage data for unexecuted package files. Always run `coverage json` for exit codes `0` and `5` so symbol statement/branch denominators remain measurable.
 - Do not accept any other non-zero pytest exit code: collection errors and failing tests are invalid evaluations.
 - A baseline with zero covered units may enter GEPA as long as every target has valid non-zero statement denominators. Candidate failures are then scored as zero against those fixed reference units.
-- Evaluation cache schema `9` invalidates older caches that discarded zero-test denominators, omitted structured traces, shared coverage across targets, or stored generated workspaces outside the artifacts tree.
+- Evaluation cache schema `10` invalidates older caches that discarded zero-test denominators, omitted structured traces, shared coverage across targets, stored generated workspaces outside the artifacts tree, or ran CoverUp and coverage with different randomized hash ordering.
 - When reporting repeated evaluation failures, skip wrapper lines such as `Replicate 0:` and show the first substantive feedback line.
 
 ## Cấu hình khuyến nghị

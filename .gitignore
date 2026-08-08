@@ -71,4 +71,4 @@ out/
 .ai-log/archive/
 src/sample_repo
 coverup-log
-/eval/prompt_optimization_v2
+/eval/prompt_optimization*/

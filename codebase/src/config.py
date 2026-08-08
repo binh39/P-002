@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     max_runner_uncompressed_bytes: int = Field(default=100 * 1024 * 1024, ge=1024)
     baseline_runner_network: str = "none"
     optimize_model: str = ""
-    optimize_model_allowlist: str = "vertex_ai/gemini-3.6-flash"
+    optimize_model_allowlist: str = "vertex_ai/gemini-3.1-pro-preview"
     gepa_max_metric_calls: int = Field(default=30, ge=3, le=1000)
     optimization_execution_backend: Literal["inline", "cloud_run_job"] = "inline"
     cloud_run_gepa_job: str = "promptopt-gepa-runner"

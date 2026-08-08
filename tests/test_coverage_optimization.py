@@ -28,7 +28,11 @@ from src.optimization.gepa import (
 from src.optimization.metrics import aggregate_coverage_score, build_feedback, score_symbol
 from src.optimization.models import ExperimentConfig, ProjectLayout, SymbolTarget
 from src.optimization.prompts import PromptBundle, baseline_bundle
-from src.optimization.runner import CoverUpExperimentRunner, _zero_coverage_like
+from src.optimization.runner import (
+    CoverUpExperimentRunner,
+    _test_environment,
+    _zero_coverage_like,
+)
 
 
 def coverage(*, executed_lines=(), missing_lines=(), executed_branches=(), missing_branches=()):
@@ -58,6 +62,14 @@ def test_zero_coverage_start_preserves_all_targets():
     assert before.covered_branches == 0
     assert before.missing_lines == (1, 2, 3)
     assert before.missing_branches == ((1, 2), (1, 3))
+
+
+def test_test_environment_fixes_python_hash_seed(tmp_path, monkeypatch):
+    monkeypatch.setenv("PYTHONHASHSEED", "random")
+
+    environment = _test_environment(tmp_path)
+
+    assert environment["PYTHONHASHSEED"] == "0"
 
 
 def test_run_coverage_exports_zero_coverage_when_pytest_collects_no_tests(
@@ -146,9 +158,15 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
     prompt_path = tmp_path / "prompt.json"
     baseline_bundle().save(prompt_path)
     commands = []
+    target_specs = []
 
     def fake_subprocess_run(command, **kwargs):
         commands.append(command)
+        target_specs.append(json.loads(
+            Path(command[command.index("--target-spec-file") + 1]).read_text(
+                encoding="utf-8"
+            )
+        ))
         trace_path = Path(command[command.index("--trace-file") + 1])
         trace_path.write_text(
             json.dumps({
@@ -196,24 +214,17 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
 
     command = commands[0]
     assert command[command.index("--target-symbols") + 1] == "first,Second.method"
-    target_spec = Path(command[command.index("--target-spec-file") + 1])
-    assert json.loads(target_spec.read_text(encoding="utf-8")) == [
+    assert target_specs[0] == [
         {"source_file": "pkg/a.py", "symbol": "first"},
         {"source_file": "pkg/b.py", "symbol": "Second.method"},
     ]
     assert command[command.index("--max-concurrency") + 1] == "10"
     assert "--trace-file" in command
-    assert Path(record.tests_workspace).parts[-4:] == (
-        "artifacts",
-        "generated_tests",
-        "train",
-        "tests_candidate_candidate",
+    assert record.tests_workspace.endswith(
+        "artifacts\\generated_tests\\train\\tests_candidate_candidate"
     )
-    assert Path(baseline_record.tests_workspace).parts[-4:] == (
-        "artifacts",
-        "generated_tests",
-        "train",
-        "tests_base_line_baseline",
+    assert baseline_record.tests_workspace.endswith(
+        "artifacts\\generated_tests\\train\\tests_base_line_baseline"
     )
     assert Path(record.tests_workspace).is_dir()
     assert len(record.results) == 2
@@ -805,7 +816,6 @@ def test_tune_skips_final_split_when_gepa_keeps_unchanged_baseline(
     targets = {"train": train, "validation": validation, "test": test}
 
     monkeypatch.setattr(cli, "load_dotenv", lambda *args, **kwargs: None)
-    monkeypatch.setenv("OPTIMIZE_MODEL", "vertex_ai/test-model")
     monkeypatch.setattr(
         cli,
         "make_runner",
@@ -1237,12 +1247,12 @@ def test_runner_partitions_targets_by_project(tmp_path, monkeypatch):
     assert Path(
         beta_command[beta_command.index("--package-dir") + 1]
     ).resolve() == beta_pkg.resolve()
-    assert Path(
-        alpha_command[alpha_command.index("--tests-dir") + 1]
-    ).parts[-2:] == ("tests_candidate_candidate", "alpha")
-    assert Path(
-        beta_command[beta_command.index("--tests-dir") + 1]
-    ).parts[-2:] == ("tests_candidate_candidate", "beta")
+    assert alpha_command[
+        alpha_command.index("--tests-dir") + 1
+    ].endswith("candidate\\alpha")
+    assert beta_command[
+        beta_command.index("--tests-dir") + 1
+    ].endswith("candidate\\beta")
     assert len(coverage_outputs) == 2
     assert {
         str(kwargs["package_dir"].resolve()) for kwargs in coverage_outputs

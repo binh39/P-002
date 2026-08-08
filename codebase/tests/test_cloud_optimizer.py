@@ -6,7 +6,6 @@ import pytest
 from src.modules.experiments.cloud_optimizer import CloudRunJobGepaOptimizer
 from src.modules.experiments.optimizer import OptimizationTarget
 from src.modules.experiments.prompts import baseline_prompt
-from src.modules.experiments.schemas import ExperimentSettings
 
 
 class FakeStorage:
@@ -48,10 +47,6 @@ class FakeJobsClient:
                 "candidates": [prompt.as_candidate(), candidate],
             },
             "final_validation.json": {"promoted": True, "absolute_gain": 0.5},
-            "prompts/gepa_proposed.json": candidate,
-            # Production can retain baseline even though the proposal must remain
-            # available to the web comparison.
-            "prompts/gepa_optimized.json": prompt.as_candidate(),
         }
         for name, payload in payloads.items():
             self.storage.objects[f"{prefix}/{name}"] = (json.dumps(payload).encode(), "application/json")
@@ -85,16 +80,13 @@ async def test_cloud_gepa_optimizer_uses_isolated_web_prefix_and_maps_result():
 
     result = await optimizer.optimize(
         archive=b"zip",
-        project_layouts={"uploaded": {"package_dir": "pkg", "tests_dir": "tests"}},
+        source_directory="pkg",
         baseline=baseline_prompt(),
         train=targets["train"],
         validation=targets["validation"],
         holdout=targets["test"],
-        settings=ExperimentSettings(
-            coverup_model="vertex_ai/gemini-2.5-flash-lite",
-            optimize_model="vertex_ai/gemini-3.5-flash",
-            max_metric_calls=30,
-        ),
+        reflection_model="vertex_ai/gemini-3.1-pro-preview",
+        max_metric_calls=30,
     )
 
     request_text = json.dumps(client.request)
@@ -102,17 +94,10 @@ async def test_cloud_gepa_optimizer_uses_isolated_web_prefix_and_maps_result():
     assert "runner-jobs/gepa/" in request_text
     assert client.request["name"].endswith("/promptopt-gepa-runner")
     assert client.thread_id != event_loop_thread
-    environment = client.request["overrides"]["container_overrides"][0]["env"]
-    assert environment == [
-        {"name": "COVERUP_MODEL", "value": "vertex_ai/gemini-2.5-flash-lite"},
-        {"name": "OPTIMIZE_MODEL", "value": "vertex_ai/gemini-3.5-flash"},
-    ]
     assert result.score == 0.7
     assert result.baseline_score == 0.2
     assert result.candidate_count == 2
     assert result.metric_calls == 12
-    assert result.candidate.initial.endswith("Prefer explicit boundary assertions.")
-    assert result.candidate.digest() != baseline_prompt().digest()
     dataset_object = next(name for name in storage.objects if name.endswith("inputs/dataset.jsonl"))
     rows = [json.loads(line) for line in storage.objects[dataset_object][0].decode().splitlines()]
     assert {row["split"] for row in rows} == {"train", "validation", "test"}

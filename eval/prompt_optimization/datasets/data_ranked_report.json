@@ -1,8 +1,8 @@
 {
-  "train_limit": 100,
-  "validation_limit": 200,
-  "test_limit": 200,
-  "selected_total": 500,
+  "train_limit": 150,
+  "validation_limit": 300,
+  "test_limit": 300,
+  "selected_total": 750,
   "projects": {
     "isort": {
       "functions": 188
@@ -12,6 +12,9 @@
     },
     "typesystem": {
       "functions": 176
+    },
+    "mimesis": {
+      "functions": 389
     }
   },
   "excluded_dirs": [
@@ -21,9 +24,9 @@
     "tests"
   ],
   "splits": {
-    "test": 200,
-    "train": 100,
-    "validation": 200
+    "test": 300,
+    "train": 150,
+    "validation": 300
   },
   "outputs": {
     "dataset": "D:\\Mon_Hoc\\Projects\\VINAI\\P-002\\eval\\prompt_optimization\\datasets\\data_symbols.jsonl",
