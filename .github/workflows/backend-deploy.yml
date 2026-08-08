@@ -1,0 +1,148 @@
+name: Deploy backend production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "codebase/src/**"
+      - "codebase/Dockerfile"
+      - "codebase/requirements.txt"
+      - "codebase/.dockerignore"
+      - "codebase/infra/cloud-run-env.yaml"
+      - "codebase/sandbox/**"
+      - "src/coverup/**"
+      - "src/optimization/**"
+      - "src/sample_repo/**"
+      - "src/sample_repo.rar"
+      - "src/sample_repo.zip"
+      - "cloud/run_job.py"
+      - "cloud/Dockerfile.web"
+      - "Dockerfile"
+      - ".dockerignore"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/backend-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: backend-production
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: vinaip002
+  REGION: asia-southeast1
+  REPOSITORY: promptopt
+  SERVICE: promptopt-api
+  RUNTIME_SERVICE_ACCOUNT: promptopt-api@vinaip002.iam.gserviceaccount.com
+  SOURCE_BUCKET: vinaip002-promptopt-sources
+  RUNNER_JOB: promptopt-coverup-runner
+  GEPA_JOB: promptopt-gepa-runner
+  RUNNER_SERVICE_ACCOUNT: promptopt-runner@vinaip002.iam.gserviceaccount.com
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: vinaip002
+          workload_identity_provider: projects/891999064201/locations/global/workloadIdentityPools/github-actions/providers/p002-main
+          service_account: github-backend-deploy@vinaip002.iam.gserviceaccount.com
+          token_format: access_token
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Extract bundled sample repositories
+        run: |
+          unzip -q -o src/sample_repo.zip -d src
+          test -d src/sample_repo/isort
+          test -d src/sample_repo/mlxtend
+          test -d src/sample_repo/typesystem
+      - name: Authenticate Docker to Artifact Registry
+        uses: docker/login-action@v4
+        with:
+          registry: asia-southeast1-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+      - name: Build and push images
+        env:
+          API_IMAGE: asia-southeast1-docker.pkg.dev/vinaip002/promptopt/api:${{ github.sha }}
+          RUNNER_IMAGE: asia-southeast1-docker.pkg.dev/vinaip002/promptopt/coverup-runner:${{ github.sha }}
+          GEPA_IMAGE: asia-southeast1-docker.pkg.dev/vinaip002/promptopt/gepa-runner:${{ github.sha }}
+        run: |
+          docker build --file codebase/Dockerfile --tag "$API_IMAGE" .
+          docker build --file codebase/sandbox/Dockerfile --tag "$RUNNER_IMAGE" .
+          docker build --file cloud/Dockerfile.web --tag "$GEPA_IMAGE" .
+          docker push "$API_IMAGE"
+          docker push "$RUNNER_IMAGE"
+          docker push "$GEPA_IMAGE"
+      - name: Deploy isolated CoverUp job
+        env:
+          RUNNER_IMAGE: asia-southeast1-docker.pkg.dev/vinaip002/promptopt/coverup-runner:${{ github.sha }}
+        run: |
+          gcloud run jobs deploy "$RUNNER_JOB" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --image "$RUNNER_IMAGE" \
+            --service-account "$RUNNER_SERVICE_ACCOUNT" \
+            --cpu 1 \
+            --memory 2Gi \
+            --tasks 1 \
+            --parallelism 1 \
+            --max-retries 0 \
+            --task-timeout 900s \
+            --set-env-vars "COVERUP_MODEL=vertex_ai/gemini-3.5-flash-lite,VERTEXAI_PROJECT=$PROJECT_ID,VERTEXAI_LOCATION=global,PROMPTOPT_RUNNER_TIMEOUT_SECONDS=900,PROMPTOPT_MAX_FILES=10000,PROMPTOPT_MAX_UNCOMPRESSED_BYTES=104857600"
+          gcloud run jobs add-iam-policy-binding "$RUNNER_JOB" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --member "serviceAccount:$RUNTIME_SERVICE_ACCOUNT" \
+            --role roles/run.developer \
+            --quiet
+      - name: Deploy isolated GEPA job
+        env:
+          GEPA_IMAGE: asia-southeast1-docker.pkg.dev/vinaip002/promptopt/gepa-runner:${{ github.sha }}
+        run: |
+          gcloud run jobs deploy "$GEPA_JOB" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --image "$GEPA_IMAGE" \
+            --service-account "$RUNNER_SERVICE_ACCOUNT" \
+            --command python \
+            --args=-m,cloud.run_job,--help \
+            --cpu 8 \
+            --memory 8Gi \
+            --tasks 1 \
+            --parallelism 1 \
+            --max-retries 0 \
+            --task-timeout 1680s \
+            --set-env-vars "COVERUP_MODEL=vertex_ai/gemini-3.5-flash-lite,OPTIMIZE_MODEL=vertex_ai/gemini-3.1-pro-preview,VERTEXAI_PROJECT=$PROJECT_ID,VERTEXAI_LOCATION=global"
+          gcloud run jobs add-iam-policy-binding "$GEPA_JOB" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --member "serviceAccount:$RUNTIME_SERVICE_ACCOUNT" \
+            --role roles/run.developer \
+            --quiet
+      - name: Deploy Cloud Run
+        env:
+          IMAGE: asia-southeast1-docker.pkg.dev/vinaip002/promptopt/api:${{ github.sha }}
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --image "$IMAGE" \
+            --service-account "$RUNTIME_SERVICE_ACCOUNT" \
+            --allow-unauthenticated \
+            --port 8080 \
+            --cpu 1 \
+            --memory 512Mi \
+            --timeout 1800 \
+            --min 0 \
+            --max 3 \
+            --concurrency 40 \
+            --env-vars-file codebase/infra/cloud-run-env.yaml

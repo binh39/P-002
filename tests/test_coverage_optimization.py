@@ -146,9 +146,15 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
     prompt_path = tmp_path / "prompt.json"
     baseline_bundle().save(prompt_path)
     commands = []
+    target_specs = []
 
     def fake_subprocess_run(command, **kwargs):
         commands.append(command)
+        target_specs.append(json.loads(
+            Path(command[command.index("--target-spec-file") + 1]).read_text(
+                encoding="utf-8"
+            )
+        ))
         trace_path = Path(command[command.index("--trace-file") + 1])
         trace_path.write_text(
             json.dumps({
@@ -196,8 +202,7 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
 
     command = commands[0]
     assert command[command.index("--target-symbols") + 1] == "first,Second.method"
-    target_spec = Path(command[command.index("--target-spec-file") + 1])
-    assert json.loads(target_spec.read_text(encoding="utf-8")) == [
+    assert target_specs[0] == [
         {"source_file": "pkg/a.py", "symbol": "first"},
         {"source_file": "pkg/b.py", "symbol": "Second.method"},
     ]

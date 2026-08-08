@@ -103,6 +103,24 @@ def _traces_for_target(traces: list[dict], target: SymbolTarget) -> list[dict]:
     return result
 
 
+def _prune_run_dir(run_dir: Path) -> None:
+    """Keep only record.json in a batch run directory after it is scored.
+
+    GEPA evaluates hundreds of targets per candidate, and every evaluation
+    writes a fresh run directory.  Keeping coverage reports (~0.5-2 MB each)
+    and CoverUp logs would quickly fill the container's ephemeral disk on long
+    runs.  Per-target scores, feedback and attempt traces are already persisted
+    in the batch cache (and scores/feedback again in record.json), so nothing
+    else in the run directory is read afterwards.
+    """
+    for stale in run_dir.iterdir():
+        if not stale.is_file():
+            continue
+        if stale.name == "record.json":
+            continue
+        stale.unlink(missing_ok=True)
+
+
 class CoverUpExperimentRunner:
     """Evaluate one prompt on one symbol in an isolated copy of the test suite."""
 
@@ -406,6 +424,7 @@ class CoverUpExperimentRunner:
         (run_dir / "record.json").write_text(
             json.dumps(record.as_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
         )
+        _prune_run_dir(run_dir)
         return record
 
     def evaluate_existing_tests_batch(
@@ -521,6 +540,7 @@ class CoverUpExperimentRunner:
         (run_dir / "record.json").write_text(
             json.dumps(record.as_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
         )
+        _prune_run_dir(run_dir)
         return record
 
 
