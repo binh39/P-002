@@ -27,7 +27,5 @@ async def test_optimization_poll_is_scheduled_without_holding_worker_request():
 
     await dispatcher.dispatch("run-1", delay_seconds=60)
 
-    assert dispatcher.client.task["http_request"]["url"].endswith(
-        "/internal/v1/optimization-runs/run-1/execute"
-    )
+    assert dispatcher.client.task["http_request"]["url"].endswith("/internal/v1/optimization-runs/run-1/execute")
     assert dispatcher.client.task["schedule_time"].seconds > 0

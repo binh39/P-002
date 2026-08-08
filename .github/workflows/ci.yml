@@ -100,6 +100,12 @@ jobs:
           enable-cache: true
       - name: Install locked GEPA environment
         run: uv sync --frozen --group dev
+      - name: Extract bundled sample repositories
+        run: |
+          unzip -q -o src/sample_repo.zip -d src
+          test -d src/sample_repo/isort/isort
+          test -d src/sample_repo/mlxtend/mlxtend
+          test -d src/sample_repo/typesystem/typesystem
       - name: Check GEPA pipeline
         run: |
           uv run ruff check src/optimization tests/test_coverage_optimization.py tests/test_dataset_builder.py cloud/run_job.py

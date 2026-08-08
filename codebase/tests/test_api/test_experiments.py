@@ -63,6 +63,7 @@ async def test_create_experiment_and_reject_unbundled_optimization(client):
     assert premature_comparison.status_code == 409
     assert premature_comparison.json()["error"]["code"] == "OPTIMIZATION_NOT_READY"
 
+
 @pytest.mark.asyncio
 async def test_download_optimization_artifact_checks_run_manifest(client, app):
     repository = app.state.services.experiments.repository

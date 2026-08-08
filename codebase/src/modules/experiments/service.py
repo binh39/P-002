@@ -122,8 +122,7 @@ class ExperimentService:
             split_seed=payload.random_seed,
             settings=payload.settings,
             optimization_eligible=(
-                self.samples is not None
-                and all(self.samples.contains(project.id) for project in projects)
+                self.samples is not None and all(self.samples.contains(project.id) for project in projects)
             ),
             status=ExperimentStatus.DRAFT,
             created_at=now,
@@ -163,8 +162,7 @@ class ExperimentService:
         if previous_status != ExperimentStatus.DRAFT:
             raise AppError(409, "OPTIMIZATION_ALREADY_REQUESTED", "Optimization has already been requested")
         if self.samples is None or any(
-            not self.samples.contains(snapshot.project_id)
-            for snapshot in item.project_snapshots
+            not self.samples.contains(snapshot.project_id) for snapshot in item.project_snapshots
         ):
             raise AppError(
                 409,
@@ -235,10 +233,7 @@ class ExperimentService:
             if item is not None:
                 await self._materialize_cloud_comparison(item, run)
             return
-        polling_cloud_job = (
-            run.status == ExperimentStatus.OPTIMIZING
-            and run.cloud_artifact_prefix is not None
-        )
+        polling_cloud_job = run.status == ExperimentStatus.OPTIMIZING and run.cloud_artifact_prefix is not None
         if run.status != ExperimentStatus.OPTIMIZATION_QUEUED and not polling_cloud_job:
             return
         if not polling_cloud_job:
@@ -294,9 +289,7 @@ class ExperimentService:
                         holdout=holdout,
                         settings=item.settings,
                     )
-                    run.cloud_deadline_at = datetime.now(UTC) + timedelta(
-                        seconds=self.cloud_optimizer.timeout_seconds
-                    )
+                    run.cloud_deadline_at = datetime.now(UTC) + timedelta(seconds=self.cloud_optimizer.timeout_seconds)
                     await self.repository.save_optimization_run(run)
                     await self.optimization_dispatcher.dispatch(run.id, delay_seconds=60)
                     return
