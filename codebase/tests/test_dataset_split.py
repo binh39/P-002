@@ -24,6 +24,10 @@ def test_split_is_stable_disjoint_complete_and_uses_percentages():
     assert len(values) == len(set(values))
 
 
+def test_default_percentages_are_twenty_forty_forty():
+    assert DatasetPercentages().model_dump() == {"train": 20, "validation": 40, "test": 40}
+
+
 def test_random_seed_changes_the_snapshot():
     targets = [target(index) for index in range(12)]
     assert split_targets(targets, DatasetPercentages(), seed=1) != split_targets(targets, DatasetPercentages(), seed=2)

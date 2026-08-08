@@ -1345,19 +1345,19 @@ def test_existing_baseline_tests_are_scored_per_project(tmp_path, monkeypatch):
 def test_resolve_project_layouts_supports_single_project(tmp_path):
     repos = tmp_path / "src" / "sample_repo"
     (repos / "isort" / "isort").mkdir(parents=True)
-    (repos / "isort" / "tests").mkdir(parents=True)
     targets = [SymbolTarget("isort", "isort/a.py", "f", "train")]
     layouts = _resolve_project_layouts(
         tmp_path, targets, Path("src/sample_repo")
     )
     assert set(layouts) == {"isort"}
+    assert layouts["isort"].tests_dir == repos / "isort" / "tests"
+    assert not layouts["isort"].tests_dir.exists()
 
 
 def test_resolve_project_layouts_builds_per_project_layouts(tmp_path):
     repos = tmp_path / "src" / "sample_repo"
     for project in ("isort", "mlxtend"):
         (repos / project / project).mkdir(parents=True)
-        (repos / project / "tests").mkdir(parents=True)
     targets = [
         SymbolTarget("isort", "isort/a.py", "f", "train"),
         SymbolTarget("mlxtend", "mlxtend/b.py", "g", "validation"),
@@ -1370,6 +1370,7 @@ def test_resolve_project_layouts_builds_per_project_layouts(tmp_path):
     assert set(layouts) == {"isort", "mlxtend"}
     assert layouts["isort"].package_dir == repos / "isort" / "isort"
     assert layouts["mlxtend"].tests_dir == repos / "mlxtend" / "tests"
+    assert not layouts["mlxtend"].tests_dir.exists()
 
 
 def test_resolve_project_layouts_fails_when_package_missing(tmp_path):

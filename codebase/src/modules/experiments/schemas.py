@@ -48,9 +48,9 @@ class SamplingMethod(StrEnum):
 
 
 class DatasetPercentages(StrictModel):
-    train: int = Field(default=60, ge=0, le=100)
-    validation: int = Field(default=20, ge=0, le=100)
-    test: int = Field(default=20, gt=0, le=100)
+    train: int = Field(default=20, ge=0, le=100)
+    validation: int = Field(default=40, ge=0, le=100)
+    test: int = Field(default=40, gt=0, le=100)
 
     @model_validator(mode="after")
     def total_is_one_hundred(self):

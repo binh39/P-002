@@ -29,9 +29,9 @@ export interface CloudExperimentSettings {
 }
 
 export const defaultDatasetPercentages: DatasetPercentages = {
-  train: 60,
-  validation: 20,
-  test: 20,
+  train: 20,
+  validation: 40,
+  test: 40,
 };
 
 export const defaultCloudSettings: CloudExperimentSettings = {

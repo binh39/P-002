@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  defaultDatasetPercentages,
   selectCandidateFunctions,
   splitFunctions,
   type ExperimentFunction,
@@ -22,6 +23,10 @@ const functions: ExperimentFunction[] = Array.from({ length: 10 }, (_, index) =>
 }));
 
 describe("experiment dataset configuration", () => {
+  it("defaults to a 20/40/40 train, validation, and test split", () => {
+    expect(defaultDatasetPercentages).toEqual({ train: 20, validation: 40, test: 40 });
+  });
+
   it("ranks the candidate pool before shuffling it", () => {
     const selected = selectCandidateFunctions(functions, "most_branches", 4, 42);
     expect(new Set(selected.map((item) => item.id))).toEqual(

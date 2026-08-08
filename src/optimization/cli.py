@@ -171,7 +171,12 @@ def _resolve_project_layouts(
     targets: list[SymbolTarget],
     sample_repos_dir: Path,
 ) -> dict[str, ProjectLayout] | None:
-    """Resolve bundled package/tests directories for every dataset project."""
+    """Resolve bundled source packages for every dataset project.
+
+    CoverUp evaluates each target in a generated-test workspace under the
+    artifacts directory.  A bundled upstream ``tests`` directory is therefore
+    metadata only and must not be required for prompt optimization.
+    """
     projects = sorted({target.project for target in targets})
     repos = _resolve(root, sample_repos_dir)
     layouts: dict[str, ProjectLayout] = {}
@@ -180,11 +185,7 @@ def _resolve_project_layouts(
         tests = (repos / project / "tests").resolve()
         if not package.is_dir():
             raise FileNotFoundError(
-                f"Multi-project run needs package directory {package}"
-            )
-        if not tests.is_dir():
-            raise FileNotFoundError(
-                f"Multi-project run needs tests directory {tests}"
+                f"Optimization run needs package directory {package}"
             )
         layouts[project] = ProjectLayout(package_dir=package, tests_dir=tests)
     return layouts
@@ -220,9 +221,12 @@ def make_runner(
         pytest_args=args.pytest_args,
         projects=projects,
     )
-    for name, path in (("package", config.package_dir), ("tests", config.tests_dir)):
-        if not path.is_dir():
-            raise FileNotFoundError(f"The {name} directory does not exist: {path}")
+    # ``package_dir`` is only the single-project fallback. Dynamic and
+    # multi-project runs have already validated every entry in ``projects``.
+    if projects is None and not config.package_dir.is_dir():
+        raise FileNotFoundError(
+            f"The package directory does not exist: {config.package_dir}"
+        )
     return CoverUpExperimentRunner(config)
 
 

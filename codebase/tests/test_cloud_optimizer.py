@@ -97,6 +97,14 @@ async def test_cloud_gepa_optimizer_uses_isolated_web_prefix_and_maps_result():
     assert "runner-jobs/gepa/" in request_text
     assert client.request["name"].endswith("/promptopt-gepa-runner")
     assert client.request["overrides"]["timeout"] == "86400s"
+    environment = {
+        item["name"]: item["value"]
+        for item in client.request["overrides"]["container_overrides"][0]["env"]
+    }
+    assert environment == {
+        "COVERUP_MODEL": "vertex_ai/gemini-3.5-flash-lite",
+        "OPTIMIZE_MODEL": "vertex_ai/gemini-3.1-pro-preview",
+    }
     assert client.thread_id != event_loop_thread
     assert result.score == 0.7
     assert result.baseline_score == 0.2
