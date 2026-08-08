@@ -1,5 +1,4 @@
 import type {
-  BaselineRun,
   ComparisonRun,
   CreateExperimentInput,
   Experiment,
@@ -11,9 +10,6 @@ export interface ExperimentRepository {
   create(input: CreateExperimentInput): Promise<Experiment>;
   delete(experimentId: string): Promise<void>;
   get(experimentId: string, signal?: AbortSignal): Promise<Experiment>;
-  requestBaseline(experimentId: string): Promise<BaselineRun>;
-  getBaselineRun(runId: string, signal?: AbortSignal): Promise<BaselineRun>;
-  downloadBaselineArtifact(runId: string, artifactName: string): Promise<Blob>;
   requestOptimization(experimentId: string): Promise<OptimizationRun>;
   getOptimizationRun(runId: string, signal?: AbortSignal): Promise<OptimizationRun>;
   downloadOptimizationArtifact(runId: string, artifactName: string): Promise<Blob>;

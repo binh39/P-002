@@ -16,11 +16,9 @@ def production_settings(**overrides):
         "analysis_dispatcher": "cloud_tasks",
         "analysis_worker_url": "https://api.example",
         "analysis_task_audience": "https://api.example",
-        "baseline_dispatcher": "cloud_tasks",
-        "baseline_worker_url": "https://api.example",
-        "baseline_task_audience": "https://api.example",
-        "baseline_execution_backend": "cloud_run_job",
-        "cloud_run_runner_job": "runner",
+        "experiment_dispatcher": "cloud_tasks",
+        "experiment_worker_url": "https://api.example",
+        "experiment_task_audience": "https://api.example",
         "optimization_execution_backend": "cloud_run_job",
         "cloud_run_gepa_job": "gepa-runner",
     }
@@ -28,17 +26,17 @@ def production_settings(**overrides):
     return Settings(**values)
 
 
-def test_production_requires_cloud_run_job_execution_backend():
-    with pytest.raises(ValidationError, match="BASELINE_EXECUTION_BACKEND=cloud_run_job"):
-        production_settings(baseline_execution_backend="disabled")
+def test_production_requires_cloud_tasks_experiment_dispatcher():
+    with pytest.raises(ValidationError, match="EXPERIMENT_DISPATCHER=cloud_tasks"):
+        production_settings(experiment_dispatcher="inline")
 
 
 def test_production_cloud_run_job_configuration_is_valid():
     settings = production_settings()
 
-    assert settings.baseline_execution_backend == "cloud_run_job"
-    assert settings.cloud_run_runner_timeout_seconds == 900
+    assert settings.experiment_dispatcher == "cloud_tasks"
     assert settings.optimization_execution_backend == "cloud_run_job"
+    assert settings.cloud_run_gepa_timeout_seconds == 86400
 
 
 def test_production_requires_cloud_gepa_execution_backend():

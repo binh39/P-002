@@ -814,6 +814,8 @@ def test_tune_skips_final_split_when_gepa_keeps_unchanged_baseline(
     ]
     test = [SymbolTarget("project", "pkg/c.py", "third", "test")]
     targets = {"train": train, "validation": validation, "test": test}
+    (tmp_path / "sample_repo" / "project" / "project").mkdir(parents=True)
+    (tmp_path / "sample_repo" / "project" / "tests").mkdir(parents=True)
 
     monkeypatch.setattr(cli, "load_dotenv", lambda *args, **kwargs: None)
     monkeypatch.setattr(
@@ -857,6 +859,7 @@ def test_tune_skips_final_split_when_gepa_keeps_unchanged_baseline(
         max_metric_calls=1,
         evaluation_replicates=1,
         baseline_tests_dir=None,
+        sample_repos_dir=Path("sample_repo"),
     )
 
     cli.tune(args)
@@ -1342,11 +1345,15 @@ def test_existing_baseline_tests_are_scored_per_project(tmp_path, monkeypatch):
     assert all(result.score["score"] == pytest.approx(0.5) for result in record.results)
 
 
-def test_resolve_project_layouts_requires_multi_project(tmp_path):
+def test_resolve_project_layouts_supports_single_project(tmp_path):
+    repos = tmp_path / "src" / "sample_repo"
+    (repos / "isort" / "isort").mkdir(parents=True)
+    (repos / "isort" / "tests").mkdir(parents=True)
     targets = [SymbolTarget("isort", "isort/a.py", "f", "train")]
-    assert _resolve_project_layouts(
+    layouts = _resolve_project_layouts(
         tmp_path, targets, Path("src/sample_repo")
-    ) is None
+    )
+    assert set(layouts) == {"isort"}
 
 
 def test_resolve_project_layouts_builds_per_project_layouts(tmp_path):

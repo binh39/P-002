@@ -171,10 +171,8 @@ def _resolve_project_layouts(
     targets: list[SymbolTarget],
     sample_repos_dir: Path,
 ) -> dict[str, ProjectLayout] | None:
-    """Resolve per-project package/tests dirs for a multi-project dataset."""
+    """Resolve bundled package/tests directories for every dataset project."""
     projects = sorted({target.project for target in targets})
-    if len(projects) < 2:
-        return None
     repos = _resolve(root, sample_repos_dir)
     layouts: dict[str, ProjectLayout] = {}
     for project in projects:

@@ -10,7 +10,7 @@ describe("HttpExperimentRepository", () => {
     vi.unstubAllGlobals();
   });
 
-  it("maps create and baseline API contracts without fixture fallback", async () => {
+  it("maps the create API contract without fixture fallback", async () => {
     const responses = [
       {
         id: "experiment-1",
@@ -43,22 +43,6 @@ describe("HttpExperimentRepository", () => {
         prompt_version_id: null,
         created_at: "2026-08-06T00:00:00Z",
         updated_at: "2026-08-06T00:00:00Z",
-      },
-      {
-        id: "run-1",
-        experiment_id: "experiment-1",
-        status: "baseline_queued",
-        target_count: 1,
-        coverage_score: null,
-        statement_coverage: null,
-        branch_coverage: null,
-        prompt_digest: null,
-        artifact_objects: {},
-        target_metrics: {},
-        error_message: null,
-        created_at: "2026-08-06T00:00:00Z",
-        started_at: null,
-        finished_at: null,
       },
     ];
     const fetchMock = vi.fn().mockImplementation(() =>
@@ -94,10 +78,7 @@ describe("HttpExperimentRepository", () => {
         reflectionTemperature: 0.7,
       },
     });
-    const run = await repository.requestBaseline(experiment.id);
-
     expect(experiment.projectId).toBe("project-1");
-    expect(run.status).toBe("baseline_queued");
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       "/api/v1/experiments",
@@ -126,11 +107,7 @@ describe("HttpExperimentRepository", () => {
         }),
       }),
     );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      "/api/v1/experiments/experiment-1/runs",
-      expect.objectContaining({ method: "POST" }),
-    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("starts and maps an optimization run", async () => {

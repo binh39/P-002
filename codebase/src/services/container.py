@@ -15,17 +15,13 @@ from src.modules.analysis.repository import (
     InMemoryFunctionRepository,
 )
 from src.modules.analysis.service import AnalysisService
-from src.modules.experiments.cloud_executor import CloudRunJobCoverUpExecutor
 from src.modules.experiments.cloud_optimizer import CloudRunJobGepaOptimizer
 from src.modules.experiments.dispatcher import (
-    CloudTasksBaselineDispatcher,
     CloudTasksComparisonDispatcher,
     CloudTasksOptimizationDispatcher,
-    InlineBaselineDispatcher,
     InlineComparisonDispatcher,
     InlineOptimizationDispatcher,
 )
-from src.modules.experiments.executor import DockerCoverUpExecutor
 from src.modules.experiments.repository import FirestoreExperimentRepository, InMemoryExperimentRepository
 from src.modules.experiments.service import ExperimentService
 from src.modules.projects.repository import (
@@ -128,30 +124,6 @@ def build_services(settings: Settings) -> ServiceContainer:
     else:
         dispatcher = InlineAnalysisDispatcher(analysis.run)
     analysis.set_dispatcher(dispatcher)
-    executor = None
-    if settings.baseline_execution_backend == "docker":
-        executor = DockerCoverUpExecutor(
-            settings.baseline_runner_image,
-            900,
-            2048,
-            1,
-            settings.max_runner_files,
-            settings.max_runner_uncompressed_bytes,
-            settings.baseline_runner_network,
-        )
-    elif settings.baseline_execution_backend == "cloud_run_job":
-        from google.cloud import run_v2
-
-        executor = CloudRunJobCoverUpExecutor(
-            client=run_v2.JobsClient(),
-            storage=storage,
-            bucket=settings.gcs_bucket,
-            job_name=(
-                f"projects/{settings.gcp_project_id}/locations/{settings.cloud_tasks_location}/jobs/"
-                f"{settings.cloud_run_runner_job}"
-            ),
-            timeout_seconds=settings.cloud_run_runner_timeout_seconds,
-        )
     cloud_optimizer = None
     if settings.optimization_execution_backend == "cloud_run_job":
         from google.cloud import run_v2
@@ -171,28 +143,17 @@ def build_services(settings: Settings) -> ServiceContainer:
         projects,
         function_repository,
         storage,
-        executor=executor,
         cloud_optimizer=cloud_optimizer,
         samples=samples,
     )
-    if settings.baseline_dispatcher == "cloud_tasks":
-        experiments.set_dispatcher(
-            CloudTasksBaselineDispatcher(
-                settings.gcp_project_id,
-                settings.cloud_tasks_location,
-                settings.baseline_cloud_tasks_queue,
-                settings.baseline_worker_url,
-                settings.baseline_task_audience,
-                settings.gcp_service_account_email,
-            )
-        )
+    if settings.experiment_dispatcher == "cloud_tasks":
         experiments.set_optimization_dispatcher(
             CloudTasksOptimizationDispatcher(
                 settings.gcp_project_id,
                 settings.cloud_tasks_location,
-                settings.baseline_cloud_tasks_queue,
-                settings.baseline_worker_url,
-                settings.baseline_task_audience,
+                settings.experiment_cloud_tasks_queue,
+                settings.experiment_worker_url,
+                settings.experiment_task_audience,
                 settings.gcp_service_account_email,
             )
         )
@@ -200,14 +161,13 @@ def build_services(settings: Settings) -> ServiceContainer:
             CloudTasksComparisonDispatcher(
                 settings.gcp_project_id,
                 settings.cloud_tasks_location,
-                settings.baseline_cloud_tasks_queue,
-                settings.baseline_worker_url,
-                settings.baseline_task_audience,
+                settings.experiment_cloud_tasks_queue,
+                settings.experiment_worker_url,
+                settings.experiment_task_audience,
                 settings.gcp_service_account_email,
             )
         )
     else:
-        experiments.set_dispatcher(InlineBaselineDispatcher(experiments.execute_baseline))
         experiments.set_optimization_dispatcher(InlineOptimizationDispatcher(experiments.execute_optimization))
         experiments.set_comparison_dispatcher(InlineComparisonDispatcher(experiments.execute_comparison))
     return ServiceContainer(

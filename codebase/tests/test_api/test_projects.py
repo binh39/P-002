@@ -1,10 +1,4 @@
-import io
-import json
-import zipfile
-
 import pytest
-
-from src.modules.experiments.executor import BaselineExecution
 
 AUTH_HEADERS = {"Authorization": "Bearer dev-token"}
 
@@ -19,7 +13,7 @@ async def test_projects_require_authentication(client):
 
 
 @pytest.mark.asyncio
-async def test_sample_catalog_creates_experiment_without_persisting_projects(client, app):
+async def test_sample_catalog_creates_experiment_without_persisting_projects(client):
     samples_response = await client.get("/api/v1/projects/samples", headers=AUTH_HEADERS)
 
     assert samples_response.status_code == 200
@@ -54,37 +48,6 @@ async def test_sample_catalog_creates_experiment_without_persisting_projects(cli
     assert created.status_code == 201
     assert created.json()["project_id"] == "sample:isort"
     assert created.json()["optimization_eligible"] is True
-
-    captured = {}
-
-    class SampleExecutor:
-        async def execute(self, archive, source_directory, symbols, prompt, settings, target_specs=None):
-            captured.update(
-                archive=archive,
-                source_directory=source_directory,
-                symbols=symbols,
-                prompt=prompt,
-                settings=settings,
-                target_specs=target_specs,
-            )
-            return BaselineExecution(0.5, 0.5, 0.5, {}, {})
-
-    app.state.services.experiments.executor = SampleExecutor()
-    baseline = await client.post(
-        f"/api/v1/experiments/{created.json()['id']}/runs",
-        headers=AUTH_HEADERS,
-    )
-    assert baseline.status_code == 202
-    assert baseline.json()["status"] == "baseline_succeeded"
-    assert captured["source_directory"] == "isort"
-    assert len(captured["symbols"]) == 3
-    available_specs = {(item["file"], item["qualified_name"]) for item in functions}
-    assert {(item["source_file"], item["symbol"]) for item in captured["target_specs"]}.issubset(available_specs)
-    with zipfile.ZipFile(io.BytesIO(captured["archive"])) as bundle:
-        assert "isort/__init__.py" in bundle.namelist()
-        setup = json.loads(bundle.read(".promptopt/setup.json"))
-        assert setup["distribution_name"] == "isort"
-        assert setup["required_imports"] == ["tomli"]
 
     persisted_projects = await client.get("/api/v1/projects", headers=AUTH_HEADERS)
     assert persisted_projects.status_code == 200

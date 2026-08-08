@@ -10,7 +10,6 @@ class OptimizationTarget:
 
     id: str
     symbol: str
-    source: str
     split: str
     source_file: str = ""
     project: str = "uploaded"

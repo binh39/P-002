@@ -1,13 +1,11 @@
 import { apiDownload, apiRequest } from "@/api/client";
 import type {
-  BaselineRun,
   ComparisonMetrics,
   ComparisonRun,
   CreateExperimentInput,
   Experiment,
   ExperimentStatus,
   OptimizationRun,
-  TargetMetric,
 } from "@/domain/experiments";
 import type { ExperimentRepository } from "@/repositories/contracts/ExperimentRepository";
 
@@ -47,34 +45,6 @@ interface ApiExperiment {
 interface ApiExperimentList {
   items: ApiExperiment[];
   total: number;
-}
-
-interface ApiTargetMetric {
-  valid?: boolean;
-  score?: number;
-  covered_statements?: number;
-  num_statements?: number;
-  covered_branches?: number;
-  num_branches?: number;
-  statement_coverage?: number;
-  branch_coverage?: number;
-}
-
-interface ApiBaselineRun {
-  id: string;
-  experiment_id: string;
-  status: ExperimentStatus;
-  target_count: number;
-  coverage_score: number | null;
-  statement_coverage: number | null;
-  branch_coverage: number | null;
-  prompt_digest: string | null;
-  artifact_objects: Record<string, string>;
-  target_metrics: Record<string, ApiTargetMetric>;
-  error_message: string | null;
-  created_at: string;
-  started_at: string | null;
-  finished_at: string | null;
 }
 
 interface ApiOptimizationRun {
@@ -205,40 +175,6 @@ function mapOptimizationRun(item: ApiOptimizationRun): OptimizationRun {
   };
 }
 
-function mapTargetMetric(item: ApiTargetMetric): TargetMetric {
-  return {
-    valid: item.valid,
-    score: item.score,
-    coveredStatements: item.covered_statements,
-    numStatements: item.num_statements,
-    coveredBranches: item.covered_branches,
-    numBranches: item.num_branches,
-    statementCoverage: item.statement_coverage,
-    branchCoverage: item.branch_coverage,
-  };
-}
-
-function mapBaselineRun(item: ApiBaselineRun): BaselineRun {
-  return {
-    id: item.id,
-    experimentId: item.experiment_id,
-    status: item.status,
-    targetCount: item.target_count,
-    coverageScore: item.coverage_score,
-    statementCoverage: item.statement_coverage,
-    branchCoverage: item.branch_coverage,
-    promptDigest: item.prompt_digest,
-    artifacts: Object.keys(item.artifact_objects).sort(),
-    targetMetrics: Object.fromEntries(
-      Object.entries(item.target_metrics).map(([name, metric]) => [name, mapTargetMetric(metric)]),
-    ),
-    errorMessage: item.error_message,
-    createdAt: item.created_at,
-    startedAt: item.started_at,
-    finishedAt: item.finished_at,
-  };
-}
-
 function mapComparisonMetrics(item: ApiComparisonMetrics): ComparisonMetrics {
   return {
     score: item.score ?? null,
@@ -321,22 +257,6 @@ export class HttpExperimentRepository implements ExperimentRepository {
     return mapExperiment(
       await apiRequest<ApiExperiment>(`/experiments/${experimentId}`, { signal }),
     );
-  }
-
-  async requestBaseline(experimentId: string) {
-    return mapBaselineRun(
-      await apiRequest<ApiBaselineRun>(`/experiments/${experimentId}/runs`, { method: "POST" }),
-    );
-  }
-
-  async getBaselineRun(runId: string, signal?: AbortSignal) {
-    return mapBaselineRun(
-      await apiRequest<ApiBaselineRun>(`/experiments/runs/${runId}`, { signal }),
-    );
-  }
-
-  downloadBaselineArtifact(runId: string, artifactName: string) {
-    return apiDownload(`/experiments/runs/${runId}/artifacts/${encodeURIComponent(artifactName)}`);
   }
 
   async requestOptimization(experimentId: string) {

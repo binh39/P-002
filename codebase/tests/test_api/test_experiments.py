@@ -15,7 +15,7 @@ from tests.test_api.test_analysis import AUTH_HEADERS, create_project, python_ar
 
 
 @pytest.mark.asyncio
-async def test_create_experiment_and_queue_baseline(client):
+async def test_create_experiment_and_reject_unbundled_optimization(client):
     project_id = await create_project(client, python_archive())
     await client.post(f"/api/v1/projects/{project_id}/analyze", headers=AUTH_HEADERS)
 
@@ -56,59 +56,12 @@ async def test_create_experiment_and_queue_baseline(client):
     assert listed.json()["items"][0]["id"] == experiment["id"]
 
     premature_optimization = await client.post(f"/api/v1/experiments/{experiment['id']}/optimize", headers=AUTH_HEADERS)
-    assert premature_optimization.status_code == 202
-    assert premature_optimization.json()["status"] == "failed"
-    assert "Cloud GEPA optimizer is not configured" in premature_optimization.json()["error_message"]
+    assert premature_optimization.status_code == 409
+    assert premature_optimization.json()["error"]["code"] == "BUNDLED_SAMPLE_REQUIRED"
 
     premature_comparison = await client.post(f"/api/v1/experiments/{experiment['id']}/compare", headers=AUTH_HEADERS)
     assert premature_comparison.status_code == 409
     assert premature_comparison.json()["error"]["code"] == "OPTIMIZATION_NOT_READY"
-
-    queued = await client.post(f"/api/v1/experiments/{experiment['id']}/runs", headers=AUTH_HEADERS)
-    assert queued.status_code == 202
-    run = queued.json()
-    assert run["target_count"] == 3
-    # The inline development worker refuses to execute user Python in the API container.
-    assert run["status"] == "failed"
-    assert run["error_message"] == "Baseline sandbox is not configured"
-
-    fetched = await client.get(f"/api/v1/experiments/runs/{run['id']}", headers=AUTH_HEADERS)
-    assert fetched.status_code == 200
-    assert fetched.json()["id"] == run["id"]
-
-
-@pytest.mark.asyncio
-async def test_download_baseline_artifact_checks_run_manifest(client, app):
-    project_id = await create_project(client, python_archive())
-    await client.post(f"/api/v1/projects/{project_id}/analyze", headers=AUTH_HEADERS)
-    experiment = (
-        await client.post(
-            "/api/v1/experiments",
-            headers=AUTH_HEADERS,
-            json={
-                "project_ids": [project_id],
-                "name": "Artifact baseline",
-                "max_targets": 3,
-            },
-        )
-    ).json()
-    run = (await client.post(f"/api/v1/experiments/{experiment['id']}/runs", headers=AUTH_HEADERS)).json()
-    repository = app.state.services.experiments.repository
-    stored_run = await repository.get_run(run["id"])
-    object_name = f"artifacts/local-user/{project_id}/{experiment['id']}/{run['id']}/coverup.log"
-    stored_run.artifact_objects = {"coverup.log": object_name}
-    await repository.save_run(stored_run)
-    await app.state.services.experiments.storage.write(object_name, b"runner output", "text/plain")
-
-    downloaded = await client.get(f"/api/v1/experiments/runs/{run['id']}/artifacts/coverup.log", headers=AUTH_HEADERS)
-    missing = await client.get(f"/api/v1/experiments/runs/{run['id']}/artifacts/missing.log", headers=AUTH_HEADERS)
-
-    assert downloaded.status_code == 200
-    assert downloaded.content == b"runner output"
-    assert downloaded.headers["content-disposition"] == 'attachment; filename="coverup.log"'
-    assert missing.status_code == 404
-    assert missing.json()["error"]["code"] == "ARTIFACT_NOT_FOUND"
-
 
 @pytest.mark.asyncio
 async def test_download_optimization_artifact_checks_run_manifest(client, app):

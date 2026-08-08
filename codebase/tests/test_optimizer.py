@@ -1,5 +1,3 @@
-import io
-import zipfile
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -32,15 +30,14 @@ class FakeStorage:
     def __init__(self):
         self.objects = {}
 
-    async def read(self, object_name):
-        buffer = io.BytesIO()
-        with zipfile.ZipFile(buffer, "w") as archive:
-            archive.writestr("src/pkg.py", "def train_fn(): pass\n")
-            archive.writestr("tests/test_pkg.py", "")
-        return buffer.getvalue()
-
     async def write(self, object_name, content, content_type):
         self.objects[object_name] = (content, content_type)
+
+
+class FakeSamples:
+    @staticmethod
+    def contains(project_id):
+        return project_id == "project-1"
 
 
 @pytest.mark.asyncio
@@ -116,6 +113,7 @@ async def test_optimization_passes_locked_multi_project_snapshot_to_cloud():
         FakeFunctions(),
         storage,
         cloud_optimizer=cloud,
+        samples=FakeSamples(),
     )
     service.set_optimization_dispatcher(InlineOptimizationDispatcher(service.execute_optimization))
     run = await service.request_optimization(experiment.id, experiment.owner_id)

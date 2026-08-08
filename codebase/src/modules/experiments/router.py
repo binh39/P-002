@@ -3,7 +3,6 @@ from fastapi import APIRouter, Query, Request, Response, status
 from src.api.dependencies import CurrentUser, InternalTask
 
 from .schemas import (
-    BaselineRunResponse,
     ComparisonRunResponse,
     CreateExperimentRequest,
     ExperimentListResponse,
@@ -16,7 +15,6 @@ from .schemas import (
 )
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
-internal_router = APIRouter(prefix="/internal/v1/baseline-runs", tags=["internal"])
 optimization_internal_router = APIRouter(prefix="/internal/v1/optimization-runs", tags=["internal"])
 comparison_internal_router = APIRouter(prefix="/internal/v1/comparison-runs", tags=["internal"])
 prompt_router = APIRouter(prefix="/prompt-versions", tags=["prompt-versions"])
@@ -36,36 +34,6 @@ async def list_experiments(user: CurrentUser, request: Request):
 async def delete_experiment(experiment_id: str, user: CurrentUser, request: Request):
     await request.app.state.services.experiments.delete(experiment_id, user.uid)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.post("/{experiment_id}/runs", response_model=BaselineRunResponse, status_code=status.HTTP_202_ACCEPTED)
-async def request_baseline(experiment_id: str, user: CurrentUser, request: Request):
-    return await request.app.state.services.experiments.request_baseline(experiment_id, user.uid)
-
-
-@router.get("/runs/{run_id}", response_model=BaselineRunResponse)
-async def get_run(run_id: str, user: CurrentUser, request: Request):
-    return await request.app.state.services.experiments.get_run(run_id, user.uid)
-
-
-@router.get("/runs/{run_id}/artifacts/{artifact_name}")
-async def get_baseline_artifact(run_id: str, artifact_name: str, user: CurrentUser, request: Request):
-    content_types = {
-        "coverage_after.json": "application/json",
-        "prompt.json": "application/json",
-        "attempt_trace.jsonl": "application/x-ndjson",
-        "generated_tests.zip": "application/zip",
-        "target_coverage.json": "application/json",
-        "project_setup.json": "application/json",
-        "coverage.data": "application/octet-stream",
-    }
-    content = await request.app.state.services.experiments.get_baseline_artifact(run_id, artifact_name, user.uid)
-    safe_name = artifact_name.replace('"', "")
-    return Response(
-        content=content,
-        media_type=content_types.get(artifact_name, "text/plain"),
-        headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
-    )
 
 
 @router.post("/{experiment_id}/optimize", response_model=OptimizationRunResponse, status_code=status.HTTP_202_ACCEPTED)
@@ -113,12 +81,6 @@ async def get_comparison_artifact(run_id: str, artifact_name: str, user: Current
 @router.get("/{experiment_id}", response_model=ExperimentResponse)
 async def get_experiment(experiment_id: str, user: CurrentUser, request: Request):
     return await request.app.state.services.experiments.get(experiment_id, user.uid)
-
-
-@internal_router.post("/{run_id}/execute", status_code=status.HTTP_204_NO_CONTENT)
-async def execute_baseline(run_id: str, _task: InternalTask, request: Request):
-    await request.app.state.services.experiments.execute_baseline(run_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @optimization_internal_router.post("/{run_id}/execute", status_code=status.HTTP_204_NO_CONTENT)

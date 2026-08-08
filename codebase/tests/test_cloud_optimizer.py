@@ -6,6 +6,7 @@ import pytest
 from src.modules.experiments.cloud_optimizer import CloudRunJobGepaOptimizer
 from src.modules.experiments.optimizer import OptimizationTarget
 from src.modules.experiments.prompts import baseline_prompt
+from src.modules.experiments.schemas import ExperimentSettings
 
 
 class FakeStorage:
@@ -21,7 +22,7 @@ class FakeStorage:
 
 class FakeOperation:
     def result(self, timeout):
-        assert timeout == 1740
+        pytest.fail("the API worker must not wait for a 24-hour Cloud Run Job")
 
 
 class FakeJobsClient:
@@ -47,6 +48,7 @@ class FakeJobsClient:
                 "candidates": [prompt.as_candidate(), candidate],
             },
             "final_validation.json": {"promoted": True, "absolute_gain": 0.5},
+            "prompts/gepa_proposed.json": candidate,
         }
         for name, payload in payloads.items():
             self.storage.objects[f"{prefix}/{name}"] = (json.dumps(payload).encode(), "application/json")
@@ -63,36 +65,38 @@ async def test_cloud_gepa_optimizer_uses_isolated_web_prefix_and_maps_result():
         storage=storage,
         bucket="private-source-bucket",
         job_name="projects/project/locations/region/jobs/promptopt-gepa-runner",
-        timeout_seconds=1680,
+        timeout_seconds=86400,
     )
     targets = {
         split: [
             OptimizationTarget(
                 id=f"{split}-1",
                 symbol=f"pkg.{split}",
-                source=f"def {split}(): pass",
                 split=split,
                 source_file="pkg/module.py",
+                project="isort",
             )
         ]
         for split in ("train", "validation", "test")
     }
 
     result = await optimizer.optimize(
-        archive=b"zip",
-        source_directory="pkg",
         baseline=baseline_prompt(),
         train=targets["train"],
         validation=targets["validation"],
         holdout=targets["test"],
-        reflection_model="vertex_ai/gemini-3.1-pro-preview",
-        max_metric_calls=30,
+        settings=ExperimentSettings(
+            coverup_model="vertex_ai/gemini-3.5-flash-lite",
+            optimize_model="vertex_ai/gemini-3.1-pro-preview",
+            max_metric_calls=30,
+        ),
     )
 
     request_text = json.dumps(client.request)
     assert "prompt_optimization_v3" not in request_text
     assert "runner-jobs/gepa/" in request_text
     assert client.request["name"].endswith("/promptopt-gepa-runner")
+    assert client.request["overrides"]["timeout"] == "86400s"
     assert client.thread_id != event_loop_thread
     assert result.score == 0.7
     assert result.baseline_score == 0.2
@@ -101,3 +105,5 @@ async def test_cloud_gepa_optimizer_uses_isolated_web_prefix_and_maps_result():
     dataset_object = next(name for name in storage.objects if name.endswith("inputs/dataset.jsonl"))
     rows = [json.loads(line) for line in storage.objects[dataset_object][0].decode().splitlines()]
     assert {row["split"] for row in rows} == {"train", "validation", "test"}
+    assert not any(name.endswith("source.zip") for name in storage.objects)
+    assert not any(name.endswith("project-layouts.json") for name in storage.objects)

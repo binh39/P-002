@@ -180,13 +180,6 @@ export default function Experiments() {
                           >
                             Open optimization
                           </button>
-                        ) : item.baselineRunId ? (
-                          <button
-                            className="table-action"
-                            onClick={() => navigate(`/runs/${item.baselineRunId}`)}
-                          >
-                            Open baseline
-                          </button>
                         ) : (
                           <span className="muted-cell">Draft</span>
                         )}

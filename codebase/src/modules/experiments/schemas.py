@@ -200,6 +200,8 @@ class OptimizationRunResponse(StrictModel):
     metric_calls: int = 0
     final_validation: dict = Field(default_factory=dict)
     artifact_objects: dict[str, str] = Field(default_factory=dict)
+    cloud_artifact_prefix: str | None = None
+    cloud_deadline_at: datetime | None = None
     error_message: str | None = None
     created_at: datetime
     started_at: datetime | None = None

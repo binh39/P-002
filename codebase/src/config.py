@@ -33,23 +33,16 @@ class Settings(BaseSettings):
     cloud_tasks_queue: str = "promptopt-analysis"
     analysis_worker_url: str = ""
     analysis_task_audience: str = ""
-    baseline_dispatcher: Literal["inline", "cloud_tasks"] = "inline"
-    baseline_cloud_tasks_queue: str = "promptopt-baseline"
-    baseline_worker_url: str = ""
-    baseline_task_audience: str = ""
-    baseline_execution_backend: Literal["disabled", "docker", "cloud_run_job"] = "disabled"
-    baseline_runner_image: str = "promptopt-coverup-runner:local"
-    cloud_run_runner_job: str = "promptopt-coverup-runner"
-    cloud_run_runner_timeout_seconds: int = Field(default=900, ge=60, le=3600)
-    max_runner_files: int = Field(default=10000, ge=1, le=50000)
-    max_runner_uncompressed_bytes: int = Field(default=100 * 1024 * 1024, ge=1024)
-    baseline_runner_network: str = "none"
+    experiment_dispatcher: Literal["inline", "cloud_tasks"] = "inline"
+    experiment_cloud_tasks_queue: str = "promptopt-baseline"
+    experiment_worker_url: str = ""
+    experiment_task_audience: str = ""
     optimize_model: str = ""
     optimize_model_allowlist: str = "vertex_ai/gemini-3.1-pro-preview"
     gepa_max_metric_calls: int = Field(default=30, ge=3, le=1000)
     optimization_execution_backend: Literal["inline", "cloud_run_job"] = "inline"
     cloud_run_gepa_job: str = "promptopt-gepa-runner"
-    cloud_run_gepa_timeout_seconds: int = Field(default=1800, ge=300, le=3600)
+    cloud_run_gepa_timeout_seconds: int = Field(default=86400, ge=300, le=86400)
     gepa_max_concurrency: int = Field(default=10, ge=1, le=32)
     gepa_repeat_tests: int = Field(default=2, ge=0, le=20)
     gepa_evaluation_replicates: int = Field(default=1, ge=1, le=10)
@@ -84,12 +77,10 @@ class Settings(BaseSettings):
                 raise ValueError("ANALYSIS_DISPATCHER=cloud_tasks is required in production")
             if not self.analysis_worker_url or not self.analysis_task_audience:
                 raise ValueError("ANALYSIS_WORKER_URL and ANALYSIS_TASK_AUDIENCE are required in production")
-            if self.baseline_dispatcher != "cloud_tasks":
-                raise ValueError("BASELINE_DISPATCHER=cloud_tasks is required in production")
-            if not self.baseline_worker_url or not self.baseline_task_audience:
-                raise ValueError("BASELINE_WORKER_URL and BASELINE_TASK_AUDIENCE are required in production")
-            if self.baseline_execution_backend != "cloud_run_job" or not self.cloud_run_runner_job:
-                raise ValueError("BASELINE_EXECUTION_BACKEND=cloud_run_job and CLOUD_RUN_RUNNER_JOB are required")
+            if self.experiment_dispatcher != "cloud_tasks":
+                raise ValueError("EXPERIMENT_DISPATCHER=cloud_tasks is required in production")
+            if not self.experiment_worker_url or not self.experiment_task_audience:
+                raise ValueError("EXPERIMENT_WORKER_URL and EXPERIMENT_TASK_AUDIENCE are required in production")
             if self.optimization_execution_backend != "cloud_run_job" or not self.cloud_run_gepa_job:
                 raise ValueError("OPTIMIZATION_EXECUTION_BACKEND=cloud_run_job and CLOUD_RUN_GEPA_JOB are required")
         return self

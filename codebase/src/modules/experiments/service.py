@@ -1,8 +1,6 @@
-import io
 import json
 import re
-import zipfile
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from src.core.errors import AppError
 from src.infrastructure.storage import ObjectStorage
@@ -11,14 +9,11 @@ from src.modules.projects.samples import SampleProjectCatalog
 from src.modules.projects.service import ProjectService
 
 from .dataset import select_targets, split_targets, validate_manual_splits
-from .dispatcher import BaselineDispatcher, ComparisonDispatcher, OptimizationDispatcher
-from .executor import DockerCoverUpExecutor
+from .dispatcher import ComparisonDispatcher, OptimizationDispatcher
 from .optimizer import OptimizationTarget
 from .prompts import PromptBundle, baseline_prompt
 from .repository import ExperimentRepository
 from .schemas import (
-    BaselineRunRecord,
-    BaselineRunResponse,
     ComparisonRunRecord,
     ComparisonRunResponse,
     CreateExperimentRequest,
@@ -46,20 +41,15 @@ class ExperimentService:
         projects: ProjectService,
         functions: FunctionRepository,
         storage: ObjectStorage,
-        executor: DockerCoverUpExecutor | None = None,
         cloud_optimizer=None,
         samples: SampleProjectCatalog | None = None,
     ):
         self.repository, self.projects, self.functions = repository, projects, functions
-        self.storage, self.executor = storage, executor
+        self.storage = storage
         self.cloud_optimizer = cloud_optimizer
         self.samples = samples
-        self.dispatcher: BaselineDispatcher | None = None
         self.optimization_dispatcher: OptimizationDispatcher | None = None
         self.comparison_dispatcher: ComparisonDispatcher | None = None
-
-    def set_dispatcher(self, dispatcher: BaselineDispatcher) -> None:
-        self.dispatcher = dispatcher
 
     def set_optimization_dispatcher(self, dispatcher: OptimizationDispatcher) -> None:
         self.optimization_dispatcher = dispatcher
@@ -131,7 +121,10 @@ class ExperimentService:
             split_percentages=payload.split_percentages,
             split_seed=payload.random_seed,
             settings=payload.settings,
-            optimization_eligible=True,
+            optimization_eligible=(
+                self.samples is not None
+                and all(self.samples.contains(project.id) for project in projects)
+            ),
             status=ExperimentStatus.DRAFT,
             created_at=now,
             updated_at=now,
@@ -164,147 +157,20 @@ class ExperimentService:
             raise AppError(409, "EXPERIMENT_ACTIVE", "A running experiment cannot be deleted")
         await self.repository.delete(item.id)
 
-    async def request_baseline(self, experiment_id: str, owner_id: str) -> BaselineRunResponse:
-        item = await self._owned(experiment_id, owner_id)
-        if item.status != ExperimentStatus.DRAFT:
-            raise AppError(409, "BASELINE_ALREADY_REQUESTED", "A baseline run has already been requested")
-        if self.dispatcher is None:
-            raise RuntimeError("Baseline dispatcher is not configured")
-        now = datetime.now(UTC)
-        run = BaselineRunRecord(
-            id=new_id(),
-            experiment_id=item.id,
-            status=ExperimentStatus.BASELINE_QUEUED,
-            target_count=len(item.target_function_ids),
-            created_at=now,
-        )
-        await self.repository.create_run(run)
-        item.status, item.baseline_run_id, item.updated_at = ExperimentStatus.BASELINE_QUEUED, run.id, now
-        await self.repository.save(item)
-        try:
-            await self.dispatcher.dispatch(run.id)
-        except Exception as exc:
-            run.status, run.error_message, run.finished_at = (
-                ExperimentStatus.FAILED,
-                "Baseline job could not be queued",
-                datetime.now(UTC),
-            )
-            item.status, item.updated_at = ExperimentStatus.FAILED, run.finished_at
-            await self.repository.save_run(run)
-            await self.repository.save(item)
-            raise AppError(503, "BASELINE_QUEUE_UNAVAILABLE", "Baseline run could not be queued") from exc
-        return BaselineRunResponse.model_validate((await self.repository.get_run(run.id)) or run)
-
-    async def get_run(self, run_id: str, owner_id: str) -> BaselineRunResponse:
-        run = await self.repository.get_run(run_id)
-        if run is None:
-            raise AppError(404, "RUN_NOT_FOUND", "Baseline run was not found")
-        await self._owned(run.experiment_id, owner_id)
-        return BaselineRunResponse.model_validate(run)
-
-    async def get_baseline_artifact(self, run_id: str, artifact_name: str, owner_id: str) -> bytes:
-        run = await self.repository.get_run(run_id)
-        if run is None:
-            raise AppError(404, "RUN_NOT_FOUND", "Baseline run was not found")
-        await self._owned(run.experiment_id, owner_id)
-        object_name = run.artifact_objects.get(artifact_name)
-        if object_name is None:
-            raise AppError(404, "ARTIFACT_NOT_FOUND", "Baseline artifact was not found")
-        return await self.storage.read(object_name)
-
-    async def execute_baseline(self, run_id: str) -> None:
-        run = await self.repository.get_run(run_id)
-        if run is None or run.status != ExperimentStatus.BASELINE_QUEUED:
-            return
-        run.status, run.started_at = ExperimentStatus.BASELINE_RUNNING, datetime.now(UTC)
-        await self.repository.save_run(run)
-        item = await self.repository.get(run.experiment_id)
-        try:
-            if item is None or self.executor is None:
-                raise RuntimeError("Baseline sandbox is not configured")
-            prompt = baseline_prompt()
-            targets_by_project: dict[str, list[TargetReference]] = {}
-            for target in item.targets:
-                targets_by_project.setdefault(target.project_id, []).append(target)
-            executions = []
-            for snapshot in item.project_snapshots:
-                project_targets = targets_by_project.get(snapshot.project_id, [])
-                if not project_targets:
-                    continue
-                project = await self.projects.require_owned(snapshot.project_id, item.owner_id)
-                execution = await self.executor.execute(
-                    await self._read_project_archive(project),
-                    snapshot.source_directory,
-                    [target.symbol for target in project_targets],
-                    prompt,
-                    item.settings,
-                    target_specs=[
-                        {"source_file": target.source_file, "symbol": target.symbol} for target in project_targets
-                    ],
-                )
-                executions.append((snapshot, project_targets, execution))
-            if not executions:
-                raise RuntimeError("No baseline targets are available")
-            artifact_objects: dict[str, str] = {}
-            target_metrics: dict[str, dict] = {}
-            content_types = {
-                "coverage_after.json": "application/json",
-                "prompt.json": "application/json",
-                "attempt_trace.jsonl": "application/x-ndjson",
-                "generated_tests.zip": "application/zip",
-                "target_coverage.json": "application/json",
-                "project_setup.json": "application/json",
-            }
-            for snapshot, project_targets, execution in executions:
-                for target in project_targets:
-                    execution_key = f"{target.source_file}::{target.symbol}"
-                    target_metrics[target.key] = execution.target_metrics.get(
-                        execution_key,
-                        execution.target_metrics.get(target.symbol, {}),
-                    )
-                for name, content in execution.artifacts.items():
-                    artifact_name = f"{snapshot.runner_project}__{name}"
-                    object_name = f"artifacts/{item.owner_id}/{item.id}/{run.id}/{artifact_name}"
-                    await self.storage.write(object_name, content, content_types.get(name, "text/plain"))
-                    artifact_objects[artifact_name] = object_name
-            statement, branch, score = self._aggregate_target_metrics(target_metrics)
-            (
-                run.status,
-                run.coverage_score,
-                run.statement_coverage,
-                run.branch_coverage,
-                run.prompt_digest,
-                run.artifact_objects,
-                run.target_metrics,
-                run.finished_at,
-            ) = (
-                ExperimentStatus.BASELINE_SUCCEEDED,
-                score,
-                statement,
-                branch,
-                prompt.digest(),
-                artifact_objects,
-                target_metrics,
-                datetime.now(UTC),
-            )
-            item.status, item.updated_at = ExperimentStatus.BASELINE_SUCCEEDED, run.finished_at
-        except Exception as exc:
-            run.status, run.error_message, run.finished_at = (
-                ExperimentStatus.FAILED,
-                str(exc)[-4000:],
-                datetime.now(UTC),
-            )
-            if item:
-                item.status, item.updated_at = ExperimentStatus.FAILED, run.finished_at
-        await self.repository.save_run(run)
-        if item:
-            await self.repository.save(item)
-
     async def request_optimization(self, experiment_id: str, owner_id: str) -> OptimizationRunResponse:
         item = await self._owned(experiment_id, owner_id)
         previous_status = item.status
-        if previous_status not in {ExperimentStatus.DRAFT, ExperimentStatus.BASELINE_SUCCEEDED}:
+        if previous_status != ExperimentStatus.DRAFT:
             raise AppError(409, "OPTIMIZATION_ALREADY_REQUESTED", "Optimization has already been requested")
+        if self.samples is None or any(
+            not self.samples.contains(snapshot.project_id)
+            for snapshot in item.project_snapshots
+        ):
+            raise AppError(
+                409,
+                "BUNDLED_SAMPLE_REQUIRED",
+                "Optimization runs only against projects bundled in sample_repo",
+            )
         if not item.optimization_eligible:
             raise AppError(
                 409,
@@ -314,12 +180,6 @@ class ExperimentService:
         if self.optimization_dispatcher is None:
             raise RuntimeError("Optimization dispatcher is not configured")
         parent = baseline_prompt()
-        if item.baseline_run_id:
-            baseline_run = await self.repository.get_run(item.baseline_run_id)
-            if baseline_run is None or baseline_run.status != ExperimentStatus.BASELINE_SUCCEEDED:
-                raise AppError(409, "BASELINE_NOT_READY", "The legacy baseline result is unavailable")
-            if parent.digest() != baseline_run.prompt_digest:
-                raise AppError(409, "BASELINE_PROMPT_CHANGED", "The baseline prompt version no longer matches this run")
 
         now = datetime.now(UTC)
         run = OptimizationRunRecord(
@@ -375,11 +235,16 @@ class ExperimentService:
             if item is not None:
                 await self._materialize_cloud_comparison(item, run)
             return
-        if run.status != ExperimentStatus.OPTIMIZATION_QUEUED:
+        polling_cloud_job = (
+            run.status == ExperimentStatus.OPTIMIZING
+            and run.cloud_artifact_prefix is not None
+        )
+        if run.status != ExperimentStatus.OPTIMIZATION_QUEUED and not polling_cloud_job:
             return
-        run.status = ExperimentStatus.OPTIMIZING
-        run.started_at = datetime.now(UTC)
-        await self.repository.save_optimization_run(run)
+        if not polling_cloud_job:
+            run.status = ExperimentStatus.OPTIMIZING
+            run.started_at = datetime.now(UTC)
+            await self.repository.save_optimization_run(run)
         item = await self.repository.get(run.experiment_id)
         try:
             if item is None or self.cloud_optimizer is None:
@@ -387,44 +252,61 @@ class ExperimentService:
             parent = baseline_prompt()
             if run.parent_prompt_digest != parent.digest():
                 raise RuntimeError("The candidate-zero baseline prompt has changed")
-            references = {target.key: target for target in item.targets}
-            if set(item.target_function_ids) != set(references):
-                raise RuntimeError("The immutable target snapshot is incomplete")
-            targets = {
-                split: [
+            if polling_cloud_job:
+                result = await self.cloud_optimizer.collect(run.cloud_artifact_prefix)
+                if result is None:
+                    if run.cloud_deadline_at and datetime.now(UTC) >= run.cloud_deadline_at:
+                        raise RuntimeError("Cloud Run GEPA job timed out")
+                    await self.optimization_dispatcher.dispatch(run.id, delay_seconds=60)
+                    return
+            else:
+                references = {target.key: target for target in item.targets}
+                if set(item.target_function_ids) != set(references):
+                    raise RuntimeError("The immutable target snapshot is incomplete")
+                targets = {
+                    split: [
+                        OptimizationTarget(
+                            id=target_key,
+                            project=references[target_key].project,
+                            symbol=references[target_key].symbol,
+                            split=split,
+                            source_file=references[target_key].source_file,
+                        )
+                        for target_key in item.dataset_splits[split]
+                    ]
+                    for split in ("train", "validation")
+                }
+                holdout = [
                     OptimizationTarget(
                         id=target_key,
                         project=references[target_key].project,
                         symbol=references[target_key].symbol,
-                        source=(await self._require_target_source(references[target_key], item.owner_id)),
-                        split=split,
+                        split="test",
                         source_file=references[target_key].source_file,
                     )
-                    for target_key in item.dataset_splits[split]
+                    for target_key in item.dataset_splits["test"]
                 ]
-                for split in ("train", "validation")
-            }
-            holdout = [
-                OptimizationTarget(
-                    id=target_key,
-                    project=references[target_key].project,
-                    symbol=references[target_key].symbol,
-                    source=await self._require_target_source(references[target_key], item.owner_id),
-                    split="test",
-                    source_file=references[target_key].source_file,
+                if hasattr(self.cloud_optimizer, "start"):
+                    run.cloud_artifact_prefix = await self.cloud_optimizer.start(
+                        baseline=parent,
+                        train=targets["train"],
+                        validation=targets["validation"],
+                        holdout=holdout,
+                        settings=item.settings,
+                    )
+                    run.cloud_deadline_at = datetime.now(UTC) + timedelta(
+                        seconds=self.cloud_optimizer.timeout_seconds
+                    )
+                    await self.repository.save_optimization_run(run)
+                    await self.optimization_dispatcher.dispatch(run.id, delay_seconds=60)
+                    return
+                result = await self.cloud_optimizer.optimize(
+                    baseline=parent,
+                    train=targets["train"],
+                    validation=targets["validation"],
+                    holdout=holdout,
+                    settings=item.settings,
                 )
-                for target_key in item.dataset_splits["test"]
-            ]
-            archive, project_layouts = await self._build_cloud_archive(item)
-            result = await self.cloud_optimizer.optimize(
-                archive=archive,
-                project_layouts=project_layouts,
-                baseline=parent,
-                train=targets["train"],
-                validation=targets["validation"],
-                holdout=holdout,
-                settings=item.settings,
-            )
             artifact_payloads = {
                 "candidate_prompt.json": (result.candidate.as_json().encode(), "application/json"),
                 "gepa_result.json": (
@@ -455,11 +337,7 @@ class ExperimentService:
             run.finished_at = datetime.now(UTC)
             if item:
                 # A failed search does not invalidate candidate zero and may be retried.
-                item.status = (
-                    ExperimentStatus.BASELINE_SUCCEEDED
-                    if item.baseline_run_id
-                    else ExperimentStatus.DRAFT
-                )
+                item.status = ExperimentStatus.DRAFT
                 item.updated_at = run.finished_at
         await self.repository.save_optimization_run(run)
         if item:
@@ -735,16 +613,6 @@ class ExperimentService:
             return self.samples.functions(project_id)
         return await self.functions.list_for_project(project_id)
 
-    async def _get_function(self, project_id: str, function_id: str):
-        if self.samples and self.samples.contains(project_id):
-            return self.samples.function(project_id, function_id)
-        return await self.functions.get(project_id, function_id)
-
-    async def _read_project_archive(self, project) -> bytes:
-        if self.samples and self.samples.contains(project.id):
-            return self.samples.archive(project.id)
-        return await self.storage.read(project.object_name)
-
     @staticmethod
     def _runner_project_name(project, index: int, used: set[str]) -> str:
         base = re.sub(r"[^A-Za-z0-9_.-]+", "-", project.name.lower()).strip(".-") or f"project-{index + 1}"
@@ -754,47 +622,6 @@ class ExperimentService:
             candidate = f"{base}-{suffix}"
             suffix += 1
         return candidate
-
-    async def _require_target_source(self, target: TargetReference, owner_id: str) -> str:
-        await self.projects.require_owned(target.project_id, owner_id)
-        function = await self._get_function(target.project_id, target.function_id)
-        if function is None:
-            raise RuntimeError(f"Target is no longer available: {target.key}")
-        return function.source
-
-    async def _build_cloud_archive(self, item: ExperimentRecord) -> tuple[bytes, dict[str, dict[str, str]]]:
-        output = io.BytesIO()
-        layouts: dict[str, dict[str, str]] = {}
-        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as destination:
-            for snapshot in item.project_snapshots:
-                project = await self.projects.require_owned(snapshot.project_id, item.owner_id)
-                archive = await self._read_project_archive(project)
-                with zipfile.ZipFile(io.BytesIO(archive)) as source:
-                    for entry in source.infolist():
-                        if entry.is_dir():
-                            continue
-                        normalized = entry.filename.replace("\\", "/").lstrip("/")
-                        if ".." in normalized.split("/"):
-                            raise RuntimeError("Project archive contains an unsafe path")
-                        destination.writestr(f"projects/{snapshot.runner_project}/{normalized}", source.read(entry))
-                root = f"projects/{snapshot.runner_project}"
-                layouts[snapshot.runner_project] = {
-                    "package_dir": f"{root}/{snapshot.source_directory.strip('/')}",
-                    "tests_dir": f"{root}/{snapshot.test_directory.strip('/')}",
-                }
-        return output.getvalue(), layouts
-
-    @staticmethod
-    def _aggregate_target_metrics(metrics: dict[str, dict]) -> tuple[float | None, float | None, float]:
-        valid = [metric for metric in metrics.values() if metric.get("valid")]
-        covered_statements = sum(int(metric.get("covered_statements", 0)) for metric in valid)
-        statements = sum(int(metric.get("num_statements", 0)) for metric in valid)
-        covered_branches = sum(int(metric.get("covered_branches", 0)) for metric in valid)
-        branches = sum(int(metric.get("num_branches", 0)) for metric in valid)
-        statement = covered_statements / statements if statements else None
-        branch = covered_branches / branches if branches else None
-        score = statement if branch is None else 0.4 * (statement or 0.0) + 0.6 * branch
-        return statement, branch, score or 0.0
 
     @staticmethod
     def _comparison_metrics(coverage: dict | None) -> dict:

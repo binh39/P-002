@@ -17,9 +17,6 @@ from src.modules.experiments.router import (
     comparison_internal_router,
     optimization_internal_router,
 )
-from src.modules.experiments.router import (
-    internal_router as experiments_internal_router,
-)
 from src.services.container import build_services
 
 logger = logging.getLogger("promptopt.api")
@@ -104,7 +101,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     application.include_router(api_router, prefix=settings.api_prefix)
     application.include_router(internal_router)
-    application.include_router(experiments_internal_router)
     application.include_router(optimization_internal_router)
     application.include_router(comparison_internal_router)
 

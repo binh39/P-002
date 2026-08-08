@@ -50,34 +50,6 @@ export interface CreateExperimentInput {
   settings: import("@/domain/experimentConfiguration").CloudExperimentSettings;
 }
 
-export interface TargetMetric {
-  valid?: boolean;
-  score?: number;
-  coveredStatements?: number;
-  numStatements?: number;
-  coveredBranches?: number;
-  numBranches?: number;
-  statementCoverage?: number;
-  branchCoverage?: number;
-}
-
-export interface BaselineRun {
-  id: string;
-  experimentId: string;
-  status: ExperimentStatus;
-  targetCount: number;
-  coverageScore: number | null;
-  statementCoverage: number | null;
-  branchCoverage: number | null;
-  promptDigest: string | null;
-  artifacts: string[];
-  targetMetrics: Record<string, TargetMetric>;
-  errorMessage: string | null;
-  createdAt: string;
-  startedAt: string | null;
-  finishedAt: string | null;
-}
-
 export interface OptimizationRun {
   id: string;
   experimentId: string;
@@ -160,15 +132,6 @@ export interface PromptVersionList {
   offset: number;
   limit: number;
 }
-
-export const baselineRunIsActive = (status: ExperimentStatus) =>
-  status === "baseline_queued" || status === "baseline_running";
-
-export const baselineRunIsFinished = (status: ExperimentStatus) =>
-  status === "baseline_succeeded" ||
-  status === "failed" ||
-  status === "timed_out" ||
-  status === "cancelled";
 
 export const optimizationRunIsActive = (status: ExperimentStatus) =>
   status === "optimization_queued" || status === "optimizing" || status === "candidate_evaluating";

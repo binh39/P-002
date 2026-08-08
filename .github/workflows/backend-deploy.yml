@@ -9,7 +9,6 @@ on:
       - "codebase/requirements.txt"
       - "codebase/.dockerignore"
       - "codebase/infra/cloud-run-env.yaml"
-      - "codebase/sandbox/**"
       - "src/coverup/**"
       - "src/optimization/**"
       - "src/sample_repo/**"
@@ -39,7 +38,6 @@ env:
   SERVICE: promptopt-api
   RUNTIME_SERVICE_ACCOUNT: promptopt-api@vinaip002.iam.gserviceaccount.com
   SOURCE_BUCKET: vinaip002-promptopt-sources
-  RUNNER_JOB: promptopt-coverup-runner
   GEPA_JOB: promptopt-gepa-runner
   RUNNER_SERVICE_ACCOUNT: promptopt-runner@vinaip002.iam.gserviceaccount.com
 
@@ -73,37 +71,12 @@ jobs:
       - name: Build and push images
         env:
           API_IMAGE: asia-southeast1-docker.pkg.dev/vinaip002/promptopt/api:${{ github.sha }}
-          RUNNER_IMAGE: asia-southeast1-docker.pkg.dev/vinaip002/promptopt/coverup-runner:${{ github.sha }}
           GEPA_IMAGE: asia-southeast1-docker.pkg.dev/vinaip002/promptopt/gepa-runner:${{ github.sha }}
         run: |
           docker build --file codebase/Dockerfile --tag "$API_IMAGE" .
-          docker build --file codebase/sandbox/Dockerfile --tag "$RUNNER_IMAGE" .
           docker build --file cloud/Dockerfile.web --tag "$GEPA_IMAGE" .
           docker push "$API_IMAGE"
-          docker push "$RUNNER_IMAGE"
           docker push "$GEPA_IMAGE"
-      - name: Deploy isolated CoverUp job
-        env:
-          RUNNER_IMAGE: asia-southeast1-docker.pkg.dev/vinaip002/promptopt/coverup-runner:${{ github.sha }}
-        run: |
-          gcloud run jobs deploy "$RUNNER_JOB" \
-            --project "$PROJECT_ID" \
-            --region "$REGION" \
-            --image "$RUNNER_IMAGE" \
-            --service-account "$RUNNER_SERVICE_ACCOUNT" \
-            --cpu 1 \
-            --memory 2Gi \
-            --tasks 1 \
-            --parallelism 1 \
-            --max-retries 0 \
-            --task-timeout 900s \
-            --set-env-vars "COVERUP_MODEL=vertex_ai/gemini-3.5-flash-lite,VERTEXAI_PROJECT=$PROJECT_ID,VERTEXAI_LOCATION=global,PROMPTOPT_RUNNER_TIMEOUT_SECONDS=900,PROMPTOPT_MAX_FILES=10000,PROMPTOPT_MAX_UNCOMPRESSED_BYTES=104857600"
-          gcloud run jobs add-iam-policy-binding "$RUNNER_JOB" \
-            --project "$PROJECT_ID" \
-            --region "$REGION" \
-            --member "serviceAccount:$RUNTIME_SERVICE_ACCOUNT" \
-            --role roles/run.developer \
-            --quiet
       - name: Deploy isolated GEPA job
         env:
           GEPA_IMAGE: asia-southeast1-docker.pkg.dev/vinaip002/promptopt/gepa-runner:${{ github.sha }}
@@ -120,7 +93,7 @@ jobs:
             --tasks 1 \
             --parallelism 1 \
             --max-retries 0 \
-            --task-timeout 1680s \
+            --task-timeout 86400s \
             --set-env-vars "COVERUP_MODEL=vertex_ai/gemini-3.5-flash-lite,OPTIMIZE_MODEL=vertex_ai/gemini-3.1-pro-preview,VERTEXAI_PROJECT=$PROJECT_ID,VERTEXAI_LOCATION=global"
           gcloud run jobs add-iam-policy-binding "$GEPA_JOB" \
             --project "$PROJECT_ID" \

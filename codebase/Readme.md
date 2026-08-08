@@ -13,10 +13,10 @@ ngày **2026-08-08**.
 
 1. Firebase Authentication xác thực người dùng.
 2. Frontend gọi FastAPI qua Firebase Hosting rewrite `/api/**`.
-3. Người dùng chọn sample repo hoặc upload ZIP, phân tích source và tạo experiment.
-4. Cloud Tasks điều phối baseline sang CoverUp Cloud Run Job.
-5. Optimization chạy DSPy/GEPA trong Cloud Run Job riêng.
-6. Baseline và candidate được so sánh trên locked test split.
+3. Người dùng chọn bundled sample repo và tạo experiment; upload ZIP vẫn chỉ phục vụ phân tích project riêng.
+4. Cloud Tasks điều phối DSPy/GEPA sang Cloud Run Job; baseline prompt là candidate số 0.
+5. Job dùng sample repo đóng gói sẵn và chỉ nhận dataset/prompt qua GCS.
+6. Candidate số 0 và candidate tối ưu được so sánh trên locked test split.
 7. Prompt đủ điều kiện được tạo ở trạng thái `in_review`, rồi approve/reject có audit data.
 
 Production hiện tại: [https://vinaip002.web.app](https://vinaip002.web.app).
@@ -46,7 +46,6 @@ P-002/
       api/                    public API dependencies/router assembly
       modules/                auth, uploads, projects, analysis, experiments
       infrastructure/         Firestore, GCS, Cloud Tasks, Cloud Run clients
-    sandbox/                  isolated CoverUp baseline job entrypoints
     tests/                    backend tests
     infra/                    Google Cloud provisioning and runtime env
     scripts/                  local/production smoke scripts
@@ -56,8 +55,8 @@ P-002/
   src/
     coverup/                  project-owned CoverUp engine
     optimization/             DSPy/GEPA runner, metrics, cache and promotion logic
-    sample_repo.zip           deployable isort/mlxtend/typesystem snapshots
-    sample_repo/              expanded local snapshots; generated/ignored in clean CI
+    sample_repo.zip           source archive for the bundled isort/mlxtend/typesystem snapshots
+    sample_repo/              bundled snapshots copied into the GEPA image during deployment
   cloud/
     run_job.py                GEPA Cloud Run Job entrypoint
     Dockerfile.web            GEPA runner image
@@ -99,8 +98,7 @@ Browser
                           -> private GCS source/artifacts
                           -> Cloud Tasks
                              -> OIDC internal worker endpoint
-                                -> CoverUp Cloud Run Job (baseline)
-                                -> GEPA Cloud Run Job (optimization/comparison)
+                                -> GEPA Cloud Run Job (candidate zero/optimization/comparison)
                                    -> Vertex AI Gemini
                                    -> pytest + SlipCover/coverage.py
                                    -> result manifest/artifacts in GCS
@@ -161,9 +159,9 @@ account; frontend không được gọi trực tiếp.
   evaluation replicates và reflection temperature.
 - Review cấu hình và xóa experiment.
 
-### Baseline CoverUp
+### CoverUp trong GEPA
 
-- Queue/poll baseline qua Cloud Tasks và isolated CoverUp Cloud Run Job.
+- Không có baseline job riêng; baseline prompt được GEPA đánh giá như candidate số 0.
 - Auto-setup ba sample repo trước khi gọi model:
   - tạo distribution metadata an toàn mà không chạy setup script của repo;
   - kiểm tra import package và dependency bắt buộc;
@@ -171,13 +169,12 @@ account; frontend không được gọi trực tiếp.
   - `mlxtend`: kiểm tra NumPy/SciPy/Pandas/scikit-learn/Matplotlib/joblib;
   - `typesystem`: kiểm tra Jinja2 và YAML.
 - Target contract dùng chính xác `source_file + qualified_name`, không match rộng theo tên hàm.
-- Web runner dùng cùng `--target-spec-file` và `--prompt-template-file` với pipeline GEPA.
+- Web runner dùng dataset và prompt tải riêng từ GCS; source lấy từ sample repo trong image.
 - Structured attempt trace giữ outcome như `test_error`, `coverage_gain_saved` và
   `max_attempts_exhausted`.
 - Pytest exit code 5 là zero-test baseline hợp lệ nếu denominator của mọi target vẫn hợp lệ.
 - Không báo branch coverage ảo khi không statement nào được chạy.
-- Artifacts gồm prompt, setup report, CoverUp logs, stdout, structured trace, generated-tests ZIP,
-  coverage report/data và per-target coverage.
+- Artifacts gồm prompt, setup report, CoverUp logs, structured trace, coverage và kết quả GEPA.
 
 ### DSPy/GEPA optimization
 
@@ -187,7 +184,7 @@ account; frontend không được gọi trực tiếp.
 - Workspace tách theo candidate/split; target được xác định bằng source file + qualname.
 - Candidate prompt chỉ gồm `initial` và `error`, giữ placeholder bắt buộc.
 - Candidate và baseline prompt được lưu riêng; optimization không tự ghi đè production prompt.
-- Production web GEPA job dùng giới hạn thấp hơn standalone benchmark để nằm trong task timeout.
+- Cloud Tasks chỉ trigger/poll ngắn; GEPA Cloud Run Job có timeout tối đa 86400 giây.
 
 ### Comparison và prompt review
 
@@ -202,7 +199,7 @@ account; frontend không được gọi trực tiếp.
 
 - Login/Register, Dashboard, Projects, Project Detail/Analysis, Create Experiment, Experiments,
   Run/Comparison, Review & Approval, Prompt Registry, Datasets, Playground và Settings.
-- Projects, experiments, baseline, optimization, comparison và prompt review luôn dùng HTTP
+- Projects, experiments, optimization, comparison và prompt review luôn dùng HTTP
   repositories.
 - `VITE_DATA_MODE` hiện chỉ quyết định Dashboard dùng mock hay HTTP. Workflow production đang build
   với `VITE_DATA_MODE=demo`, nên production là **hybrid**: Dashboard dùng fixture; các workflow chính
@@ -217,22 +214,10 @@ Một experiment lưu snapshot bất biến đủ để tái hiện lựa chọn
 - source file, function ID và qualified symbol;
 - sampling method, seed và dataset splits;
 - CoverUp/GEPA settings và selected models;
-- baseline, optimization, comparison và prompt-version IDs.
+- optimization, comparison và prompt-version IDs.
 
-Baseline runner exchange dùng prefix mới dưới `runner-jobs/<execution-id>/`. GEPA web workflow dùng
-`runner-jobs/gepa/<execution-id>/`. Không dùng prefix `prompt_optimization_v3`.
-
-Khi đọc baseline artifact:
-
-- `project_setup.json`: môi trường/import preflight;
-- `attempt_trace.jsonl`: outcome từng attempt;
-- `generated_tests.zip`: phải có `test_opt_*.py` nếu CoverUp chấp nhận test;
-- `coverage_after.json`: raw coverage report;
-- `target_coverage.json`: metrics theo `source_file::qualified_name`.
-
-`baseline_succeeded` với 0% không đồng nghĩa hạ tầng lỗi: đó có thể là zero-test baseline hợp lệ.
-Kiểm tra `G/F/U/R`, `coverage_gain_saved` và generated-tests ZIP trước khi kết luận. Với model Lite và
-nhóm “nhiều statement nhất”, 0% vẫn có thể là kết quả chất lượng model vì các function rất lớn.
+GEPA web workflow dùng prefix riêng `runner-jobs/gepa/<execution-id>/`, upload dataset/prompt nhưng
+không upload source ZIP. Không dùng prefix `prompt_optimization_v3`.
 
 ## Frontend development
 
@@ -292,7 +277,6 @@ Chạy từ repository root:
 
 ```powershell
 docker build --file codebase/Dockerfile --tag promptopt-api:local .
-docker build --file codebase/sandbox/Dockerfile --tag promptopt-coverup-runner:local .
 docker build --file cloud/Dockerfile.web --tag promptopt-gepa-runner:local .
 ```
 
@@ -335,10 +319,10 @@ Runner identity chỉ được cấp quyền tối thiểu trên opaque runner e
 Script cần Firebase **ID token**; `gcloud auth login` không tạo Firebase user session.
 
 ```powershell
-# Baseline smoke
+# GEPA smoke on bundled isort
 .\codebase\scripts\smoke_production.ps1
 
-# Baseline -> optimize -> compare -> optional review
+# GEPA (candidate zero is baseline) -> optional locked comparison/review
 .\codebase\scripts\smoke_production.ps1 -FullPipeline -ReviewDecision approve
 ```
 
@@ -350,7 +334,7 @@ Tại lần cập nhật 2026-08-08:
 
 - Backend Ruff/pytest: **38 passed**.
 - CoverUp/GEPA invariant tests: **51 passed**.
-- API image và CoverUp runner image build local thành công sau exact-target fix.
+- API image và GEPA runner image dùng cùng sample repo đóng gói sẵn.
 - Production vẫn cần deploy commit mới và chạy lại smoke 10-target/ba sample repo.
 - Live Gemini benchmark không được chạy tự động trong lần kiểm tra tài liệu.
 
@@ -360,7 +344,7 @@ Thứ tự ưu tiên được theo dõi chi tiết trong `Checklist.md`:
 
 1. Deploy exact-target/prompt-contract runner và smoke isort mới; không tái sử dụng experiment cũ.
 2. Smoke `typesystem`, rồi `mlxtend`; xác nhận setup report, accepted tests và metrics.
-3. Chạy full baseline -> optimize -> comparison -> review trên production.
+3. Chạy full optimize -> comparison -> review trên production.
 4. Hoàn thiện idempotency, cancellation, GEPA checkpoint/resume và immutable checksums.
 5. Thêm quota, cost ceiling, artifact retention, structured monitoring và alerts.
 6. Xóa mock Dashboard/Datasets/Playground hoặc định nghĩa API/product semantics tương ứng.

@@ -11,7 +11,6 @@ on:
       - "codebase/ruff.toml"
       - "codebase/Dockerfile"
       - "codebase/.dockerignore"
-      - "codebase/sandbox/**"
       - "src/coverup/**"
       - "src/optimization/**"
       - "src/sample_repo/**"
@@ -35,7 +34,6 @@ on:
       - "codebase/ruff.toml"
       - "codebase/Dockerfile"
       - "codebase/.dockerignore"
-      - "codebase/sandbox/**"
       - "src/coverup/**"
       - "src/optimization/**"
       - "src/sample_repo/**"
@@ -81,17 +79,16 @@ jobs:
           test -d src/sample_repo/typesystem
 
       - name: Lint with ruff
-        run: ruff format --check src/ tests/ sandbox/ && ruff check src/ tests/ sandbox/
+        run: ruff format --check src/ tests/ && ruff check src/ tests/
 
       - name: Run tests
         run: python -m pytest tests/ -v --tb=short
         env:
           APP_ENV: test
 
-      - name: Build API and runner images
+      - name: Build API image
         run: |
           docker build --file Dockerfile --tag promptopt-api:ci ..
-          docker build --file sandbox/Dockerfile --tag promptopt-coverup-runner:ci ..
 
   gepa-lint-test-and-build:
     runs-on: ubuntu-latest
