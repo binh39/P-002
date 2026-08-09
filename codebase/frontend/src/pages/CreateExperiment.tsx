@@ -34,16 +34,15 @@ const geminiModels = [
 ] as const;
 const sparseBaselinePrompt: PromptBundle = {
   initial: `Write pytest tests for {filename} that cover {coverage_targets}.
-Use get_info with a function, class, or Class.method name to inspect source or signatures missing
-from the excerpt; it follows imports when possible. Prefer it to guessing APIs.
+Use get_info(name) to inspect missing function, class, or method source/signatures; it follows
+imports when possible. Do not guess APIs.
 Return a complete test module in a Python markdown code block.
 
 \`\`\`python
 {source_excerpt}
 \`\`\``,
   error: `Fix the test error and return the complete Python test module.
-Use get_info with a symbol name from the traceback to inspect a missing definition or signature
-before revising.
+Use get_info(name) for missing symbol details from the traceback before revising.
 {error}`,
 };
 function projectFunctionKey(projectId: string, functionId: string) {
