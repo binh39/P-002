@@ -118,8 +118,6 @@ describe("create experiment wizard", () => {
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
 
-    expect(screen.getByLabelText(/Max metric calls · Full access/i)).not.toHaveAttribute(
-      "max",
-    );
+    expect(screen.getByLabelText(/Max metric calls · Full access/i)).not.toHaveAttribute("max");
   });
 });

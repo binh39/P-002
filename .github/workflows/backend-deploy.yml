@@ -60,6 +60,7 @@ jobs:
         run: |
           unzip -q -o src/sample_repo.zip -d src
           test -d src/sample_repo/isort
+          test -d src/sample_repo/mimesis
           test -d src/sample_repo/mlxtend
           test -d src/sample_repo/typesystem
       - name: Authenticate Docker to Artifact Registry

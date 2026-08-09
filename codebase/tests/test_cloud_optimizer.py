@@ -101,10 +101,7 @@ async def test_cloud_gepa_optimizer_uses_isolated_web_prefix_and_maps_result():
     assert job_args[job_args.index("--metric-calls") + 1] == "30"
     assert job_args[job_args.index("--repeat-tests") + 1] == "5"
     assert job_args[job_args.index("--evaluation-replicates") + 1] == "1"
-    environment = {
-        item["name"]: item["value"]
-        for item in client.request["overrides"]["container_overrides"][0]["env"]
-    }
+    environment = {item["name"]: item["value"] for item in client.request["overrides"]["container_overrides"][0]["env"]}
     assert environment == {
         "COVERUP_MODEL": "vertex_ai/gemini-3.5-flash-lite",
         "OPTIMIZE_MODEL": "vertex_ai/gemini-3.1-pro-preview",

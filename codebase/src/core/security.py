@@ -15,9 +15,7 @@ class AuthenticatedUser:
 
     @property
     def has_full_access(self) -> bool:
-        return bool(
-            self.email and self.email.strip().casefold() in FULL_ACCESS_EMAILS
-        )
+        return bool(self.email and self.email.strip().casefold() in FULL_ACCESS_EMAILS)
 
 
 class TokenVerifier(Protocol):

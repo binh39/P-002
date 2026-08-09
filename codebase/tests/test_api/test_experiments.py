@@ -30,9 +30,7 @@ async def test_only_full_access_account_can_exceed_metric_budget(client, app):
         "settings": {"max_metric_calls": 4500},
     }
 
-    rejected = await client.post(
-        "/api/v1/experiments", headers=AUTH_HEADERS, json=payload
-    )
+    rejected = await client.post("/api/v1/experiments", headers=AUTH_HEADERS, json=payload)
     assert rejected.status_code == 403
     assert rejected.json()["error"]["code"] == "METRIC_BUDGET_LIMIT"
 

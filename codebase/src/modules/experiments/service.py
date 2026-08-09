@@ -66,10 +66,7 @@ class ExperimentService:
         *,
         full_access: bool = False,
     ) -> ExperimentResponse:
-        if (
-            not full_access
-            and payload.settings.max_metric_calls > STANDARD_MAX_METRIC_CALLS
-        ):
+        if not full_access and payload.settings.max_metric_calls > STANDARD_MAX_METRIC_CALLS:
             raise AppError(
                 403,
                 "METRIC_BUDGET_LIMIT",

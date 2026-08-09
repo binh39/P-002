@@ -43,10 +43,7 @@ def test_split_is_stratified_by_project():
 
     by_key = {item.key: item for item in targets}
     assert {
-        split: {
-            project: sum(by_key[key].project_id == project for key in keys)
-            for project in ("alpha", "beta")
-        }
+        split: {project: sum(by_key[key].project_id == project for key in keys) for project in ("alpha", "beta")}
         for split, keys in splits.items()
     } == {
         "train": {"alpha": 2, "beta": 4},

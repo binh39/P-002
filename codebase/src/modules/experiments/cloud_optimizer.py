@@ -149,8 +149,9 @@ class CloudRunJobGepaOptimizer:
             missing = ", ".join(manifest.get("missing_artifacts", []))
             return_code = manifest.get("return_code", "unknown")
             raise RuntimeError(
-                f"Cloud Run GEPA job failed with exit code {return_code}; "
-                f"missing artifacts: {missing or 'none'}"[-4000:]
+                f"Cloud Run GEPA job failed with exit code {return_code}; missing artifacts: {missing or 'none'}"[
+                    -4000:
+                ]
             )
 
         program = json.loads((await self.storage.read(f"{artifacts_prefix}/optimized_program.json")).decode())

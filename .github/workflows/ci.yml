@@ -75,6 +75,7 @@ jobs:
         run: |
           unzip -q -o src/sample_repo.zip -d src
           test -d src/sample_repo/isort
+          test -d src/sample_repo/mimesis
           test -d src/sample_repo/mlxtend
           test -d src/sample_repo/typesystem
 
@@ -104,6 +105,7 @@ jobs:
         run: |
           unzip -q -o src/sample_repo.zip -d src
           test -d src/sample_repo/isort/isort
+          test -d src/sample_repo/mimesis/mimesis
           test -d src/sample_repo/mlxtend/mlxtend
           test -d src/sample_repo/typesystem/typesystem
       - name: Check GEPA pipeline

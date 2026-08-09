@@ -55,13 +55,8 @@ def split_targets(
     positive_splits = tuple(name for name in split_names if counts[name] > 0)
     project_count = len(projects)
     if any(counts[name] < project_count for name in positive_splits):
-        raise ValueError(
-            "Dataset is too small to include every project in every non-empty split"
-        )
-    undersized = sorted(
-        project for project, values in projects.items()
-        if len(values) < len(positive_splits)
-    )
+        raise ValueError("Dataset is too small to include every project in every non-empty split")
+    undersized = sorted(project for project, values in projects.items() if len(values) < len(positive_splits))
     if undersized:
         raise ValueError(
             "Each project needs at least one target in every non-empty split; "
@@ -71,24 +66,15 @@ def split_targets(
     # Reserve one target per project in every active split, then distribute the
     # remainder toward the proportional ideal while preserving exact totals.
     total = len(unique)
-    allocation = {
-        (project, split): int(split in positive_splits)
-        for project in projects
-        for split in split_names
-    }
-    row_remaining = {
-        project: len(values) - len(positive_splits)
-        for project, values in projects.items()
-    }
+    allocation = {(project, split): int(split in positive_splits) for project in projects for split in split_names}
+    row_remaining = {project: len(values) - len(positive_splits) for project, values in projects.items()}
     column_remaining = {
-        split: counts[split] - project_count if split in positive_splits else 0
-        for split in split_names
+        split: counts[split] - project_count if split in positive_splits else 0 for split in split_names
     }
     while any(column_remaining.values()):
         candidates = [
             (
-                len(projects[project]) * counts[split] / total
-                - allocation[(project, split)],
+                len(projects[project]) * counts[split] / total - allocation[(project, split)],
                 project,
                 split,
             )
@@ -101,8 +87,10 @@ def split_targets(
         _, project, split = max(
             candidates,
             key=lambda item: (
-                item[0], column_remaining[item[2]],
-                -split_names.index(item[2]), item[1],
+                item[0],
+                column_remaining[item[2]],
+                -split_names.index(item[2]),
+                item[1],
             ),
         )
         allocation[(project, split)] += 1
@@ -113,14 +101,12 @@ def split_targets(
     for project, keys in sorted(projects.items()):
         ordered = sorted(
             keys,
-            key=lambda value: hashlib.sha256(
-                f"{seed}::{project}::{value}".encode()
-            ).hexdigest(),
+            key=lambda value: hashlib.sha256(f"{seed}::{project}::{value}".encode()).hexdigest(),
         )
         offset = 0
         for split in split_names:
             size = allocation[(project, split)]
-            result[split].extend(ordered[offset:offset + size])
+            result[split].extend(ordered[offset : offset + size])
             offset += size
     return result
 
