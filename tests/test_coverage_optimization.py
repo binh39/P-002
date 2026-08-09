@@ -712,6 +712,167 @@ def test_direct_gepa_adapter_returns_distinct_per_symbol_scores_and_context(tmp_
     )
 
 
+def test_reflection_compares_candidate_with_parent_and_balances_exemplars(tmp_path):
+    project = tmp_path / "sample_repo"
+    package = project / "pkg"
+    package.mkdir(parents=True)
+    (package / "a.py").write_text(
+        "def improved_target(value):\n    return value + 1\n",
+        encoding="utf-8",
+    )
+    (package / "b.py").write_text(
+        "def regressed_target(value):\n    return value - 1\n",
+        encoding="utf-8",
+    )
+
+    class FakeRunner:
+        def __init__(self):
+            self.config = SimpleNamespace(
+                package_dir=package,
+                project_root=tmp_path,
+            )
+
+        def evaluate_batch(
+            self, targets, prompt_template, *, candidate_id=None, split=None,
+            workspace_kind="candidate",
+        ):
+            prompt = json.loads(Path(prompt_template).read_text(encoding="utf-8"))
+            if "Contrastive marker" in prompt["initial"]:
+                version = "candidate"
+            elif "Parent marker" in prompt["initial"]:
+                version = "parent"
+            else:
+                version = "baseline"
+            target = targets[0]
+            scores = {
+                "improved_target": {
+                    "candidate": 0.8, "parent": 0.6, "baseline": 0.4,
+                },
+                "regressed_target": {
+                    "candidate": 0.2, "parent": 0.8, "baseline": 0.9,
+                },
+            }
+            value = scores[target.symbol][version]
+            covered = int(value * 10)
+            result = SimpleNamespace(
+                target=target,
+                score={
+                    "score": value,
+                    "statement_gain": value,
+                    "branch_gain": value,
+                    "statement_coverage": value,
+                    "branch_coverage": value,
+                    "covered_statements": covered,
+                    "num_statements": 10,
+                    "covered_branches": covered,
+                    "num_branches": 10,
+                    "gained_lines": [],
+                    "gained_branches": [],
+                    "remaining_lines": [2],
+                    "remaining_branches": [],
+                    "valid": True,
+                },
+                feedback=f"feedback for {version} {target.symbol}",
+                attempt_traces=[{
+                    "attempt": 1,
+                    "component": "initial",
+                    "outcome": "coverage_gain_saved",
+                    "generated_test": f"def test_{version}_{target.symbol}(): pass",
+                }],
+            )
+            return SimpleNamespace(
+                run_id=f"run-{candidate_id}",
+                tests_workspace=f"tests-{candidate_id}",
+                results=[result],
+            )
+
+    baseline = baseline_bundle()
+    parent_initial = baseline.initial.replace(
+        "Create new pytest test functions",
+        "Parent marker: preserve verified behavior.\n"
+        "Create new pytest test functions",
+    )
+    proposed_initial = parent_initial.replace(
+        "Parent marker: preserve verified behavior.",
+        "Parent marker: preserve verified behavior.\n"
+        "Contrastive marker: compare causal outcomes.",
+    )
+    proposed_templates = iter((parent_initial, proposed_initial))
+    adapter = CoverUpPromptAdapter(
+        runner=FakeRunner(),
+        candidate_dir=tmp_path / "candidates",
+        targets_by_split={},
+        baseline=baseline,
+        reflection_lm=lambda prompt: [f"<template>{next(proposed_templates)}</template>"],
+    )
+    parent_updates = adapter.propose_new_texts(
+        baseline.as_candidate(),
+        {"initial": [{"Feedback": "add one evidence-backed instruction"}]},
+        ["initial"],
+    )
+    parent = {**baseline.as_candidate(), **parent_updates}
+    candidate_updates = adapter.propose_new_texts(
+        parent,
+        {"initial": [{"Feedback": "compare the candidate with its direct parent"}]},
+        ["initial"],
+    )
+    candidate = {**parent, **candidate_updates}
+    targets = [
+        SymbolTarget("project", "pkg/a.py", "improved_target", "train"),
+        SymbolTarget("project", "pkg/b.py", "regressed_target", "train"),
+    ]
+    adapter.targets_by_split = {"train": targets}
+
+    evaluated = adapter.evaluate(targets, candidate, capture_traces=True)
+    reflective = adapter.make_reflective_dataset(
+        candidate, evaluated, ["initial"]
+    )["initial"]
+    by_target = {row["Inputs"]["target"]: row for row in reflective}
+    improved = by_target["pkg/a.py::improved_target"]
+    regressed = by_target["pkg/b.py::regressed_target"]
+
+    improved_output = improved["Generated Outputs"]
+    assert improved_output["candidate_score"] == pytest.approx(0.8)
+    assert improved_output["parent_score"] == pytest.approx(0.6)
+    assert improved_output["baseline_score"] == pytest.approx(0.4)
+    assert improved_output["score_delta"] == pytest.approx(0.2)
+    assert improved_output["baseline_score_delta"] == pytest.approx(0.4)
+    assert improved_output["comparison_outcome"] == "improved"
+    assert improved_output["exemplar_type"] == "positive"
+    assert "test_candidate_improved_target" in improved_output["candidate_test"]
+    assert "test_parent_improved_target" in improved_output["parent_test"]
+    assert "test_baseline_improved_target" in improved_output["baseline_test"]
+    assert improved_output["baseline_test"] != improved_output["parent_test"]
+    assert improved["Inputs"]["changed_components"] == ["initial"]
+
+    regressed_output = regressed["Generated Outputs"]
+    assert regressed_output["candidate_score"] == pytest.approx(0.2)
+    assert regressed_output["parent_score"] == pytest.approx(0.8)
+    assert regressed_output["baseline_score"] == pytest.approx(0.9)
+    assert regressed_output["score_delta"] == pytest.approx(-0.6)
+    assert regressed_output["baseline_score_delta"] == pytest.approx(-0.7)
+    assert regressed_output["comparison_outcome"] == "regressed"
+    assert regressed_output["exemplar_type"] == "regression"
+    assert "test_candidate_regressed_target" in regressed_output["candidate_test"]
+    assert "test_parent_regressed_target" in regressed_output["parent_test"]
+    assert "candidate regressed versus parent" in regressed["Feedback"]
+
+    assert [
+        row["Generated Outputs"]["exemplar_type"] for row in reflective[:2]
+    ] == ["regression", "positive"]
+    trace_path = tmp_path / "candidates" / "reflection_traces.jsonl"
+    trace = json.loads(trace_path.read_text(encoding="utf-8").splitlines()[-1])
+    assert trace["schema_version"] == 1
+    assert trace["candidate_digest"] == bundle_digest(
+        PromptBundle.from_candidate(candidate)
+    )
+    assert trace["components_to_update"] == ["initial"]
+    assert [
+        row["Generated Outputs"]["exemplar_type"]
+        for row in trace["records"]["initial"][:2]
+    ] == ["regression", "positive"]
+
+
 def test_reflection_uses_only_attempts_from_the_component_being_optimized(tmp_path):
     baseline = baseline_bundle()
     adapter = CoverUpPromptAdapter(

@@ -337,6 +337,82 @@ def _compact_component_attempts(
     return compact
 
 
+def _attempts_with_replicates(samples: Sequence[Mapping[str, Any]]) -> list[dict]:
+    return [
+        {**attempt, "replicate": replicate}
+        for replicate, sample in enumerate(samples)
+        for attempt in sample.get("attempt_traces", [])
+    ]
+
+
+def _representative_test(attempts: Sequence[Mapping[str, Any]]) -> str:
+    for attempt in reversed(attempts):
+        generated_test = attempt.get("generated_test")
+        if generated_test:
+            return _clip_text(generated_test, 12_000)
+    return ""
+
+
+def _comparison_outcome(score_delta: float, *, tolerance: float = 1e-9) -> str:
+    if score_delta > tolerance:
+        return "improved"
+    if score_delta < -tolerance:
+        return "regressed"
+    return "tied"
+
+
+def _exemplar_type(trajectory: Mapping[str, Any]) -> str:
+    outcome = trajectory.get("comparison_outcome")
+    if outcome == "regressed":
+        return "regression"
+    if outcome == "improved" or float(trajectory.get("score", 0.0)) >= 0.999999:
+        return "positive"
+    if float(trajectory.get("score", 0.0)) < 0.999999:
+        return "failure"
+    return "neutral"
+
+
+def _order_contrastive_trajectories(
+    trajectories: Sequence[Mapping[str, Any]],
+) -> list[Mapping[str, Any]]:
+    """Lead with one negative and one positive example when both are available."""
+    values = list(trajectories)
+    negative = [
+        trajectory for trajectory in values
+        if _exemplar_type(trajectory) in {"regression", "failure"}
+    ]
+    positive = [
+        trajectory for trajectory in values
+        if _exemplar_type(trajectory) == "positive"
+    ]
+    representatives: list[Mapping[str, Any]] = []
+    if negative:
+        representatives.append(min(
+            negative,
+            key=lambda trajectory: (
+                float(trajectory.get("score_delta", 0.0)),
+                float(trajectory.get("score", 0.0)),
+            ),
+        ))
+    if positive:
+        best_positive = max(
+            positive,
+            key=lambda trajectory: (
+                float(trajectory.get("score_delta", 0.0)),
+                float(trajectory.get("score", 0.0)),
+            ),
+        )
+        if all(best_positive is not value for value in representatives):
+            representatives.append(best_positive)
+    return [
+        *representatives,
+        *(
+            trajectory for trajectory in values
+            if all(trajectory is not value for value in representatives)
+        ),
+    ]
+
+
 def evaluate_bundle_repeated(
     runner: CoverUpExperimentRunner,
     targets: list[SymbolTarget],
@@ -618,6 +694,7 @@ class CoverUpPromptAdapter:
             name: max(600, len(text) * 3)
             for name, text in baseline.as_candidate().items()
         }
+        self.candidate_lineage: dict[str, dict[str, Any]] = {}
 
     def _workspace_kind(self, bundle: PromptBundle) -> str:
         return "baseline" if bundle_digest(bundle) == self.baseline_digest else "candidate"
@@ -654,6 +731,44 @@ class CoverUpPromptAdapter:
         )
         return statement + branch
 
+    def _evaluate_replicates(
+        self,
+        targets: list[SymbolTarget],
+        bundle: PromptBundle,
+        *,
+        split: str,
+    ) -> list[dict]:
+        return [
+            evaluate_bundle_batch_cached(
+                self.runner,
+                targets,
+                bundle,
+                self.candidate_dir,
+                split=split,
+                workspace_kind=self._workspace_kind(bundle),
+                replicate=replicate,
+            )
+            for replicate in range(self.evaluation_replicates)
+        ]
+
+    def _comparison_candidate(
+        self, candidate: dict[str, str],
+    ) -> tuple[dict[str, str], list[str], str]:
+        digest = bundle_digest(PromptBundle.from_candidate(candidate))
+        lineage = self.candidate_lineage.get(digest)
+        if lineage is not None:
+            return (
+                dict(lineage["parent_candidate"]),
+                list(lineage["changed_components"]),
+                "parent",
+            )
+        baseline_candidate = self.baseline.as_candidate()
+        changed = [
+            component for component in COMPONENT_PLACEHOLDERS
+            if candidate.get(component) != baseline_candidate[component]
+        ]
+        return baseline_candidate, changed, "baseline"
+
     def evaluate(
         self,
         batch: list[SymbolTarget],
@@ -688,22 +803,45 @@ class CoverUpPromptAdapter:
                 trajectories=trajectories,
             )
 
-        repeated_batches = [
-            evaluate_bundle_batch_cached(
-                self.runner,
-                full_targets,
-                bundle,
-                self.candidate_dir,
-                split=split,
-                workspace_kind=self._workspace_kind(bundle),
-                replicate=replicate,
-            )
-            for replicate in range(self.evaluation_replicates)
-        ]
+        repeated_batches = self._evaluate_replicates(
+            full_targets, bundle, split=split
+        )
         lookups = [
             {_result_identity(result): result for result in record["results"]}
             for record in repeated_batches
         ]
+        comparison_lookups = lookups
+        baseline_lookups = lookups
+        comparison_digest = bundle_digest(bundle)
+        baseline_digest = self.baseline_digest
+        changed_components: list[str] = []
+        comparison_source = "baseline"
+        if capture_traces:
+            parent_candidate, changed_components, comparison_source = (
+                self._comparison_candidate(candidate)
+            )
+            parent_bundle = PromptBundle.from_candidate(parent_candidate)
+            comparison_digest = bundle_digest(parent_bundle)
+            batches_by_digest = {bundle_digest(bundle): repeated_batches}
+
+            def comparison_batches(comparison_bundle: PromptBundle) -> list[dict]:
+                comparison_bundle_digest = bundle_digest(comparison_bundle)
+                if comparison_bundle_digest not in batches_by_digest:
+                    batches_by_digest[comparison_bundle_digest] = self._evaluate_replicates(
+                        full_targets, comparison_bundle, split=split
+                    )
+                return batches_by_digest[comparison_bundle_digest]
+
+            parent_batches = comparison_batches(parent_bundle)
+            baseline_batches = comparison_batches(self.baseline)
+            comparison_lookups = [
+                {_result_identity(result): result for result in record["results"]}
+                for record in parent_batches
+            ]
+            baseline_lookups = [
+                {_result_identity(result): result for result in record["results"]}
+                for record in baseline_batches
+            ]
         outputs = []
         scores = []
         objectives = []
@@ -739,23 +877,65 @@ class CoverUpPromptAdapter:
                 ]),
             })
             if trajectories is not None:
-                worst = min(samples, key=lambda item: float(item["score"]))
-                attempt_traces = [
-                    {**attempt, "replicate": replicate}
-                    for replicate, sample in enumerate(samples)
-                    for attempt in sample.get("attempt_traces", [])
+                parent_samples = [lookup[identity] for lookup in comparison_lookups]
+                baseline_samples = [lookup[identity] for lookup in baseline_lookups]
+                representative_replicate = min(
+                    range(len(samples)),
+                    key=lambda index: float(samples[index]["score"]),
+                )
+                worst = samples[representative_replicate]
+                attempt_traces = _attempts_with_replicates(samples)
+                parent_attempt_traces = _attempts_with_replicates(parent_samples)
+                baseline_attempt_traces = _attempts_with_replicates(baseline_samples)
+                parent_replicate_scores = [
+                    float(sample["score"]) for sample in parent_samples
                 ]
+                baseline_replicate_scores = [
+                    float(sample["score"]) for sample in baseline_samples
+                ]
+                parent_score = _mean(parent_replicate_scores)
+                baseline_score = _mean(baseline_replicate_scores)
+                score_delta = raw_score - parent_score
                 trajectories.append({
                     "target": target.__dict__,
                     "score": raw_score,
+                    "candidate_score": raw_score,
+                    "parent_score": parent_score,
+                    "baseline_score": baseline_score,
+                    "score_delta": score_delta,
+                    "baseline_score_delta": raw_score - baseline_score,
+                    "comparison_outcome": _comparison_outcome(score_delta),
+                    "comparison_source": comparison_source,
+                    "candidate_digest": bundle_digest(bundle),
+                    "parent_digest": comparison_digest,
+                    "baseline_digest": baseline_digest,
+                    "changed_components": changed_components,
                     "weighted_score": score,
                     "replicate_scores": raw_scores,
+                    "parent_replicate_scores": parent_replicate_scores,
+                    "baseline_replicate_scores": baseline_replicate_scores,
+                    "representative_replicate": representative_replicate,
+                    "candidate_test": _representative_test(
+                        samples[representative_replicate].get("attempt_traces", [])
+                    ),
+                    "parent_test": _representative_test(
+                        parent_samples[representative_replicate].get(
+                            "attempt_traces", []
+                        )
+                    ),
+                    "baseline_test": _representative_test(
+                        baseline_samples[representative_replicate].get(
+                            "attempt_traces", []
+                        )
+                    ),
                     "feedback": "\n\n".join(
                         f"Replicate {replicate}:\n{sample['feedback']}"
                         for replicate, sample in enumerate(samples)
                     ),
                     "coverage": worst.get("coverage"),
                     "attempt_traces": attempt_traces,
+                    "parent_attempt_traces": parent_attempt_traces,
+                    "baseline_attempt_traces": baseline_attempt_traces,
                     "source_context": _source_context(
                         self.runner, target, worst.get("coverage")
                     ),
@@ -777,17 +957,13 @@ class CoverUpPromptAdapter:
         if trajectories is None:
             raise ValueError("GEPA reflection requires captured CoverUp trajectories")
         result: dict[str, list[dict[str, Any]]] = {}
-        weak_trajectories = [
-            trajectory for trajectory in trajectories
-            if float(trajectory.get("score", 0.0)) < 0.999999
-        ] or list(trajectories)
         for component in components_to_update:
             placeholders = COMPONENT_PLACEHOLDERS[component]
             has_structured_traces = any(
-                trajectory.get("attempt_traces") for trajectory in weak_trajectories
+                trajectory.get("attempt_traces") for trajectory in trajectories
             )
             component_trajectories = [
-                trajectory for trajectory in weak_trajectories
+                trajectory for trajectory in trajectories
                 if any(
                     attempt.get("component") == component
                     for attempt in trajectory.get("attempt_traces", [])
@@ -796,7 +972,10 @@ class CoverUpPromptAdapter:
             # Compatibility for custom runners that predate trace schema 7. Real
             # traced runs never borrow evidence from an unexercised component.
             if not has_structured_traces:
-                component_trajectories = weak_trajectories
+                component_trajectories = list(trajectories)
+            component_trajectories = _order_contrastive_trajectories(
+                component_trajectories
+            )
             result[component] = [
                 {
                     "Inputs": {
@@ -807,26 +986,95 @@ class CoverUpPromptAdapter:
                             f"{trajectory['target']['source_file']}::"
                             f"{trajectory['target']['symbol']}"
                         ),
+                        "active_component": component,
+                        "changed_components": trajectory.get(
+                            "changed_components", []
+                        ),
                         "source_context": _clip_text(
                             trajectory["source_context"], 12_000
                         ),
                     },
                     "Generated Outputs": {
                         "symbol_score": trajectory["score"],
+                        "candidate_score": trajectory.get(
+                            "candidate_score", trajectory["score"]
+                        ),
+                        "parent_score": trajectory.get(
+                            "parent_score", trajectory["score"]
+                        ),
+                        "baseline_score": trajectory.get(
+                            "baseline_score", trajectory["score"]
+                        ),
+                        "score_delta": trajectory.get("score_delta", 0.0),
+                        "baseline_score_delta": trajectory.get(
+                            "baseline_score_delta", 0.0
+                        ),
+                        "comparison_outcome": trajectory.get(
+                            "comparison_outcome", "tied"
+                        ),
+                        "comparison_source": trajectory.get(
+                            "comparison_source", "baseline"
+                        ),
+                        "exemplar_type": _exemplar_type(trajectory),
                         "replicate_scores": trajectory.get("replicate_scores", []),
+                        "parent_replicate_scores": trajectory.get(
+                            "parent_replicate_scores", []
+                        ),
+                        "baseline_replicate_scores": trajectory.get(
+                            "baseline_replicate_scores", []
+                        ),
+                        "representative_replicate": trajectory.get(
+                            "representative_replicate", 0
+                        ),
                         "candidate_component_chars": len(candidate[component]),
+                        "candidate_test": trajectory.get(
+                            "candidate_test",
+                            _representative_test(trajectory.get("attempt_traces", [])),
+                        ),
+                        "parent_test": trajectory.get(
+                            "parent_test",
+                            _representative_test(
+                                trajectory.get("parent_attempt_traces", [])
+                            ),
+                        ),
+                        "baseline_test": trajectory.get(
+                            "baseline_test",
+                            _representative_test(
+                                trajectory.get("baseline_attempt_traces", [])
+                            ),
+                        ),
                         "component_attempts": _compact_component_attempts(
                             trajectory.get("attempt_traces", []), component
                         ),
                     },
                     "Feedback": (
+                        "Contrastive result: candidate "
+                        f"{trajectory.get('comparison_outcome', 'tied')} versus "
+                        f"{trajectory.get('comparison_source', 'baseline')} "
+                        f"(delta={float(trajectory.get('score_delta', 0.0)):+.4f}).\n"
                         f"{_clip_text(trajectory['feedback'], 6_000, keep_tail=True)}\n"
-                        "Infer a reusable prompting improvement from this failure. "
+                        "Compare the candidate and parent/baseline tests. Preserve causal "
+                        "behaviors associated with positive deltas and correct behaviors "
+                        "associated with regressions or failures. Infer one reusable prompting "
+                        "improvement from the contrast. "
                         "Do not embed project-specific names or line numbers in the template."
                     ),
                 }
                 for trajectory in component_trajectories
             ]
+        trace_path = self.candidate_dir / "reflection_traces.jsonl"
+        trace_payload = {
+            "schema_version": 1,
+            "candidate_digest": bundle_digest(PromptBundle.from_candidate(candidate)),
+            "components_to_update": list(components_to_update),
+            "records": result,
+        }
+        with _digest_lock(f"reflection-trace:{trace_path.resolve()}"):
+            trace_path.parent.mkdir(parents=True, exist_ok=True)
+            with trace_path.open("a", encoding="utf-8") as trace_file:
+                trace_file.write(
+                    json.dumps(trace_payload, ensure_ascii=False, default=str) + "\n"
+                )
         return result
 
     @staticmethod
@@ -883,7 +1131,7 @@ Current template:
 {current}
 </current_template>
 
-Execution evidence from representative failing or weak targets:
+Contrastive execution evidence from representative positive, failing, and regressed targets:
 <evidence>
 {evidence}
 </evidence>
@@ -915,6 +1163,18 @@ only the complete revised template between <template> and </template> tags.
                     f"Reflection LM failed to produce a valid {component} template: "
                     f"{last_error}"
                 )
+        proposed_candidate = {**candidate, **proposals}
+        changed_components = [
+            component for component in components_to_update
+            if proposed_candidate[component] != candidate[component]
+        ]
+        if changed_components:
+            self.candidate_lineage[
+                bundle_digest(PromptBundle.from_candidate(proposed_candidate))
+            ] = {
+                "parent_candidate": dict(candidate),
+                "changed_components": changed_components,
+            }
         return proposals
 
 
