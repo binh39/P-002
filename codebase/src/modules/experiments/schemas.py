@@ -80,6 +80,11 @@ class ExperimentSettings(StrictModel):
         return self
 
 
+class BaselinePromptInput(StrictModel):
+    initial: str = Field(min_length=1, max_length=32 * 1024)
+    error: str = Field(min_length=1, max_length=32 * 1024)
+
+
 class TargetReference(StrictModel):
     project_id: str
     function_id: str
@@ -113,6 +118,7 @@ class CreateExperimentRequest(StrictModel):
     split_percentages: DatasetPercentages = Field(default_factory=DatasetPercentages)
     manual_splits: dict[str, list[str]] | None = None
     settings: ExperimentSettings = Field(default_factory=ExperimentSettings)
+    baseline_prompt: BaselinePromptInput | None = None
 
     @model_validator(mode="after")
     def validate_selection(self):
@@ -139,6 +145,7 @@ class ExperimentResponse(StrictModel):
     split_percentages: DatasetPercentages = Field(default_factory=DatasetPercentages)
     split_seed: int = 7
     settings: ExperimentSettings = Field(default_factory=ExperimentSettings)
+    baseline_prompt: dict[str, str] | None = None
     optimization_eligible: bool = False
     status: ExperimentStatus
     baseline_run_id: str | None = None

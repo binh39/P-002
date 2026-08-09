@@ -64,6 +64,7 @@ describe("HttpExperimentRepository", () => {
       randomSeed: 7,
       splitPercentages: { train: 60, validation: 20, test: 20 },
       manualSplits: null,
+      baselinePrompt: null,
       settings: {
         coverupModel: "vertex_ai/gemini-3.6-flash",
         optimizeModel: "vertex_ai/gemini-3.6-flash",
@@ -92,6 +93,7 @@ describe("HttpExperimentRepository", () => {
           random_seed: 7,
           split_percentages: { train: 60, validation: 20, test: 20 },
           manual_splits: null,
+          baseline_prompt: null,
           settings: {
             coverup_model: "vertex_ai/gemini-3.6-flash",
             optimize_model: "vertex_ai/gemini-3.6-flash",

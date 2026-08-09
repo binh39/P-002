@@ -18,6 +18,7 @@ import {
   type SamplingMethod,
 } from "@/domain/experimentConfiguration";
 import type { PythonProject } from "@/domain/projects";
+import type { PromptBundle } from "@/domain/experiments";
 
 const steps = ["Projects", "Functions", "Dataset", "Settings", "Review"];
 const splitNames: DatasetSplit[] = ["train", "validation", "test"];
@@ -31,6 +32,16 @@ const geminiModels = [
   "vertex_ai/gemini-3.5-flash-lite",
   "vertex_ai/gemini-3.6-flash",
 ] as const;
+const sparseBaselinePrompt: PromptBundle = {
+  initial: `Write pytest tests for {filename} that cover {coverage_targets}.
+Return a complete test module in a Python markdown code block.
+
+\`\`\`python
+{source_excerpt}
+\`\`\``,
+  error: `Fix the test error and return the complete Python test module:
+{error}`,
+};
 function projectFunctionKey(projectId: string, functionId: string) {
   return `${projectId}::${functionId}`;
 }
@@ -58,6 +69,8 @@ export default function CreateExperiment() {
   const [manualAssignments, setManualAssignments] = useState<Record<string, DatasetSplit>>({});
   const [percentages, setPercentages] = useState<DatasetPercentages>(defaultDatasetPercentages);
   const [settings, setSettings] = useState<CloudExperimentSettings>(defaultCloudSettings);
+  const [baselineMode, setBaselineMode] = useState<"preset" | "custom">("preset");
+  const [customBaseline, setCustomBaseline] = useState<PromptBundle>(sparseBaselinePrompt);
   const [search, setSearch] = useState("");
   const [projectFilter, setProjectFilter] = useState("all");
 
@@ -139,7 +152,12 @@ export default function CreateExperiment() {
     (hasFullAccess || settings.maxMetricCalls <= 2200) &&
     settings.evaluationReplicates >= 1 &&
     settings.reflectionTemperature >= 0 &&
-    settings.reflectionTemperature <= 2;
+    settings.reflectionTemperature <= 2 &&
+    (baselineMode === "preset" ||
+      (customBaseline.initial.includes("{filename}") &&
+        customBaseline.initial.includes("{coverage_targets}") &&
+        customBaseline.initial.includes("{source_excerpt}") &&
+        customBaseline.error.includes("{error}")));
   const canContinue = [
     selectedProjectIds.length > 0,
     !functionsLoading && !functionsError && functionSelectionValid,
@@ -164,6 +182,7 @@ export default function CreateExperiment() {
               )
             : null,
         settings,
+        baselinePrompt: baselineMode === "custom" ? customBaseline : null,
       });
       return experiments.requestOptimization(experiment.id);
     },
@@ -268,6 +287,10 @@ export default function CreateExperiment() {
               settings={settings}
               setSettings={setSettings}
               hasFullAccess={hasFullAccess}
+              baselineMode={baselineMode}
+              setBaselineMode={setBaselineMode}
+              customBaseline={customBaseline}
+              setCustomBaseline={setCustomBaseline}
             />
           )}
           {step === 4 && (
@@ -280,6 +303,7 @@ export default function CreateExperiment() {
               randomSeed={randomSeed}
               percentages={percentages}
               settings={settings}
+              baselineMode={baselineMode}
             />
           )}
         </section>
@@ -746,10 +770,18 @@ function SettingsStep({
   settings,
   setSettings,
   hasFullAccess,
+  baselineMode,
+  setBaselineMode,
+  customBaseline,
+  setCustomBaseline,
 }: {
   settings: CloudExperimentSettings;
   setSettings: (settings: CloudExperimentSettings) => void;
   hasFullAccess: boolean;
+  baselineMode: "preset" | "custom";
+  setBaselineMode: (mode: "preset" | "custom") => void;
+  customBaseline: PromptBundle;
+  setCustomBaseline: (prompt: PromptBundle) => void;
 }) {
   const update = <Key extends keyof CloudExperimentSettings>(
     key: Key,
@@ -762,6 +794,53 @@ function SettingsStep({
         title="Configure CoverUp and GEPA"
         description="Runtime controls that affect cost, reproducibility and optimization quality."
       />
+      <section className="settings-section">
+        <div className="settings-section-title">
+          <span>00</span>
+          <div>
+            <h3>Baseline prompt</h3>
+            <p>
+              Start sparse so GEPA has useful instructions to discover, or provide your own seed.
+            </p>
+          </div>
+        </div>
+        <div className="settings-form-grid">
+          <Field label="Baseline source">
+            <select
+              value={baselineMode}
+              onChange={(event) => setBaselineMode(event.target.value as "preset" | "custom")}
+            >
+              <option value="preset">Sparse built-in preset</option>
+              <option value="custom">Custom prompt bundle</option>
+            </select>
+          </Field>
+        </div>
+        {baselineMode === "custom" && (
+          <div className="settings-form-grid">
+            <Field
+              label="Initial prompt"
+              hint="Required: {filename}, {coverage_targets}, {source_excerpt}"
+            >
+              <textarea
+                rows={9}
+                value={customBaseline.initial}
+                onChange={(event) =>
+                  setCustomBaseline({ ...customBaseline, initial: event.target.value })
+                }
+              />
+            </Field>
+            <Field label="Error prompt" hint="Required: {error}">
+              <textarea
+                rows={9}
+                value={customBaseline.error}
+                onChange={(event) =>
+                  setCustomBaseline({ ...customBaseline, error: event.target.value })
+                }
+              />
+            </Field>
+          </div>
+        )}
+      </section>
       <section className="settings-section">
         <div className="settings-section-title">
           <span>01</span>
@@ -979,6 +1058,7 @@ function ReviewStep({
   randomSeed,
   percentages,
   settings,
+  baselineMode,
 }: {
   experimentName: string;
   setExperimentName: (name: string) => void;
@@ -988,6 +1068,7 @@ function ReviewStep({
   randomSeed: number;
   percentages: DatasetPercentages;
   settings: CloudExperimentSettings;
+  baselineMode: "preset" | "custom";
 }) {
   return (
     <>
@@ -1030,6 +1111,7 @@ function ReviewStep({
         <ReviewCard
           title="Execution"
           rows={[
+            ["Baseline", baselineMode === "preset" ? "Sparse built-in preset" : "Custom bundle"],
             ["Attempts", String(settings.maxAttempts)],
             ["Repeat tests", String(settings.repeatTests)],
             ["Concurrency", String(settings.maxConcurrency)],

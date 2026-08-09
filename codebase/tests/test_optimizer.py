@@ -44,7 +44,9 @@ class FakeSamples:
 @pytest.mark.asyncio
 async def test_optimization_passes_locked_multi_project_snapshot_to_cloud():
     repository, storage = InMemoryExperimentRepository(), FakeStorage()
-    now, prompt = datetime.now(UTC), baseline_prompt()
+    now = datetime.now(UTC)
+    preset = baseline_prompt()
+    prompt = PromptBundle(initial=preset.initial + "\nCustom seed instruction.", error=preset.error)
     refs = [
         TargetReference(
             project_id="project-1",
@@ -75,6 +77,7 @@ async def test_optimization_passes_locked_multi_project_snapshot_to_cloud():
         target_function_ids=keys,
         dataset_splits={"train": [keys[0]], "validation": [keys[1]], "test": [keys[2]]},
         optimization_eligible=True,
+        baseline_prompt=prompt.as_candidate(),
         status=ExperimentStatus.DRAFT,
         created_at=now,
         updated_at=now,

@@ -35,23 +35,19 @@ class PromptBundle:
 
 
 def baseline_prompt() -> PromptBundle:
+    """Return the deliberately sparse seed prompt used for new experiments.
+
+    GEPA needs room to discover useful instructions.  Keep this preset focused on
+    the task and output shape; users that already have a stronger seed can submit
+    their own validated bundle when creating an experiment.
+    """
     return PromptBundle(
-        initial="""You are an expert Python test-driven developer.
-The code below, extracted from {filename}, does not achieve full coverage:
-when tested, {coverage_targets} not execute.
-Create new pytest test functions that execute all missing lines and branches. Each test must
-be correct, deterministic, contain meaningful assertions, and clean up all modified state.
-Use the get_info tool function as necessary. Always return an entire Python test module.
-Do not call pytest.main and do not execute tests at module import time.
-Respond only with Python code enclosed in a python markdown code block.
+        initial="""Write pytest tests for {filename} that cover {coverage_targets}.
+Return a complete test module in a Python markdown code block.
 
 ```python
 {source_excerpt}
 ```""",
-        error="""Executing the test yields an error, shown below.
-Modify or rewrite the test to correct it. Return the complete Python test module, not a patch.
-Preserve useful assertions from the previous test and use get_info when more source context is needed.
-Respond only with Python code enclosed in a python markdown code block.
-
+        error="""Fix the test error and return the complete Python test module:
 {error}""",
     )

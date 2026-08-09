@@ -99,6 +99,13 @@ class ExperimentService:
     def set_comparison_dispatcher(self, dispatcher: ComparisonDispatcher) -> None:
         self.comparison_dispatcher = dispatcher
 
+    @staticmethod
+    def _baseline_for(item: ExperimentRecord) -> PromptBundle:
+        candidate = item.baseline_prompt
+        prompt = PromptBundle.from_candidate(candidate) if candidate is not None else baseline_prompt()
+        prompt.validate()
+        return prompt
+
     async def create(
         self,
         owner_id: str,
@@ -112,6 +119,18 @@ class ExperimentService:
                 "METRIC_BUDGET_LIMIT",
                 f"Metric-call budget is limited to {STANDARD_MAX_METRIC_CALLS}",
             )
+        try:
+            parent = (
+                PromptBundle(
+                    initial=payload.baseline_prompt.initial,
+                    error=payload.baseline_prompt.error,
+                )
+                if payload.baseline_prompt is not None
+                else baseline_prompt()
+            )
+            parent.validate()
+        except (KeyError, ValueError) as exc:
+            raise AppError(422, "INVALID_BASELINE_PROMPT", str(exc)) from exc
         projects = [await self.projects.require_owned(project_id, owner_id) for project_id in payload.project_ids]
         if any(project.status not in {"ready", "warning"} for project in projects):
             raise AppError(409, "ANALYSIS_NOT_READY", "Every project must finish analysis first")
@@ -175,6 +194,7 @@ class ExperimentService:
             split_percentages=payload.split_percentages,
             split_seed=payload.random_seed,
             settings=payload.settings,
+            baseline_prompt=parent.as_candidate(),
             optimization_eligible=(
                 self.samples is not None and all(self.samples.contains(project.id) for project in projects)
             ),
@@ -231,7 +251,7 @@ class ExperimentService:
             )
         if self.optimization_dispatcher is None:
             raise RuntimeError("Optimization dispatcher is not configured")
-        parent = baseline_prompt()
+        parent = self._baseline_for(item)
 
         now = datetime.now(UTC)
         run = OptimizationRunRecord(
@@ -298,7 +318,7 @@ class ExperimentService:
         try:
             if item is None or self.cloud_optimizer is None:
                 raise RuntimeError("Cloud GEPA optimizer is not configured")
-            parent = baseline_prompt()
+            parent = self._baseline_for(item)
             if run.parent_prompt_digest != parent.digest():
                 raise RuntimeError("The candidate-zero baseline prompt has changed")
             if polling_cloud_job:

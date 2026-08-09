@@ -32,6 +32,7 @@ interface ApiExperiment {
     evaluation_replicates: number;
     reflection_temperature: number;
   };
+  baseline_prompt?: { initial: string; error: string } | null;
   optimization_eligible: boolean;
   status: ExperimentStatus;
   baseline_run_id: string | null;
@@ -52,7 +53,7 @@ interface ApiOptimizationRun {
   experiment_id: string;
   status: ExperimentStatus;
   parent_prompt_digest: string;
-  candidate_prompt: Record<string, string> | null;
+  candidate_prompt: { initial: string; error: string } | null;
   candidate_prompt_digest: string | null;
   baseline_validation_score: number | null;
   candidate_validation_score: number | null;
@@ -132,6 +133,7 @@ function mapExperiment(item: ApiExperiment): Experiment {
       evaluationReplicates: item.settings.evaluation_replicates,
       reflectionTemperature: item.settings.reflection_temperature,
     },
+    baselinePrompt: item.baseline_prompt ?? null,
     optimizationEligible: item.optimization_eligible,
     status: item.status,
     baselineRunId: item.baseline_run_id,
@@ -232,6 +234,7 @@ export class HttpExperimentRepository implements ExperimentRepository {
           random_seed: input.randomSeed,
           split_percentages: input.splitPercentages,
           manual_splits: input.manualSplits,
+          baseline_prompt: input.baselinePrompt,
           settings: {
             coverup_model: input.settings.coverupModel,
             optimize_model: input.settings.optimizeModel,

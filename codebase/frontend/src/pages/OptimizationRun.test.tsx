@@ -37,7 +37,10 @@ describe("optimization run", () => {
       experimentId: "experiment-1",
       status: "optimization_succeeded",
       parentPromptDigest: "parent",
-      candidatePrompt: { instructions: "Generate focused tests for the selected function." },
+      candidatePrompt: {
+        initial: "Optimized initial prompt",
+        error: "Optimized error prompt",
+      },
       candidatePromptDigest: "candidate",
       baselineValidationScore: 0.2,
       candidateValidationScore: 0.7,
@@ -60,6 +63,10 @@ describe("optimization run", () => {
     repositories.experiments.get.mockResolvedValue({
       id: "experiment-1",
       name: "isort optimization",
+      baselinePrompt: {
+        initial: "Sparse baseline initial prompt",
+        error: "Sparse baseline error prompt",
+      },
       baselineRunId: "baseline-1",
       comparisonRunId: "comparison-1",
     });
@@ -69,12 +76,33 @@ describe("optimization run", () => {
     render(<OptimizationRun />, { wrapper: Wrapper });
 
     expect(await screen.findByText("isort optimization")).toBeInTheDocument();
-    expect(
-      screen.getByText("Generate focused tests for the selected function."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Sparse baseline initial prompt")).toBeInTheDocument();
+    expect(screen.getByText("Optimized initial prompt")).toBeInTheDocument();
+    expect(screen.getByText("Baseline prompt")).toBeInTheDocument();
+    expect(screen.getByText("Final selected prompt")).toBeInTheDocument();
     expect(screen.getByText("+0.500")).toBeInTheDocument();
     expect(screen.getByText("Locked baseline vs optimized result")).toBeInTheDocument();
     expect(screen.getByText("Optimized prompt promoted")).toBeInTheDocument();
     expect(screen.getByText("candidate_prompt.json")).toBeInTheDocument();
+  });
+
+  it("shows the baseline as the final prompt when the proposal is not promoted", async () => {
+    repositories.experiments.getOptimizationRun.mockResolvedValueOnce({
+      ...(await repositories.experiments.getOptimizationRun()),
+      finalComparison: {
+        baselineMetrics: { score: 0.6 },
+        candidateMetrics: { score: 0.5 },
+        absoluteGain: -0.1,
+        promoted: false,
+        skipped: false,
+        reason: null,
+      },
+    });
+
+    render(<OptimizationRun />, { wrapper: Wrapper });
+
+    expect(await screen.findByText("Baseline retained")).toBeInTheDocument();
+    expect(await screen.findAllByText("Sparse baseline initial prompt")).toHaveLength(2);
+    expect(screen.queryByText("Optimized initial prompt")).not.toBeInTheDocument();
   });
 });

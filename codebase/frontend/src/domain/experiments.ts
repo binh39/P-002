@@ -29,6 +29,7 @@ export interface Experiment {
   splitSeed: number;
   splitPercentages: import("@/domain/experimentConfiguration").DatasetPercentages;
   settings: import("@/domain/experimentConfiguration").CloudExperimentSettings;
+  baselinePrompt: PromptBundle | null;
   optimizationEligible: boolean;
   status: ExperimentStatus;
   baselineRunId: string | null;
@@ -37,6 +38,11 @@ export interface Experiment {
   promptVersionId: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PromptBundle {
+  initial: string;
+  error: string;
 }
 
 export interface CreateExperimentInput {
@@ -48,6 +54,7 @@ export interface CreateExperimentInput {
   splitPercentages: import("@/domain/experimentConfiguration").DatasetPercentages;
   manualSplits: Record<string, string[]> | null;
   settings: import("@/domain/experimentConfiguration").CloudExperimentSettings;
+  baselinePrompt: PromptBundle | null;
 }
 
 export interface OptimizationRun {
@@ -55,7 +62,7 @@ export interface OptimizationRun {
   experimentId: string;
   status: ExperimentStatus;
   parentPromptDigest: string;
-  candidatePrompt: Record<string, string> | null;
+  candidatePrompt: PromptBundle | null;
   candidatePromptDigest: string | null;
   baselineValidationScore: number | null;
   candidateValidationScore: number | null;

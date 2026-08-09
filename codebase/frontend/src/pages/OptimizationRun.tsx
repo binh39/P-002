@@ -3,7 +3,11 @@ import { useLocation, useParams } from "wouter";
 
 import { useRepositories } from "@/app/providers";
 import { PageHeader, StatCard, StatusBadge } from "@/components/PlatformUI";
-import { optimizationRunIsActive, type ExperimentStatus } from "@/domain/experiments";
+import {
+  optimizationRunIsActive,
+  type ExperimentStatus,
+  type PromptBundle,
+} from "@/domain/experiments";
 
 const statusLabels: Partial<Record<ExperimentStatus, string>> = {
   optimization_queued: "Queued",
@@ -33,6 +37,41 @@ function formatTimestamp(value: string | null) {
         new Date(value),
       )
     : "—";
+}
+
+function PromptCard({
+  title,
+  description,
+  prompt,
+  emptyMessage,
+}: {
+  title: string;
+  description: string;
+  prompt: PromptBundle | null;
+  emptyMessage: string;
+}) {
+  return (
+    <section className="platform-card candidate-prompt-card">
+      <div className="card-heading">
+        <div>
+          <h2>{title}</h2>
+          <p>{description}</p>
+        </div>
+      </div>
+      {!prompt ? (
+        <div className="empty-state">{emptyMessage}</div>
+      ) : (
+        <div className="candidate-prompt-sections">
+          {Object.entries(prompt).map(([name, content]) => (
+            <section key={name}>
+              <h3>{name.replace(/_/g, " ")}</h3>
+              <pre>{content}</pre>
+            </section>
+          ))}
+        </div>
+      )}
+    </section>
+  );
 }
 
 export default function OptimizationRun() {
@@ -99,6 +138,12 @@ export default function OptimizationRun() {
     run.baselineValidationScore !== null && run.candidateValidationScore !== null
       ? run.candidateValidationScore - run.baselineValidationScore
       : null;
+  const baselinePrompt = experiment?.baselinePrompt ?? null;
+  const finalPrompt = run.finalComparison
+    ? run.finalComparison.promoted
+      ? run.candidatePrompt
+      : baselinePrompt
+    : null;
 
   return (
     <div className="platform-page optimization-run-page">
@@ -306,30 +351,32 @@ export default function OptimizationRun() {
         </section>
       </div>
 
-      <section className="platform-card candidate-prompt-card">
-        <div className="card-heading">
-          <div>
-            <h2>Selected candidate prompt</h2>
-            <p>The exact prompt returned by the optimizer, without UI fixture content.</p>
-          </div>
-        </div>
-        {!run.candidatePrompt ? (
-          <div className="empty-state">
-            {active
-              ? "The best candidate will appear when optimization finishes."
-              : "No candidate prompt was published."}
-          </div>
-        ) : (
-          <div className="candidate-prompt-sections">
-            {Object.entries(run.candidatePrompt).map(([name, content]) => (
-              <section key={name}>
-                <h3>{name.replace(/_/g, " ")}</h3>
-                <pre>{content}</pre>
-              </section>
-            ))}
-          </div>
-        )}
-      </section>
+      <div className="platform-two-column optimization-details-grid">
+        <PromptCard
+          title="Baseline prompt"
+          description="The immutable candidate-zero prompt saved with this experiment."
+          prompt={baselinePrompt}
+          emptyMessage={
+            experimentQuery.isPending
+              ? "Loading the baseline prompt…"
+              : "No baseline prompt snapshot is available."
+          }
+        />
+        <PromptCard
+          title="Final selected prompt"
+          description={
+            run.finalComparison?.promoted
+              ? "The optimized prompt passed the strict promotion gate."
+              : "The baseline was retained because the proposal did not strictly improve it."
+          }
+          prompt={finalPrompt}
+          emptyMessage={
+            active
+              ? "The final prompt will appear when optimization finishes."
+              : "No final prompt decision was published."
+          }
+        />
+      </div>
     </div>
   );
 }
