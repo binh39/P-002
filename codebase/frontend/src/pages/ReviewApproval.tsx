@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 
 import { useRepositories } from "@/app/providers";
 import { PageHeader, StatCard, StatusBadge } from "@/components/PlatformUI";
-import type { PromptVersion, PromptVersionStatus } from "@/domain/experiments";
+import type { PromptBundle, PromptVersion, PromptVersionStatus } from "@/domain/experiments";
 
 function formatTimestamp(value: string | null) {
   return value
@@ -25,9 +25,23 @@ function statusLabel(status: PromptVersionStatus) {
   return status[0].toUpperCase() + status.slice(1);
 }
 
-function promptText(prompt: Record<string, string>) {
-  const values = Object.values(prompt).filter(Boolean);
-  return values.length > 0 ? values.join("\n\n") : "No prompt content was recorded.";
+function PromptParts({ prompt }: { prompt: PromptBundle | Record<string, string> | null }) {
+  if (!prompt) {
+    return <div className="empty-state">No prompt snapshot is available.</div>;
+  }
+
+  return (
+    <div className="review-prompt-parts">
+      <section>
+        <h4>Initial</h4>
+        <pre>{prompt.initial || "No initial prompt content was recorded."}</pre>
+      </section>
+      <section>
+        <h4>Error</h4>
+        <pre>{prompt.error || "No error prompt content was recorded."}</pre>
+      </section>
+    </div>
+  );
 }
 
 export default function ReviewApproval() {
@@ -213,55 +227,69 @@ export default function ReviewApproval() {
         </section>
       </div>
 
-      <div className="platform-two-column comparison-details-grid">
-        <section className="platform-card">
-          <div className="card-heading">
-            <div>
-              <h2>Candidate prompt</h2>
-              <p>Exact candidate stored with this version.</p>
-            </div>
+      <section className="platform-card comparison-details-grid review-prompt-card">
+        <div className="card-heading">
+          <div>
+            <h2>Prompt comparison</h2>
+            <p>Compare the immutable baseline and candidate by prompt component.</p>
           </div>
-          <pre className="prompt-preview">{promptText(selected.prompt)}</pre>
-        </section>
-        <section className="platform-card">
-          <div className="card-heading">
-            <div>
-              <h2>Prompt lineage</h2>
-              <p>Digests identify the immutable prompt pair.</p>
-            </div>
+        </div>
+        <div className="review-prompt-comparison">
+          <article className="review-prompt-column">
+            <header>
+              <h3>Baseline prompt</h3>
+              <span>Candidate zero</span>
+            </header>
+            <PromptParts prompt={selectedExperiment?.baselinePrompt ?? null} />
+          </article>
+          <article className="review-prompt-column is-candidate">
+            <header>
+              <h3>Candidate prompt</h3>
+              <span>Proposed version</span>
+            </header>
+            <PromptParts prompt={selected.prompt} />
+          </article>
+        </div>
+      </section>
+
+      <section className="platform-card comparison-details-grid">
+        <div className="card-heading">
+          <div>
+            <h2>Prompt lineage</h2>
+            <p>Digests identify the immutable prompt pair.</p>
           </div>
-          <dl className="definition-list comparison-definition-list">
+        </div>
+        <dl className="definition-list comparison-definition-list">
+          <div>
+            <dt>Baseline digest</dt>
+            <dd>
+              <code>{selected.parentPromptDigest}</code>
+            </dd>
+          </div>
+          <div>
+            <dt>Candidate digest</dt>
+            <dd>
+              <code>{selected.promptDigest}</code>
+            </dd>
+          </div>
+          <div>
+            <dt>Review state</dt>
+            <dd>{statusLabel(selected.status)}</dd>
+          </div>
+          <div>
+            <dt>Reviewed at</dt>
+            <dd>{formatTimestamp(selected.reviewedAt)}</dd>
+          </div>
+          {selected.reviewerId && (
             <div>
-              <dt>Baseline digest</dt>
+              <dt>Reviewer</dt>
               <dd>
-                <code>{selected.parentPromptDigest}</code>
+                <code>{selected.reviewerId}</code>
               </dd>
             </div>
-            <div>
-              <dt>Candidate digest</dt>
-              <dd>
-                <code>{selected.promptDigest}</code>
-              </dd>
-            </div>
-            <div>
-              <dt>Review state</dt>
-              <dd>{statusLabel(selected.status)}</dd>
-            </div>
-            <div>
-              <dt>Reviewed at</dt>
-              <dd>{formatTimestamp(selected.reviewedAt)}</dd>
-            </div>
-            {selected.reviewerId && (
-              <div>
-                <dt>Reviewer</dt>
-                <dd>
-                  <code>{selected.reviewerId}</code>
-                </dd>
-              </div>
-            )}
-          </dl>
-        </section>
-      </div>
+          )}
+        </dl>
+      </section>
 
       <section className="platform-card">
         <div className="card-heading">
