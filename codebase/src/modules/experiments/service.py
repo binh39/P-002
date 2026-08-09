@@ -35,6 +35,46 @@ from .schemas import (
 
 STANDARD_MAX_METRIC_CALLS = 2200
 
+_FINAL_VALIDATION_SCALAR_FIELDS = (
+    "mean_score",
+    "baseline_mean_score",
+    "optimized_mean_score",
+    "absolute_gain",
+    "promoted",
+    "final_evaluation_skipped",
+    "skip_reason",
+    "final_split",
+    "used_locked_holdout",
+    "evaluation_replicates",
+)
+_FINAL_VALIDATION_METRIC_FIELDS = (
+    "score",
+    "statement_coverage",
+    "branch_coverage",
+    "pass_rate",
+    "latency_seconds",
+    "sample_count",
+    "timeout_count",
+    "flaky_targets",
+)
+
+
+def _compact_final_validation(report: dict) -> dict:
+    """Return the Firestore-safe subset used by the API and comparison flow.
+
+    The complete report remains in the GCS optimization artifacts. Per-target
+    traces include arrays of branch-coordinate arrays, which Firestore rejects
+    as nested array values and which are not needed to render the result.
+    """
+    compact = {field: report[field] for field in _FINAL_VALIDATION_SCALAR_FIELDS if field in report}
+    for aggregate_field in ("baseline_aggregate_coverage", "optimized_aggregate_coverage"):
+        aggregate = report.get(aggregate_field)
+        if isinstance(aggregate, dict):
+            compact[aggregate_field] = {
+                field: aggregate[field] for field in _FINAL_VALIDATION_METRIC_FIELDS if field in aggregate
+            }
+    return compact
+
 
 class ExperimentService:
     def __init__(
@@ -333,7 +373,7 @@ class ExperimentService:
             run.candidate_validation_score = result.score
             run.candidate_count = result.candidate_count
             run.metric_calls = result.metric_calls
-            run.final_validation = result.gepa_result.get("final_validation", {})
+            run.final_validation = _compact_final_validation(result.gepa_result.get("final_validation", {}))
             run.artifact_objects = artifact_objects
             run.finished_at = datetime.now(UTC)
             item.status = ExperimentStatus.OPTIMIZATION_SUCCEEDED

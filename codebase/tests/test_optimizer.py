@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -102,6 +103,13 @@ async def test_optimization_passes_locked_multi_project_snapshot_to_cloud():
                         "absolute_gain": 0.4,
                         "baseline_aggregate_coverage": {"score": 0.4},
                         "optimized_aggregate_coverage": {"score": 0.8},
+                        "baseline_results": [
+                            {
+                                "coverage": {
+                                    "gained_branches": [[10, 11], [10, 12]],
+                                }
+                            }
+                        ],
                     }
                 },
             )
@@ -121,6 +129,14 @@ async def test_optimization_passes_locked_multi_project_snapshot_to_cloud():
     assert run.status == ExperimentStatus.OPTIMIZATION_SUCCEEDED
     assert run.candidate_validation_score == 0.8
     assert run.final_validation["promoted"] is True
+    assert "baseline_results" not in run.final_validation
+    gepa_artifact = next(
+        content for object_name, (content, _) in storage.objects.items() if object_name.endswith("/gepa_result.json")
+    )
+    assert json.loads(gepa_artifact)["final_validation"]["baseline_results"][0]["coverage"]["gained_branches"] == [
+        [10, 11],
+        [10, 12],
+    ]
     assert len(cloud.calls) == 1
     stored_experiment = await repository.get(experiment.id)
     assert stored_experiment.baseline_run_id is None
