@@ -49,7 +49,7 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
 ## Cấu hình khuyến nghị
 
 - Dataset mặc định: 50 train / 100 validation / 100 test.
-- `--repeat-tests 2`: giảm nhiễu do test execution.
+- `--repeat-tests 5`: giảm nhiễu do test execution.
 - `--evaluation-replicates 2`: giảm nhiễu do LLM generation khi đánh giá candidate quan trọng.
 - `--max-concurrency 10`: trần mặc định cho CoverUp; hạ xuống nếu gặp HTTP 429 hoặc giới hạn quota.
 - Budget: `light=120`, `medium=300`, `heavy=600` metric calls.
@@ -75,7 +75,7 @@ python -m src.optimization.cli `
   --sample-repos-dir src/sample_repo `
   --artifacts-dir eval/prompt_optimization_smoke `
   --max-concurrency 10 `
-  --repeat-tests 2 `
+  --repeat-tests 5 `
   optimize `
   --dataset eval/prompt_optimization/datasets/isort_mlxtend_symbols.jsonl `
   --prompt eval/prompt_optimization/prompts/gpt_v2_baseline.json `
@@ -91,7 +91,7 @@ python -m src.optimization.cli `
   --sample-repos-dir src/sample_repo `
   --artifacts-dir eval/prompt_optimization_v3 `
   --max-concurrency 10 `
-  --repeat-tests 2 `
+  --repeat-tests 5 `
   optimize `
   --dataset eval/prompt_optimization/datasets/isort_mlxtend_symbols.jsonl `
   --prompt eval/prompt_optimization/prompts/gpt_v2_baseline.json `

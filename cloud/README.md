@@ -148,5 +148,5 @@ gcloud storage rm -r gs://p002-gepa-artifacts/prompt_optimization_v3
 .\cloud\run_gepa_job.ps1 -NoWait
 
 # Lúc quay lại — chờ + tải kết quả của đúng execution đó
-.\cloud\run_gepa_job.ps1 -ExecutionName p002-gepa-gmg8w
+.\cloud\run_gepa_job.ps1 -ExecutionName p002-gepa-d5r6z
 ```

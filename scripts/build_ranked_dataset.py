@@ -8,9 +8,8 @@ count, statement count, source line count) and sorted by:
 3. number of source lines, descending;
 4. project name, then source file, then symbol (ascending, deterministic).
 
-The first ``--train-limit`` functions become train, the next
-``--validation-limit`` become validation, and the last ``--test-limit``
-become the locked test split.
+Selected functions are allocated proportionally by project, with ranks inside
+each project interleaved across train, validation and the locked test split.
 
 Example (defaults, from the repository root):
 
@@ -123,12 +122,15 @@ def main() -> int:
     )
 
     selected = len(targets)
+    split_by_identity = {
+        (row["project"], row["source_file"], row["symbol"]): row["split"]
+        for row in targets
+    }
     split_of = {
-        info: "train" if index < args.train_limit
-        else "validation" if index < args.train_limit + args.validation_limit
-        else "test" if index < selected
-        else "unselected"
-        for index, info in enumerate(ranked)
+        info: split_by_identity.get(
+            (info.project, info.source_file, info.symbol), "unselected"
+        )
+        for info in ranked
     }
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -158,13 +160,22 @@ def main() -> int:
 
     per_project = Counter(info.project for info in ranked)
     splits = Counter(row["split"] for row in targets)
+    project_splits = {
+        name: dict(sorted(Counter(
+            row["split"] for row in targets if row["project"] == name
+        ).items()))
+        for name in args.projects
+    }
     report = {
         "train_limit": args.train_limit,
         "validation_limit": args.validation_limit,
         "test_limit": args.test_limit,
         "selected_total": selected,
         "projects": {
-            name: {"functions": per_project[name]}
+            name: {
+                "functions": per_project[name],
+                "selected_splits": project_splits[name],
+            }
             for name in args.projects
         },
         "excluded_dirs": sorted(exclude_dirs),

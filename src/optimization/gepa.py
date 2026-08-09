@@ -115,10 +115,10 @@ def _evaluation_digest(
                     path.read_bytes()
                 ).hexdigest()
     payload = {
-        # Schema 10 also fixes PYTHONHASHSEED across CoverUp and coverage
-        # subprocesses so a generated test cannot pass under one set ordering
-        # and fail under another. Older caches predate that reproducibility rule.
-        "cache_schema": 10,
+        # Schema 10 fixed PYTHONHASHSEED across CoverUp and coverage subprocesses.
+        # Schema 11 makes repeat_tests effective during generation and final
+        # scoring, so caches created before that fix must not be reused.
+        "cache_schema": 11,
         "config": config_values,
         "targets": [_target_identity(target) for target in targets],
         "sources": source_hashes,

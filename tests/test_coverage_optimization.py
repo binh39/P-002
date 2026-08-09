@@ -8,7 +8,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.optimization.cli import _resolve_project_layouts, _top_isort_targets, should_promote
+from src.optimization.cli import (
+    _resolve_project_layouts,
+    _top_isort_targets,
+    parser,
+    should_promote,
+)
 from src.optimization.coveragepy import (
     SymbolCoverage,
     load_report,
@@ -105,12 +110,21 @@ def test_run_coverage_exports_zero_coverage_when_pytest_collects_no_tests(
         package_dir=package_dir,
         tests_dir=tests_dir,
         output=output,
+        repeat_tests=2,
     )
-
     assert completed.returncode == 0
     assert completed.stdout == "no tests ran"
     assert output.is_file()
     assert len(calls) == 2
+    assert calls[0][calls[0].index("--count") + 1] == "2"
+
+
+def test_optimization_cli_defaults_to_five_test_repetitions():
+    args = parser().parse_args([
+        "evaluate", "--dataset", "dataset.jsonl", "--prompt", "prompt.json",
+    ])
+
+    assert args.repeat_tests == 5
 
 
 def test_run_coverage_does_not_mask_real_pytest_failures(tmp_path, monkeypatch):
@@ -797,7 +811,7 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
     assert result.best_bundle == baseline
 
 
-def test_tune_skips_final_split_when_gepa_keeps_unchanged_baseline(
+def test_tune_preflights_baseline_but_skips_proposal_when_gepa_keeps_it(
     tmp_path, monkeypatch,
 ):
     from src.optimization import cli
@@ -812,6 +826,7 @@ def test_tune_skips_final_split_when_gepa_keeps_unchanged_baseline(
     ]
     test = [SymbolTarget("project", "pkg/c.py", "third", "test")]
     targets = {"train": train, "validation": validation, "test": test}
+    events = []
     (tmp_path / "sample_repo" / "project" / "project").mkdir(parents=True)
     (tmp_path / "sample_repo" / "project" / "tests").mkdir(parents=True)
 
@@ -829,22 +844,44 @@ def test_tune_skips_final_split_when_gepa_keeps_unchanged_baseline(
     monkeypatch.setattr(
         cli,
         "optimize",
-        lambda **kwargs: SimpleNamespace(
-            best_bundle=baseline,
-            as_dict=lambda: {
-                "best_index": 0,
-                "best_candidate": baseline.as_candidate(),
-                "validation_scores": [0.5],
-                "total_metric_calls": 1,
-                "candidates": [baseline.as_candidate()],
-            },
+        lambda **kwargs: (
+            events.append("optimize")
+            or SimpleNamespace(
+                best_bundle=baseline,
+                as_dict=lambda: {
+                    "best_index": 0,
+                    "best_candidate": baseline.as_candidate(),
+                    "validation_scores": [0.5],
+                    "total_metric_calls": 1,
+                    "candidates": [baseline.as_candidate()],
+                },
+            )
         ),
     )
+    baseline_result = {
+        "target": test[0].__dict__,
+        "score": 1.0,
+        "coverage": {
+            "valid": True,
+            "score": 1.0,
+            "covered_statements": 1,
+            "num_statements": 1,
+            "covered_branches": 0,
+            "num_branches": 0,
+        },
+        "feedback": "ok",
+    }
     monkeypatch.setattr(
         cli,
         "evaluate_bundle_repeated",
-        lambda *args, **kwargs: pytest.fail(
-            "unchanged baseline must not evaluate the final split"
+        lambda *args, **kwargs: (
+            events.append("final baseline preflight")
+            or {
+                "results": [baseline_result],
+                "aggregate": aggregate_coverage_score([baseline_result]),
+                "run_ids": ["baseline-preflight"],
+                "tests_workspaces": ["baseline-workspace"],
+            }
         ),
     )
     args = SimpleNamespace(
@@ -870,7 +907,9 @@ def test_tune_skips_final_split_when_gepa_keeps_unchanged_baseline(
     assert report["skip_reason"].startswith("GEPA selected the unchanged baseline")
     assert report["final_split"] == "test"
     assert report["run_ids"] == []
-    assert report["baseline_run_ids"] == []
+    assert report["baseline_run_ids"] == ["baseline-preflight"]
+    assert len(report["baseline_results"]) == 1
+    assert events == ["final baseline preflight", "optimize"]
     assert baseline_bundle().as_candidate() == json.loads(
         (artifacts / "prompts" / "gepa_optimized.json").read_text(encoding="utf-8")
     )
@@ -981,10 +1020,12 @@ def test_coverup_trace_preserves_component_level_attempt_history(tmp_path, monke
     monkeypatch.setattr(coverup_module, "test_seq", 1)
 
     coverage_calls = 0
+    seen_pytest_args = []
 
     async def fake_measure_test_coverage(**kwargs):
         nonlocal coverage_calls
         coverage_calls += 1
+        seen_pytest_args.append(kwargs["pytest_args"])
         if coverage_calls == 1:
             raise subprocess.CalledProcessError(
                 1, ["pytest"], output=b"AssertionError: wrong result"
@@ -1040,6 +1081,7 @@ def test_coverup_trace_preserves_component_level_attempt_history(tmp_path, monke
         trace_file=tmp_path / "attempt_trace.jsonl",
         install_missing_modules=False,
         pytest_args="",
+        repeat_tests=2,
         tests_dir=tmp_path,
         prefix="trace",
         isolate_tests=True,
@@ -1063,6 +1105,7 @@ def test_coverup_trace_preserves_component_level_attempt_history(tmp_path, monke
     ]
     assert traces[0]["execution_error"] == "AssertionError: wrong result"
     assert traces[1]["generated_test"].strip() == "assert True"
+    assert seen_pytest_args == ["--count 2", "--count 2"]
 
 
 def test_coverup_stops_after_no_gain_without_a_third_prompt_component(

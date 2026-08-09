@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from src.core.security import AuthenticatedUser
 from src.modules.experiments.prompts import baseline_prompt
 from src.modules.experiments.schemas import (
     ComparisonRunRecord,
@@ -12,6 +13,37 @@ from src.modules.experiments.schemas import (
     PromptVersionStatus,
 )
 from tests.test_api.test_analysis import AUTH_HEADERS, create_project, python_archive
+
+
+class AdminTokenVerifier:
+    async def verify(self, token: str) -> AuthenticatedUser:
+        assert token == "admin-token"
+        return AuthenticatedUser(uid="admin-user", email="admin@gmail.com")
+
+
+@pytest.mark.asyncio
+async def test_only_full_access_account_can_exceed_metric_budget(client, app):
+    payload = {
+        "project_ids": ["sample:isort"],
+        "name": "Large GEPA budget",
+        "max_targets": 3,
+        "settings": {"max_metric_calls": 4500},
+    }
+
+    rejected = await client.post(
+        "/api/v1/experiments", headers=AUTH_HEADERS, json=payload
+    )
+    assert rejected.status_code == 403
+    assert rejected.json()["error"]["code"] == "METRIC_BUDGET_LIMIT"
+
+    app.state.services.token_verifier = AdminTokenVerifier()
+    accepted = await client.post(
+        "/api/v1/experiments",
+        headers={"Authorization": "Bearer admin-token"},
+        json=payload,
+    )
+    assert accepted.status_code == 201
+    assert accepted.json()["settings"]["max_metric_calls"] == 4500
 
 
 @pytest.mark.asyncio

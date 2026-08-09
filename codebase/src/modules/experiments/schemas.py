@@ -63,11 +63,11 @@ class ExperimentSettings(StrictModel):
     coverup_model: str = "vertex_ai/gemini-3.6-flash"
     optimize_model: str = "vertex_ai/gemini-3.6-flash"
     max_attempts: int = Field(default=3, ge=1, le=20)
-    repeat_tests: int = Field(default=2, ge=0, le=20)
+    repeat_tests: int = Field(default=5, ge=0, le=20)
     max_concurrency: int = Field(default=10, ge=1, le=32)
     rate_limit: int | None = Field(default=None, ge=1)
     pytest_args: str = Field(default="", max_length=500)
-    max_metric_calls: int = Field(default=30, ge=3, le=2200)
+    max_metric_calls: int = Field(default=30, ge=3)
     evaluation_replicates: int = Field(default=1, ge=1, le=10)
     reflection_temperature: float = Field(default=0.7, ge=0, le=2)
 

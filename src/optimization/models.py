@@ -35,7 +35,7 @@ class ExperimentConfig:
     coverup_model: str
     prompt_template_file: Path | None = None
     max_attempts: int = 3
-    repeat_tests: int = 2
+    repeat_tests: int = 5
     max_concurrency: int = 10
     rate_limit: int | None = None
     pytest_args: str = ""

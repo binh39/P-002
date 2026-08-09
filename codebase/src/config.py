@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     cloud_run_gepa_job: str = "promptopt-gepa-runner"
     cloud_run_gepa_timeout_seconds: int = Field(default=86400, ge=300, le=86400)
     gepa_max_concurrency: int = Field(default=10, ge=1, le=32)
-    gepa_repeat_tests: int = Field(default=2, ge=0, le=20)
+    gepa_repeat_tests: int = Field(default=5, ge=0, le=20)
     gepa_evaluation_replicates: int = Field(default=1, ge=1, le=10)
     final_evaluation_replicates: int = Field(default=2, ge=1, le=10)
     max_analysis_python_files: int = Field(default=5000, ge=1, le=20000)

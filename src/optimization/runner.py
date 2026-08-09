@@ -347,6 +347,7 @@ class CoverUpExperimentRunner:
                 tests_dir=workspace,
                 output=after_json,
                 pytest_args=self.config.pytest_args,
+                repeat_tests=self.config.repeat_tests,
                 env=environment,
             )
             if after.returncode:
@@ -495,6 +496,7 @@ class CoverUpExperimentRunner:
                 tests_dir=per_project_tests[project],
                 output=after_json,
                 pytest_args=self.config.pytest_args,
+                repeat_tests=self.config.repeat_tests,
                 env=environment,
             )
             final_exit_code = completed.returncode

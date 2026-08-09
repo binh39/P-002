@@ -18,6 +18,7 @@ COPY src/optimization ./src/optimization
 COPY src/sample_repo ./sample_repo
 COPY cloud/run_job.py ./cloud/run_job.py
 RUN test -d /app/sample_repo/isort/isort \
+    && test -d /app/sample_repo/mimesis/mimesis \
     && test -d /app/sample_repo/mlxtend/mlxtend \
     && test -d /app/sample_repo/typesystem/typesystem \
     && mkdir -p /app/artifacts \

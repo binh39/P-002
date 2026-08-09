@@ -33,6 +33,8 @@ from .schemas import (
     new_id,
 )
 
+STANDARD_MAX_METRIC_CALLS = 2200
+
 
 class ExperimentService:
     def __init__(
@@ -57,7 +59,22 @@ class ExperimentService:
     def set_comparison_dispatcher(self, dispatcher: ComparisonDispatcher) -> None:
         self.comparison_dispatcher = dispatcher
 
-    async def create(self, owner_id: str, payload: CreateExperimentRequest) -> ExperimentResponse:
+    async def create(
+        self,
+        owner_id: str,
+        payload: CreateExperimentRequest,
+        *,
+        full_access: bool = False,
+    ) -> ExperimentResponse:
+        if (
+            not full_access
+            and payload.settings.max_metric_calls > STANDARD_MAX_METRIC_CALLS
+        ):
+            raise AppError(
+                403,
+                "METRIC_BUDGET_LIMIT",
+                f"Metric-call budget is limited to {STANDARD_MAX_METRIC_CALLS}",
+            )
         projects = [await self.projects.require_owned(project_id, owner_id) for project_id in payload.project_ids]
         if any(project.status not in {"ready", "warning"} for project in projects):
             raise AppError(409, "ANALYSIS_NOT_READY", "Every project must finish analysis first")

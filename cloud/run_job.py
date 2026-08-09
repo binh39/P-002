@@ -54,7 +54,7 @@ def main() -> int:
     parser.add_argument("--metric-calls", type=int, default=30)
     parser.add_argument("--evaluation-replicates", type=int, default=1)
     parser.add_argument("--max-concurrency", type=int, default=10)
-    parser.add_argument("--repeat-tests", type=int, default=2)
+    parser.add_argument("--repeat-tests", type=int, default=5)
     parser.add_argument("--max-attempts", type=int, default=3)
     parser.add_argument("--rate-limit", type=int)
     parser.add_argument("--pytest-args", default="")

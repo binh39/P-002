@@ -38,7 +38,7 @@ export const defaultCloudSettings: CloudExperimentSettings = {
   coverupModel: "vertex_ai/gemini-3.6-flash",
   optimizeModel: "vertex_ai/gemini-3.6-flash",
   maxAttempts: 3,
-  repeatTests: 2,
+  repeatTests: 5,
   maxConcurrency: 10,
   rateLimit: null,
   pytestArgs: "",

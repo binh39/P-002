@@ -1,10 +1,14 @@
 from pathlib import Path
 
+import pytest
+
+from src.optimization.dataset import validate_project_stratification
 from src.optimization.dataset_builder import (
     build_dataset,
     collect_project_functions,
     rank_functions,
 )
+from src.optimization.models import SymbolTarget
 
 
 def _write_file(root: Path, relative: str, source: str) -> None:
@@ -156,6 +160,50 @@ def f4(x):
     assert [row["split"] for row in targets] == ["train", "validation", "test"]
     assert all(set(row) == {"project", "source_file", "symbol", "split"} for row in targets)
     assert len(ranked) == 4
+
+
+def test_build_dataset_stratifies_every_split_by_project(tmp_path: Path):
+    for project in ("alpha", "beta"):
+        _write_file(
+            tmp_path,
+            f"{project}/pkg/mod.py",
+            "\n".join(
+                f"def f{index}(x):\n    if x:\n        return {index}\n"
+                for index in range(1, 5)
+            ),
+        )
+
+    targets, _ = build_dataset(
+        [
+            ("alpha", tmp_path / "alpha" / "pkg"),
+            ("beta", tmp_path / "beta" / "pkg"),
+        ],
+        train_limit=2,
+        validation_limit=2,
+        test_limit=2,
+    )
+
+    for split in ("train", "validation", "test"):
+        assert {
+            row["project"] for row in targets if row["split"] == split
+        } == {"alpha", "beta"}
+    assert {row["symbol"] for row in targets} == {"f1", "f2", "f3"}
+
+
+def test_project_stratification_validator_rejects_skewed_splits():
+    def targets(split: str, alpha: int, beta: int) -> list[SymbolTarget]:
+        return [
+            SymbolTarget(project, f"{project}/{index}.py", "target", split)
+            for project, count in (("alpha", alpha), ("beta", beta))
+            for index in range(count)
+        ]
+
+    with pytest.raises(ValueError, match="not stratified by project"):
+        validate_project_stratification({
+            "train": targets("train", 8, 2),
+            "validation": targets("validation", 2, 8),
+            "test": targets("test", 5, 5),
+        })
 
 
 def test_build_dataset_raises_when_too_few_functions(tmp_path: Path):

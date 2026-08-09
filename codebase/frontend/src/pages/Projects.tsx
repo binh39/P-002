@@ -39,7 +39,7 @@ export default function Projects() {
       <PageHeader
         eyebrow="Experiment fixtures"
         title="Sample Python Projects"
-        description="Run experiments against three immutable repositories without uploading source."
+        description="Run experiments against four immutable repositories without uploading source."
         actions={
           <button className="primary-button" onClick={() => navigate("/experiments/new")}>
             + Create experiment
@@ -116,8 +116,8 @@ export default function Projects() {
         <div>
           <strong>No project upload is required</strong>
           <p>
-            isort, mlxtend and typesystem are pinned snapshots. Experiments and runs are saved, but
-            these projects and their analyzed functions are not written to Firestore.
+            isort, mimesis, mlxtend and typesystem are pinned snapshots. Experiments and runs are
+            saved, but these projects and their analyzed functions are not written to Firestore.
           </p>
         </div>
         <button className="secondary-button" onClick={() => navigate("/experiments/new")}>

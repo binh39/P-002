@@ -15,9 +15,10 @@ and then ranked:
 3. number of source lines, descending;
 4. deterministic order by project name, source file, then symbol (ascending).
 
-The first ``train_limit`` functions become the train split, the next
-``validation_limit`` become validation, and the last ``test_limit`` become
-the locked test split.
+The selected functions are stratified by project.  Every split receives a
+project mix proportional to the number of available functions, while ranks
+within each project are interleaved across splits so difficulty is not
+silently confounded with the split label.
 """
 
 from __future__ import annotations
@@ -180,26 +181,97 @@ def assign_splits(
     validation_limit: int,
     test_limit: int,
 ) -> list[dict]:
-    """Assign the first train/validation/test_limit functions to splits."""
+    """Assign exact split limits while stratifying project and rank."""
 
-    selected = ranked[: train_limit + validation_limit + test_limit]
-    rows: list[dict] = []
-    for index, info in enumerate(selected):
-        if index < train_limit:
-            split = "train"
-        elif index < train_limit + validation_limit:
-            split = "validation"
-        else:
-            split = "test"
-        rows.append(
-            {
-                "project": info.project,
-                "source_file": info.source_file,
-                "symbol": info.symbol,
-                "split": split,
-            }
+    split_limits = {
+        "train": train_limit,
+        "validation": validation_limit,
+        "test": test_limit,
+    }
+    if any(limit < 0 for limit in split_limits.values()):
+        raise ValueError("Split limits cannot be negative")
+    project_ranked: dict[str, list[FunctionInfo]] = {}
+    for info in ranked:
+        project_ranked.setdefault(info.project, []).append(info)
+    total_available = len(ranked)
+    if not total_available:
+        return []
+
+    # Allocate the project x split matrix close to its proportional ideal,
+    # with exact split column totals and without exceeding any project size.
+    projects = sorted(project_ranked)
+    ideal = {
+        (project, split): (
+            len(project_ranked[project]) * limit / total_available
         )
-    return rows
+        for project in projects
+        for split, limit in split_limits.items()
+    }
+    allocation = {
+        cell: int(value) for cell, value in ideal.items()
+    }
+    column_remaining = {
+        split: limit - sum(allocation[(project, split)] for project in projects)
+        for split, limit in split_limits.items()
+    }
+    row_remaining = {
+        project: len(project_ranked[project]) - sum(
+            allocation[(project, split)] for split in split_limits
+        )
+        for project in projects
+    }
+    while any(remaining for remaining in column_remaining.values()):
+        candidates = [
+            (ideal[(project, split)] - allocation[(project, split)], project, split)
+            for project in projects
+            for split in split_limits
+            if column_remaining[split] > 0 and row_remaining[project] > 0
+        ]
+        if not candidates:
+            raise ValueError("Unable to satisfy stratified split limits")
+        _, project, split = max(
+            candidates,
+            key=lambda item: (
+                item[0],
+                column_remaining[item[2]],
+                -list(split_limits).index(item[2]),
+                item[1],
+            ),
+        )
+        allocation[(project, split)] += 1
+        column_remaining[split] -= 1
+        row_remaining[project] -= 1
+
+    assigned: dict[FunctionInfo, str] = {}
+    split_order = tuple(split_limits)
+    for project in projects:
+        counts = {
+            split: allocation[(project, split)] for split in split_order
+        }
+        selected_count = sum(counts.values())
+        used = {split: 0 for split in split_order}
+        for index, info in enumerate(project_ranked[project][:selected_count], start=1):
+            eligible = [split for split in split_order if used[split] < counts[split]]
+            split = max(
+                eligible,
+                key=lambda name: (
+                    index * counts[name] / selected_count - used[name],
+                    -split_order.index(name),
+                ),
+            )
+            assigned[info] = split
+            used[split] += 1
+
+    return [
+        {
+            "project": info.project,
+            "source_file": info.source_file,
+            "symbol": info.symbol,
+            "split": assigned[info],
+        }
+        for info in ranked
+        if info in assigned
+    ]
 
 
 def build_dataset(
@@ -210,7 +282,7 @@ def build_dataset(
     test_limit: int,
     exclude_dirs: frozenset[str] = _DEFAULT_EXCLUDED_DIRS,
 ) -> tuple[list[dict], list[FunctionInfo]]:
-    """Rank all functions of ``projects`` and assign the requested splits.
+    """Rank functions and assign project-stratified requested splits.
 
     Returns ``(target_rows, ranked_functions)``.  ``target_rows`` is exactly
     the JSONL-serializable dataset with the four fields used by the pipeline:

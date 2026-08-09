@@ -41,19 +41,88 @@ def split_targets(
     percentages: DatasetPercentages | None = None,
     seed: int = 7,
 ) -> dict[str, list[str]]:
-    """Create stable, disjoint percentage splits for composite target IDs."""
+    """Create stable, disjoint, project-stratified dataset splits."""
     percentages = percentages or DatasetPercentages()
     unique = {_stable_key(target): target for target in targets}
-    ordered = sorted(unique, key=lambda value: hashlib.sha256(value.encode()).hexdigest())
-    random.Random(seed).shuffle(ordered)
-    counts = _allocate_counts(len(ordered), percentages)
-    train_end = counts["train"]
-    validation_end = train_end + counts["validation"]
-    return {
-        "train": ordered[:train_end],
-        "validation": ordered[train_end:validation_end],
-        "test": ordered[validation_end:],
+    counts = _allocate_counts(len(unique), percentages)
+    split_names = tuple(counts)
+    projects: dict[str, list[str]] = {}
+    for key, target in unique.items():
+        projects.setdefault(target.project_id, []).append(key)
+    if not projects:
+        return {name: [] for name in split_names}
+
+    positive_splits = tuple(name for name in split_names if counts[name] > 0)
+    project_count = len(projects)
+    if any(counts[name] < project_count for name in positive_splits):
+        raise ValueError(
+            "Dataset is too small to include every project in every non-empty split"
+        )
+    undersized = sorted(
+        project for project, values in projects.items()
+        if len(values) < len(positive_splits)
+    )
+    if undersized:
+        raise ValueError(
+            "Each project needs at least one target in every non-empty split; "
+            f"undersized projects: {', '.join(undersized[:10])}"
+        )
+
+    # Reserve one target per project in every active split, then distribute the
+    # remainder toward the proportional ideal while preserving exact totals.
+    total = len(unique)
+    allocation = {
+        (project, split): int(split in positive_splits)
+        for project in projects
+        for split in split_names
     }
+    row_remaining = {
+        project: len(values) - len(positive_splits)
+        for project, values in projects.items()
+    }
+    column_remaining = {
+        split: counts[split] - project_count if split in positive_splits else 0
+        for split in split_names
+    }
+    while any(column_remaining.values()):
+        candidates = [
+            (
+                len(projects[project]) * counts[split] / total
+                - allocation[(project, split)],
+                project,
+                split,
+            )
+            for project in sorted(projects)
+            for split in split_names
+            if row_remaining[project] > 0 and column_remaining[split] > 0
+        ]
+        if not candidates:
+            raise ValueError("Unable to satisfy project-stratified split sizes")
+        _, project, split = max(
+            candidates,
+            key=lambda item: (
+                item[0], column_remaining[item[2]],
+                -split_names.index(item[2]), item[1],
+            ),
+        )
+        allocation[(project, split)] += 1
+        row_remaining[project] -= 1
+        column_remaining[split] -= 1
+
+    result = {name: [] for name in split_names}
+    for project, keys in sorted(projects.items()):
+        ordered = sorted(
+            keys,
+            key=lambda value: hashlib.sha256(
+                f"{seed}::{project}::{value}".encode()
+            ).hexdigest(),
+        )
+        offset = 0
+        for split in split_names:
+            size = allocation[(project, split)]
+            result[split].extend(ordered[offset:offset + size])
+            offset += size
+    return result
 
 
 def validate_manual_splits(

@@ -66,6 +66,19 @@ SAMPLE_DEFINITIONS = (
         excluded_source_parts=("_vendored", "deprecated"),
     ),
     SampleDefinition(
+        slug="mimesis",
+        name="mimesis",
+        description="Fake-data generator with a broad provider-oriented API surface.",
+        commit="56427956",
+        source_directory="mimesis",
+        python_file_count=33,
+        function_count=389,
+        statement_count=2027,
+        branch_count=249,
+        required_imports=(),
+        excluded_source_parts=(),
+    ),
+    SampleDefinition(
         slug="mlxtend",
         name="mlxtend",
         description="Machine-learning extensions with statement and branch-heavy targets.",
@@ -127,7 +140,7 @@ class SampleProjectCatalog:
     def function(self, project_id: str, function_id: str) -> ProjectFunctionRecord | None:
         return next((item for item in self.functions(project_id) if item.id == function_id), None)
 
-    @lru_cache(maxsize=3)
+    @lru_cache(maxsize=4)
     def _snapshot(self, project_id: str) -> tuple[bytes, AnalysisResult]:
         definition = self._definitions.get(project_id)
         if definition is None:

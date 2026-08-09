@@ -33,7 +33,7 @@
 
 ### Đã hoàn thành: sample repositories và auto-setup
 
-- [x] Catalog read-only cho `isort`, `mlxtend`, `typesystem`; không ghi sample Project/Function dư
+- [x] Catalog read-only cho `isort`, `mimesis`, `mlxtend`, `typesystem`; không ghi sample Project/Function dư
   vào Firestore.
 - [x] Sample snapshots được deploy từ `src/sample_repo.zip`; CI tự extract trước test/build.
 - [x] Preflight không chạy setup script của repo; tạo minimal distribution metadata và validate imports
@@ -682,9 +682,9 @@ Create experiment
 
 ### P1 — Hoàn tất frontend bằng API thật và loại bỏ mock production
 
-- [x] Thêm catalog chỉ đọc cho `isort`, `mlxtend`, `typesystem`; không ghi Upload/Project/Function sample vào Firestore.
+- [x] Thêm catalog chỉ đọc cho `isort`, `mimesis`, `mlxtend`, `typesystem`; không ghi Upload/Project/Function sample vào Firestore.
 - [x] Nối Projects và Create Experiment vào `GET /projects/samples` và pipeline Cloud Run thật.
-- [ ] Deploy sample-project slice rồi chạy smoke từng repo; ưu tiên isort trước, sau đó typesystem và mlxtend.
+- [ ] Deploy sample-project slice rồi chạy smoke từng repo; ưu tiên isort trước, sau đó mimesis, typesystem và mlxtend.
 
 #### Review & Approval
 

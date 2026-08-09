@@ -9,7 +9,7 @@ from pathlib import Path
 import dspy
 from dotenv import load_dotenv
 
-from .dataset import load_targets
+from .dataset import load_targets, validate_project_stratification
 from .gepa import (
     build_coverage_report,
     bundle_digest,
@@ -49,8 +49,8 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--artifacts-dir", type=Path, default=Path("eval/prompt_optimization"))
     result.add_argument("--max-attempts", type=int, default=3)
     result.add_argument(
-        "--repeat-tests", type=int, default=2,
-        help="Repeat generated tests to reject flaky suites (default: 2)",
+        "--repeat-tests", type=int, default=5,
+        help="Repeat generated tests to reject flaky suites (default: 5)",
     )
     result.add_argument(
         "--max-concurrency", type=int, default=10,
@@ -92,6 +92,25 @@ def parser() -> argparse.ArgumentParser:
         type=int,
         help="Set an explicit maximum number of prompt-symbol evaluations",
     )
+
+    finalize = commands.add_parser(
+        "finalize",
+        help="Finish the locked holdout comparison from a saved GEPA proposal",
+    )
+    finalize.add_argument("--dataset", type=Path, required=True)
+    finalize.add_argument("--prompt", type=Path, required=True)
+    finalize.add_argument("--proposed-prompt", type=Path, required=True)
+    finalize.add_argument(
+        "--reference-cache",
+        type=Path,
+        required=True,
+        help=(
+            "Saved full-split baseline batch. Invalid rows are regenerated and "
+            "merged; valid rows are reused without rerunning GEPA."
+        ),
+    )
+    finalize.add_argument("--holdout-split", default="test")
+    finalize.add_argument("--evaluation-replicates", type=int, default=1)
     return result
 
 
@@ -287,11 +306,11 @@ def tune(args: argparse.Namespace) -> None:
     runner = make_runner(args, projects=projects)
     final_targets = holdout or validation
     final_split = args.holdout_split if holdout else "validation"
-    lm = dspy.LM(
-        _model_from_env("OPTIMIZE_MODEL"),
-        max_tokens=8192,
-        temperature=args.reflection_temperature,
-    )
+    validate_project_stratification({
+        "train": train,
+        "validation": validation,
+        final_split: final_targets,
+    })
     artifacts = runner.config.artifacts_dir.resolve()
     existing_baseline_reference = None
     if args.baseline_tests_dir is not None:
@@ -325,6 +344,31 @@ def tune(args: argparse.Namespace) -> None:
         }
         existing_baseline_reference = baseline_evaluation
 
+    # Measure the locked final-split baseline before starting GEPA. This result
+    # is cached and reused at the promotion gate, so a broken holdout target
+    # fails early instead of wasting the entire search budget first.
+    baseline_evaluation = evaluate_bundle_repeated(
+        runner,
+        final_targets,
+        baseline,
+        artifacts / "candidates",
+        split=final_split,
+        workspace_kind="baseline",
+        replicates=args.evaluation_replicates,
+    )
+    baseline_results = baseline_evaluation["results"]
+    validate_reference_evaluation(
+        baseline_results, split=final_split, expected_targets=final_targets,
+    )
+    baseline_aggregate = baseline_evaluation["aggregate"]
+    baseline_mean_score = float(baseline_aggregate["score"])
+
+    lm = dspy.LM(
+        _model_from_env("OPTIMIZE_MODEL"),
+        max_tokens=8192,
+        temperature=args.reflection_temperature,
+    )
+
     optimized = optimize(
         runner=runner, train_targets=train, validation_targets=validation,
         baseline=baseline, reflection_lm=lm, artifacts_dir=artifacts,
@@ -348,9 +392,9 @@ def tune(args: argparse.Namespace) -> None:
         baseline.save(final_path)
         report = {
             "mean_score": None,
-            "baseline_mean_score": None,
+            "baseline_mean_score": baseline_mean_score,
             "optimized_mean_score": None,
-            "baseline_aggregate_coverage": None,
+            "baseline_aggregate_coverage": baseline_aggregate,
             "optimized_aggregate_coverage": None,
             "absolute_gain": None,
             "promoted": False,
@@ -365,11 +409,11 @@ def tune(args: argparse.Namespace) -> None:
             "prompt": str(proposed_path),
             "production_prompt": str(final_path),
             "baseline_prompt": str(args.prompt.resolve()),
-            "baseline_tests_workspaces": [],
-            "baseline_run_ids": [],
+            "baseline_tests_workspaces": baseline_evaluation["tests_workspaces"],
+            "baseline_run_ids": baseline_evaluation["run_ids"],
             "run_ids": [],
             "tests_workspaces": [],
-            "baseline_results": [],
+            "baseline_results": baseline_results,
             "results": [],
             "existing_baseline_reference": existing_baseline_reference,
         }
@@ -385,21 +429,6 @@ def tune(args: argparse.Namespace) -> None:
         print(f"Retained baseline at {final_path}")
         return
 
-    baseline_evaluation = evaluate_bundle_repeated(
-        runner,
-        final_targets,
-        baseline,
-        artifacts / "candidates",
-        split=final_split,
-        workspace_kind="baseline",
-        replicates=args.evaluation_replicates,
-    )
-    baseline_results = baseline_evaluation["results"]
-    validate_reference_evaluation(
-        baseline_results, split=final_split, expected_targets=final_targets,
-    )
-    baseline_aggregate = baseline_evaluation["aggregate"]
-    baseline_mean_score = float(baseline_aggregate["score"])
     proposed_evaluation = evaluate_bundle_repeated(
         runner,
         final_targets,
@@ -476,6 +505,182 @@ def tune(args: argparse.Namespace) -> None:
     _print_coverage_report(coverage_report)
 
 
+def _target_key(value: SymbolTarget | dict) -> tuple[str, str, str, str]:
+    target = value.__dict__ if isinstance(value, SymbolTarget) else value
+    return (
+        str(target["project"]), str(target["source_file"]),
+        str(target["symbol"]), str(target["split"]),
+    )
+
+
+def _reference_row_is_valid(row: dict) -> bool:
+    coverage = row.get("coverage")
+    if not coverage or coverage.get("valid") is False:
+        return False
+    try:
+        return int(coverage["num_statements"]) > 0 and int(
+            coverage["num_branches"]
+        ) >= 0
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def _coverage_summary(aggregate: dict, count: int) -> dict:
+    return {
+        "num_targets": count,
+        "score": float(aggregate.get("score", 0.0)),
+        "statement_coverage": float(aggregate.get("statement_coverage", 0.0)),
+        "branch_coverage": float(aggregate.get("branch_coverage", 0.0)),
+        "covered_statements": int(aggregate.get("covered_statements", 0)),
+        "num_statements": int(aggregate.get("num_statements", 0)),
+        "covered_branches": int(aggregate.get("covered_branches", 0)),
+        "num_branches": int(aggregate.get("num_branches", 0)),
+    }
+
+
+def finalize(args: argparse.Namespace) -> None:
+    """Recover the final comparison without rerunning an expensive GEPA search."""
+    load_dotenv(args.project_root.resolve() / ".env")
+    baseline = PromptBundle.load(args.prompt.resolve())
+    proposed = PromptBundle.load(args.proposed_prompt.resolve())
+    for label, bundle in (("baseline", baseline), ("proposed", proposed)):
+        if error := validate_bundle(bundle):
+            raise ValueError(f"Invalid {label} prompt bundle: {error}")
+
+    final_targets = load_targets(args.dataset.resolve(), args.holdout_split)
+    if not final_targets:
+        raise ValueError(f"No targets found for split {args.holdout_split!r}")
+    validate_project_stratification({
+        "train": load_targets(args.dataset.resolve(), "train"),
+        "validation": load_targets(args.dataset.resolve(), "validation"),
+        args.holdout_split: final_targets,
+    })
+    projects = _resolve_project_layouts(
+        args.project_root.resolve(), final_targets, _sample_repos_dir(args)
+    )
+    runner = make_runner(args, projects=projects)
+    artifacts = runner.config.artifacts_dir.resolve()
+    artifacts.mkdir(parents=True, exist_ok=True)
+
+    reference = json.loads(args.reference_cache.resolve().read_text(encoding="utf-8"))
+    rows = list(reference.get("results", []))
+    expected = {_target_key(target) for target in final_targets}
+    actual = {_target_key(row["target"]) for row in rows}
+    if actual != expected:
+        raise RuntimeError(
+            "Reference cache target set does not match the requested holdout split."
+        )
+    invalid_keys = {
+        _target_key(row["target"]) for row in rows if not _reference_row_is_valid(row)
+    }
+    repaired_run_ids: list[str] = []
+    repaired_workspaces: list[str] = []
+    if invalid_keys:
+        invalid_targets = [
+            target for target in final_targets if _target_key(target) in invalid_keys
+        ]
+        repaired = evaluate_bundle_repeated(
+            runner,
+            invalid_targets,
+            baseline,
+            artifacts / "candidates",
+            split=args.holdout_split,
+            workspace_kind="baseline",
+            replicates=args.evaluation_replicates,
+        )
+        replacements = {
+            _target_key(row["target"]): row for row in repaired["results"]
+        }
+        rows = [replacements.get(_target_key(row["target"]), row) for row in rows]
+        repaired_run_ids = repaired["run_ids"]
+        repaired_workspaces = repaired["tests_workspaces"]
+
+    validate_reference_evaluation(
+        rows, split=args.holdout_split, expected_targets=final_targets,
+    )
+    baseline_aggregate = aggregate_coverage_score(rows)
+    proposed_evaluation = evaluate_bundle_repeated(
+        runner,
+        final_targets,
+        proposed,
+        artifacts / "candidates",
+        split=args.holdout_split,
+        workspace_kind="candidate",
+        replicates=args.evaluation_replicates,
+        reference_results=rows,
+    )
+    proposed_aggregate = proposed_evaluation["aggregate"]
+    baseline_score = float(baseline_aggregate["score"])
+    proposed_score = float(proposed_aggregate["score"])
+    promoted = should_promote(
+        optimized_mean=proposed_score, baseline_mean=baseline_score,
+    )
+
+    proposed_path = artifacts / "prompts" / "gepa_proposed.json"
+    proposed.save(proposed_path)
+    final_path = artifacts / "prompts" / "gepa_optimized.json"
+    (proposed if promoted else baseline).save(final_path)
+    report = {
+        "mean_score": proposed_score,
+        "baseline_mean_score": baseline_score,
+        "optimized_mean_score": proposed_score,
+        "baseline_aggregate_coverage": baseline_aggregate,
+        "optimized_aggregate_coverage": proposed_aggregate,
+        "absolute_gain": proposed_score - baseline_score,
+        "promoted": promoted,
+        "final_evaluation_skipped": False,
+        "skip_reason": None,
+        "final_split": args.holdout_split,
+        "used_locked_holdout": True,
+        "evaluation_replicates": args.evaluation_replicates,
+        "prompt": str(proposed_path),
+        "production_prompt": str(final_path),
+        "baseline_prompt": str(args.prompt.resolve()),
+        "baseline_tests_workspaces": [
+            *reference.get("tests_workspaces", []), *repaired_workspaces,
+        ],
+        "baseline_run_ids": [
+            *reference.get("run_ids", []), *repaired_run_ids,
+        ],
+        "run_ids": proposed_evaluation["run_ids"],
+        "tests_workspaces": proposed_evaluation["tests_workspaces"],
+        "baseline_results": rows,
+        "results": proposed_evaluation["results"],
+        "existing_baseline_reference": None,
+        "recovery": {
+            "source_reference_cache": str(args.reference_cache.resolve()),
+            "repaired_targets": ["::".join(key[1:3]) for key in sorted(invalid_keys)],
+            "gepa_search_rerun": False,
+        },
+    }
+    (artifacts / "final_validation.json").write_text(
+        json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    coverage_report = {
+        "baseline_digest": bundle_digest(baseline),
+        "optimized_digest": bundle_digest(proposed),
+        "evaluation_replicates": args.evaluation_replicates,
+        "recovered_final_split_only": True,
+        "splits": {
+            args.holdout_split: {
+                "baseline": _coverage_summary(baseline_aggregate, len(rows)),
+                "optimized": _coverage_summary(
+                    proposed_aggregate, len(proposed_evaluation["results"])
+                ),
+            }
+        },
+    }
+    (artifacts / "coverage_report.json").write_text(
+        json.dumps(coverage_report, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    print(f"Final comparison split: {args.holdout_split}")
+    print(f"Repaired baseline targets: {len(invalid_keys)}")
+    print(f"Baseline aggregate score: {baseline_score:.4f}")
+    print(f"GEPA proposal aggregate score: {proposed_score:.4f}")
+    print(f"Absolute gain: {proposed_score - baseline_score:.4f}")
+    print(f"Promoted: {promoted}")
+
+
 def main() -> None:
     # Load model defaults before argparse evaluates environment-backed options.
     load_dotenv(Path.cwd() / ".env")
@@ -484,8 +689,10 @@ def main() -> None:
         init_files(args)
     elif args.command == "evaluate":
         evaluate(args)
-    else:
+    elif args.command == "optimize":
         tune(args)
+    else:
+        finalize(args)
 
 
 if __name__ == "__main__":

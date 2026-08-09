@@ -5,16 +5,36 @@
   "selected_total": 750,
   "projects": {
     "isort": {
-      "functions": 188
+      "functions": 188,
+      "selected_splits": {
+        "test": 52,
+        "train": 26,
+        "validation": 52
+      }
     },
     "mlxtend": {
-      "functions": 339
+      "functions": 339,
+      "selected_splits": {
+        "test": 93,
+        "train": 47,
+        "validation": 93
+      }
     },
     "typesystem": {
-      "functions": 176
+      "functions": 176,
+      "selected_splits": {
+        "test": 48,
+        "train": 24,
+        "validation": 48
+      }
     },
     "mimesis": {
-      "functions": 389
+      "functions": 389,
+      "selected_splits": {
+        "test": 107,
+        "train": 53,
+        "validation": 107
+      }
     }
   },
   "excluded_dirs": [

@@ -165,6 +165,13 @@ Generator của dataset isort loại `isort/_vendored/`. Vendored code thường
 config bỏ qua và import path có thể đổi theo Python version; đưa nó vào validation làm
 metric mất denominator và có thể tạo score 0 giả.
 
+Project stratification is mandatory for the main optimization flow. Rebuild the
+ranked dataset with `python scripts/build_ranked_dataset.py`; the builder keeps
+the exact global split limits, allocates every project proportionally to all
+three splits, and interleaves per-project ranks to keep difficulty comparable.
+`optimize` and `finalize` reject custom datasets whose project distributions
+are missing or materially skewed across splits.
+
 ## Prompt baseline
 
 Prompt `gpt_v2_baseline.json` chứa hai template với placeholder bắt buộc:
@@ -238,7 +245,7 @@ python -m coverup `
   --max-attempts 3 `
   --max-concurrency 10 `
   --prefix opt `
-  --repeat-tests 2 `
+  --repeat-tests 5 `
   --no-checkpoint
 ```
 
@@ -565,7 +572,7 @@ python -m src.optimization.cli `
   --sample-repos-dir src/sample_repo `
   --artifacts-dir eval/prompt_optimization_v3 `
   --max-concurrency 10 `
-  --repeat-tests 2 `
+  --repeat-tests 5 `
   optimize `
   --dataset eval/prompt_optimization/datasets/isort_mlxtend_symbols.jsonl `
   --prompt eval/prompt_optimization/prompts/gpt_v2_baseline.json `

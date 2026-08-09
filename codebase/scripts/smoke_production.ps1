@@ -1,6 +1,6 @@
 param(
     [string]$ApiBase = "https://vinaip002.web.app/api/v1",
-    [ValidateSet("isort", "mlxtend", "typesystem")][string]$Sample = "isort",
+    [ValidateSet("isort", "mimesis", "mlxtend", "typesystem")][string]$Sample = "isort",
     [switch]$FullPipeline,
     [ValidateSet("approve", "reject")][string]$ReviewDecision = "approve",
     [int]$PollSeconds = 10,

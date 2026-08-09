@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 
 import { useRepositories } from "@/app/providers";
+import { useAuth } from "@/auth/AuthProvider";
 import { Field, PageHeader, StatusBadge } from "@/components/PlatformUI";
 import {
   defaultCloudSettings,
@@ -45,7 +46,9 @@ function formatSamplingMethod(method: SamplingMethod) {
 
 export default function CreateExperiment() {
   const [, navigate] = useLocation();
+  const { user } = useAuth();
   const { projects, experiments } = useRepositories();
+  const hasFullAccess = user?.email?.trim().toLowerCase() === "admin@gmail.com";
   const [step, setStep] = useState(0);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const [experimentName, setExperimentName] = useState("");
@@ -133,6 +136,7 @@ export default function CreateExperiment() {
     settings.maxConcurrency >= 1 &&
     settings.maxConcurrency <= 32 &&
     settings.maxMetricCalls >= 3 &&
+    (hasFullAccess || settings.maxMetricCalls <= 2200) &&
     settings.evaluationReplicates >= 1 &&
     settings.reflectionTemperature >= 0 &&
     settings.reflectionTemperature <= 2;
@@ -259,7 +263,13 @@ export default function CreateExperiment() {
               valid={datasetValid}
             />
           )}
-          {step === 3 && <SettingsStep settings={settings} setSettings={setSettings} />}
+          {step === 3 && (
+            <SettingsStep
+              settings={settings}
+              setSettings={setSettings}
+              hasFullAccess={hasFullAccess}
+            />
+          )}
           {step === 4 && (
             <ReviewStep
               experimentName={experimentName}
@@ -735,9 +745,11 @@ function DatasetStat({ name, functions }: { name: DatasetSplit; functions: Exper
 function SettingsStep({
   settings,
   setSettings,
+  hasFullAccess,
 }: {
   settings: CloudExperimentSettings;
   setSettings: (settings: CloudExperimentSettings) => void;
+  hasFullAccess: boolean;
 }) {
   const update = <Key extends keyof CloudExperimentSettings>(
     key: Key,
@@ -869,10 +881,10 @@ function SettingsStep({
             </select>
           </Field>
           <NumberField
-            label="Max metric calls"
+            label={hasFullAccess ? "Max metric calls · Full access" : "Max metric calls"}
             value={settings.maxMetricCalls}
             min={3}
-            max={2200}
+            max={hasFullAccess ? undefined : 2200}
             disabled={settings.budgetMode !== "custom"}
             onChange={(value) => update("maxMetricCalls", value)}
           />
@@ -940,7 +952,7 @@ function NumberField({
   label: string;
   value: number;
   min: number;
-  max: number;
+  max?: number;
   disabled?: boolean;
   onChange: (value: number) => void;
 }) {

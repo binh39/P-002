@@ -20,6 +20,7 @@ async def test_sample_catalog_creates_experiment_without_persisting_projects(cli
     samples = samples_response.json()["items"]
     assert [item["id"] for item in samples] == [
         "sample:isort",
+        "sample:mimesis",
         "sample:mlxtend",
         "sample:typesystem",
     ]
@@ -35,6 +36,15 @@ async def test_sample_catalog_creates_experiment_without_persisting_projects(cli
     assert all(item["project_id"] == "sample:isort" for item in functions)
     assert all("/_vendored/" not in f"/{item['file']}" for item in functions)
     assert all("/deprecated/" not in f"/{item['file']}" for item in functions)
+
+    mimesis_response = await client.get(
+        "/api/v1/projects/sample:mimesis/functions",
+        headers=AUTH_HEADERS,
+    )
+    assert mimesis_response.status_code == 200
+    mimesis_functions = mimesis_response.json()["items"]
+    assert len(mimesis_functions) == 389
+    assert all(item["project_id"] == "sample:mimesis" for item in mimesis_functions)
 
     created = await client.post(
         "/api/v1/experiments",

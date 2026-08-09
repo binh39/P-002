@@ -83,7 +83,8 @@ def symbol_coverage(report: dict[str, Any], source_file: str, symbol: str) -> Sy
 
 def run_coverage(
     *, project_root: Path, package_dir: Path, tests_dir: Path, output: Path,
-    pytest_args: str = "", env: dict[str, str] | None = None,
+    pytest_args: str = "", repeat_tests: int = 0,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     output.parent.mkdir(parents=True, exist_ok=True)
     run_env = os.environ.copy()
@@ -92,7 +93,9 @@ def run_coverage(
     run_cmd = [
         sys.executable, "-m", "coverage", "run", "--branch",
         f"--source={package_dir.resolve()}", "-m", "pytest", str(tests_dir.resolve()),
-        "--disable-warnings", "-q", *shlex.split(pytest_args, posix=os.name != "nt"),
+        "--disable-warnings", "-q",
+        *(("--count", str(repeat_tests)) if repeat_tests else ()),
+        *shlex.split(pytest_args, posix=os.name != "nt"),
     ]
     completed = subprocess.run(
         run_cmd, cwd=project_root, env=run_env, text=True,

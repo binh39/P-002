@@ -55,7 +55,7 @@ P-002/
   src/
     coverup/                  project-owned CoverUp engine
     optimization/             DSPy/GEPA runner, metrics, cache and promotion logic
-    sample_repo.zip           source archive for the bundled isort/mlxtend/typesystem snapshots
+    sample_repo.zip           source archive for the bundled isort/mimesis/mlxtend/typesystem snapshots
     sample_repo/              bundled snapshots copied into the GEPA image during deployment
   cloud/
     run_job.py                GEPA Cloud Run Job entrypoint
@@ -143,7 +143,7 @@ account; frontend không được gọi trực tiếp.
 - Phát hiện function, method, async function, qualified name, source range, LOC, statements và
   branch candidates.
 - Xem source chính xác của function và chạy re-analysis.
-- Catalog read-only cho `isort`, `mlxtend`, `typesystem`; chọn sample không tạo Project/Function
+- Catalog read-only cho `isort`, `mimesis`, `mlxtend`, `typesystem`; chọn sample không tạo Project/Function
   documents dư thừa trong Firestore.
 
 ### Experiment configuration

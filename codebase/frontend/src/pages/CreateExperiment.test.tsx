@@ -6,6 +6,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import CreateExperiment from "@/pages/CreateExperiment";
 
 const navigate = vi.fn();
+const auth = vi.hoisted(() => ({
+  user: { email: "member@example.com" },
+}));
 const repositories = vi.hoisted(() => ({
   projects: {
     list: vi.fn(),
@@ -19,6 +22,7 @@ const repositories = vi.hoisted(() => ({
 }));
 
 vi.mock("@/app/providers", () => ({ useRepositories: () => repositories }));
+vi.mock("@/auth/AuthProvider", () => ({ useAuth: () => auth }));
 vi.mock("wouter", () => ({ useLocation: () => ["/experiments/new", navigate] }));
 
 const project = {
@@ -64,6 +68,7 @@ function Wrapper({ children }: PropsWithChildren) {
 describe("create experiment wizard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    auth.user.email = "member@example.com";
     repositories.projects.listSamples.mockResolvedValue([project]);
     repositories.projects.listFunctions.mockResolvedValue(functions);
     repositories.experiments.create.mockResolvedValue({ id: "experiment-1" });
@@ -101,5 +106,20 @@ describe("create experiment wizard", () => {
 
     await screen.findByRole("button", { name: /isort/i });
     expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
+  });
+
+  it("removes the metric budget ceiling for the full-access account", async () => {
+    auth.user.email = "admin@gmail.com";
+    render(<CreateExperiment />, { wrapper: Wrapper });
+
+    fireEvent.click(await screen.findByRole("button", { name: /isort/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByText(/3 valid functions available/i);
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+    expect(screen.getByLabelText(/Max metric calls · Full access/i)).not.toHaveAttribute(
+      "max",
+    );
   });
 });

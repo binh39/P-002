@@ -728,7 +728,13 @@ async def improve_coverage(
                 return False # not finished: needs a missing module
 
         try:
-            pytest_args = args.pytest_args
+            pytest_args = " ".join(
+                part for part in (
+                    args.pytest_args,
+                    f"--count {args.repeat_tests}"
+                    if getattr(args, "repeat_tests", 0) else "",
+                ) if part
+            )
             coverage = await measure_test_coverage(test=last_test, tests_dir=args.tests_dir,
                                                  pytest_args=pytest_args,
                                                  isolate_tests=args.isolate_tests,
@@ -943,7 +949,13 @@ def main():
             try:
                 print("Measuring coverage...  ", end='', flush=True)
                 coverage = measure_suite_coverage(tests_dir=args.tests_dir, source_dir=args.package_dir,
-                                                  pytest_args=args.pytest_args,
+                                                  pytest_args=" ".join(
+                                                      part for part in (
+                                                          args.pytest_args,
+                                                          f"--count {args.repeat_tests}"
+                                                          if getattr(args, "repeat_tests", 0) else "",
+                                                      ) if part
+                                                  ),
                                                   isolate_tests=args.isolate_tests,
                                                   branch_coverage=args.branch_coverage,
                                                   trace=(print if args.debug else None))
@@ -1033,7 +1045,13 @@ def main():
         try:
             print("Measuring coverage...  ", end='', flush=True)
             coverage = measure_suite_coverage(tests_dir=args.tests_dir, source_dir=args.package_dir,
-                                              pytest_args=args.pytest_args,
+                                              pytest_args=" ".join(
+                                                  part for part in (
+                                                      args.pytest_args,
+                                                      f"--count {args.repeat_tests}"
+                                                      if getattr(args, "repeat_tests", 0) else "",
+                                                  ) if part
+                                              ),
                                               isolate_tests=args.isolate_tests,
                                               branch_coverage=args.branch_coverage,
                                               trace=(print if args.debug else None))

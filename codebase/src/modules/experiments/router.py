@@ -22,7 +22,11 @@ prompt_router = APIRouter(prefix="/prompt-versions", tags=["prompt-versions"])
 
 @router.post("", response_model=ExperimentResponse, status_code=status.HTTP_201_CREATED)
 async def create_experiment(payload: CreateExperimentRequest, user: CurrentUser, request: Request):
-    return await request.app.state.services.experiments.create(user.uid, payload)
+    return await request.app.state.services.experiments.create(
+        user.uid,
+        payload,
+        full_access=user.has_full_access,
+    )
 
 
 @router.get("", response_model=ExperimentListResponse)

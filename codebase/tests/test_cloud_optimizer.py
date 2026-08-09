@@ -97,6 +97,10 @@ async def test_cloud_gepa_optimizer_uses_isolated_web_prefix_and_maps_result():
     assert "runner-jobs/gepa/" in request_text
     assert client.request["name"].endswith("/promptopt-gepa-runner")
     assert client.request["overrides"]["timeout"] == "86400s"
+    job_args = client.request["overrides"]["container_overrides"][0]["args"]
+    assert job_args[job_args.index("--metric-calls") + 1] == "30"
+    assert job_args[job_args.index("--repeat-tests") + 1] == "5"
+    assert job_args[job_args.index("--evaluation-replicates") + 1] == "1"
     environment = {
         item["name"]: item["value"]
         for item in client.request["overrides"]["container_overrides"][0]["env"]

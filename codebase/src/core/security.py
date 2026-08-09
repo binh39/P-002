@@ -4,12 +4,20 @@ from typing import Protocol
 
 from src.core.errors import AppError
 
+FULL_ACCESS_EMAILS = frozenset({"admin@gmail.com"})
+
 
 @dataclass(frozen=True, slots=True)
 class AuthenticatedUser:
     uid: str
     email: str | None = None
     name: str | None = None
+
+    @property
+    def has_full_access(self) -> bool:
+        return bool(
+            self.email and self.email.strip().casefold() in FULL_ACCESS_EMAILS
+        )
 
 
 class TokenVerifier(Protocol):

@@ -2,11 +2,11 @@ from src.modules.experiments.dataset import select_targets, split_targets
 from src.modules.experiments.schemas import DatasetPercentages, SamplingMethod, TargetReference
 
 
-def target(index: int) -> TargetReference:
+def target(index: int, project: str = "project") -> TargetReference:
     return TargetReference(
-        project_id="project",
+        project_id=project,
         function_id=f"function-{index}",
-        project="project",
+        project=project,
         source_file="pkg/module.py",
         symbol=f"function_{index}",
     )
@@ -31,6 +31,39 @@ def test_default_percentages_are_twenty_forty_forty():
 def test_random_seed_changes_the_snapshot():
     targets = [target(index) for index in range(12)]
     assert split_targets(targets, DatasetPercentages(), seed=1) != split_targets(targets, DatasetPercentages(), seed=2)
+
+
+def test_split_is_stratified_by_project():
+    targets = [
+        *(target(index, "alpha") for index in range(10)),
+        *(target(index, "beta") for index in range(20)),
+    ]
+
+    splits = split_targets(targets, DatasetPercentages(), seed=7)
+
+    by_key = {item.key: item for item in targets}
+    assert {
+        split: {
+            project: sum(by_key[key].project_id == project for key in keys)
+            for project in ("alpha", "beta")
+        }
+        for split, keys in splits.items()
+    } == {
+        "train": {"alpha": 2, "beta": 4},
+        "validation": {"alpha": 4, "beta": 8},
+        "test": {"alpha": 4, "beta": 8},
+    }
+
+
+def test_split_rejects_projects_too_small_for_all_splits():
+    targets = [target(0, "alpha"), *(target(index, "beta") for index in range(9))]
+
+    try:
+        split_targets(targets, DatasetPercentages(), seed=7)
+    except ValueError as exc:
+        assert "one target in every non-empty split" in str(exc)
+    else:
+        raise AssertionError("split_targets should reject an unstratifiable project")
 
 
 def test_selection_has_no_implicit_fifty_target_cap():
