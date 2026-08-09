@@ -355,9 +355,30 @@ class CoverUpExperimentRunner:
                     "Score: 0. The generated test suite failed under coverage.py:\n"
                     f"{after.stdout[-4000:]}"
                 )
+                # pytest exit 1 still leaves a complete coverage data file and
+                # run_coverage exports it to JSON.  Preserve its structural
+                # denominators, but never reward lines reached by failing tests.
+                # Other failures do not produce JSON and remain unmeasurable.
+                report = load_report(after_json) if after_json.is_file() else None
                 for target in group:
+                    score_data = None
+                    if report is not None:
+                        try:
+                            measured_cov = symbol_coverage(
+                                report, target.source_file, target.symbol
+                            )
+                        except KeyError:
+                            pass
+                        else:
+                            zero_cov = _zero_coverage_like(measured_cov)
+                            score_data = score_symbol(zero_cov, zero_cov).as_dict()
+                            score_data["valid"] = True
+                            score_data["tests_passed"] = False
+                            score_data["pytest_exit_code"] = after.returncode
+                            score_data["generator_exit_code"] = completed.returncode
                     results.append(BatchTargetResult(
                         target=target,
+                        score=score_data,
                         feedback=feedback,
                         attempt_traces=_traces_for_target(attempt_traces, target),
                     ))

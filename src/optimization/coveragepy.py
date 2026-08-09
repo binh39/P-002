@@ -12,6 +12,7 @@ from typing import Any
 # pytest.ExitCode.NO_TESTS_COLLECTED.  Keep this local instead of importing
 # pytest in the production coverage wrapper.
 _NO_TESTS_COLLECTED = 5
+_TESTS_FAILED = 1
 
 
 def normalize_path(value: str | Path) -> str:
@@ -101,12 +102,12 @@ def run_coverage(
         run_cmd, cwd=project_root, env=run_env, text=True,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
     )
-    # A from-scratch CoverUp workspace can legitimately contain no accepted
-    # tests.  coverage.py still writes a data file with every file supplied by
-    # --source, which gives us the zero-covered symbol denominators required by
-    # GEPA.  Only pytest's dedicated "no tests" status is recoverable here;
-    # collection errors and failing tests must remain invalid evaluations.
-    if completed.returncode not in (0, _NO_TESTS_COLLECTED):
+    # coverage.py writes usable execution data when pytest finishes with test
+    # failures (exit 1), as well as when it passes or collects no tests.  Export
+    # that data so callers can retain symbol denominators while scoring a
+    # failing generated suite as zero.  Collection/internal/usage errors remain
+    # unmeasurable and must not be converted into coverage reports.
+    if completed.returncode not in (0, _TESTS_FAILED, _NO_TESTS_COLLECTED):
         return completed
     # Compact JSON (no --pretty-print): the report is only used to score the
     # batch and is deleted afterwards, so pretty-printing just wastes disk.

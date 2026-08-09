@@ -132,6 +132,13 @@ def test_run_coverage_does_not_mask_real_pytest_failures(tmp_path, monkeypatch):
 
     def fake_run(command, **kwargs):
         calls.append(command)
+        if "json" in command:
+            Path(command[command.index("-o") + 1]).write_text(
+                '{"files": {}}', encoding="utf-8"
+            )
+            return SimpleNamespace(
+                args=command, returncode=0, stdout="json written", stderr=None
+            )
         return SimpleNamespace(
             args=command, returncode=1, stdout="test failed", stderr=None
         )
@@ -150,7 +157,76 @@ def test_run_coverage_does_not_mask_real_pytest_failures(tmp_path, monkeypatch):
     )
 
     assert completed.returncode == 1
-    assert len(calls) == 1
+    assert completed.stdout == "test failed"
+    assert len(calls) == 2
+    assert (tmp_path / "coverage.json").is_file()
+
+
+def test_runner_keeps_denominators_but_scores_failing_suite_as_zero(
+    tmp_path, monkeypatch,
+):
+    package_dir = tmp_path / "sample_repo" / "pkg"
+    tests_dir = tmp_path / "sample_repo" / "tests"
+    artifacts_dir = tmp_path / "artifacts"
+    package_dir.mkdir(parents=True)
+    tests_dir.mkdir(parents=True)
+    prompt_path = tmp_path / "prompt.json"
+    baseline_bundle().save(prompt_path)
+
+    monkeypatch.setattr(
+        "src.optimization.runner.subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="coverup ok"),
+    )
+
+    def fake_run_coverage(**kwargs):
+        kwargs["output"].write_text(json.dumps({
+            "files": {
+                "pkg/module.py": {
+                    "functions": {
+                        "target": {
+                            "executed_lines": [1, 2],
+                            "missing_lines": [3],
+                            "executed_branches": [[1, 2]],
+                            "missing_branches": [[1, 3]],
+                            "summary": {
+                                "covered_lines": 2,
+                                "num_statements": 3,
+                                "covered_branches": 1,
+                                "num_branches": 2,
+                            },
+                        }
+                    }
+                }
+            }
+        }), encoding="utf-8")
+        return SimpleNamespace(returncode=1, stdout="2 failed, 23 passed")
+
+    monkeypatch.setattr("src.optimization.runner.run_coverage", fake_run_coverage)
+    runner = CoverUpExperimentRunner(ExperimentConfig(
+        project_root=tmp_path,
+        package_dir=package_dir,
+        tests_dir=tests_dir,
+        artifacts_dir=artifacts_dir,
+        coverup_model="fake-model",
+    ))
+
+    record = runner.evaluate_batch(
+        [SymbolTarget("project", "pkg/module.py", "target", "train")],
+        prompt_path,
+        candidate_id="failing-suite",
+        split="train",
+    )
+
+    score = record.results[0].score
+    assert score["score"] == 0.0
+    assert score["covered_statements"] == 0
+    assert score["num_statements"] == 3
+    assert score["covered_branches"] == 0
+    assert score["num_branches"] == 2
+    assert score["valid"] is True
+    assert score["tests_passed"] is False
+    assert score["pytest_exit_code"] == 1
+    assert "2 failed, 23 passed" in record.results[0].feedback
 
 
 @pytest.mark.parametrize(

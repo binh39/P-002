@@ -117,8 +117,9 @@ def _evaluation_digest(
     payload = {
         # Schema 10 fixed PYTHONHASHSEED across CoverUp and coverage subprocesses.
         # Schema 11 makes repeat_tests effective during generation and final
-        # scoring, so caches created before that fix must not be reused.
-        "cache_schema": 11,
+        # scoring. Schema 12 preserves denominators from pytest exit 1 while
+        # assigning failing generated suites zero covered units.
+        "cache_schema": 12,
         "config": config_values,
         "targets": [_target_identity(target) for target in targets],
         "sources": source_hashes,
