@@ -219,6 +219,38 @@ class OptimizationRunRecord(OptimizationRunResponse):
     pass
 
 
+class EvolutionIteration(StrictModel):
+    iteration: int
+    strategy: str
+    parent_program: str | None = None
+    parent_validation_score: float | None = None
+    component: str | None = None
+    proposed_prompt: str | None = None
+    parent_minibatch_sum: float | None = None
+    candidate_minibatch_sum: float | None = None
+    decision: str
+    full_validation: bool = False
+    best_statement: float | None = None
+    best_branch: float | None = None
+    best_score: float | None = None
+    pareto_changed: bool = False
+
+
+class EvolutionMetricPoint(StrictModel):
+    iteration: int
+    statement: float | None = None
+    branch: float | None = None
+    score: float | None = None
+
+
+class EvolutionResponse(StrictModel):
+    available: bool
+    source: str = "cloud_run_stdout"
+    message: str = ""
+    iterations: list[EvolutionIteration] = Field(default_factory=list)
+    metrics: list[EvolutionMetricPoint] = Field(default_factory=list)
+
+
 class ComparisonRunResponse(StrictModel):
     id: str
     experiment_id: str

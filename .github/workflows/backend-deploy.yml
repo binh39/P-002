@@ -95,7 +95,7 @@ jobs:
             --parallelism 1 \
             --max-retries 0 \
             --task-timeout 86400s \
-            --set-env-vars "COVERUP_MODEL=vertex_ai/gemini-3.5-flash-lite,OPTIMIZE_MODEL=vertex_ai/gemini-3.1-pro-preview,VERTEXAI_PROJECT=$PROJECT_ID,VERTEXAI_LOCATION=global"
+            --set-env-vars "COVERUP_MODEL=vertex_ai/gemini-3.6-flash,OPTIMIZE_MODEL=vertex_ai/gemini-3.6-flash,VERTEXAI_PROJECT=$PROJECT_ID,VERTEXAI_LOCATION=global"
           gcloud run jobs add-iam-policy-binding "$GEPA_JOB" \
             --project "$PROJECT_ID" \
             --region "$REGION" \

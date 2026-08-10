@@ -1,10 +1,14 @@
 import asyncio
 import json
+from datetime import UTC, datetime, timedelta
+from itertools import islice
+from time import monotonic
 from uuid import uuid4
 
+from .evolution import CloudLogLine, parse_evolution_log
 from .optimizer import OptimizationResult, OptimizationTarget
 from .prompts import PromptBundle
-from .schemas import ExperimentSettings
+from .schemas import EvolutionResponse, ExperimentSettings
 
 
 class CloudRunJobGepaOptimizer:
@@ -23,12 +27,17 @@ class CloudRunJobGepaOptimizer:
         bucket: str,
         job_name: str,
         timeout_seconds: int,
+        logging_client=None,
+        executions_client=None,
     ):
         self.client = client
         self.storage = storage
         self.bucket = bucket
         self.job_name = job_name
         self.timeout_seconds = timeout_seconds
+        self.logging_client = logging_client
+        self.executions_client = executions_client
+        self._evolution_cache: dict[str, tuple[float, EvolutionResponse]] = {}
 
     async def optimize(
         self,
@@ -181,3 +190,142 @@ class CloudRunJobGepaOptimizer:
                 "artifact_prefix": artifacts_prefix,
             },
         )
+
+    async def evolution(
+        self,
+        artifacts_prefix: str,
+        *,
+        started_at: datetime | None,
+    ) -> EvolutionResponse:
+        """Read this job execution's stdout and expose its GEPA iteration summary."""
+        if self.logging_client is None:
+            return EvolutionResponse(
+                available=False,
+                message="Cloud Logging is not configured for this API instance.",
+            )
+        cached = self._evolution_cache.get(artifacts_prefix)
+        if cached and monotonic() - cached[0] < 5:
+            return cached[1]
+        try:
+            entries = await asyncio.to_thread(
+                self._read_execution_log,
+                artifacts_prefix,
+                started_at,
+            )
+        except Exception as exc:  # Logging must never break the optimization status API.
+            detail = str(exc).strip() or type(exc).__name__
+            return EvolutionResponse(
+                available=False,
+                message=f"Cloud Run logs are temporarily unavailable: {detail}"[:500],
+            )
+        result = parse_evolution_log(entries)
+        if len(self._evolution_cache) >= 256:
+            self._evolution_cache.pop(next(iter(self._evolution_cache)))
+        self._evolution_cache[artifacts_prefix] = (monotonic(), result)
+        return result
+
+    async def cancel(
+        self,
+        artifacts_prefix: str,
+        *,
+        started_at: datetime | None,
+    ) -> str:
+        """Cancel the Cloud Run execution that owns an opaque artifact prefix."""
+        if self.executions_client is None:
+            raise RuntimeError("Cloud Run execution cancellation is not configured")
+        execution_name = await asyncio.to_thread(
+            self._resolve_execution_name,
+            artifacts_prefix,
+            started_at,
+        )
+        if not execution_name:
+            raise RuntimeError("Cloud Run execution is not discoverable yet; retry in a few seconds")
+        parts = self.job_name.split("/")
+        full_name = f"projects/{parts[1]}/locations/{parts[3]}/jobs/{parts[-1]}/executions/{execution_name}"
+        await asyncio.to_thread(
+            self.executions_client.cancel_execution,
+            request={"name": full_name},
+        )
+        return full_name
+
+    def _resolve_execution_name(
+        self,
+        artifacts_prefix: str,
+        started_at: datetime | None,
+    ) -> str | None:
+        if self.logging_client is None:
+            return None
+        execution_id = artifacts_prefix.strip("/").split("/")[-2]
+        if not execution_id.isalnum():
+            raise ValueError("Invalid Cloud Run artifact prefix")
+        parts = self.job_name.split("/")
+        project = parts[1]
+        location = parts[3]
+        job = parts[-1]
+        earliest = (started_at or datetime.now(UTC)) - timedelta(minutes=5)
+        timestamp_filter = earliest.astimezone(UTC).isoformat().replace("+00:00", "Z")
+        base_filter = (
+            'resource.type="cloud_run_job" '
+            f'AND resource.labels.project_id="{project}" '
+            f'AND resource.labels.location="{location}" '
+            f'AND resource.labels.job_name="{job}" '
+            f'AND timestamp>="{timestamp_filter}"'
+        )
+        marker_filter = f'{base_filter} AND textPayload:"{execution_id}"'
+        marker_entries = list(
+            islice(
+                self.logging_client.list_entries(
+                    filter_=marker_filter,
+                    order_by="timestamp desc",
+                    page_size=50,
+                ),
+                50,
+            )
+        )
+        for entry in marker_entries:
+            labels = getattr(entry, "labels", {}) or {}
+            candidate = labels.get("run.googleapis.com/execution_name")
+            payload = str(getattr(entry, "payload", ""))
+            if candidate and execution_id in payload:
+                return candidate
+        return None
+
+    def _read_execution_log(
+        self,
+        artifacts_prefix: str,
+        started_at: datetime | None,
+    ) -> list[CloudLogLine]:
+        parts = self.job_name.split("/")
+        project = parts[1]
+        location = parts[3]
+        job = parts[-1]
+        earliest = (started_at or datetime.now(UTC)) - timedelta(minutes=5)
+        timestamp_filter = earliest.astimezone(UTC).isoformat().replace("+00:00", "Z")
+        base_filter = (
+            'resource.type="cloud_run_job" '
+            f'AND resource.labels.project_id="{project}" '
+            f'AND resource.labels.location="{location}" '
+            f'AND resource.labels.job_name="{job}" '
+            f'AND timestamp>="{timestamp_filter}"'
+        )
+        execution_name = self._resolve_execution_name(artifacts_prefix, started_at)
+        if not execution_name:
+            return []
+        execution_filter = f'{base_filter} AND labels."run.googleapis.com/execution_name"="{execution_name}"'
+        cloud_entries = list(
+            islice(
+                self.logging_client.list_entries(
+                    filter_=execution_filter,
+                    order_by="timestamp asc",
+                    page_size=1000,
+                ),
+                10_000,
+            )
+        )
+        return [
+            CloudLogLine(
+                timestamp=getattr(entry, "timestamp", None),
+                text=str(getattr(entry, "payload", "")),
+            )
+            for entry in cloud_entries
+        ]

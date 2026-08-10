@@ -3,3 +3,4 @@ description: Poll Cloud Run long-running operations after starting an isolated r
 stage: GA
 includedPermissions:
   - run.operations.get
+  - run.executions.cancel

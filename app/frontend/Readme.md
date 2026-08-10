@@ -12,7 +12,7 @@ npm run dev
 
 The default `VITE_AUTH_MODE=demo` uses an explicit demo session. Set it to `firebase` for Firebase Google Sign-In plus Email/Password login, registration and password reset.
 
-The connected Firebase project is `vinaip002`, with production at `https://vinaip002.web.app`. Feature branches are tested with `npm run dev`; no public preview channel is kept. Local Firebase values belong in the ignored `.env.local`; start from `.env.example` on a new machine.
+The connected Firebase project is `vinai-505107`, with production at `https://vinai-505107.web.app`. Feature branches are tested with `npm run dev`; no public preview channel is kept. Local Firebase values belong in the ignored `.env.local`; start from `.env.example` on a new machine.
 
 Projects, experiment creation, GEPA optimization runs and paired comparisons always use authenticated HTTP repositories and never fall back to fixture data. GEPA treats the baseline prompt as candidate zero; there is no separate baseline run. `VITE_DATA_MODE=demo` keeps unfinished dashboard, dataset and review screens in demo mode, so the UI displays a `hybrid data` badge until those slices are connected.
 

@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from "@/auth/AuthProvider";
 import { env } from "@/config/env";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/NotFound";
+import { ThemeProvider } from "@/theme/ThemeProvider";
 
 const Comparison = lazy(() => import("@/pages/Comparison"));
 const CreateExperiment = lazy(() => import("@/pages/CreateExperiment"));
@@ -144,12 +145,14 @@ function RoutedApplication() {
 
 export function AppRouter() {
   return (
-    <ErrorBoundary>
-      <AppProviders>
-        <AuthProvider>
-          <RoutedApplication />
-        </AuthProvider>
-      </AppProviders>
-    </ErrorBoundary>
+    <ThemeProvider>
+      <ErrorBoundary>
+        <AppProviders>
+          <AuthProvider>
+            <RoutedApplication />
+          </AuthProvider>
+        </AppProviders>
+      </ErrorBoundary>
+    </ThemeProvider>
   );
 }
