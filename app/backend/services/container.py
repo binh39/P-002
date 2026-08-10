@@ -15,6 +15,7 @@ from backend.modules.analysis.repository import (
     InMemoryFunctionRepository,
 )
 from backend.modules.analysis.service import AnalysisService
+from backend.modules.dashboard.service import DashboardService
 from backend.modules.experiments.cloud_optimizer import CloudRunJobGepaOptimizer
 from backend.modules.experiments.dispatcher import (
     CloudTasksComparisonDispatcher,
@@ -47,6 +48,7 @@ class ServiceContainer:
     projects: ProjectService
     analysis: AnalysisService
     experiments: ExperimentService
+    dashboard: DashboardService
 
 
 def build_services(settings: Settings) -> ServiceContainer:
@@ -126,7 +128,7 @@ def build_services(settings: Settings) -> ServiceContainer:
     analysis.set_dispatcher(dispatcher)
     cloud_optimizer = None
     if settings.optimization_execution_backend == "cloud_run_job":
-        from google.cloud import run_v2
+        from google.cloud import logging_v2, run_v2
 
         cloud_optimizer = CloudRunJobGepaOptimizer(
             client=run_v2.JobsClient(),
@@ -137,6 +139,8 @@ def build_services(settings: Settings) -> ServiceContainer:
                 f"{settings.cloud_run_gepa_job}"
             ),
             timeout_seconds=settings.cloud_run_gepa_timeout_seconds,
+            logging_client=logging_v2.Client(project=settings.gcp_project_id),
+            executions_client=run_v2.ExecutionsClient(),
         )
     experiments = ExperimentService(
         experiment_repository,
@@ -146,6 +150,7 @@ def build_services(settings: Settings) -> ServiceContainer:
         cloud_optimizer=cloud_optimizer,
         samples=samples,
     )
+    dashboard = DashboardService(experiment_repository)
     if settings.experiment_dispatcher == "cloud_tasks":
         experiments.set_optimization_dispatcher(
             CloudTasksOptimizationDispatcher(
@@ -177,4 +182,5 @@ def build_services(settings: Settings) -> ServiceContainer:
         projects=projects,
         analysis=analysis,
         experiments=experiments,
+        dashboard=dashboard,
     )

@@ -5,6 +5,7 @@ import type {
   CreateExperimentInput,
   Experiment,
   ExperimentStatus,
+  OptimizationEvolution,
   OptimizationRun,
 } from "@/domain/experiments";
 import type { ExperimentRepository } from "@/repositories/contracts/ExperimentRepository";
@@ -72,6 +73,34 @@ interface ApiOptimizationRun {
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
+}
+
+interface ApiOptimizationEvolution {
+  available: boolean;
+  source: string;
+  message: string;
+  iterations: Array<{
+    iteration: number;
+    strategy: string;
+    parent_program: string | null;
+    parent_validation_score: number | null;
+    component: string | null;
+    proposed_prompt: string | null;
+    parent_minibatch_sum: number | null;
+    candidate_minibatch_sum: number | null;
+    decision: string;
+    full_validation: boolean;
+    best_statement: number | null;
+    best_branch: number | null;
+    best_score: number | null;
+    pareto_changed: boolean;
+  }>;
+  metrics: Array<{
+    iteration: number;
+    statement: number | null;
+    branch: number | null;
+    score: number | null;
+  }>;
 }
 
 interface ApiComparisonMetrics {
@@ -177,6 +206,31 @@ function mapOptimizationRun(item: ApiOptimizationRun): OptimizationRun {
   };
 }
 
+function mapOptimizationEvolution(item: ApiOptimizationEvolution): OptimizationEvolution {
+  return {
+    available: item.available,
+    source: item.source,
+    message: item.message,
+    iterations: item.iterations.map((iteration) => ({
+      iteration: iteration.iteration,
+      strategy: iteration.strategy,
+      parentProgram: iteration.parent_program,
+      parentValidationScore: iteration.parent_validation_score,
+      component: iteration.component,
+      proposedPrompt: iteration.proposed_prompt,
+      parentMinibatchSum: iteration.parent_minibatch_sum,
+      candidateMinibatchSum: iteration.candidate_minibatch_sum,
+      decision: iteration.decision,
+      fullValidation: iteration.full_validation,
+      bestStatement: iteration.best_statement,
+      bestBranch: iteration.best_branch,
+      bestScore: iteration.best_score,
+      paretoChanged: iteration.pareto_changed,
+    })),
+    metrics: item.metrics,
+  };
+}
+
 function mapComparisonMetrics(item: ApiComparisonMetrics): ComparisonMetrics {
   return {
     score: item.score ?? null,
@@ -273,6 +327,24 @@ export class HttpExperimentRepository implements ExperimentRepository {
   async getOptimizationRun(runId: string, signal?: AbortSignal) {
     return mapOptimizationRun(
       await apiRequest<ApiOptimizationRun>(`/experiments/optimization-runs/${runId}`, { signal }),
+    );
+  }
+
+  async cancelOptimization(runId: string) {
+    return mapOptimizationRun(
+      await apiRequest<ApiOptimizationRun>(
+        `/experiments/optimization-runs/${runId}/cancel`,
+        { method: "POST" },
+      ),
+    );
+  }
+
+  async getOptimizationEvolution(runId: string, signal?: AbortSignal) {
+    return mapOptimizationEvolution(
+      await apiRequest<ApiOptimizationEvolution>(
+        `/experiments/optimization-runs/${runId}/evolution`,
+        { signal },
+      ),
     );
   }
 

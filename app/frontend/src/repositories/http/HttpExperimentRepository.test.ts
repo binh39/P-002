@@ -149,6 +149,43 @@ describe("HttpExperimentRepository", () => {
     );
   });
 
+  it("cancels an active optimization through the API", async () => {
+    const response = {
+      id: "optimization-1",
+      experiment_id: "experiment-1",
+      status: "cancelled",
+      parent_prompt_digest: "parent-digest",
+      candidate_prompt: null,
+      candidate_prompt_digest: null,
+      baseline_validation_score: 0.2,
+      candidate_validation_score: null,
+      candidate_count: 0,
+      metric_calls: 5,
+      final_validation: {},
+      artifact_objects: { "evolution.json": "private/evolution.json" },
+      error_message: null,
+      created_at: "2026-08-06T00:00:00Z",
+      started_at: "2026-08-06T00:00:01Z",
+      finished_at: "2026-08-06T00:00:30Z",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const run = await new HttpExperimentRepository().cancelOptimization("optimization-1");
+
+    expect(run.status).toBe("cancelled");
+    expect(run.artifacts).toEqual(["evolution.json"]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/experiments/optimization-runs/optimization-1/cancel",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
   it("deletes an experiment through the authenticated API", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);

@@ -49,7 +49,7 @@ export default function ProjectDetail() {
   if (projectQuery.isPending)
     return (
       <div className="page-state" role="status">
-        Loading projectâ€¦
+        Loading project...
       </div>
     );
   if (projectQuery.isError)
@@ -230,7 +230,7 @@ export default function ProjectDetail() {
           </div>
           {functionsQuery.isPending && (
             <div className="page-state" role="status">
-              Loading analyzed functionsâ€¦
+              Loading analyzed functions...
             </div>
           )}
           {functionsQuery.isError && (
@@ -359,7 +359,7 @@ export default function ProjectDetail() {
             <pre>
               <code>
                 {sourceQuery.isPending
-                  ? "Loading sourceâ€¦"
+                  ? "Loading source..."
                   : sourceQuery.isError
                     ? "Source is unavailable."
                     : sourceQuery.data}

@@ -31,6 +31,12 @@ function createRepositories(): Repositories {
   };
 }
 
+// Repository classes are stateless. Keeping this object at module scope lets Vite
+// replace it together with an updated repository module during Fast Refresh.
+// Storing it in React state would retain an instance of the old class and make
+// newly added methods (for example cancelOptimization) unavailable until reload.
+const repositories = createRepositories();
+
 export function useRepositories() {
   const repositories = useContext(RepositoryContext);
   if (!repositories) throw new Error("useRepositories must be used inside AppProviders");
@@ -46,7 +52,6 @@ export function AppProviders({ children }: PropsWithChildren) {
         },
       }),
   );
-  const [repositories] = useState(createRepositories);
 
   return (
     <QueryClientProvider client={queryClient}>

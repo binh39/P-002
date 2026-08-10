@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,6 +8,8 @@ import OptimizationRun from "@/pages/OptimizationRun";
 const repositories = vi.hoisted(() => ({
   experiments: {
     getOptimizationRun: vi.fn(),
+    cancelOptimization: vi.fn(),
+    getOptimizationEvolution: vi.fn(),
     get: vi.fn(),
     downloadOptimizationArtifact: vi.fn(),
   },
@@ -70,6 +72,49 @@ describe("optimization run", () => {
       baselineRunId: "baseline-1",
       comparisonRunId: "comparison-1",
     });
+    repositories.experiments.getOptimizationEvolution.mockResolvedValue({
+      available: true,
+      source: "cloud_run_stdout",
+      message: "Parsed from Cloud Run stdout.",
+      iterations: [
+        {
+          iteration: 0,
+          strategy: "baseline",
+          parentProgram: "Program 0",
+          parentValidationScore: 0.2599,
+          component: null,
+          proposedPrompt: null,
+          parentMinibatchSum: null,
+          candidateMinibatchSum: null,
+          decision: "Baseline evaluated",
+          fullValidation: true,
+          bestStatement: null,
+          bestBranch: null,
+          bestScore: 0.2599,
+          paretoChanged: true,
+        },
+        {
+          iteration: 2,
+          strategy: "reflective mutation",
+          parentProgram: "Program 0",
+          parentValidationScore: 0.2599,
+          component: "error",
+          proposedPrompt: "Repair the failing test.",
+          parentMinibatchSum: 0.9625,
+          candidateMinibatchSum: 0.9398,
+          decision: "Rejected",
+          fullValidation: false,
+          bestStatement: 0.8198,
+          bestBranch: 0.7707,
+          bestScore: 0.8319,
+          paretoChanged: false,
+        },
+      ],
+      metrics: [
+        { iteration: 0, statement: null, branch: null, score: 0.2599 },
+        { iteration: 2, statement: 0.8198, branch: 0.7707, score: 0.8319 },
+      ],
+    });
   });
 
   it("renders the candidate and real optimization metrics", async () => {
@@ -84,6 +129,10 @@ describe("optimization run", () => {
     expect(screen.getByText("Locked baseline vs optimized result")).toBeInTheDocument();
     expect(screen.getByText("Optimized prompt promoted")).toBeInTheDocument();
     expect(screen.getByText("candidate_prompt.json")).toBeInTheDocument();
+    expect(screen.getByText("Live GEPA evolution")).toBeInTheDocument();
+    expect(screen.getAllByText("Iteration 2")).toHaveLength(2);
+    expect(screen.getByText("Repair the failing test.")).toBeInTheDocument();
+    expect(screen.getByText("Parent minibatch sum")).toBeInTheDocument();
   });
 
   it("shows the baseline as the final prompt when the proposal is not promoted", async () => {
@@ -104,5 +153,30 @@ describe("optimization run", () => {
     expect(await screen.findByText("Baseline retained")).toBeInTheDocument();
     expect(await screen.findAllByText("Sparse baseline initial prompt")).toHaveLength(2);
     expect(screen.queryByText("Optimized initial prompt")).not.toBeInTheDocument();
+  });
+
+  it("cancels an active Cloud Run optimization from the running card", async () => {
+    const activeRun = {
+      ...(await repositories.experiments.getOptimizationRun()),
+      status: "optimizing",
+      finishedAt: null,
+    };
+    repositories.experiments.getOptimizationRun.mockResolvedValueOnce(activeRun);
+    repositories.experiments.cancelOptimization.mockResolvedValue({
+      ...activeRun,
+      status: "cancelled",
+      finishedAt: "2026-08-06T00:00:30Z",
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<OptimizationRun />, { wrapper: Wrapper });
+    fireEvent.click(await screen.findByRole("button", { name: "Stop optimization" }));
+
+    expect(confirm).toHaveBeenCalledOnce();
+    await waitFor(() => {
+      expect(repositories.experiments.cancelOptimization).toHaveBeenCalledWith("optimization-1");
+    });
+    expect(await screen.findByText("Cancelled")).toBeInTheDocument();
+    confirm.mockRestore();
   });
 });

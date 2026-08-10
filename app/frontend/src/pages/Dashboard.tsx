@@ -1,5 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  ArrowRight,
+  ArrowUpRight,
+  Braces,
+  ChartNoAxesCombined,
+  FlaskConical,
+  GitBranch,
+  Play,
+  Plus,
+} from "lucide-react";
+import { motion } from "motion/react";
+import {
   Area,
   AreaChart,
   CartesianGrid,
@@ -10,7 +21,6 @@ import {
 } from "recharts";
 
 import { useRepositories } from "@/app/providers";
-import { IC } from "@/components/Icons";
 import type { ExperimentStatus, Kpi } from "@/domain/dashboard";
 
 type Page =
@@ -22,89 +32,35 @@ type Page =
   | "review"
   | "registry"
   | "settings";
+
 interface Props {
   onNavigate: (page: Page) => void;
 }
 
-const card = {
-  background: "#fff",
-  borderRadius: 14,
-  border: "1px solid #E8EBF5",
-  boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
-} as const;
-
-const kpiPresentation: Record<
-  Kpi["icon"],
-  {
-    icon: typeof IC.Flask;
-    color: string;
-    bg: string;
-  }
-> = {
-  experiments: { icon: IC.Flask, color: "#4F6EF7", bg: "#EEF2FF" },
-  running: { icon: IC.Play, color: "#F59E0B", bg: "#FFFBEB" },
-  branch: { icon: IC.BarChart, color: "#10B981", bg: "#F0FDF4" },
-  statement: { icon: IC.Code, color: "#8B5CF6", bg: "#F5F3FF" },
+const kpiPresentation: Record<Kpi["icon"], { Icon: typeof FlaskConical; tone: string }> = {
+  experiments: { Icon: FlaskConical, tone: "cyan" },
+  running: { Icon: Play, tone: "amber" },
+  branch: { Icon: GitBranch, tone: "green" },
+  statement: { Icon: Braces, tone: "violet" },
 };
 
 function StatusBadge({ status }: { status: ExperimentStatus }) {
-  const styles = {
-    completed: { bg: "#F0FDF4", color: "#059669", dot: "#10B981" },
-    running: { bg: "#EFF6FF", color: "#2563EB", dot: "#3B82F6" },
-    pending: { bg: "#FFFBEB", color: "#D97706", dot: "#F59E0B" },
-    failed: { bg: "#FEF2F2", color: "#DC2626", dot: "#EF4444" },
-  };
-  const style = styles[status];
   return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 5,
-        background: style.bg,
-        color: style.color,
-        padding: "3px 10px",
-        borderRadius: 20,
-        fontSize: 12,
-        fontWeight: 500,
-      }}
-    >
-      <span
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: "50%",
-          background: style.dot,
-        }}
-      />
+    <span className={`dashboard-status dashboard-status-${status}`}>
+      <i />
       {status}
     </span>
   );
 }
 
 function CoverageBar({ value }: { value: number }) {
-  const color = value >= 80 ? "#10B981" : value >= 65 ? "#F59E0B" : "#EF4444";
+  const tone = value >= 80 ? "good" : value >= 65 ? "fair" : "low";
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <div
-        style={{
-          flex: 1,
-          height: 4,
-          background: "#F0F1F5",
-          borderRadius: 2,
-          maxWidth: 60,
-        }}
-      >
-        <div
-          style={{
-            width: `${value}%`,
-            height: "100%",
-            background: color,
-            borderRadius: 2,
-          }}
-        />
-      </div>
-      <span style={{ fontSize: 13, fontWeight: 500, color: "#374151" }}>{value.toFixed(1)}%</span>
+    <div className="coverage-meter">
+      <span>
+        <i className={tone} style={{ width: `${value}%` }} />
+      </span>
+      <strong>{value.toFixed(1)}%</strong>
     </div>
   );
 }
@@ -116,13 +72,14 @@ export default function Dashboard({ onNavigate }: Props) {
     queryFn: ({ signal }) => dashboard.getSnapshot(signal),
   });
 
-  if (snapshot.isPending)
+  if (snapshot.isPending) {
     return (
       <div className="page-state" role="status">
         Loading dashboard…
       </div>
     );
-  if (snapshot.isError)
+  }
+  if (snapshot.isError) {
     return (
       <div className="page-state page-state-error" role="alert">
         <h2>Dashboard is unavailable</h2>
@@ -134,217 +91,195 @@ export default function Dashboard({ onNavigate }: Props) {
         <button onClick={() => snapshot.refetch()}>Try again</button>
       </div>
     );
+  }
 
   const data = snapshot.data;
   return (
-    <div style={{ padding: "28px 32px", maxWidth: 1280 }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          marginBottom: 28,
-        }}
+    <div className="platform-page dashboard-page">
+      <motion.header
+        className="dashboard-hero"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
       >
         <div>
-          <h1
-            style={{
-              fontSize: 22,
-              fontWeight: 700,
-              color: "#0F1117",
-              margin: 0,
-            }}
-          >
-            Dashboard
-          </h1>
-          <p style={{ color: "#9CA3AF", fontSize: 13.5, margin: "4px 0 0" }}>
-            {data.asOf} — {data.projectName} project
+          <span className="eyebrow">Optimization intelligence</span>
+          <h1>Make every prompt earn its place.</h1>
+          <p>
+            {data.asOf} · Monitoring <strong>{data.projectName}</strong> with reproducible coverage
+            evidence.
           </p>
         </div>
         <button className="primary-button" onClick={() => onNavigate("experiments")}>
-          <IC.Plus /> New Experiment
+          <Plus size={17} /> New experiment
         </button>
-      </div>
+      </motion.header>
 
-      <div className="dashboard-kpis">
-        {data.kpis.map(({ label, value, delta, trend, icon }) => {
-          const presentation = kpiPresentation[icon];
-          const Icon = presentation.icon;
+      <section className="dashboard-kpis" aria-label="Key metrics">
+        {data.kpis.map(({ label, value, delta, trend, icon }, index) => {
+          const { Icon, tone } = kpiPresentation[icon];
           return (
-            <div key={label} style={{ ...card, padding: "20px 22px" }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  justifyContent: "space-between",
-                  marginBottom: 14,
-                }}
-              >
-                <span style={{ fontSize: 13, color: "#6B7280", fontWeight: 500 }}>{label}</span>
-                <div
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: 9,
-                    background: presentation.bg,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: presentation.color,
-                  }}
-                >
-                  <Icon />
-                </div>
+            <motion.article
+              className={`dashboard-kpi tone-${tone}`}
+              key={label}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.06 * index, duration: 0.45 }}
+            >
+              <div className="dashboard-kpi-top">
+                <span>{label}</span>
+                <i>
+                  <Icon size={18} strokeWidth={1.8} />
+                </i>
               </div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: "#0F1117" }}>{value}</div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 12,
-                  color: trend === "up" ? "#10B981" : trend === "down" ? "#EF4444" : "#9CA3AF",
-                  fontWeight: 500,
-                }}
-              >
+              <strong>{value}</strong>
+              <small className={`trend-${trend}`}>
                 {trend === "up" ? "↑ " : trend === "down" ? "↓ " : ""}
                 {delta}
-              </div>
-            </div>
+              </small>
+            </motion.article>
           );
         })}
-      </div>
+      </section>
 
       <div className="dashboard-main-grid">
-        <section style={{ ...card, padding: "22px 24px" }}>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginBottom: 20,
-            }}
-          >
+        <section className="platform-card dashboard-chart-card">
+          <div className="card-heading">
             <div>
-              <h2 className="card-title">Coverage Trend</h2>
-              <p className="card-subtitle">Last 8 days</p>
+              <span className="card-kicker">Coverage signal</span>
+              <h2>Coverage trend</h2>
+              <p>Branch and statement coverage over the last eight days.</p>
             </div>
             <div className="chart-legend">
               <span>
-                <i style={{ background: "#4F6EF7" }} />
+                <i className="branch" />
                 Branch
               </span>
               <span>
-                <i style={{ background: "#8B5CF6" }} />
+                <i className="statement" />
                 Statement
               </span>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={180}>
-            <AreaChart data={data.coverage} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+          <ResponsiveContainer width="100%" height={230}>
+            <AreaChart data={data.coverage} margin={{ top: 16, right: 10, bottom: 0, left: -20 }}>
               <defs>
-                <linearGradient id="gradBlue" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#4F6EF7" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#4F6EF7" stopOpacity={0} />
+                <linearGradient id="branchFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#31A8FF" stopOpacity={0.22} />
+                  <stop offset="100%" stopColor="#31A8FF" stopOpacity={0} />
                 </linearGradient>
-                <linearGradient id="gradPurple" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
+                <linearGradient id="statementFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#7C6CF2" stopOpacity={0.18} />
+                  <stop offset="100%" stopColor="#7C6CF2" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F0F1F5" vertical={false} />
+              <CartesianGrid strokeDasharray="3 5" stroke="var(--po-chart-grid)" vertical={false} />
               <XAxis
                 dataKey="day"
-                tick={{ fontSize: 11, fill: "#9CA3AF" }}
+                tick={{ fontSize: 11, fill: "var(--po-chart-muted)" }}
                 axisLine={false}
                 tickLine={false}
               />
               <YAxis
-                tick={{ fontSize: 11, fill: "#9CA3AF" }}
+                tick={{ fontSize: 11, fill: "var(--po-chart-muted)" }}
                 axisLine={false}
                 tickLine={false}
                 domain={[50, 100]}
               />
               <Tooltip
                 contentStyle={{
-                  border: "1px solid #E8EBF5",
-                  borderRadius: 8,
+                  border: "1px solid #E2E8F0",
+                  borderRadius: 14,
                   fontSize: 12,
+                  boxShadow: "0 16px 40px rgba(15,23,42,.1)",
                 }}
                 formatter={(value) => [`${value}%`]}
               />
               <Area
                 type="monotone"
                 dataKey="branch"
-                stroke="#4F6EF7"
-                strokeWidth={2}
-                fill="url(#gradBlue)"
+                stroke="#31A8FF"
+                strokeWidth={2.5}
+                fill="url(#branchFill)"
               />
               <Area
                 type="monotone"
                 dataKey="statement"
-                stroke="#8B5CF6"
-                strokeWidth={2}
-                fill="url(#gradPurple)"
+                stroke="#7C6CF2"
+                strokeWidth={2.5}
+                fill="url(#statementFill)"
               />
             </AreaChart>
           </ResponsiveContainer>
         </section>
 
-        <section style={{ ...card, padding: "22px 24px" }}>
-          <h2 className="card-title" style={{ marginBottom: 18 }}>
-            Quick Stats
-          </h2>
-          {data.quickStats.map(({ label, value }) => (
-            <div key={label} className="quick-stat">
-              <span>{label}</span>
-              <strong>{value}</strong>
-            </div>
-          ))}
+        <section className="platform-card dashboard-quick-card">
+          <div className="quick-card-symbol">
+            <ChartNoAxesCombined size={20} />
+          </div>
+          <span className="card-kicker">Current workspace</span>
+          <h2>Quick stats</h2>
+          <div className="quick-stat-list">
+            {data.quickStats.map(({ label, value }) => (
+              <div key={label} className="quick-stat">
+                <span>{label}</span>
+                <strong>{value}</strong>
+              </div>
+            ))}
+          </div>
+          <button className="text-button" onClick={() => onNavigate("playground")}>
+            Open playground <ArrowUpRight size={15} />
+          </button>
         </section>
       </div>
 
-      <section style={{ ...card, overflow: "hidden" }}>
+      <section className="platform-card dashboard-table-card">
         <div className="table-heading">
-          <h2 className="card-title">Recent Experiments</h2>
-          <button onClick={() => onNavigate("registry")}>
-            View all <IC.ArrowRight />
+          <div>
+            <span className="card-kicker">Latest activity</span>
+            <h2>Recent experiments</h2>
+          </div>
+          <button onClick={() => onNavigate("experiments")}>
+            View all <ArrowRight size={15} />
           </button>
         </div>
         {data.experiments.length === 0 ? (
-          <div className="empty-state">
-            No experiments yet. Create your first experiment to start optimizing.
-          </div>
+          <div className="empty-state">No experiments yet. Create one to start optimizing.</div>
         ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                {["ID", "Name", "Model", "Branch Cov.", "Stmt Cov.", "Status", "Updated"].map(
-                  (heading) => (
-                    <th key={heading}>{heading}</th>
-                  ),
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {data.experiments.map((experiment) => (
-                <tr key={experiment.id}>
-                  <td className="mono-cell">{experiment.id}</td>
-                  <td className="name-cell">{experiment.name}</td>
-                  <td>
-                    <span className="model-chip">{experiment.model}</span>
-                  </td>
-                  <td>
-                    <CoverageBar value={experiment.branchCoverage} />
-                  </td>
-                  <td>
-                    <CoverageBar value={experiment.statementCoverage} />
-                  </td>
-                  <td>
-                    <StatusBadge status={experiment.status} />
-                  </td>
-                  <td className="muted-cell">{experiment.updatedAt}</td>
+          <div className="data-table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  {["ID", "Experiment", "Model", "Branch", "Statement", "Status", "Updated"].map(
+                    (heading) => (
+                      <th key={heading}>{heading}</th>
+                    ),
+                  )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.experiments.map((experiment) => (
+                  <tr key={experiment.id}>
+                    <td className="mono-cell">{experiment.id}</td>
+                    <td className="name-cell">{experiment.name}</td>
+                    <td>
+                      <span className="model-chip">{experiment.model}</span>
+                    </td>
+                    <td>
+                      <CoverageBar value={experiment.branchCoverage} />
+                    </td>
+                    <td>
+                      <CoverageBar value={experiment.statementCoverage} />
+                    </td>
+                    <td>
+                      <StatusBadge status={experiment.status} />
+                    </td>
+                    <td className="muted-cell">{experiment.updatedAt}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </div>

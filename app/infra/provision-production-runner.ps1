@@ -1,7 +1,7 @@
 param(
-    [string]$ProjectId = "vinaip002",
+    [string]$ProjectId = "vinai-505107",
     [string]$Region = "asia-southeast1",
-    [string]$Bucket = "vinaip002-promptopt-sources",
+    [string]$Bucket = "vinai-505107-promptopt-sources",
     [string]$Queue = "promptopt-baseline"
 )
 
@@ -57,6 +57,7 @@ $PrefixCondition = "expression=resource.name.startsWith('projects/_/buckets/$Buc
 Invoke-Gcloud storage buckets add-iam-policy-binding "gs://$Bucket" --member "serviceAccount:$RunnerAccount" --role $RunnerObjectRoleResource --condition $PrefixCondition
 Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$RunnerAccount" --role roles/aiplatform.user --condition None
 Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$ApiAccount" --role $ApiOperationRoleResource --condition None
+Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$ApiAccount" --role roles/logging.viewer --condition None
 Invoke-Gcloud iam service-accounts add-iam-policy-binding $RunnerAccount --project $ProjectId --member "serviceAccount:$DeployAccount" --role roles/iam.serviceAccountUser
 
 if (-not (Test-GcloudResource tasks queues describe $Queue --location $Region --project $ProjectId)) {

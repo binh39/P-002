@@ -1,11 +1,24 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import {
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { useLocation, useParams } from "wouter";
 
 import { useRepositories } from "@/app/providers";
 import { PageHeader, StatCard, StatusBadge } from "@/components/PlatformUI";
 import {
   optimizationRunIsActive,
+  type EvolutionIteration,
   type ExperimentStatus,
+  type OptimizationEvolution,
   type PromptBundle,
 } from "@/domain/experiments";
 
@@ -74,10 +87,166 @@ function PromptCard({
   );
 }
 
+function metric(value: number | null) {
+  return value === null ? "—" : value.toFixed(4);
+}
+
+function decisionTone(decision: string) {
+  if (decision === "Accepted" || decision === "Baseline evaluated") return "success" as const;
+  if (decision === "Rejected") return "danger" as const;
+  return "info" as const;
+}
+
+function FlowValue({ children }: { children: React.ReactNode }) {
+  return <strong>{children ?? "—"}</strong>;
+}
+
+function IterationFlow({ iteration }: { iteration: EvolutionIteration }) {
+  return (
+    <div className="evolution-flow" data-testid="evolution-flow">
+      <div className="evolution-flow-title">
+        <div>
+          <span>Selected evolution step</span>
+          <h3>Iteration {iteration.iteration}</h3>
+        </div>
+        <StatusBadge tone={decisionTone(iteration.decision)}>{iteration.decision}</StatusBadge>
+      </div>
+      <dl className="evolution-flow-tree">
+        <div>
+          <dt>Strategy</dt>
+          <dd><FlowValue>{iteration.strategy}</FlowValue></dd>
+        </div>
+        <div>
+          <dt>Parent</dt>
+          <dd><FlowValue>{iteration.parentProgram}</FlowValue></dd>
+        </div>
+        <div>
+          <dt>Parent validation score</dt>
+          <dd><FlowValue>{metric(iteration.parentValidationScore)}</FlowValue></dd>
+        </div>
+        <div>
+          <dt>Component</dt>
+          <dd><FlowValue>{iteration.component}</FlowValue></dd>
+        </div>
+        <div className="evolution-flow-prompt">
+          <dt>Proposed prompt</dt>
+          <dd>
+            {iteration.proposedPrompt ? <pre>{iteration.proposedPrompt}</pre> : <FlowValue>—</FlowValue>}
+          </dd>
+        </div>
+        <div>
+          <dt>Parent minibatch sum</dt>
+          <dd><FlowValue>{metric(iteration.parentMinibatchSum)}</FlowValue></dd>
+        </div>
+        <div>
+          <dt>Candidate minibatch sum</dt>
+          <dd><FlowValue>{metric(iteration.candidateMinibatchSum)}</FlowValue></dd>
+        </div>
+        <div>
+          <dt>Decision</dt>
+          <dd><FlowValue>{iteration.decision}</FlowValue></dd>
+        </div>
+        <div>
+          <dt>Best Pareto metrics</dt>
+          <dd>
+            <FlowValue>{iteration.paretoChanged ? "Updated" : "Unchanged"}</FlowValue>
+            <small>
+              Statement {metric(iteration.bestStatement)} · Branch {metric(iteration.bestBranch)} · Score{" "}
+              {metric(iteration.bestScore)}
+            </small>
+          </dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
+
+function EvolutionPanel({ evolution }: { evolution: OptimizationEvolution }) {
+  const [selectedIteration, setSelectedIteration] = useState<number | null>(null);
+  const selected =
+    evolution.iterations.find((item) => item.iteration === selectedIteration) ??
+    evolution.iterations.at(-1) ??
+    null;
+
+  return (
+    <section className="platform-card evolution-card">
+      <div className="card-heading evolution-heading">
+        <div>
+          <h2>Live GEPA evolution</h2>
+          <p>Iteration history and best validation metrics parsed from Cloud Run stdout.</p>
+        </div>
+        <StatusBadge tone={evolution.available ? "success" : "neutral"}>
+          {evolution.available ? `${evolution.iterations.length} iterations` : "Waiting for logs"}
+        </StatusBadge>
+      </div>
+
+      {!evolution.available || !selected ? (
+        <div className="evolution-empty">
+          <span className="baseline-spinner" aria-hidden="true" />
+          <div>
+            <strong>Evolution data is not available yet</strong>
+            <p>{evolution.message}</p>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="evolution-workspace">
+            <aside className="evolution-history" aria-label="Iteration history">
+              <div className="evolution-panel-label">History</div>
+              <div className="evolution-history-list">
+                {[...evolution.iterations].reverse().map((iteration) => (
+                  <button
+                    className={iteration.iteration === selected.iteration ? "is-selected" : ""}
+                    key={iteration.iteration}
+                    onClick={() => setSelectedIteration(iteration.iteration)}
+                  >
+                    <span>
+                      <strong>Iteration {iteration.iteration}</strong>
+                      <small>{iteration.strategy}</small>
+                    </span>
+                    <span className={`iteration-decision is-${iteration.decision.toLowerCase().replace(/\s+/g, "-")}`}>
+                      {iteration.decision}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </aside>
+
+            <IterationFlow iteration={selected} />
+
+            <div className="evolution-chart-panel">
+              <div className="evolution-panel-label">Best validation metrics</div>
+              <div className="evolution-chart" aria-label="Statement, branch and score by iteration">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={evolution.metrics} margin={{ top: 18, right: 18, bottom: 8, left: -12 }}>
+                    <CartesianGrid strokeDasharray="4 4" stroke="#e4e7ec" />
+                    <XAxis dataKey="iteration" tickFormatter={(value) => `I${value}`} />
+                    <YAxis domain={[0, "auto"]} tickFormatter={(value) => Number(value).toFixed(2)} />
+                    <Tooltip
+                      labelFormatter={(value) => `Iteration ${value}`}
+                      formatter={(value) => [Number(value).toFixed(4)]}
+                    />
+                    <Legend />
+                    <Line type="monotone" dataKey="statement" name="Statement" stroke="#7c6cf2" strokeWidth={2.5} connectNulls />
+                    <Line type="monotone" dataKey="branch" name="Branch" stroke="#f59e0b" strokeWidth={2.5} connectNulls />
+                    <Line type="monotone" dataKey="score" name="Score" stroke="#0f9f75" strokeWidth={2.5} connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <p className="evolution-source-note">{evolution.message}</p>
+            </div>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 export default function OptimizationRun() {
   const { runId = "" } = useParams<{ runId: string }>();
   const [, navigate] = useLocation();
   const { experiments } = useRepositories();
+  const queryClient = useQueryClient();
   const runQuery = useQuery({
     queryKey: ["optimization-runs", runId],
     queryFn: ({ signal }) => experiments.getOptimizationRun(runId, signal),
@@ -95,6 +264,13 @@ export default function OptimizationRun() {
         ? 3_000
         : false,
   });
+  const evolutionQuery = useQuery({
+    queryKey: ["optimization-runs", runId, "evolution"],
+    queryFn: ({ signal }) => experiments.getOptimizationEvolution(runId, signal),
+    enabled: runId !== "",
+    refetchInterval: () =>
+      runQuery.data && optimizationRunIsActive(runQuery.data.status) ? 3_000 : false,
+  });
   const download = useMutation({
     mutationFn: async (artifactName: string) => ({
       artifactName,
@@ -107,6 +283,18 @@ export default function OptimizationRun() {
       anchor.download = artifactName;
       anchor.click();
       URL.revokeObjectURL(url);
+    },
+  });
+  const cancel = useMutation({
+    mutationFn: () => experiments.cancelOptimization(runId),
+    onSuccess: (cancelledRun) => {
+      queryClient.setQueryData(["optimization-runs", runId], cancelledRun);
+      void queryClient.invalidateQueries({
+        queryKey: ["experiments", cancelledRun.experimentId],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["optimization-runs", runId, "evolution"],
+      });
     },
   });
 
@@ -168,6 +356,29 @@ export default function OptimizationRun() {
             <h2>{statusLabels[run.status]}</h2>
             <p>The optimizer is evaluating prompt candidates. This page refreshes automatically.</p>
           </div>
+          <button
+            className="danger-button stop-optimization-button"
+            type="button"
+            disabled={cancel.isPending}
+            onClick={() => {
+              if (
+                window.confirm(
+                  "Stop this optimization? The current candidate may be incomplete, but existing logs will be retained.",
+                )
+              ) {
+                cancel.mutate();
+              }
+            }}
+          >
+            {cancel.isPending ? "Stopping…" : "Stop optimization"}
+          </button>
+        </section>
+      )}
+
+      {cancel.isError && (
+        <section className="baseline-error" role="alert">
+          <strong>Could not stop optimization</strong>
+          <p>{cancel.error instanceof Error ? cancel.error.message : "Please try again."}</p>
         </section>
       )}
 
@@ -225,6 +436,23 @@ export default function OptimizationRun() {
           tone="orange"
         />
       </div>
+
+      {evolutionQuery.data ? (
+        <EvolutionPanel evolution={evolutionQuery.data} />
+      ) : evolutionQuery.isError ? (
+        <section className="platform-card evolution-card">
+          <div className="empty-state" role="alert">
+            Evolution logs could not be loaded. The optimization status will continue updating.
+          </div>
+        </section>
+      ) : (
+        <section className="platform-card evolution-card">
+          <div className="evolution-empty" role="status">
+            <span className="baseline-spinner" aria-hidden="true" />
+            <div><strong>Loading Cloud Run evolution log…</strong></div>
+          </div>
+        </section>
+      )}
 
       {run.finalComparison && (
         <section className="platform-card">

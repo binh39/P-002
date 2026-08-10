@@ -1,5 +1,5 @@
 param(
-    [string]$ApiBase = "https://vinaip002.web.app/api/v1",
+    [string]$ApiBase = "https://vinai-505107.web.app/api/v1",
     [ValidateSet("isort", "mimesis", "mlxtend", "typesystem")][string]$Sample = "isort",
     [switch]$FullPipeline,
     [ValidateSet("approve", "reject")][string]$ReviewDecision = "approve",

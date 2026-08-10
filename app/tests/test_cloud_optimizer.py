@@ -1,5 +1,7 @@
 import json
 import threading
+from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -53,6 +55,43 @@ class FakeJobsClient:
         for name, payload in payloads.items():
             self.storage.objects[f"{prefix}/{name}"] = (json.dumps(payload).encode(), "application/json")
         return FakeOperation()
+
+
+class FakeLoggingClient:
+    def __init__(self, execution_id):
+        self.execution_id = execution_id
+        self.filters = []
+
+    def list_entries(self, *, filter_, order_by, page_size):
+        self.filters.append(filter_)
+        if len(self.filters) == 1:
+            return iter(
+                [
+                    SimpleNamespace(
+                        labels={"run.googleapis.com/execution_name": "promptopt-gepa-runner-ab123"},
+                        payload=f"==> Upload target: gs://bucket/runner-jobs/gepa/{self.execution_id}/artifacts/",
+                        timestamp=datetime(2026, 8, 10, tzinfo=UTC),
+                    )
+                ]
+            )
+        return iter(
+            [
+                SimpleNamespace(
+                    labels={"run.googleapis.com/execution_name": "promptopt-gepa-runner-ab123"},
+                    payload="Iteration 0: Base program full valset score: 0.25 over 2 / 2 examples",
+                    timestamp=datetime(2026, 8, 10, tzinfo=UTC),
+                )
+            ]
+        )
+
+
+class FakeExecutionsClient:
+    def __init__(self):
+        self.request = None
+
+    def cancel_execution(self, *, request):
+        self.request = request
+        return SimpleNamespace()
 
 
 @pytest.mark.asyncio
@@ -116,3 +155,49 @@ async def test_cloud_gepa_optimizer_uses_isolated_web_prefix_and_maps_result():
     assert {row["split"] for row in rows} == {"train", "validation", "test"}
     assert not any(name.endswith("source.zip") for name in storage.objects)
     assert not any(name.endswith("project-layouts.json") for name in storage.objects)
+
+
+@pytest.mark.asyncio
+async def test_cloud_evolution_resolves_execution_label_and_parses_stdout():
+    execution_id = "a1b2c3"
+    logging_client = FakeLoggingClient(execution_id)
+    optimizer = CloudRunJobGepaOptimizer(
+        client=FakeJobsClient(FakeStorage()),
+        storage=FakeStorage(),
+        bucket="bucket",
+        job_name="projects/project/locations/region/jobs/promptopt-gepa-runner",
+        timeout_seconds=86400,
+        logging_client=logging_client,
+    )
+
+    result = await optimizer.evolution(
+        f"runner-jobs/gepa/{execution_id}/artifacts",
+        started_at=datetime(2026, 8, 10, tzinfo=UTC),
+    )
+
+    assert result.available is True
+    assert result.iterations[0].best_score == 0.25
+    assert 'labels."run.googleapis.com/execution_name"="promptopt-gepa-runner-ab123"' in logging_client.filters[1]
+
+
+@pytest.mark.asyncio
+async def test_cloud_cancel_targets_the_execution_resolved_from_stdout():
+    execution_id = "d4e5f6"
+    executions = FakeExecutionsClient()
+    optimizer = CloudRunJobGepaOptimizer(
+        client=FakeJobsClient(FakeStorage()),
+        storage=FakeStorage(),
+        bucket="bucket",
+        job_name="projects/project/locations/region/jobs/promptopt-gepa-runner",
+        timeout_seconds=86400,
+        logging_client=FakeLoggingClient(execution_id),
+        executions_client=executions,
+    )
+
+    name = await optimizer.cancel(
+        f"runner-jobs/gepa/{execution_id}/artifacts",
+        started_at=datetime(2026, 8, 10, tzinfo=UTC),
+    )
+
+    assert name == "projects/project/locations/region/jobs/promptopt-gepa-runner/executions/promptopt-gepa-runner-ab123"
+    assert executions.request == {"name": name}

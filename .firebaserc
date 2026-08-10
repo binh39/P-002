@@ -1,13 +1,13 @@
 {
   "projects": {
-    "default": "vinaip002",
-    "prod": "vinaip002"
+    "default": "vinai-505107",
+    "prod": "vinai-505107"
   },
   "targets": {
-    "vinaip002": {
+    "vinai-505107": {
       "hosting": {
         "frontend": [
-          "vinaip002"
+          "vinai-505107"
         ]
       }
     }

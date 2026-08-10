@@ -1,181 +1,125 @@
-import { IC } from "./Icons";
-import { env } from "../config/env";
+import { Bell, Command, Menu, Moon, Search, Sun, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useLocation } from "wouter";
+
+import { env } from "@/config/env";
+import { useTheme } from "@/theme/ThemeProvider";
+
+const destinations = [
+  { label: "Dashboard", detail: "Workspace overview", path: "/dashboard" },
+  { label: "Projects", detail: "Source repositories", path: "/projects" },
+  { label: "Experiments", detail: "Optimization runs", path: "/experiments" },
+  { label: "Datasets", detail: "Train, validation and test splits", path: "/datasets" },
+  { label: "Prompt registry", detail: "Versioned prompt bundles", path: "/prompts" },
+  { label: "Playground", detail: "Try a prompt against a target", path: "/playground" },
+];
 
 export default function TopNav({ onMenu }: { onMenu: () => void }) {
-  const dataStatus = env.dataMode === "demo" ? "hybrid data" : "connected";
+  const { theme, toggleTheme } = useTheme();
+  const [, navigate] = useLocation();
+  const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dataStatus = env.dataMode === "demo" ? "hybrid data" : "API connected";
+  const results = destinations.filter((item) =>
+    `${item.label} ${item.detail}`.toLowerCase().includes(query.trim().toLowerCase()),
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSearchOpen(true);
+        window.setTimeout(() => inputRef.current?.focus(), 0);
+      }
+      if (event.key === "Escape") {
+        setSearchOpen(false);
+        setNotificationsOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const openResult = (path: string) => {
+    navigate(path);
+    setQuery("");
+    setSearchOpen(false);
+  };
 
   return (
-    <header
-      style={{
-        height: 56,
-        background: "#fff",
-        borderBottom: "1px solid #E8EBF5",
-
-        display: "flex",
-        alignItems: "center",
-        paddingInline: 24,
-        gap: 16,
-
-        position: "sticky",
-        top: 0,
-        zIndex: 10,
-      }}
-    >
+    <header className="top-nav">
       <button className="mobile-menu-button" onClick={onMenu} aria-label="Open navigation">
-        <svg
-          width="19"
-          height="19"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-        >
-          <path d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
+        <Menu size={19} />
       </button>
 
-      {/* Search */}
-      <div
-        className="environment-badge"
-        style={{
-          flex: 1,
-          maxWidth: 400,
-          position: "relative",
-        }}
-      >
-        <span
-          style={{
-            position: "absolute",
-            left: 12,
-            top: "50%",
-            transform: "translateY(-50%)",
-            color: "#9CA3AF",
-          }}
-        >
-          <IC.Search />
-        </span>
+      <div className={`top-search ${searchOpen ? "is-open" : ""}`}>
+        <Search size={16} />
         <input
-          placeholder="Search experiments, prompts..."
-          style={{
-            width: "100%",
-            paddingLeft: 36,
-            paddingRight: 16,
-            paddingBlock: 7,
-
-            border: "1px solid #E8EBF5",
-            borderRadius: 8,
-            fontSize: 13,
-
-            background: "#F8F9FC",
-            color: "#374151",
-            outline: "none",
-
-            fontFamily: "inherit",
+          ref={inputRef}
+          value={query}
+          onFocus={() => setSearchOpen(true)}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && results[0]) openResult(results[0].path);
           }}
+          placeholder="Search workspace"
+          aria-label="Search workspace"
         />
-        <span
-          style={{
-            position: "absolute",
-            right: 10,
-            top: "50%",
-            transform: "translateY(-50%)",
-
-            background: "#F0F1F5",
-            borderRadius: 4,
-            padding: "1px 5px",
-            fontSize: 10,
-
-            color: "#9CA3AF",
-            fontWeight: 500,
-            pointerEvents: "none",
-          }}
-        >
-          Ctrl K
-        </span>
+        {searchOpen ? (
+          <button type="button" onClick={() => setSearchOpen(false)} aria-label="Close search">
+            <X size={15} />
+          </button>
+        ) : (
+          <kbd>
+            <Command size={11} />K
+          </kbd>
+        )}
+        {searchOpen && (
+          <div className="top-search-results">
+            <p>{query ? `${results.length} matching destinations` : "Jump to"}</p>
+            {results.map((item) => (
+              <button key={item.path} type="button" onClick={() => openResult(item.path)}>
+                <span>{item.label}</span>
+                <small>{item.detail}</small>
+              </button>
+            ))}
+            {results.length === 0 && <div className="top-search-empty">No matching page</div>}
+          </div>
+        )}
       </div>
 
-      <div style={{ flex: 1 }} />
-
-      {/* Environment badge */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          padding: "5px 12px",
-
-          background: "#F0FDF4",
-          borderRadius: 20,
-          border: "1px solid #BBF7D0",
-        }}
-      >
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            background: "#10B981",
-            display: "inline-block",
-          }}
-        />
-        <span style={{ fontSize: 12, color: "#059669", fontWeight: 500 }}>{dataStatus}</span>
-      </div>
-
-      {/* Notifications */}
+      <div className="top-nav-spacer" />
+      <span className="connection-status">
+        <i /> {dataStatus}
+      </span>
       <button
-        style={{
-          position: "relative",
-          width: 36,
-          height: 36,
-          borderRadius: 8,
-
-          border: "1px solid #E8EBF5",
-          background: "#fff",
-          display: "flex",
-
-          alignItems: "center",
-          justifyContent: "center",
-          cursor: "pointer",
-          color: "#6B7280",
-        }}
+        type="button"
+        className="icon-button theme-toggle"
+        aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        title={theme === "dark" ? "Light mode" : "Dark mode"}
+        onClick={toggleTheme}
       >
-        <IC.Bell />
-        <span
-          style={{
-            position: "absolute",
-            top: 6,
-            right: 6,
-            width: 7,
-            height: 7,
-
-            background: "#EF4444",
-            borderRadius: "50%",
-            border: "1.5px solid #fff",
-          }}
-        />
+        {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
       </button>
-
-      {/* Avatar */}
-      <div
-        style={{
-          width: 32,
-          height: 32,
-          borderRadius: 8,
-          cursor: "pointer",
-
-          background: "linear-gradient(135deg, #4F6EF7, #7C3AED)",
-
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-
-          color: "#fff",
-          fontSize: 13,
-          fontWeight: 600,
-        }}
-      >
-        A
+      <div className="notification-wrap">
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Notifications"
+          aria-expanded={notificationsOpen}
+          onClick={() => setNotificationsOpen((open) => !open)}
+        >
+          <Bell size={17} />
+          <i />
+        </button>
+        {notificationsOpen && (
+          <div className="notification-panel" role="status">
+            <strong>Workspace ready</strong>
+            <p>Run status and review decisions will appear here.</p>
+          </div>
+        )}
       </div>
     </header>
   );
