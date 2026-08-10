@@ -1141,64 +1141,64 @@ class CoverUpPromptAdapter:
             )
             placeholders = COMPONENT_PLACEHOLDERS[component]
             prompt = f"""
-You are optimizing one reusable CoverUp pytest-generation template that will be used by another LLM to generate Python tests. 
-Your goal is to improve the template so that the downstream test-generation LLM produces higher-quality pytest tests with the highest achievable code coverage, with particular emphasis on: 
-1. Branch coverage 
-2. Statement coverage 
+You are optimizing one reusable CoverUp pytest-generation template that will be used by another LLM to generate Python tests.
+Your goal is to improve the template so that the downstream test-generation LLM produces higher-quality pytest tests with the highest achievable code coverage, with particular emphasis on:
+1. Branch coverage
+2. Statement coverage
 The final optimization score is defined as: score = 0.4 * statement_coverage + 0.6 * branch_coverage.
-Therefore, branch coverage is more important than statement coverage, but the optimized template should improve both whenever possible. 
-Component: {component} Role: {COMPONENT_ROLES[component]} 
-Required literal placeholders: {', '.join(placeholders)} 
-Maximum length: {self.max_component_chars[component]} characters 
-Current template: <current_template> {current} </current_template> 
-Contrastive execution evidence from representative successful, failing, and regressed targets: <evidence> {evidence} </evidence> 
-Your task is to revise the current template so that a downstream LLM is more likely to generate effective tests that exercise previously uncovered statements and branches. 
-Analyze the execution evidence carefully before making any change. When optimizing the template, follow these principles: 
-1. Optimize for coverage behavior, not wording quality alone. The revised template should cause the downstream LLM to make better testing decisions, not merely make the instruction sound clearer or more polished. 
-2. Prioritize branch coverage. Because branch coverage contributes 60% of the final score, prefer changes that help the downstream LLM: - identify uncovered decision outcomes, - reason about both true and false branches, - exercise alternative control-flow paths, - reach nested and compound conditions, - trigger exception-handling branches, - cover early returns, - cover loop-entry and loop-exit behavior, - cover match/case alternatives when applicable, - and construct inputs that force execution through currently uncovered branches. 
-3. Improve statement coverage as well. Encourage the downstream LLM to reach executable statements that remain uncovered, especially statements that are only reachable through specific branches, state configurations, exceptions, boundary values, or dependency behavior. 
-4. Learn from contrastive evidence. Compare successful, failing, and regressed targets and infer general patterns such as: - which testing strategies consistently increase coverage, - which instructions cause the test generator to miss important paths, - which behaviors lead to regressions, - which kinds of inputs expose additional branches, - which setup or mocking strategies help execution reach deeper code, - and which unnecessary behaviors waste test-generation effort. 
-5. Convert observed failures into reusable operational guidance. If evidence shows that the downstream LLM repeatedly misses a particular class of behavior, revise the template to explicitly guide it toward a better strategy. 
-Prefer rules such as: 
-- inspect uncovered control-flow before adding redundant tests, 
-- target uncovered branch outcomes directly, 
-- vary one relevant input or state dimension at a time, 
-- reason about preconditions required to reach a target branch, 
-- use boundary, empty, null-like, invalid, exceptional, and alternative-state inputs when relevant, 
-- minimize duplicated tests that execute already-covered paths, 
-- repair failing tests when those failures prevent execution from reaching useful code, 
-- and prioritize tests that are likely to unlock multiple uncovered statements or branches. 
-6. Encourage coverage-directed iteration. The optimized instruction should make the downstream LLM use available coverage feedback as a search signal: 
-- identify what remains uncovered, 
-- infer why it remains uncovered, 
-- propose a test specifically targeting it, 
-- execute or validate that test when the surrounding system allows it, 
-- and avoid spending effort on already-saturated paths. 
-7. Prefer actionable guidance over generic statements. Avoid vague instructions such as: 
-- "write comprehensive tests", 
-- "maximize coverage", 
-- "consider edge cases", unless they are accompanied by concrete operational guidance explaining how to do so. 
-8. Do not overfit to individual examples. Never include target-specific: 
-- file names, 
-- function names, 
-- class names, 
-- variable names, 
-- literal line numbers, 
-- repository-specific details, 
-- exact test values that only apply to one target, 
-- or implementation-specific facts that would not generalize. 
-9. Preserve useful existing behavior. The new template should be a conservative improvement over the current template. 
-Do not remove effective instructions unless the evidence clearly indicates that they are harmful, redundant, misleading, or consume valuable prompt space. 
-10. Prefer concise, high-value instructions. The template has a strict character limit. Each added instruction should justify its cost by being likely to improve downstream coverage behavior. 
-Remove redundancy, repeated goals, unnecessary explanations, scoring formulas, or generic testing advice if they do not directly help the downstream LLM generate better tests. 
-11. Respect the optimization objective. When there is a trade-off between two possible revisions, prefer the revision that is more likely to improve: 0.4 * statement_coverage + 0.6 * branch_coverage In particular, a revision that significantly improves branch exploration may be preferable even if its statement-coverage improvement is smaller. 
-12. Preserve all required placeholders exactly. Every required literal placeholder listed above must appear exactly as required in the revised template. Do not rename, remove, escape, paraphrase, or alter them. 13. Keep the revised template general and reusable. It must remain suitable for many different Python functions, modules, repositories, and testing situations. Before producing the final revision, internally determine: 
-- what behavior in the current template is already effective, 
-- what specific weakness is supported by the evidence, 
-- what single or small set of changes is most likely to improve downstream branch and statement coverage, 
-- and whether the change is sufficiently general to help unseen targets. Propose one conservative, evidence-supported revision of the template. Return only the complete revised template between the following tags: <template> ... </template> 
-Do not include explanations, analysis, markdown fences, scores, comments, or any text outside the <template> tags. 
-"""            
+Therefore, branch coverage is more important than statement coverage, but the optimized template should improve both whenever possible.
+Component: {component} Role: {COMPONENT_ROLES[component]}
+Required literal placeholders: {', '.join(placeholders)}
+Maximum length: {self.max_component_chars[component]} characters
+Current template: <current_template> {current} </current_template>
+Contrastive execution evidence from representative successful, failing, and regressed targets: <evidence> {evidence} </evidence>
+Your task is to revise the current template so that a downstream LLM is more likely to generate effective tests that exercise previously uncovered statements and branches.
+Analyze the execution evidence carefully before making any change. When optimizing the template, follow these principles:
+1. Optimize for coverage behavior, not wording quality alone. The revised template should cause the downstream LLM to make better testing decisions, not merely make the instruction sound clearer or more polished.
+2. Prioritize branch coverage. Because branch coverage contributes 60% of the final score, prefer changes that help the downstream LLM: - identify uncovered decision outcomes, - reason about both true and false branches, - exercise alternative control-flow paths, - reach nested and compound conditions, - trigger exception-handling branches, - cover early returns, - cover loop-entry and loop-exit behavior, - cover match/case alternatives when applicable, - and construct inputs that force execution through currently uncovered branches.
+3. Improve statement coverage as well. Encourage the downstream LLM to reach executable statements that remain uncovered, especially statements that are only reachable through specific branches, state configurations, exceptions, boundary values, or dependency behavior.
+4. Learn from contrastive evidence. Compare successful, failing, and regressed targets and infer general patterns such as: - which testing strategies consistently increase coverage, - which instructions cause the test generator to miss important paths, - which behaviors lead to regressions, - which kinds of inputs expose additional branches, - which setup or mocking strategies help execution reach deeper code, - and which unnecessary behaviors waste test-generation effort.
+5. Convert observed failures into reusable operational guidance. If evidence shows that the downstream LLM repeatedly misses a particular class of behavior, revise the template to explicitly guide it toward a better strategy.
+Prefer rules such as:
+- inspect uncovered control-flow before adding redundant tests,
+- target uncovered branch outcomes directly,
+- vary one relevant input or state dimension at a time,
+- reason about preconditions required to reach a target branch,
+- use boundary, empty, null-like, invalid, exceptional, and alternative-state inputs when relevant,
+- minimize duplicated tests that execute already-covered paths,
+- repair failing tests when those failures prevent execution from reaching useful code,
+- and prioritize tests that are likely to unlock multiple uncovered statements or branches.
+6. Encourage coverage-directed iteration. The optimized instruction should make the downstream LLM use available coverage feedback as a search signal:
+- identify what remains uncovered,
+- infer why it remains uncovered,
+- propose a test specifically targeting it,
+- execute or validate that test when the surrounding system allows it,
+- and avoid spending effort on already-saturated paths.
+7. Prefer actionable guidance over generic statements. Avoid vague instructions such as:
+- "write comprehensive tests",
+- "maximize coverage",
+- "consider edge cases", unless they are accompanied by concrete operational guidance explaining how to do so.
+8. Do not overfit to individual examples. Never include target-specific:
+- file names,
+- function names,
+- class names,
+- variable names,
+- literal line numbers,
+- repository-specific details,
+- exact test values that only apply to one target,
+- or implementation-specific facts that would not generalize.
+9. Preserve useful existing behavior. The new template should be a conservative improvement over the current template.
+Do not remove effective instructions unless the evidence clearly indicates that they are harmful, redundant, misleading, or consume valuable prompt space.
+10. Prefer concise, high-value instructions. The template has a strict character limit. Each added instruction should justify its cost by being likely to improve downstream coverage behavior.
+Remove redundancy, repeated goals, unnecessary explanations, scoring formulas, or generic testing advice if they do not directly help the downstream LLM generate better tests.
+11. Respect the optimization objective. When there is a trade-off between two possible revisions, prefer the revision that is more likely to improve: 0.4 * statement_coverage + 0.6 * branch_coverage In particular, a revision that significantly improves branch exploration may be preferable even if its statement-coverage improvement is smaller.
+12. Preserve all required placeholders exactly. Every required literal placeholder listed above must appear exactly as required in the revised template. Do not rename, remove, escape, paraphrase, or alter them. 13. Keep the revised template general and reusable. It must remain suitable for many different Python functions, modules, repositories, and testing situations. Before producing the final revision, internally determine:
+- what behavior in the current template is already effective,
+- what specific weakness is supported by the evidence,
+- what single or small set of changes is most likely to improve downstream branch and statement coverage,
+- and whether the change is sufficiently general to help unseen targets. Propose one conservative, evidence-supported revision of the template. Return only the complete revised template between the following tags: <template> ... </template>
+Do not include explanations, analysis, markdown fences, scores, comments, or any text outside the <template> tags.
+"""
             last_error = ""
             for _ in range(2):
                 response = self._lm_text(self.reflection_lm(prompt))
