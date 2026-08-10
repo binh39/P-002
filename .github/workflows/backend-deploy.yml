@@ -1,14 +1,14 @@
-name: Deploy backend production
+﻿name: Deploy backend production
 
 on:
   push:
     branches: [main]
     paths:
-      - "codebase/src/**"
-      - "codebase/Dockerfile"
-      - "codebase/requirements.txt"
-      - "codebase/.dockerignore"
-      - "codebase/infra/cloud-run-env.yaml"
+      - "app/backend/**"
+      - "app/Dockerfile"
+      - "app/requirements.txt"
+      - "app/.dockerignore"
+      - "app/infra/cloud-run-env.yaml"
       - "src/coverup/**"
       - "src/optimization/**"
       - "src/sample_repo/**"
@@ -74,7 +74,7 @@ jobs:
           API_IMAGE: asia-southeast1-docker.pkg.dev/vinaip002/promptopt/api:${{ github.sha }}
           GEPA_IMAGE: asia-southeast1-docker.pkg.dev/vinaip002/promptopt/gepa-runner:${{ github.sha }}
         run: |
-          docker build --file codebase/Dockerfile --tag "$API_IMAGE" .
+          docker build --file app/Dockerfile --tag "$API_IMAGE" .
           docker build --file cloud/Dockerfile.web --tag "$GEPA_IMAGE" .
           docker push "$API_IMAGE"
           docker push "$GEPA_IMAGE"
@@ -119,4 +119,4 @@ jobs:
             --min 0 \
             --max 3 \
             --concurrency 40 \
-            --env-vars-file codebase/infra/cloud-run-env.yaml
+            --env-vars-file app/infra/cloud-run-env.yaml

@@ -1,10 +1,10 @@
-name: Deploy frontend production
+﻿name: Deploy frontend production
 
 on:
   push:
     branches: [main]
     paths:
-      - "codebase/frontend/**"
+      - "app/frontend/**"
       - "firebase.json"
       - ".github/workflows/frontend-deploy.yml"
   workflow_dispatch:
@@ -29,14 +29,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version-file: codebase/frontend/.nvmrc
+          node-version-file: app/frontend/.nvmrc
           cache: npm
-          cache-dependency-path: codebase/frontend/package-lock.json
+          cache-dependency-path: app/frontend/package-lock.json
       - name: Install frontend dependencies
-        working-directory: codebase/frontend
+        working-directory: app/frontend
         run: npm ci
       - name: Verify frontend
-        working-directory: codebase/frontend
+        working-directory: app/frontend
         run: |
           npm run format:check
           npm run lint
@@ -61,7 +61,7 @@ jobs:
             echo "VITE_FIREBASE_APP_ID=$(jq -r '.appId' <<< "$firebase_config")"
           } >> "$GITHUB_ENV"
       - name: Build production frontend
-        working-directory: codebase/frontend
+        working-directory: app/frontend
         env:
           VITE_AUTH_MODE: firebase
           VITE_DATA_MODE: demo

@@ -1,16 +1,16 @@
-name: CI
+﻿name: CI
 
 on:
   push:
     branches: [main, develop]
     paths:
-      - "codebase/src/**"
-      - "codebase/tests/**"
-      - "codebase/requirements.txt"
-      - "codebase/requirements-dev.txt"
-      - "codebase/ruff.toml"
-      - "codebase/Dockerfile"
-      - "codebase/.dockerignore"
+      - "app/backend/**"
+      - "app/tests/**"
+      - "app/requirements.txt"
+      - "app/requirements-dev.txt"
+      - "app/ruff.toml"
+      - "app/Dockerfile"
+      - "app/.dockerignore"
       - "src/coverup/**"
       - "src/optimization/**"
       - "src/sample_repo/**"
@@ -27,13 +27,13 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "codebase/src/**"
-      - "codebase/tests/**"
-      - "codebase/requirements.txt"
-      - "codebase/requirements-dev.txt"
-      - "codebase/ruff.toml"
-      - "codebase/Dockerfile"
-      - "codebase/.dockerignore"
+      - "app/backend/**"
+      - "app/tests/**"
+      - "app/requirements.txt"
+      - "app/requirements-dev.txt"
+      - "app/ruff.toml"
+      - "app/Dockerfile"
+      - "app/.dockerignore"
       - "src/coverup/**"
       - "src/optimization/**"
       - "src/sample_repo/**"
@@ -53,7 +53,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: codebase
+        working-directory: app
 
     steps:
       - uses: actions/checkout@v4
@@ -64,8 +64,8 @@ jobs:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: |
-            codebase/requirements.txt
-            codebase/requirements-dev.txt
+            app/requirements.txt
+            app/requirements-dev.txt
 
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
@@ -80,7 +80,7 @@ jobs:
           test -d src/sample_repo/typesystem
 
       - name: Lint with ruff
-        run: ruff format --check src/ tests/ && ruff check src/ tests/
+        run: ruff format --check backend/ tests/ && ruff check backend/ tests/
 
       - name: Run tests
         run: python -m pytest tests/ -v --tb=short

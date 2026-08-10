@@ -1,4 +1,4 @@
-{
+﻿{
   "auth": {
     "providers": {
       "emailPassword": true,
@@ -10,7 +10,7 @@
   },
   "hosting": {
     "target": "frontend",
-    "public": "codebase/frontend/dist",
+    "public": "app/frontend/dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "cleanUrls": true,
     "trailingSlash": false,

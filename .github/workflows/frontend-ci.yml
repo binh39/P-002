@@ -1,16 +1,16 @@
-name: Frontend CI
+﻿name: Frontend CI
 
 on:
   pull_request:
     branches: [main]
     paths:
-      - "codebase/frontend/**"
+      - "app/frontend/**"
       - "firebase.json"
       - ".github/workflows/frontend-*.yml"
   push:
     branches: [main]
     paths:
-      - "codebase/frontend/**"
+      - "app/frontend/**"
       - "firebase.json"
       - ".github/workflows/frontend-*.yml"
 
@@ -22,14 +22,14 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: codebase/frontend
+        working-directory: app/frontend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version-file: codebase/frontend/.nvmrc
+          node-version-file: app/frontend/.nvmrc
           cache: npm
-          cache-dependency-path: codebase/frontend/package-lock.json
+          cache-dependency-path: app/frontend/package-lock.json
       - run: npm ci
       - run: npm run format:check
       - run: npm run lint
