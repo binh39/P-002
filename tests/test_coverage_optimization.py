@@ -788,6 +788,50 @@ def test_direct_gepa_adapter_returns_distinct_per_symbol_scores_and_context(tmp_
     )
 
 
+def test_direct_gepa_adapter_evaluates_only_requested_minibatch(tmp_path):
+    targets = [
+        SymbolTarget("project", "pkg/a.py", "first", "train"),
+        SymbolTarget("project", "pkg/b.py", "second", "train"),
+    ]
+    baseline = baseline_bundle()
+    adapter = CoverUpPromptAdapter(
+        runner=SimpleNamespace(),
+        candidate_dir=tmp_path / "candidates",
+        targets_by_split={"train": targets},
+        baseline=baseline,
+        reflection_lm=lambda prompt: ["<template>unchanged</template>"],
+    )
+    evaluated_target_batches = []
+
+    def fake_evaluate_replicates(requested, bundle, *, split):
+        evaluated_target_batches.append(list(requested))
+        return [{
+            "results": [{
+                "target": target.__dict__,
+                "score": 0.5,
+                "coverage": {
+                    "valid": True,
+                    "covered_statements": 1,
+                    "num_statements": 2,
+                    "covered_branches": 0,
+                    "num_branches": 0,
+                    "statement_gain": 0.5,
+                    "branch_gain": 1.0,
+                },
+                "feedback": "ok",
+                "attempt_traces": [],
+            } for target in requested],
+        }]
+
+    adapter._evaluate_replicates = fake_evaluate_replicates
+    evaluated = adapter.evaluate(
+        [targets[1]], baseline.as_candidate(), capture_traces=False
+    )
+
+    assert evaluated_target_batches == [[targets[1]]]
+    assert [output["target"]["symbol"] for output in evaluated.outputs] == ["second"]
+
+
 def test_reflection_compares_candidate_with_parent_and_balances_exemplars(tmp_path):
     project = tmp_path / "sample_repo"
     package = project / "pkg"
