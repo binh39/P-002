@@ -1,9 +1,11 @@
 param(
-    [string]$ProjectId = "vinaip002",
+    [string]$ProjectId = "vinai-505107",
     [string]$Region = "asia-southeast1",
-    [string]$Bucket = "vinaip002-promptopt-sources",
+    [string]$Bucket = "vinai-505107-promptopt-sources",
     [string]$Queue = "promptopt-baseline"
 )
+
+Write-Warning "This compatibility script provisions only runner-specific resources. For a new project, run app/infra/provision-production.ps1 first."
 
 $ErrorActionPreference = "Stop"
 $RunnerAccountName = "promptopt-runner"
