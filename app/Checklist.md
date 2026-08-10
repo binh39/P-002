@@ -1,5 +1,13 @@
 ﻿# PromptOpt Delivery Checklist
 
+## Production migration â€” 2026-08-10
+
+- [x] Migrated production to the empty GCP/Firebase project `vinai-505107`; no data or bucket was copied from the previous project.
+- [x] Provisioned Artifact Registry, private GCS, Firestore, Cloud Tasks, runtime/deploy service accounts, IAM and GitHub WIF with `app/infra/provision-production.ps1`.
+- [x] Enabled Firebase Email/Password and Google Sign-In on the new project.
+- [x] Deployed Firebase Hosting at `https://vinai-505107.web.app`; the page and `/api/v1/health` return HTTP 200.
+- [ ] Run authenticated production smoke tests for baseline, optimization, comparison and prompt review on the new project.
+
 ## Current handoff â€” 2026-08-08 (authoritative)
 
 > ÄÃ¢y lÃ  tráº¡ng thÃ¡i hiá»‡n táº¡i vÃ  thá»© tá»± thá»±c hiá»‡n Ä‘Æ°á»£c Ä‘á» xuáº¥t. Náº¿u má»™t má»¥c lá»‹ch sá»­ phÃ­a dÆ°á»›i mÃ¢u
@@ -8,7 +16,7 @@
 
 ### ÄÃ£ hoÃ n thÃ nh: ná»n táº£ng vÃ  production vertical slice
 
-- [x] Frontend React/Vite Ä‘Ã£ deploy táº¡i `https://vinaip002.web.app`.
+- [x] Frontend React/Vite Ä‘Ã£ deploy táº¡i `https://vinai-505107.web.app`.
 - [x] Firebase Email/Password, Google Sign-In, register, login, logout vÃ  reset password.
 - [x] FastAPI production cháº¡y trÃªn Cloud Run, Ä‘Æ°á»£c Firebase Hosting rewrite qua `/api/v1`.
 - [x] Firebase token verification, owner-scoped API, Firestore repositories vÃ  private GCS.
