@@ -210,7 +210,7 @@ Pipeline tạo run ID dạng:
 isort-train-batch-a1b2c3d4
 ```
 
-Mỗi target của một candidate có một workspace test rỗng, độc lập dưới thư mục
+Mỗi batch/project của một candidate có một workspace test rỗng dùng chung dưới thư mục
 `<artifacts-dir>/generated_tests/<split>/`:
 
 ```text
@@ -237,7 +237,7 @@ Runner gọi:
 ```powershell
 python -m coverup `
   --package-dir src/sample_repo/isort/isort `
-  --tests-dir <isolated-tests> `
+  --tests-dir <shared-batch-tests> `
   --target-symbols process,Trie.search,Config.is_supported_filetype,grid `
   --prompt gpt-v2 `
   --prompt-template-file <run-dir>/prompt.json `
@@ -430,12 +430,13 @@ Kết quả metric được cache theo `prompt hash + split` tại
 `candidates/evaluations/<candidate-id>/<evaluation-digest>/<split>/batch.json`.
 `evaluation-digest` bao gồm model/config, target set và source hashes nên cache cũ không
 thể âm thầm được dùng sau khi code hoặc protocol thay đổi. Các replicate bổ sung dùng
-`batch_r1.json`, `batch_r2.json`, ... và workspace riêng. Khi GEPA gọi metric cho từng
-example, pipeline lấy đúng score từ workspace cô lập của symbol đó thay vì coverage của
-test suite dùng chung. Cache per-example nội bộ của GEPA được tắt để ID integer của train
+`batch_r1.json`, `batch_r2.json`, ... và workspace riêng theo batch. CoverUp sinh cả batch
+trong một process; sau đó pipeline dùng `trace.saved_test` để chạy pytest/coverage chỉ trên
+test file của từng `source_file + qualname`, nên GEPA vẫn nhận đúng score và feedback theo
+symbol. Cache per-example nội bộ của GEPA được tắt để ID integer của train
 không thể va chạm với validation; cache artifact phía adapter vẫn được giữ nguyên.
 
-Evaluation isolation, generated workspace layout và deterministic Python hash ordering hiện dùng cache schema 10. Artifact từ schema cũ không được tái sử
+Batch generation, per-target test-file scoring và deterministic Python hash ordering hiện dùng cache schema 13. Artifact từ schema cũ không được tái sử
 dụng; với benchmark quyết định vẫn nên chọn một `--artifacts-dir` mới.
 
 Sau khi compile xong, pipeline lưu:

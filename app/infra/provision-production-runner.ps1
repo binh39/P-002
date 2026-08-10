@@ -5,6 +5,8 @@ param(
     [string]$Queue = "promptopt-baseline"
 )
 
+Write-Warning "This compatibility script provisions only runner-specific resources. For a new project, run app/infra/provision-production.ps1 first."
+
 $ErrorActionPreference = "Stop"
 $RunnerAccountName = "promptopt-runner"
 $RunnerAccount = "$RunnerAccountName@$ProjectId.iam.gserviceaccount.com"

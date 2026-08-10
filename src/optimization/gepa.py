@@ -6,7 +6,6 @@ import json
 import re
 import threading
 from collections.abc import Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -118,8 +117,9 @@ def _evaluation_digest(
         # Schema 10 fixed PYTHONHASHSEED across CoverUp and coverage subprocesses.
         # Schema 11 makes repeat_tests effective during generation and final
         # scoring. Schema 12 preserves denominators from pytest exit 1 while
-        # assigning failing generated suites zero covered units.
-        "cache_schema": 12,
+        # assigning failing generated suites zero covered units. Schema 13
+        # batches CoverUp generation and scores only each target's traced tests.
+        "cache_schema": 13,
         "config": config_values,
         "targets": [_target_identity(target) for target in targets],
         "sources": source_hashes,
@@ -165,7 +165,7 @@ def evaluate_bundle_batch_cached(
     workspace_kind: str = "candidate",
     replicate: int = 0,
 ) -> dict:
-    """Evaluate a split with one isolated CoverUp workspace per target and cache it."""
+    """Evaluate and cache one batch with isolated per-target coverage scores."""
     if not targets:
         raise ValueError("Batch evaluation requires at least one target")
     if replicate < 0:
@@ -179,6 +179,19 @@ def evaluate_bundle_batch_cached(
         raise ValueError(
             f"Batch targets do not match requested split {split!r}: {sorted(target_splits)}"
         )
+
+    # GEPA may sample the same example more than once in a minibatch. Evaluate each
+    # identity once so CoverUp does not generate duplicate tests or return ambiguous
+    # per-target results inside the shared batch workspace.
+    unique_targets: list[SymbolTarget] = []
+    seen_targets: set[tuple[str, str, str, str]] = set()
+    for target in targets:
+        identity = _target_identity(target)
+        if identity not in seen_targets:
+            seen_targets.add(identity)
+            unique_targets.append(target)
+    targets = unique_targets
+
     digest = bundle_digest(bundle)
     evaluation_digest = _evaluation_digest(runner, targets)
     lock_key = (
@@ -214,51 +227,41 @@ def evaluate_bundle_batch_cached(
         run_candidate_id = f"{digest}-{evaluation_digest}"
         if replicate:
             run_candidate_id += f"-r{replicate}"
-        def evaluate_target(target: SymbolTarget) -> Any:
-            identity = json.dumps(_target_identity(target), ensure_ascii=True)
-            target_digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:10]
-            return runner.evaluate_batch(
-                [target],
-                candidate,
-                candidate_id=f"{run_candidate_id}-{target_digest}",
-                split=split,
-                workspace_kind=workspace_kind,
-            )
-
-        configured_concurrency = int(
-            getattr(getattr(runner, "config", None), "max_concurrency", 1) or 1
-        )
-        # A configured rate limit is process-local in CoverUp. Running several
-        # subprocesses would multiply it, so preserve the requested global cap.
-        max_workers = 1 if getattr(getattr(runner, "config", None), "rate_limit", None) else max(
-            1, min(configured_concurrency, len(targets))
-        )
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            records = list(executor.map(evaluate_target, targets))
+        # Generate the whole GEPA minibatch in one CoverUp process/workspace.
+        # The runner maps saved tests back to their source target and performs
+        # a separate pytest/coverage pass for each target, preserving per-example
+        # feedback without creating one generated-tests folder per symbol.
+        records = [runner.evaluate_batch(
+            targets,
+            candidate,
+            candidate_id=run_candidate_id,
+            split=split,
+            workspace_kind=workspace_kind,
+        )]
 
         results = []
         for record in records:
-            if len(record.results) != 1:
+            if len(record.results) != len(targets):
                 raise RuntimeError(
-                    "Isolated target evaluation returned an unexpected result count: "
-                    f"{len(record.results)}"
+                    "Minibatch evaluation returned an unexpected result count: "
+                    f"{len(record.results)} for {len(targets)} targets"
                 )
-            target_result = record.results[0]
-            target = target_result.target
-            results.append({
-                "prompt_digest": digest,
-                "evaluation_digest": evaluation_digest,
-                "replicate": replicate,
-                "target": target.__dict__,
-                "run_id": record.run_id,
-                "score": (
-                    float(target_result.score["score"])
-                    if target_result.score else 0.0
-                ),
-                "coverage": target_result.score,
-                "feedback": target_result.feedback,
-                "attempt_traces": getattr(target_result, "attempt_traces", []),
-            })
+            for target_result in record.results:
+                target = target_result.target
+                results.append({
+                    "prompt_digest": digest,
+                    "evaluation_digest": evaluation_digest,
+                    "replicate": replicate,
+                    "target": target.__dict__,
+                    "run_id": record.run_id,
+                    "score": (
+                        float(target_result.score["score"])
+                        if target_result.score else 0.0
+                    ),
+                    "coverage": target_result.score,
+                    "feedback": target_result.feedback,
+                    "attempt_traces": getattr(target_result, "attempt_traces", []),
+                })
         batch = {
             "prompt_digest": digest,
             "evaluation_digest": evaluation_digest,
@@ -1141,64 +1144,64 @@ class CoverUpPromptAdapter:
             )
             placeholders = COMPONENT_PLACEHOLDERS[component]
             prompt = f"""
-You are optimizing one reusable CoverUp pytest-generation template that will be used by another LLM to generate Python tests. 
-Your goal is to improve the template so that the downstream test-generation LLM produces higher-quality pytest tests with the highest achievable code coverage, with particular emphasis on: 
-1. Branch coverage 
-2. Statement coverage 
+You are optimizing one reusable CoverUp pytest-generation template that will be used by another LLM to generate Python tests.
+Your goal is to improve the template so that the downstream test-generation LLM produces higher-quality pytest tests with the highest achievable code coverage, with particular emphasis on:
+1. Branch coverage
+2. Statement coverage
 The final optimization score is defined as: score = 0.4 * statement_coverage + 0.6 * branch_coverage.
-Therefore, branch coverage is more important than statement coverage, but the optimized template should improve both whenever possible. 
-Component: {component} Role: {COMPONENT_ROLES[component]} 
-Required literal placeholders: {', '.join(placeholders)} 
-Maximum length: {self.max_component_chars[component]} characters 
-Current template: <current_template> {current} </current_template> 
-Contrastive execution evidence from representative successful, failing, and regressed targets: <evidence> {evidence} </evidence> 
-Your task is to revise the current template so that a downstream LLM is more likely to generate effective tests that exercise previously uncovered statements and branches. 
-Analyze the execution evidence carefully before making any change. When optimizing the template, follow these principles: 
-1. Optimize for coverage behavior, not wording quality alone. The revised template should cause the downstream LLM to make better testing decisions, not merely make the instruction sound clearer or more polished. 
-2. Prioritize branch coverage. Because branch coverage contributes 60% of the final score, prefer changes that help the downstream LLM: - identify uncovered decision outcomes, - reason about both true and false branches, - exercise alternative control-flow paths, - reach nested and compound conditions, - trigger exception-handling branches, - cover early returns, - cover loop-entry and loop-exit behavior, - cover match/case alternatives when applicable, - and construct inputs that force execution through currently uncovered branches. 
-3. Improve statement coverage as well. Encourage the downstream LLM to reach executable statements that remain uncovered, especially statements that are only reachable through specific branches, state configurations, exceptions, boundary values, or dependency behavior. 
-4. Learn from contrastive evidence. Compare successful, failing, and regressed targets and infer general patterns such as: - which testing strategies consistently increase coverage, - which instructions cause the test generator to miss important paths, - which behaviors lead to regressions, - which kinds of inputs expose additional branches, - which setup or mocking strategies help execution reach deeper code, - and which unnecessary behaviors waste test-generation effort. 
-5. Convert observed failures into reusable operational guidance. If evidence shows that the downstream LLM repeatedly misses a particular class of behavior, revise the template to explicitly guide it toward a better strategy. 
-Prefer rules such as: 
-- inspect uncovered control-flow before adding redundant tests, 
-- target uncovered branch outcomes directly, 
-- vary one relevant input or state dimension at a time, 
-- reason about preconditions required to reach a target branch, 
-- use boundary, empty, null-like, invalid, exceptional, and alternative-state inputs when relevant, 
-- minimize duplicated tests that execute already-covered paths, 
-- repair failing tests when those failures prevent execution from reaching useful code, 
-- and prioritize tests that are likely to unlock multiple uncovered statements or branches. 
-6. Encourage coverage-directed iteration. The optimized instruction should make the downstream LLM use available coverage feedback as a search signal: 
-- identify what remains uncovered, 
-- infer why it remains uncovered, 
-- propose a test specifically targeting it, 
-- execute or validate that test when the surrounding system allows it, 
-- and avoid spending effort on already-saturated paths. 
-7. Prefer actionable guidance over generic statements. Avoid vague instructions such as: 
-- "write comprehensive tests", 
-- "maximize coverage", 
-- "consider edge cases", unless they are accompanied by concrete operational guidance explaining how to do so. 
-8. Do not overfit to individual examples. Never include target-specific: 
-- file names, 
-- function names, 
-- class names, 
-- variable names, 
-- literal line numbers, 
-- repository-specific details, 
-- exact test values that only apply to one target, 
-- or implementation-specific facts that would not generalize. 
-9. Preserve useful existing behavior. The new template should be a conservative improvement over the current template. 
-Do not remove effective instructions unless the evidence clearly indicates that they are harmful, redundant, misleading, or consume valuable prompt space. 
-10. Prefer concise, high-value instructions. The template has a strict character limit. Each added instruction should justify its cost by being likely to improve downstream coverage behavior. 
-Remove redundancy, repeated goals, unnecessary explanations, scoring formulas, or generic testing advice if they do not directly help the downstream LLM generate better tests. 
-11. Respect the optimization objective. When there is a trade-off between two possible revisions, prefer the revision that is more likely to improve: 0.4 * statement_coverage + 0.6 * branch_coverage In particular, a revision that significantly improves branch exploration may be preferable even if its statement-coverage improvement is smaller. 
-12. Preserve all required placeholders exactly. Every required literal placeholder listed above must appear exactly as required in the revised template. Do not rename, remove, escape, paraphrase, or alter them. 13. Keep the revised template general and reusable. It must remain suitable for many different Python functions, modules, repositories, and testing situations. Before producing the final revision, internally determine: 
-- what behavior in the current template is already effective, 
-- what specific weakness is supported by the evidence, 
-- what single or small set of changes is most likely to improve downstream branch and statement coverage, 
-- and whether the change is sufficiently general to help unseen targets. Propose one conservative, evidence-supported revision of the template. Return only the complete revised template between the following tags: <template> ... </template> 
-Do not include explanations, analysis, markdown fences, scores, comments, or any text outside the <template> tags. 
-"""            
+Therefore, branch coverage is more important than statement coverage, but the optimized template should improve both whenever possible.
+Component: {component} Role: {COMPONENT_ROLES[component]}
+Required literal placeholders: {', '.join(placeholders)}
+Maximum length: {self.max_component_chars[component]} characters
+Current template: <current_template> {current} </current_template>
+Contrastive execution evidence from representative successful, failing, and regressed targets: <evidence> {evidence} </evidence>
+Your task is to revise the current template so that a downstream LLM is more likely to generate effective tests that exercise previously uncovered statements and branches.
+Analyze the execution evidence carefully before making any change. When optimizing the template, follow these principles:
+1. Optimize for coverage behavior, not wording quality alone. The revised template should cause the downstream LLM to make better testing decisions, not merely make the instruction sound clearer or more polished.
+2. Prioritize branch coverage. Because branch coverage contributes 60% of the final score, prefer changes that help the downstream LLM: - identify uncovered decision outcomes, - reason about both true and false branches, - exercise alternative control-flow paths, - reach nested and compound conditions, - trigger exception-handling branches, - cover early returns, - cover loop-entry and loop-exit behavior, - cover match/case alternatives when applicable, - and construct inputs that force execution through currently uncovered branches.
+3. Improve statement coverage as well. Encourage the downstream LLM to reach executable statements that remain uncovered, especially statements that are only reachable through specific branches, state configurations, exceptions, boundary values, or dependency behavior.
+4. Learn from contrastive evidence. Compare successful, failing, and regressed targets and infer general patterns such as: - which testing strategies consistently increase coverage, - which instructions cause the test generator to miss important paths, - which behaviors lead to regressions, - which kinds of inputs expose additional branches, - which setup or mocking strategies help execution reach deeper code, - and which unnecessary behaviors waste test-generation effort.
+5. Convert observed failures into reusable operational guidance. If evidence shows that the downstream LLM repeatedly misses a particular class of behavior, revise the template to explicitly guide it toward a better strategy.
+Prefer rules such as:
+- inspect uncovered control-flow before adding redundant tests,
+- target uncovered branch outcomes directly,
+- vary one relevant input or state dimension at a time,
+- reason about preconditions required to reach a target branch,
+- use boundary, empty, null-like, invalid, exceptional, and alternative-state inputs when relevant,
+- minimize duplicated tests that execute already-covered paths,
+- repair failing tests when those failures prevent execution from reaching useful code,
+- and prioritize tests that are likely to unlock multiple uncovered statements or branches.
+6. Encourage coverage-directed iteration. The optimized instruction should make the downstream LLM use available coverage feedback as a search signal:
+- identify what remains uncovered,
+- infer why it remains uncovered,
+- propose a test specifically targeting it,
+- execute or validate that test when the surrounding system allows it,
+- and avoid spending effort on already-saturated paths.
+7. Prefer actionable guidance over generic statements. Avoid vague instructions such as:
+- "write comprehensive tests",
+- "maximize coverage",
+- "consider edge cases", unless they are accompanied by concrete operational guidance explaining how to do so.
+8. Do not overfit to individual examples. Never include target-specific:
+- file names,
+- function names,
+- class names,
+- variable names,
+- literal line numbers,
+- repository-specific details,
+- exact test values that only apply to one target,
+- or implementation-specific facts that would not generalize.
+9. Preserve useful existing behavior. The new template should be a conservative improvement over the current template.
+Do not remove effective instructions unless the evidence clearly indicates that they are harmful, redundant, misleading, or consume valuable prompt space.
+10. Prefer concise, high-value instructions. The template has a strict character limit. Each added instruction should justify its cost by being likely to improve downstream coverage behavior.
+Remove redundancy, repeated goals, unnecessary explanations, scoring formulas, or generic testing advice if they do not directly help the downstream LLM generate better tests.
+11. Respect the optimization objective. When there is a trade-off between two possible revisions, prefer the revision that is more likely to improve: 0.4 * statement_coverage + 0.6 * branch_coverage In particular, a revision that significantly improves branch exploration may be preferable even if its statement-coverage improvement is smaller.
+12. Preserve all required placeholders exactly. Every required literal placeholder listed above must appear exactly as required in the revised template. Do not rename, remove, escape, paraphrase, or alter them. 13. Keep the revised template general and reusable. It must remain suitable for many different Python functions, modules, repositories, and testing situations. Before producing the final revision, internally determine:
+- what behavior in the current template is already effective,
+- what specific weakness is supported by the evidence,
+- what single or small set of changes is most likely to improve downstream branch and statement coverage,
+- and whether the change is sufficiently general to help unseen targets. Propose one conservative, evidence-supported revision of the template. Return only the complete revised template between the following tags: <template> ... </template>
+Do not include explanations, analysis, markdown fences, scores, comments, or any text outside the <template> tags.
+"""
             last_error = ""
             for _ in range(2):
                 response = self._lm_text(self.reflection_lm(prompt))
@@ -1375,7 +1378,7 @@ def optimize(
         max_merge_invocations=5,
         max_metric_calls=max_metric_calls,
         run_dir=str(artifacts_dir / "gepa_direct_logs" / run_digest),
-        # The adapter already caches whole isolated-split evaluations. GEPA's
+        # The adapter already caches split/batch evaluations. GEPA's
         # per-example cache uses integer ids shared by its train and validation
         # ListDataLoaders, which can otherwise reuse a train score as validation.
         cache_evaluation=False,

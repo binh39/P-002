@@ -108,6 +108,37 @@ def _traces_for_target(traces: list[dict], target: SymbolTarget) -> list[dict]:
     return result
 
 
+def _saved_tests_for_target(
+    traces: list[dict], target: SymbolTarget, *, workspace: Path,
+) -> list[Path]:
+    """Return only saved test modules attributed to one exact target."""
+    workspace = workspace.resolve()
+    result: list[Path] = []
+    seen: set[Path] = set()
+    for trace in _traces_for_target(traces, target):
+        saved_test = trace.get("saved_test")
+        if not saved_test:
+            continue
+        path = Path(str(saved_test))
+        if not path.is_absolute():
+            path = workspace / path
+        path = path.resolve()
+        if path != workspace and workspace not in path.parents:
+            continue
+        if path.is_file() and path not in seen:
+            seen.add(path)
+            result.append(path)
+    return result
+
+
+def _target_artifact_token(target: SymbolTarget) -> str:
+    identity = json.dumps(
+        [target.project, target.source_file, target.symbol, target.split],
+        ensure_ascii=True,
+    )
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()[:12]
+
+
 def _prune_run_dir(run_dir: Path) -> None:
     """Keep only record.json in a batch run directory after it is scored.
 
@@ -127,7 +158,7 @@ def _prune_run_dir(run_dir: Path) -> None:
 
 
 class CoverUpExperimentRunner:
-    """Evaluate one prompt on one symbol in an isolated copy of the test suite."""
+    """Generate one prompt batch and score each symbol with only its traced tests."""
 
     def __init__(self, config: ExperimentConfig) -> None:
         self.config = config
@@ -276,7 +307,6 @@ class CoverUpExperimentRunner:
             coverup_log = run_dir / f"coverup{suffix}.log"
             project_trace = run_dir / f"attempt_trace{suffix}.jsonl"
             target_spec = run_dir / f"target_spec{suffix}.json"
-            after_json = run_dir / f"coverage_after{suffix}.json"
             target_spec.write_text(
                 json.dumps(
                     [
@@ -341,26 +371,46 @@ class CoverUpExperimentRunner:
             attempt_traces = _load_attempt_traces(project_trace)
             merged_attempt_traces.extend(attempt_traces)
 
-            after = run_coverage(
-                project_root=self.config.project_root.resolve(),
-                package_dir=package_dir,
-                tests_dir=workspace,
-                output=after_json,
-                pytest_args=self.config.pytest_args,
-                repeat_tests=self.config.repeat_tests,
-                env=environment,
-            )
-            if after.returncode:
-                feedback = (
-                    "Score: 0. The generated test suite failed under coverage.py:\n"
-                    f"{after.stdout[-4000:]}"
+            # CoverUp generates the project minibatch together, but every target is
+            # scored using only the test modules attributed to it by structured traces.
+            # This keeps GEPA feedback local while sharing a single generated-tests
+            # folder. An empty collector file preserves measurable zero-coverage
+            # denominators when a target produced no saved test.
+            for target in group:
+                target_traces = _traces_for_target(attempt_traces, target)
+                token = _target_artifact_token(target)
+                after_json = run_dir / f"coverage_after{suffix}_{token}.json"
+                selected_tests = _saved_tests_for_target(
+                    attempt_traces, target, workspace=workspace,
                 )
-                # pytest exit 1 still leaves a complete coverage data file and
-                # run_coverage exports it to JSON.  Preserve its structural
-                # denominators, but never reward lines reached by failing tests.
-                # Other failures do not produce JSON and remain unmeasurable.
-                report = load_report(after_json) if after_json.is_file() else None
-                for target in group:
+                if not selected_tests:
+                    empty_test = run_dir / f"empty_target_{token}.py"
+                    empty_test.write_text(
+                        "# No generated test was saved for this target.\n",
+                        encoding="utf-8",
+                    )
+                    selected_tests = [empty_test]
+                after = run_coverage(
+                    project_root=self.config.project_root.resolve(),
+                    package_dir=package_dir,
+                    tests_dir=workspace,
+                    test_paths=selected_tests,
+                    output=after_json,
+                    pytest_args=self.config.pytest_args,
+                    repeat_tests=self.config.repeat_tests,
+                    env=environment,
+                )
+                after_jsons.append(after_json)
+                if after.returncode:
+                    feedback = (
+                        "Score: 0. The generated tests for this target failed under "
+                        "coverage.py:\n"
+                        f"{after.stdout[-4000:]}"
+                    )
+                    # pytest exit 1 still leaves a complete coverage data file and
+                    # run_coverage exports it to JSON. Preserve its structural
+                    # denominators, but never reward lines reached by failing tests.
+                    report = load_report(after_json) if after_json.is_file() else None
                     score_data = None
                     if report is not None:
                         try:
@@ -380,39 +430,40 @@ class CoverUpExperimentRunner:
                         target=target,
                         score=score_data,
                         feedback=feedback,
-                        attempt_traces=_traces_for_target(attempt_traces, target),
+                        attempt_traces=target_traces,
                     ))
-            else:
+                    continue
+
                 report = load_report(after_json)
-                for target in group:
-                    try:
-                        after_cov = symbol_coverage(report, target.source_file, target.symbol)
-                    except KeyError as exc:
-                        results.append(BatchTargetResult(
-                            target=target,
-                            feedback=f"Score: 0. Coverage lookup failed: {exc}",
-                            attempt_traces=_traces_for_target(attempt_traces, target),
-                        ))
-                        continue
-                    before_cov = _zero_coverage_like(after_cov)
-                    metric_result = score_symbol(before_cov, after_cov)
-                    score_data = metric_result.as_dict()
-                    # The coverage run is the authority for test validity.  CoverUp may
-                    # exit non-zero after some concurrent segments have already produced
-                    # passing tests; invalidating the whole batch destroys useful signal.
-                    score_data["valid"] = True
-                    score_data["generator_exit_code"] = completed.returncode
+                try:
+                    after_cov = symbol_coverage(
+                        report, target.source_file, target.symbol
+                    )
+                except KeyError as exc:
                     results.append(BatchTargetResult(
                         target=target,
-                        score=score_data,
-                        feedback=build_feedback(
-                            metric_result, coverup_exit_code=completed.returncode
-                        ),
-                        attempt_traces=_traces_for_target(attempt_traces, target),
+                        feedback=f"Score: 0. Coverage lookup failed: {exc}",
+                        attempt_traces=target_traces,
                     ))
+                    continue
+                before_cov = _zero_coverage_like(after_cov)
+                metric_result = score_symbol(before_cov, after_cov)
+                score_data = metric_result.as_dict()
+                # The target-specific coverage run is authoritative for validity.
+                # A non-zero CoverUp exit may coexist with usable tests from another
+                # concurrent target, so keep each independently measured score.
+                score_data["valid"] = True
+                score_data["generator_exit_code"] = completed.returncode
+                results.append(BatchTargetResult(
+                    target=target,
+                    score=score_data,
+                    feedback=build_feedback(
+                        metric_result, coverup_exit_code=completed.returncode
+                    ),
+                    attempt_traces=target_traces,
+                ))
             coverup_logs.append(coverup_log)
             project_traces.append(project_trace)
-            after_jsons.append(after_json)
         # Preserve the caller's target order in the merged results even though
         # per-project batches are executed in sorted project order.
         result_order = {id(target): index for index, target in enumerate(targets)}

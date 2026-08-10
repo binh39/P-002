@@ -15,8 +15,8 @@ EXPERIMENT_DISPATCHER: cloud_tasks
 EXPERIMENT_CLOUD_TASKS_QUEUE: promptopt-baseline
 EXPERIMENT_WORKER_URL: https://promptopt-api-509384558275.asia-southeast1.run.app
 EXPERIMENT_TASK_AUDIENCE: https://promptopt-api-509384558275.asia-southeast1.run.app
-OPTIMIZE_MODEL: vertex_ai/gemini-3.6-flash
-OPTIMIZE_MODEL_ALLOWLIST: vertex_ai/gemini-3.6-flash
+OPTIMIZE_MODEL: vertex_ai/gemini-3.1-pro-preview
+OPTIMIZE_MODEL_ALLOWLIST: vertex_ai/gemini-3.1-pro-preview
 GEPA_MAX_METRIC_CALLS: "30"
 OPTIMIZATION_EXECUTION_BACKEND: cloud_run_job
 CLOUD_RUN_GEPA_JOB: promptopt-gepa-runner

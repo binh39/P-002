@@ -31,7 +31,7 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
    Nếu GEPA chọn lại đúng baseline (bundle digest không đổi), bỏ toàn bộ final split evaluation vì không có proposal mới để so sánh; report phải ghi rõ evaluation đã được skip.
 9. `--baseline-tests-dir` chỉ là historical reference bổ sung, không được dùng làm promotion gate thay cho paired baseline/proposal.
 10. Kết quả CoverUp không hợp lệ hoặc thiếu coverage phải nhận 0 covered units nhưng vẫn giữ denominator tham chiếu của baseline, tránh việc lỗi lại làm score tăng giả.
-11. Cache evaluation phải tách theo prompt digest, evaluation digest, split và replicate. Mỗi target phải chạy trong workspace riêng và được chọn bằng `source_file + qualname`; không dùng cache per-example integer-ID của GEPA chung cho train/validation. Evaluation digest phải phản ánh model/config, target identity và source hash. Khi nghi ngờ benchmark cũ, dùng artifacts directory mới.
+11. Cache evaluation phải tách theo prompt digest, evaluation digest, split và replicate. Mỗi minibatch dùng một workspace sinh test chung, nhưng từng target phải được chọn bằng `source_file + qualname` và chỉ được chấm bằng các test file ánh xạ từ trace của chính target đó; không dùng cache per-example integer-ID của GEPA chung cho train/validation. Evaluation digest phải phản ánh model/config, target identity và source hash. Khi nghi ngờ benchmark cũ, dùng artifacts directory mới.
 12. Generation của CoverUp giữ temperature mặc định 0 để ổn định; reflection model có thể dùng temperature 0.7 để tăng độ đa dạng proposal.
 13. Provider có thể trả `finish_reason=stop` với `content=null`. CoverUp phải retry/bỏ riêng segment, tuyệt đối không để một response rỗng làm crash toàn batch.
 14. Exit code của tiến trình sinh test không được tự động xóa score của các test đã pass coverage.py. Coverage pass là nguồn xác nhận validity; lưu exit code riêng để chẩn đoán.
@@ -46,7 +46,7 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
   failure output as GEPA feedback. Collection/internal/usage errors remain
   unmeasurable and invalid.
 - A baseline with zero covered units may enter GEPA as long as every target has valid non-zero statement denominators. Candidate failures are then scored as zero against those fixed reference units.
-- Evaluation cache schema `10` invalidates older caches that discarded zero-test denominators, omitted structured traces, shared coverage across targets, stored generated workspaces outside the artifacts tree, or ran CoverUp and coverage with different randomized hash ordering.
+- Evaluation cache schema `13` invalidates older caches that discarded zero-test denominators, omitted structured traces, scored a target with another target's tests, stored generated workspaces outside the artifacts tree, or ran CoverUp and coverage with different randomized hash ordering.
 - When reporting repeated evaluation failures, skip wrapper lines such as `Replicate 0:` and show the first substantive feedback line.
 
 ## Cấu hình khuyến nghị
