@@ -151,14 +151,10 @@ validation.
 
 ### 4.3 Batch cache cua adapter
 
-Mac du GEPA co the chi hoi score cua mot minibatch, adapter luon xac dinh
-`full_targets` cua split va cache ca split cho candidate do:
+Adapter danh gia dung target trong batch GEPA yeu cau va cache chinh batch do:
 
 ```text
 GEPA asks for [A, B] from train
-            |
-            v
-adapter resolves full train = [A, B, C, ... Y]
             |
             v
 cache key =
@@ -172,7 +168,7 @@ cache key =
 Neu cache da co:
 
 ```text
-load full-split batch.json
+load exact-batch batch.json
        |
        +--> return only score A and B to GEPA
 ```
@@ -180,70 +176,69 @@ load full-split batch.json
 Neu cache chua co:
 
 ```text
-evaluate every target in the split once
+evaluate only unique targets [A, B]
        |
-       +--> write full-split batch.json
+       +--> write exact-batch batch.json
        |
        +--> return only score A and B to GEPA
 ```
 
-Vi vay, lan metric dau tien cua mot `candidate + split + replicate` co chi phi vat ly
-bang toan bo split. Cac lan GEPA hoi example khac cua cung khoa chi doc cache.
+Baseline preflight van chay toan bo train/validation de co dinh denominator. Candidate
+trong reflection chi ton chi phi cua minibatch duoc yeu cau. Candidate thang cuoc moi
+duoc danh gia lai tren full train khi tao coverage report.
 
-### 4.4 Cach full-split batch duoc chay vat ly
+### 4.4 Cach mot batch duoc chay vat ly
 
-“Batch ca split” khong co nghia la nhieu symbol dung chung mot test workspace. Adapter
-tach no thanh mot run cho moi target:
-
-```text
-full split targets = [A, B, C, D]
-                  |
-                  v
-       ThreadPoolExecutor(max_workers)
-          |        |        |        |
-          v        v        v        v
-       run[A]   run[B]   run[C]   run[D]
-          |        |        |        |
-          v        v        v        v
-       tests_A  tests_B  tests_C  tests_D
-          |        |        |        |
-          v        v        v        v
-       pytest+A pytest+B pytest+C pytest+D
-          |        |        |        |
-          +--------+--------+--------+
-                           |
-                           v
-                  full-split batch.json
-```
-
-Moi `run[X]` goi `runner.evaluate_batch([X], ...)`, tuc danh sach target cua runner
-co dung mot phan tu. Ten ham con chu `batch` de ho tro API tong quat, nhung GEPA adapter
-hien tai co lap no theo target.
-
-Neu co `rate_limit`, `max_workers` bi ep ve 1 vi rate limiter cua CoverUp la
-process-local. Neu khong co rate limit:
+Moi project trong batch dung mot CoverUp process va mot generated-tests workspace.
+CoverUp tu chay cac target song song theo `--max-concurrency`. Sau generation, trace
+`saved_test` anh xa moi test file ve dung `source_file + qualname`; coverage/pytest chi
+chay cac file cua target dang cham:
 
 ```text
-max_workers = min(max_concurrency, number_of_targets)
+batch targets [A, B, C, D]
+            |
+            v
+one CoverUp process / project
+            |
+            v
+one shared generated-tests workspace
+   | trace(A) -> test_1.py
+   | trace(B) -> test_2.py
+   | trace(C) -> test_3.py
+   | trace(D) -> test_4.py
+            |
+            +--> pytest test_1.py -> coverage/feedback A
+            +--> pytest test_2.py -> coverage/feedback B
+            +--> pytest test_3.py -> coverage/feedback C
+            +--> pytest test_4.py -> coverage/feedback D
+            |
+            v
+exact-batch batch.json
 ```
+
+Neu mot target khong luu duoc test, runner dung mot collector file rong de lay denominator
+zero-coverage. Neu test cua mot target fail, chi target do nhan score 0; cac target khac
+van giu score va feedback doc lap. `rate_limit` va `max_concurrency` duoc ap dung mot lan
+ben trong CoverUp process, khong bi nhan len boi nhieu process ngoai.
 
 ### 4.5 Ket luan ngan gon
 
 ```text
 Logical API seen by GEPA : per requested batch of examples
-Adapter cache unit       : full split per candidate/replicate
-Physical CoverUp unit    : one target/example per process and workspace
+Adapter cache unit       : exact requested batch per candidate/replicate
+Physical CoverUp unit    : one process/workspace per project in the batch
+Coverage unit            : traced test file(s) of one target
 Score returned to GEPA   : one weighted score per requested example
 ```
 
 ## 5. Mot target duoc cham nhu the nao?
 
 ```text
-SymbolTarget
+Minibatch [SymbolTarget A, SymbolTarget B, ...]
     |
     v
-Create isolated workspace
-<artifacts>/generated_tests/<split>/<candidate-target-id>/
+Create shared batch workspace
+<artifacts>/generated_tests/<split>/<candidate-batch-id>/
     |
     v
 Write run inputs
@@ -257,7 +252,10 @@ Run CoverUp subprocess
     +-- append attempt_trace.jsonl
     |
     v
-Run coverage.py on only that generated workspace
+Map trace.saved_test to each exact source_file + qualname
+    |
+    v
+Run coverage.py on only the mapped test file(s) of one target
     |
     +-- invalid pytest/collection --> score 0
     |
@@ -373,7 +371,7 @@ trung nhau. Cache artifact cua adapter moi la nguon cache chinh xac, vi khoa cua
 prompt, split, target set, source hash, config va replicate.
 
 `max_metric_calls` la budget logic cua GEPA. No khong bang truc tiep so subprocess
-CoverUp, vi mot metric request co the gay full-split cache miss hoac chi doc lai cache.
+CoverUp, vi mot metric request co the gay exact-batch cache miss hoac chi doc lai cache.
 
 ## 9. Final decision va nhanh skip moi
 
@@ -428,11 +426,11 @@ da chon dung baseline, nghia la khong co prompt moi can so sanh.
 |                   +-- baseline_batch.json
 |
 +-- generated_tests/
-|   +-- train/<candidate-target-id>/
-|   +-- validation/<candidate-target-id>/
-|   +-- test/<candidate-target-id>/
+|   +-- train/<candidate-batch-id>/
+|   +-- validation/<candidate-batch-id>/
+|   +-- test/<candidate-batch-id>/
 |
-+-- runs/<candidate-target-id>/<split>/<run-id>/
++-- runs/<candidate-batch-id>/<split>/<run-id>/
 |   +-- prompt.json
 |   +-- target_spec.json
 |   +-- coverup.log

@@ -6,7 +6,6 @@ import json
 import re
 import threading
 from collections.abc import Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -118,8 +117,9 @@ def _evaluation_digest(
         # Schema 10 fixed PYTHONHASHSEED across CoverUp and coverage subprocesses.
         # Schema 11 makes repeat_tests effective during generation and final
         # scoring. Schema 12 preserves denominators from pytest exit 1 while
-        # assigning failing generated suites zero covered units.
-        "cache_schema": 12,
+        # assigning failing generated suites zero covered units. Schema 13
+        # batches CoverUp generation and scores only each target's traced tests.
+        "cache_schema": 13,
         "config": config_values,
         "targets": [_target_identity(target) for target in targets],
         "sources": source_hashes,
@@ -165,7 +165,7 @@ def evaluate_bundle_batch_cached(
     workspace_kind: str = "candidate",
     replicate: int = 0,
 ) -> dict:
-    """Evaluate a split with one isolated CoverUp workspace per target and cache it."""
+    """Evaluate and cache one batch with isolated per-target coverage scores."""
     if not targets:
         raise ValueError("Batch evaluation requires at least one target")
     if replicate < 0:
@@ -180,11 +180,9 @@ def evaluate_bundle_batch_cached(
             f"Batch targets do not match requested split {split!r}: {sorted(target_splits)}"
         )
 
-    # GEPA may sample the same example more than once in a minibatch.  A target's
-    # identity also determines its isolated workspace name, so launching duplicate
-    # entries concurrently makes both workers race to create and populate the same
-    # directory.  Evaluate each identity once; the adapter still emits one logical
-    # output per original minibatch entry by looking results up by identity.
+    # GEPA may sample the same example more than once in a minibatch. Evaluate each
+    # identity once so CoverUp does not generate duplicate tests or return ambiguous
+    # per-target results inside the shared batch workspace.
     unique_targets: list[SymbolTarget] = []
     seen_targets: set[tuple[str, str, str, str]] = set()
     for target in targets:
@@ -229,51 +227,41 @@ def evaluate_bundle_batch_cached(
         run_candidate_id = f"{digest}-{evaluation_digest}"
         if replicate:
             run_candidate_id += f"-r{replicate}"
-        def evaluate_target(target: SymbolTarget) -> Any:
-            identity = json.dumps(_target_identity(target), ensure_ascii=True)
-            target_digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:10]
-            return runner.evaluate_batch(
-                [target],
-                candidate,
-                candidate_id=f"{run_candidate_id}-{target_digest}",
-                split=split,
-                workspace_kind=workspace_kind,
-            )
-
-        configured_concurrency = int(
-            getattr(getattr(runner, "config", None), "max_concurrency", 1) or 1
-        )
-        # A configured rate limit is process-local in CoverUp. Running several
-        # subprocesses would multiply it, so preserve the requested global cap.
-        max_workers = 1 if getattr(getattr(runner, "config", None), "rate_limit", None) else max(
-            1, min(configured_concurrency, len(targets))
-        )
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            records = list(executor.map(evaluate_target, targets))
+        # Generate the whole GEPA minibatch in one CoverUp process/workspace.
+        # The runner maps saved tests back to their source target and performs
+        # a separate pytest/coverage pass for each target, preserving per-example
+        # feedback without creating one generated-tests folder per symbol.
+        records = [runner.evaluate_batch(
+            targets,
+            candidate,
+            candidate_id=run_candidate_id,
+            split=split,
+            workspace_kind=workspace_kind,
+        )]
 
         results = []
         for record in records:
-            if len(record.results) != 1:
+            if len(record.results) != len(targets):
                 raise RuntimeError(
-                    "Isolated target evaluation returned an unexpected result count: "
-                    f"{len(record.results)}"
+                    "Minibatch evaluation returned an unexpected result count: "
+                    f"{len(record.results)} for {len(targets)} targets"
                 )
-            target_result = record.results[0]
-            target = target_result.target
-            results.append({
-                "prompt_digest": digest,
-                "evaluation_digest": evaluation_digest,
-                "replicate": replicate,
-                "target": target.__dict__,
-                "run_id": record.run_id,
-                "score": (
-                    float(target_result.score["score"])
-                    if target_result.score else 0.0
-                ),
-                "coverage": target_result.score,
-                "feedback": target_result.feedback,
-                "attempt_traces": getattr(target_result, "attempt_traces", []),
-            })
+            for target_result in record.results:
+                target = target_result.target
+                results.append({
+                    "prompt_digest": digest,
+                    "evaluation_digest": evaluation_digest,
+                    "replicate": replicate,
+                    "target": target.__dict__,
+                    "run_id": record.run_id,
+                    "score": (
+                        float(target_result.score["score"])
+                        if target_result.score else 0.0
+                    ),
+                    "coverage": target_result.score,
+                    "feedback": target_result.feedback,
+                    "attempt_traces": getattr(target_result, "attempt_traces", []),
+                })
         batch = {
             "prompt_digest": digest,
             "evaluation_digest": evaluation_digest,
@@ -1390,7 +1378,7 @@ def optimize(
         max_merge_invocations=5,
         max_metric_calls=max_metric_calls,
         run_dir=str(artifacts_dir / "gepa_direct_logs" / run_digest),
-        # The adapter already caches whole isolated-split evaluations. GEPA's
+        # The adapter already caches split/batch evaluations. GEPA's
         # per-example cache uses integer ids shared by its train and validation
         # ListDataLoaders, which can otherwise reuse a train score as validation.
         cache_evaluation=False,

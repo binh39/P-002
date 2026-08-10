@@ -5,6 +5,7 @@ import os
 import shlex
 import subprocess
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -86,14 +87,23 @@ def run_coverage(
     *, project_root: Path, package_dir: Path, tests_dir: Path, output: Path,
     pytest_args: str = "", repeat_tests: int = 0,
     env: dict[str, str] | None = None,
+    test_paths: Sequence[Path] | None = None,
 ) -> subprocess.CompletedProcess[str]:
+    """Run coverage for a whole suite or an explicit subset of pytest paths."""
     output.parent.mkdir(parents=True, exist_ok=True)
     run_env = os.environ.copy()
     run_env.update(env or {})
     run_env["COVERAGE_FILE"] = str(output.with_suffix(".data").resolve())
+    selected_tests = (
+        [str(path.resolve()) for path in test_paths]
+        if test_paths is not None
+        else [str(tests_dir.resolve())]
+    )
+    if not selected_tests:
+        raise ValueError("test_paths must contain at least one path when provided")
     run_cmd = [
         sys.executable, "-m", "coverage", "run", "--branch",
-        f"--source={package_dir.resolve()}", "-m", "pytest", str(tests_dir.resolve()),
+        f"--source={package_dir.resolve()}", "-m", "pytest", *selected_tests,
         "--disable-warnings", "-q",
         *(("--count", str(repeat_tests)) if repeat_tests else ()),
         *shlex.split(pytest_args, posix=os.name != "nt"),
