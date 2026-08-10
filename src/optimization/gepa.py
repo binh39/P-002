@@ -179,6 +179,21 @@ def evaluate_bundle_batch_cached(
         raise ValueError(
             f"Batch targets do not match requested split {split!r}: {sorted(target_splits)}"
         )
+
+    # GEPA may sample the same example more than once in a minibatch.  A target's
+    # identity also determines its isolated workspace name, so launching duplicate
+    # entries concurrently makes both workers race to create and populate the same
+    # directory.  Evaluate each identity once; the adapter still emits one logical
+    # output per original minibatch entry by looking results up by identity.
+    unique_targets: list[SymbolTarget] = []
+    seen_targets: set[tuple[str, str, str, str]] = set()
+    for target in targets:
+        identity = _target_identity(target)
+        if identity not in seen_targets:
+            seen_targets.add(identity)
+            unique_targets.append(target)
+    targets = unique_targets
+
     digest = bundle_digest(bundle)
     evaluation_digest = _evaluation_digest(runner, targets)
     lock_key = (

@@ -24,6 +24,7 @@ from src.optimization.gepa import (
     CoverUpPromptAdapter,
     build_coverage_report,
     bundle_digest,
+    evaluate_bundle_batch_cached,
     evaluate_bundle_cached,
     optimize,
     validate_bundle,
@@ -647,6 +648,43 @@ def test_metric_isolates_targets_in_parallel_and_serializes_batch_cache(tmp_path
     assert [result["score"] for result in results] == [0.5, 0.5]
     assert runner.max_active == 2
     assert runner.calls == 2
+
+
+def test_batch_evaluation_deduplicates_repeated_minibatch_targets(tmp_path):
+    class DuplicateDetectingRunner:
+        def __init__(self):
+            self.config = SimpleNamespace(max_concurrency=2, rate_limit=None)
+            self.candidate_ids = []
+
+        def evaluate_batch(
+            self, targets, candidate, *, candidate_id=None, split=None,
+            workspace_kind="candidate",
+        ):
+            self.candidate_ids.append(candidate_id)
+            return SimpleNamespace(
+                run_id="run-once",
+                tests_workspace="tests-candidate",
+                results=[SimpleNamespace(
+                    target=targets[0],
+                    score={"score": 0.5},
+                    feedback="ok",
+                )],
+            )
+
+    runner = DuplicateDetectingRunner()
+    target = SymbolTarget("project", "pkg/a.py", "first")
+
+    result = evaluate_bundle_batch_cached(
+        runner,
+        [target, target],
+        baseline_bundle(),
+        tmp_path,
+        split="train",
+    )
+
+    assert len(runner.candidate_ids) == 1
+    assert len(result["results"]) == 1
+    assert result["results"][0]["target"] == target.__dict__
 
 
 def test_batch_cache_and_workspace_are_separate_per_split(tmp_path):
