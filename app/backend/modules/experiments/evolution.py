@@ -15,12 +15,8 @@ _ITERATION = re.compile(r"Iteration\s+(\d+):\s*(.*)", re.DOTALL)
 _BASELINE = re.compile(r"Base program full valset score:\s*([-+\d.eE]+)")
 _SELECTED = re.compile(r"Selected program\s+(\d+)\s+score:\s*([-+\d.eE]+)")
 _PROPOSAL = re.compile(r"Proposed new text for\s+([^:]+):\s*(.*)", re.DOTALL)
-_SUBSAMPLE_REJECTED = re.compile(
-    r"New subsample score\s+([-+\d.eE]+)\s+is not better than old score\s+([-+\d.eE]+)"
-)
-_SUBSAMPLE_ACCEPTED = re.compile(
-    r"New subsample score\s+([-+\d.eE]+)\s+is better than old score\s+([-+\d.eE]+)"
-)
+_SUBSAMPLE_REJECTED = re.compile(r"New subsample score\s+([-+\d.eE]+)\s+is not better than old score\s+([-+\d.eE]+)")
+_SUBSAMPLE_ACCEPTED = re.compile(r"New subsample score\s+([-+\d.eE]+)\s+is better than old score\s+([-+\d.eE]+)")
 _MERGE_REJECTED = re.compile(
     r"New program subsample score\s+([-+\d.eE]+)\s+is worse than both parents\s+(.+?),\s*skipping merge"
 )
@@ -134,9 +130,7 @@ def parse_evolution_log(entries: Iterable[CloudLogLine]) -> EvolutionResponse:
                 current.strategy = "merge"
                 current.candidate_minibatch_sum = _number(merge_rejected.group(1))
                 parents = _literal_mapping(merge_rejected.group(2))
-                numeric_parents = {
-                    str(key): _number(str(value)) for key, value in parents.items()
-                }
+                numeric_parents = {str(key): _number(str(value)) for key, value in parents.items()}
                 numeric_parents = {key: value for key, value in numeric_parents.items() if value is not None}
                 if numeric_parents:
                     current.parent_program = " + ".join(f"Program {key}" for key in numeric_parents)

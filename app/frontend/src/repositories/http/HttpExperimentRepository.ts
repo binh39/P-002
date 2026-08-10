@@ -332,10 +332,9 @@ export class HttpExperimentRepository implements ExperimentRepository {
 
   async cancelOptimization(runId: string) {
     return mapOptimizationRun(
-      await apiRequest<ApiOptimizationRun>(
-        `/experiments/optimization-runs/${runId}/cancel`,
-        { method: "POST" },
-      ),
+      await apiRequest<ApiOptimizationRun>(`/experiments/optimization-runs/${runId}/cancel`, {
+        method: "POST",
+      }),
     );
   }
 

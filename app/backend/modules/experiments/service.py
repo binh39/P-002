@@ -367,11 +367,16 @@ class ExperimentService:
             run.cloud_artifact_prefix,
             started_at=run.started_at,
         )
-        if evolution.available and evolution.iterations and run.status not in {
-            ExperimentStatus.OPTIMIZATION_QUEUED,
-            ExperimentStatus.OPTIMIZING,
-            ExperimentStatus.CANDIDATE_EVALUATING,
-        }:
+        if (
+            evolution.available
+            and evolution.iterations
+            and run.status
+            not in {
+                ExperimentStatus.OPTIMIZATION_QUEUED,
+                ExperimentStatus.OPTIMIZING,
+                ExperimentStatus.CANDIDATE_EVALUATING,
+            }
+        ):
             try:
                 object_name = self._optimization_artifact_name(item, run, "evolution.json")
                 await self.storage.write(

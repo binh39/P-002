@@ -114,45 +114,63 @@ function IterationFlow({ iteration }: { iteration: EvolutionIteration }) {
       <dl className="evolution-flow-tree">
         <div>
           <dt>Strategy</dt>
-          <dd><FlowValue>{iteration.strategy}</FlowValue></dd>
+          <dd>
+            <FlowValue>{iteration.strategy}</FlowValue>
+          </dd>
         </div>
         <div>
           <dt>Parent</dt>
-          <dd><FlowValue>{iteration.parentProgram}</FlowValue></dd>
+          <dd>
+            <FlowValue>{iteration.parentProgram}</FlowValue>
+          </dd>
         </div>
         <div>
           <dt>Parent validation score</dt>
-          <dd><FlowValue>{metric(iteration.parentValidationScore)}</FlowValue></dd>
+          <dd>
+            <FlowValue>{metric(iteration.parentValidationScore)}</FlowValue>
+          </dd>
         </div>
         <div>
           <dt>Component</dt>
-          <dd><FlowValue>{iteration.component}</FlowValue></dd>
+          <dd>
+            <FlowValue>{iteration.component}</FlowValue>
+          </dd>
         </div>
         <div className="evolution-flow-prompt">
           <dt>Proposed prompt</dt>
           <dd>
-            {iteration.proposedPrompt ? <pre>{iteration.proposedPrompt}</pre> : <FlowValue>—</FlowValue>}
+            {iteration.proposedPrompt ? (
+              <pre>{iteration.proposedPrompt}</pre>
+            ) : (
+              <FlowValue>—</FlowValue>
+            )}
           </dd>
         </div>
         <div>
           <dt>Parent minibatch sum</dt>
-          <dd><FlowValue>{metric(iteration.parentMinibatchSum)}</FlowValue></dd>
+          <dd>
+            <FlowValue>{metric(iteration.parentMinibatchSum)}</FlowValue>
+          </dd>
         </div>
         <div>
           <dt>Candidate minibatch sum</dt>
-          <dd><FlowValue>{metric(iteration.candidateMinibatchSum)}</FlowValue></dd>
+          <dd>
+            <FlowValue>{metric(iteration.candidateMinibatchSum)}</FlowValue>
+          </dd>
         </div>
         <div>
           <dt>Decision</dt>
-          <dd><FlowValue>{iteration.decision}</FlowValue></dd>
+          <dd>
+            <FlowValue>{iteration.decision}</FlowValue>
+          </dd>
         </div>
         <div>
           <dt>Best Pareto metrics</dt>
           <dd>
             <FlowValue>{iteration.paretoChanged ? "Updated" : "Unchanged"}</FlowValue>
             <small>
-              Statement {metric(iteration.bestStatement)} · Branch {metric(iteration.bestBranch)} · Score{" "}
-              {metric(iteration.bestScore)}
+              Statement {metric(iteration.bestStatement)} · Branch {metric(iteration.bestBranch)} ·
+              Score {metric(iteration.bestScore)}
             </small>
           </dd>
         </div>
@@ -204,7 +222,9 @@ function EvolutionPanel({ evolution }: { evolution: OptimizationEvolution }) {
                       <strong>Iteration {iteration.iteration}</strong>
                       <small>{iteration.strategy}</small>
                     </span>
-                    <span className={`iteration-decision is-${iteration.decision.toLowerCase().replace(/\s+/g, "-")}`}>
+                    <span
+                      className={`iteration-decision is-${iteration.decision.toLowerCase().replace(/\s+/g, "-")}`}
+                    >
                       {iteration.decision}
                     </span>
                   </button>
@@ -216,20 +236,50 @@ function EvolutionPanel({ evolution }: { evolution: OptimizationEvolution }) {
 
             <div className="evolution-chart-panel">
               <div className="evolution-panel-label">Best validation metrics</div>
-              <div className="evolution-chart" aria-label="Statement, branch and score by iteration">
+              <div
+                className="evolution-chart"
+                aria-label="Statement, branch and score by iteration"
+              >
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={evolution.metrics} margin={{ top: 18, right: 18, bottom: 8, left: -12 }}>
+                  <LineChart
+                    data={evolution.metrics}
+                    margin={{ top: 18, right: 18, bottom: 8, left: -12 }}
+                  >
                     <CartesianGrid strokeDasharray="4 4" stroke="#e4e7ec" />
                     <XAxis dataKey="iteration" tickFormatter={(value) => `I${value}`} />
-                    <YAxis domain={[0, "auto"]} tickFormatter={(value) => Number(value).toFixed(2)} />
+                    <YAxis
+                      domain={[0, "auto"]}
+                      tickFormatter={(value) => Number(value).toFixed(2)}
+                    />
                     <Tooltip
                       labelFormatter={(value) => `Iteration ${value}`}
                       formatter={(value) => [Number(value).toFixed(4)]}
                     />
                     <Legend />
-                    <Line type="monotone" dataKey="statement" name="Statement" stroke="#7c6cf2" strokeWidth={2.5} connectNulls />
-                    <Line type="monotone" dataKey="branch" name="Branch" stroke="#f59e0b" strokeWidth={2.5} connectNulls />
-                    <Line type="monotone" dataKey="score" name="Score" stroke="#0f9f75" strokeWidth={2.5} connectNulls />
+                    <Line
+                      type="monotone"
+                      dataKey="statement"
+                      name="Statement"
+                      stroke="#7c6cf2"
+                      strokeWidth={2.5}
+                      connectNulls
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="branch"
+                      name="Branch"
+                      stroke="#f59e0b"
+                      strokeWidth={2.5}
+                      connectNulls
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="score"
+                      name="Score"
+                      stroke="#0f9f75"
+                      strokeWidth={2.5}
+                      connectNulls
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -449,7 +499,9 @@ export default function OptimizationRun() {
         <section className="platform-card evolution-card">
           <div className="evolution-empty" role="status">
             <span className="baseline-spinner" aria-hidden="true" />
-            <div><strong>Loading Cloud Run evolution log…</strong></div>
+            <div>
+              <strong>Loading Cloud Run evolution log…</strong>
+            </div>
           </div>
         </section>
       )}

@@ -60,9 +60,7 @@ class DashboardService:
         items = await self.experiments.list_for_owner(owner_id)
         runs = await asyncio.gather(
             *(
-                self.experiments.get_optimization_run(item.optimization_run_id)
-                if item.optimization_run_id
-                else _none()
+                self.experiments.get_optimization_run(item.optimization_run_id) if item.optimization_run_id else _none()
                 for item in items
             )
         )
@@ -114,9 +112,7 @@ class DashboardService:
         latest_statement = completed_metrics[0][2] if completed_metrics else 0
         running = sum(item.status in _RUNNING for item in items)
         queued = sum(item.status in _PENDING - {ExperimentStatus.DRAFT} for item in items)
-        project_names = {
-            snapshot.name for item in items for snapshot in item.project_snapshots if snapshot.name
-        }
+        project_names = {snapshot.name for item in items for snapshot in item.project_snapshots if snapshot.name}
         project_name = (
             next(iter(project_names))
             if len(project_names) == 1
@@ -126,9 +122,7 @@ class DashboardService:
         )
         average_seconds = sum(durations) / len(durations) if durations else 0
         approved = sum(item.status == ExperimentStatus.APPROVED for item in items)
-        models = {item.settings.coverup_model for item in items} | {
-            item.settings.optimize_model for item in items
-        }
+        models = {item.settings.coverup_model for item in items} | {item.settings.optimize_model for item in items}
         completed = sum(_status(item.status) == "completed" for item in items)
 
         return DashboardResponse(
