@@ -241,7 +241,7 @@ class CloudRunJobGepaOptimizer:
         if not execution_name:
             raise RuntimeError("Cloud Run execution is not discoverable yet; retry in a few seconds")
         parts = self.job_name.split("/")
-        full_name = f"projects/{parts[1]}/locations/{parts[3]}/jobs/{parts[-1]}" f"/executions/{execution_name}"
+        full_name = f"projects/{parts[1]}/locations/{parts[3]}/jobs/{parts[-1]}/executions/{execution_name}"
         await asyncio.to_thread(
             self.executions_client.cancel_execution,
             request={"name": full_name},
