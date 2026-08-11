@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -150,11 +151,12 @@ def _prune_run_dir(run_dir: Path) -> None:
     else in the run directory is read afterwards.
     """
     for stale in run_dir.iterdir():
-        if not stale.is_file():
-            continue
         if stale.name == "record.json":
             continue
-        stale.unlink(missing_ok=True)
+        if stale.is_dir():
+            shutil.rmtree(stale)
+        else:
+            stale.unlink(missing_ok=True)
 
 
 class CoverUpExperimentRunner:
@@ -376,6 +378,9 @@ class CoverUpExperimentRunner:
             # This keeps GEPA feedback local while sharing a single generated-tests
             # folder. An empty collector file preserves measurable zero-coverage
             # denominators when a target produced no saved test.
+            coverage_jobs = []
+            pytest_temp_root = run_dir / f"pytest_tmp{suffix}"
+            pytest_temp_root.mkdir(parents=True, exist_ok=False)
             for target in group:
                 target_traces = _traces_for_target(attempt_traces, target)
                 token = _target_artifact_token(target)
@@ -390,17 +395,27 @@ class CoverUpExperimentRunner:
                         encoding="utf-8",
                     )
                     selected_tests = [empty_test]
+                coverage_jobs.append((
+                    target,
+                    target_traces,
+                    after_json,
+                    selected_tests,
+                    pytest_temp_root / token,
+                ))
+
+            def score_target(job):
+                target, target_traces, after_json, selected_tests, pytest_basetemp = job
                 after = run_coverage(
                     project_root=self.config.project_root.resolve(),
                     package_dir=package_dir,
                     tests_dir=workspace,
                     test_paths=selected_tests,
+                    pytest_basetemp=pytest_basetemp,
                     output=after_json,
                     pytest_args=self.config.pytest_args,
                     repeat_tests=self.config.repeat_tests,
                     env=environment,
                 )
-                after_jsons.append(after_json)
                 if after.returncode:
                     feedback = (
                         "Score: 0. The generated tests for this target failed under "
@@ -426,13 +441,12 @@ class CoverUpExperimentRunner:
                             score_data["tests_passed"] = False
                             score_data["pytest_exit_code"] = after.returncode
                             score_data["generator_exit_code"] = completed.returncode
-                    results.append(BatchTargetResult(
+                    return BatchTargetResult(
                         target=target,
                         score=score_data,
                         feedback=feedback,
                         attempt_traces=target_traces,
-                    ))
-                    continue
+                    ), after_json
 
                 report = load_report(after_json)
                 try:
@@ -440,12 +454,11 @@ class CoverUpExperimentRunner:
                         report, target.source_file, target.symbol
                     )
                 except KeyError as exc:
-                    results.append(BatchTargetResult(
+                    return BatchTargetResult(
                         target=target,
                         feedback=f"Score: 0. Coverage lookup failed: {exc}",
                         attempt_traces=target_traces,
-                    ))
-                    continue
+                    ), after_json
                 before_cov = _zero_coverage_like(after_cov)
                 metric_result = score_symbol(before_cov, after_cov)
                 score_data = metric_result.as_dict()
@@ -454,14 +467,33 @@ class CoverUpExperimentRunner:
                 # concurrent target, so keep each independently measured score.
                 score_data["valid"] = True
                 score_data["generator_exit_code"] = completed.returncode
-                results.append(BatchTargetResult(
+                return BatchTargetResult(
                     target=target,
                     score=score_data,
                     feedback=build_feedback(
                         metric_result, coverup_exit_code=completed.returncode
                     ),
                     attempt_traces=target_traces,
-                ))
+                ), after_json
+
+            coverage_workers = min(
+                len(coverage_jobs),
+                max(1, self.config.max_concurrency),
+                os.cpu_count() or 1,
+            )
+            if coverage_workers == 1:
+                scored_targets = [score_target(job) for job in coverage_jobs]
+            else:
+                with ThreadPoolExecutor(
+                    max_workers=coverage_workers,
+                    thread_name_prefix="target-coverage",
+                ) as executor:
+                    # executor.map preserves target order while the independent
+                    # pytest/coverage subprocesses execute concurrently.
+                    scored_targets = list(executor.map(score_target, coverage_jobs))
+            for target_result, after_json in scored_targets:
+                results.append(target_result)
+                after_jsons.append(after_json)
             coverup_logs.append(coverup_log)
             project_traces.append(project_trace)
         # Preserve the caller's target order in the merged results even though

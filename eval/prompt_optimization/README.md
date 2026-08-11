@@ -415,8 +415,10 @@ Trong mỗi vòng reflection:
 1. GEPA chọn `initial` hoặc `error` theo round-robin với reflection minibatch 8;
    merge có thể ghép các component tốt.
 2. Cả bundle được validate và hash để tạo candidate ID ổn định.
-3. Mỗi symbol chạy trong workspace test riêng, được chọn chính xác bằng
-   `source_file + qualname`; các target vẫn có thể chạy song song theo `max_concurrency`.
+3. Mỗi batch dùng một generated-tests workspace chung theo project; test của từng symbol
+   được chọn chính xác bằng `source_file + qualname`. Sau generation, coverage/pytest của
+   các target chạy trong bounded thread pool theo `min(max_concurrency, CPU count)`, với
+   coverage data, pytest basetemp và cache cô lập cho từng target.
 4. Mỗi example nhận score riêng của symbol, được scale theo số statement/branch để mean
    của GEPA đúng bằng micro-average cuối cùng.
 5. Feedback chứa file, symbol, source lines liên quan, coverage còn thiếu và kết quả từng

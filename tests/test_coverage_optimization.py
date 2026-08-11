@@ -177,18 +177,21 @@ def test_run_coverage_collects_only_explicit_target_test_paths(tmp_path, monkeyp
     monkeypatch.setattr("src.optimization.coveragepy.subprocess.run", fake_run)
     package_dir = tmp_path / "pkg"
     tests_dir = tmp_path / "shared-tests"
+    pytest_temp_root = tmp_path / "pytest-temp"
     package_dir.mkdir()
     tests_dir.mkdir()
     selected = tests_dir / "test_for_one_target.py"
     ignored = tests_dir / "test_for_another_target.py"
     selected.write_text("def test_selected(): pass\n", encoding="utf-8")
     ignored.write_text("def test_ignored(): pass\n", encoding="utf-8")
+    pytest_basetemp = pytest_temp_root / "target"
 
     run_coverage(
         project_root=tmp_path,
         package_dir=package_dir,
         tests_dir=tests_dir,
         test_paths=[selected],
+        pytest_basetemp=pytest_basetemp,
         output=tmp_path / "coverage.json",
     )
 
@@ -196,6 +199,66 @@ def test_run_coverage_collects_only_explicit_target_test_paths(tmp_path, monkeyp
     assert str(selected.resolve()) in pytest_command
     assert str(ignored.resolve()) not in pytest_command
     assert str(tests_dir.resolve()) not in pytest_command
+    assert pytest_command[pytest_command.index("-p") + 1] == "no:cacheprovider"
+    assert pytest_command[pytest_command.index("--basetemp") + 1] == str(
+        pytest_basetemp.resolve()
+    )
+
+
+def test_parallel_coverage_subprocesses_use_isolated_pytest_state(tmp_path):
+    package_dir = tmp_path / "pkg"
+    tests_dir = tmp_path / "shared-tests"
+    pytest_temp_root = tmp_path / "pytest-temp"
+    package_dir.mkdir()
+    tests_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    (package_dir / "module.py").write_text(
+        "def first(value):\n    return value + 1\n\n"
+        "def second(value):\n    return value * 2\n",
+        encoding="utf-8",
+    )
+    first_test = tests_dir / "test_first.py"
+    second_test = tests_dir / "test_second.py"
+    first_test.write_text(
+        "from pkg.module import first\n\n"
+        "def test_first(tmp_path):\n"
+        "    assert tmp_path.is_dir()\n"
+        "    assert first(1) == 2\n",
+        encoding="utf-8",
+    )
+    second_test.write_text(
+        "from pkg.module import second\n\n"
+        "def test_second(tmp_path):\n"
+        "    assert tmp_path.is_dir()\n"
+        "    assert second(2) == 4\n",
+        encoding="utf-8",
+    )
+
+    def execute_target(name, test_path):
+        return run_coverage(
+            project_root=tmp_path,
+            package_dir=package_dir,
+            tests_dir=tests_dir,
+            test_paths=[test_path],
+            pytest_basetemp=pytest_temp_root / name,
+            output=tmp_path / f"coverage-{name}.json",
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(execute_target, "first", first_test),
+            executor.submit(execute_target, "second", second_test),
+        ]
+        completed = [future.result(timeout=30) for future in futures]
+
+    assert [result.returncode for result in completed] == [0, 0]
+    assert (tmp_path / "coverage-first.json").is_file()
+    assert (tmp_path / "coverage-second.json").is_file()
+    assert (pytest_temp_root / "first").is_dir()
+    assert (pytest_temp_root / "second").is_dir()
+    assert not (tests_dir / ".pytest_cache").exists()
+    assert not (tests_dir / "__pycache__").exists()
+    assert not (package_dir / "__pycache__").exists()
 
 
 def test_optimization_cli_defaults_to_five_test_repetitions():
@@ -412,6 +475,8 @@ def test_runner_batches_generation_but_scores_and_reports_each_target_separately
     baseline_bundle().save(prompt_path)
     coverup_commands = []
     coverage_test_paths = []
+    coverage_basetemps = []
+    coverage_barrier = threading.Barrier(2)
 
     def fake_subprocess_run(command, **kwargs):
         coverup_commands.append(command)
@@ -449,7 +514,11 @@ def test_runner_batches_generation_but_scores_and_reports_each_target_separately
     def fake_run_coverage(**kwargs):
         selected = [Path(path) for path in kwargs["test_paths"]]
         coverage_test_paths.append(selected)
+        coverage_basetemps.append(Path(kwargs["pytest_basetemp"]))
         assert len(selected) == 1
+        # A serial implementation times out here; both target coverage workers
+        # must enter before either is allowed to produce its report.
+        coverage_barrier.wait(timeout=2)
         first = selected[0].name == "test_opt_1.py"
         source_file = "pkg/a.py" if first else "pkg/b.py"
         symbol = "first" if first else "second"
@@ -482,12 +551,14 @@ def test_runner_batches_generation_but_scores_and_reports_each_target_separately
 
     monkeypatch.setattr("src.optimization.runner.subprocess.run", fake_subprocess_run)
     monkeypatch.setattr("src.optimization.runner.run_coverage", fake_run_coverage)
+    monkeypatch.setattr("src.optimization.runner.os.cpu_count", lambda: 2)
     runner = CoverUpExperimentRunner(ExperimentConfig(
         project_root=tmp_path,
         package_dir=package_dir,
         tests_dir=tests_dir,
         artifacts_dir=artifacts_dir,
         coverup_model="fake-model",
+        max_concurrency=2,
     ))
     targets = [
         SymbolTarget("project", "pkg/a.py", "first", split),
@@ -501,11 +572,16 @@ def test_runner_batches_generation_but_scores_and_reports_each_target_separately
     assert len(coverup_commands) == 1
     command = coverup_commands[0]
     assert command[command.index("--target-symbols") + 1] == "first,second"
-    assert [paths[0].name for paths in coverage_test_paths] == [
+    assert {paths[0].name for paths in coverage_test_paths} == {
         "test_opt_1.py", "test_opt_2.py",
-    ]
+    }
+    assert len(set(coverage_basetemps)) == 2
+    assert len({path.parent for path in coverage_basetemps}) == 1
+    assert coverage_basetemps[0].parent.name == "pytest_tmp"
     generated_root = artifacts_dir / "generated_tests" / split
     assert len(list(generated_root.iterdir())) == 1
+    run_dir = artifacts_dir / "runs" / "candidate" / split / record.run_id
+    assert [path.name for path in run_dir.iterdir()] == ["record.json"]
     first_result, second_result = record.results
     assert first_result.score["score"] == 1.0
     assert first_result.attempt_traces[0]["generated_test"].startswith("def test_first")

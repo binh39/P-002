@@ -88,12 +88,16 @@ def run_coverage(
     pytest_args: str = "", repeat_tests: int = 0,
     env: dict[str, str] | None = None,
     test_paths: Sequence[Path] | None = None,
+    pytest_basetemp: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run coverage for a whole suite or an explicit subset of pytest paths."""
+    """Run coverage for a whole suite or an isolated subset of pytest paths."""
     output.parent.mkdir(parents=True, exist_ok=True)
     run_env = os.environ.copy()
     run_env.update(env or {})
     run_env["COVERAGE_FILE"] = str(output.with_suffix(".data").resolve())
+    # Concurrent target scorers may execute the same generated module. Avoid
+    # cross-process races and leftover artifacts in a shared __pycache__.
+    run_env["PYTHONDONTWRITEBYTECODE"] = "1"
     selected_tests = (
         [str(path.resolve()) for path in test_paths]
         if test_paths is not None
@@ -101,10 +105,18 @@ def run_coverage(
     )
     if not selected_tests:
         raise ValueError("test_paths must contain at least one path when provided")
+    resolved_basetemp = None
+    if pytest_basetemp is not None:
+        resolved_basetemp = pytest_basetemp.resolve()
+        resolved_basetemp.parent.mkdir(parents=True, exist_ok=True)
     run_cmd = [
         sys.executable, "-m", "coverage", "run", "--branch",
         f"--source={package_dir.resolve()}", "-m", "pytest", *selected_tests,
-        "--disable-warnings", "-q",
+        "--disable-warnings", "-q", "-p", "no:cacheprovider",
+        *(
+            ("--basetemp", str(resolved_basetemp))
+            if resolved_basetemp is not None else ()
+        ),
         *(("--count", str(repeat_tests)) if repeat_tests else ()),
         *shlex.split(pytest_args, posix=os.name != "nt"),
     ]

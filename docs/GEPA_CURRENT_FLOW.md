@@ -191,8 +191,9 @@ duoc danh gia lai tren full train khi tao coverage report.
 
 Moi project trong batch dung mot CoverUp process va mot generated-tests workspace.
 CoverUp tu chay cac target song song theo `--max-concurrency`. Sau generation, trace
-`saved_test` anh xa moi test file ve dung `source_file + qualname`; coverage/pytest chi
-chay cac file cua target dang cham:
+`saved_test` anh xa moi test file ve dung `source_file + qualname`; cac coverage/pytest
+pass chi chay test cua target dang cham va duoc dua vao bounded thread pool. So worker
+la `min(targets trong project, max_concurrency, CPU count)`:
 
 ```text
 batch targets [A, B, C, D]
@@ -207,10 +208,10 @@ one shared generated-tests workspace
    | trace(C) -> test_3.py
    | trace(D) -> test_4.py
             |
-            +--> pytest test_1.py -> coverage/feedback A
-            +--> pytest test_2.py -> coverage/feedback B
-            +--> pytest test_3.py -> coverage/feedback C
-            +--> pytest test_4.py -> coverage/feedback D
+            +==> pytest test_1.py -> coverage/feedback A
+            +==> pytest test_2.py -> coverage/feedback B
+            +==> pytest test_3.py -> coverage/feedback C
+            +==> pytest test_4.py -> coverage/feedback D
             |
             v
 exact-batch batch.json
@@ -218,8 +219,10 @@ exact-batch batch.json
 
 Neu mot target khong luu duoc test, runner dung mot collector file rong de lay denominator
 zero-coverage. Neu test cua mot target fail, chi target do nhan score 0; cac target khac
-van giu score va feedback doc lap. `rate_limit` va `max_concurrency` duoc ap dung mot lan
-ben trong CoverUp process, khong bi nhan len boi nhieu process ngoai.
+van giu score va feedback doc lap. Moi coverage worker co `COVERAGE_FILE`, pytest
+`--basetemp` rieng, tat cache provider va khong ghi bytecode, nen khong tranh chap file.
+`rate_limit` chi ap dung trong CoverUp; project generation van tuan tu de khong nhan quota
+LLM, trong khi local coverage scoring tan dung cac CPU cua cung mot Cloud Run task.
 
 ### 4.5 Ket luan ngan gon
 
