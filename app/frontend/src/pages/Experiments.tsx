@@ -166,19 +166,19 @@ export default function Experiments() {
                     </td>
                     <td>
                       <div className="experiment-row-actions">
-                        {item.comparisonRunId ? (
+                        {item.optimizationRunId ? (
+                          <button
+                            className="table-action"
+                            onClick={() => navigate(`/optimization-runs/${item.optimizationRunId}`)}
+                          >
+                            Open experiment
+                          </button>
+                        ) : item.comparisonRunId ? (
                           <button
                             className="table-action"
                             onClick={() => navigate(`/comparison-runs/${item.comparisonRunId}`)}
                           >
                             Open comparison
-                          </button>
-                        ) : item.optimizationRunId ? (
-                          <button
-                            className="table-action"
-                            onClick={() => navigate(`/optimization-runs/${item.optimizationRunId}`)}
-                          >
-                            Open optimization
                           </button>
                         ) : (
                           <span className="muted-cell">Draft</span>
