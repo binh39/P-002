@@ -4,6 +4,7 @@ REPOSITORY_BACKEND: firestore
 STORAGE_BACKEND: gcs
 ANALYSIS_DISPATCHER: cloud_tasks
 GCP_PROJECT_ID: vinai-505107
+ADMIN_VERTEXAI_PROJECT: gen-lang-client-0475767921
 GCP_SERVICE_ACCOUNT_EMAIL: promptopt-api@vinai-505107.iam.gserviceaccount.com
 GCS_BUCKET: vinai-505107-promptopt-sources
 SAMPLE_REPOS_DIR: /app/sample_repo

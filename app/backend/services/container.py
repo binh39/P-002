@@ -149,6 +149,7 @@ def build_services(settings: Settings) -> ServiceContainer:
         storage,
         cloud_optimizer=cloud_optimizer,
         samples=samples,
+        admin_vertexai_project=settings.admin_vertexai_project,
     )
     dashboard = DashboardService(experiment_repository)
     if settings.experiment_dispatcher == "cloud_tasks":

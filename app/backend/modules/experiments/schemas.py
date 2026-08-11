@@ -216,7 +216,9 @@ class OptimizationRunResponse(StrictModel):
 
 
 class OptimizationRunRecord(OptimizationRunResponse):
-    pass
+    # Internal routing metadata. This is persisted with the run but intentionally
+    # omitted from OptimizationRunResponse so clients cannot choose a billing project.
+    vertexai_project: str | None = None
 
 
 class EvolutionIteration(StrictModel):

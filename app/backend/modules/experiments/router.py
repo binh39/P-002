@@ -43,7 +43,11 @@ async def delete_experiment(experiment_id: str, user: CurrentUser, request: Requ
 
 @router.post("/{experiment_id}/optimize", response_model=OptimizationRunResponse, status_code=status.HTTP_202_ACCEPTED)
 async def request_optimization(experiment_id: str, user: CurrentUser, request: Request):
-    return await request.app.state.services.experiments.request_optimization(experiment_id, user.uid)
+    return await request.app.state.services.experiments.request_optimization(
+        experiment_id,
+        user.uid,
+        full_access=user.has_full_access,
+    )
 
 
 @router.get("/optimization-runs/{run_id}", response_model=OptimizationRunResponse)

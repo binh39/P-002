@@ -87,11 +87,13 @@ class ExperimentService:
         storage: ObjectStorage,
         cloud_optimizer=None,
         samples: SampleProjectCatalog | None = None,
+        admin_vertexai_project: str = "",
     ):
         self.repository, self.projects, self.functions = repository, projects, functions
         self.storage = storage
         self.cloud_optimizer = cloud_optimizer
         self.samples = samples
+        self.admin_vertexai_project = admin_vertexai_project.strip()
         self.optimization_dispatcher: OptimizationDispatcher | None = None
         self.comparison_dispatcher: ComparisonDispatcher | None = None
 
@@ -232,7 +234,13 @@ class ExperimentService:
             raise AppError(409, "EXPERIMENT_ACTIVE", "A running experiment cannot be deleted")
         await self.repository.delete(item.id)
 
-    async def request_optimization(self, experiment_id: str, owner_id: str) -> OptimizationRunResponse:
+    async def request_optimization(
+        self,
+        experiment_id: str,
+        owner_id: str,
+        *,
+        full_access: bool = False,
+    ) -> OptimizationRunResponse:
         item = await self._owned(experiment_id, owner_id)
         previous_status = item.status
         if previous_status != ExperimentStatus.DRAFT:
@@ -261,6 +269,7 @@ class ExperimentService:
             experiment_id=item.id,
             status=ExperimentStatus.OPTIMIZATION_QUEUED,
             parent_prompt_digest=parent.digest(),
+            vertexai_project=self.admin_vertexai_project if full_access else None,
             created_at=now,
         )
         await self.repository.create_optimization_run(run)
@@ -465,6 +474,7 @@ class ExperimentService:
                         validation=targets["validation"],
                         holdout=holdout,
                         settings=item.settings,
+                        vertexai_project=run.vertexai_project,
                     )
                     run.cloud_deadline_at = datetime.now(UTC) + timedelta(seconds=self.cloud_optimizer.timeout_seconds)
                     await self.repository.save_optimization_run(run)
@@ -476,6 +486,7 @@ class ExperimentService:
                     validation=targets["validation"],
                     holdout=holdout,
                     settings=item.settings,
+                    vertexai_project=run.vertexai_project,
                 )
             artifact_payloads = {
                 "candidate_prompt.json": (result.candidate.as_json().encode(), "application/json"),

@@ -156,6 +156,19 @@ async def test_cloud_gepa_optimizer_uses_isolated_web_prefix_and_maps_result():
     assert not any(name.endswith("source.zip") for name in storage.objects)
     assert not any(name.endswith("project-layouts.json") for name in storage.objects)
 
+    await optimizer.start(
+        baseline=baseline_prompt(),
+        train=targets["train"],
+        validation=targets["validation"],
+        holdout=targets["test"],
+        settings=ExperimentSettings(),
+        vertexai_project="gen-lang-client-0475767921",
+    )
+    admin_environment = {
+        item["name"]: item["value"] for item in client.request["overrides"]["container_overrides"][0]["env"]
+    }
+    assert admin_environment["VERTEXAI_PROJECT"] == "gen-lang-client-0475767921"
+
 
 @pytest.mark.asyncio
 async def test_cloud_evolution_resolves_execution_label_and_parses_stdout():

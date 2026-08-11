@@ -47,6 +47,7 @@ class CloudRunJobGepaOptimizer:
         validation: list[OptimizationTarget],
         holdout: list[OptimizationTarget] | None,
         settings: ExperimentSettings,
+        vertexai_project: str | None = None,
     ) -> OptimizationResult:
         artifacts_prefix = await self.start(
             baseline=baseline,
@@ -54,6 +55,7 @@ class CloudRunJobGepaOptimizer:
             validation=validation,
             holdout=holdout,
             settings=settings,
+            vertexai_project=vertexai_project,
         )
         result = await self.collect(artifacts_prefix)
         if result is None:
@@ -68,6 +70,7 @@ class CloudRunJobGepaOptimizer:
         validation: list[OptimizationTarget],
         holdout: list[OptimizationTarget] | None,
         settings: ExperimentSettings,
+        vertexai_project: str | None = None,
     ) -> str:
         """Upload immutable inputs and trigger the job without waiting for completion."""
         if not train or not validation:
@@ -125,16 +128,19 @@ class CloudRunJobGepaOptimizer:
             args.extend(["--rate-limit", str(settings.rate_limit)])
         if settings.pytest_args:
             args.extend(["--pytest-args", settings.pytest_args])
+        environment = [
+            {"name": "COVERUP_MODEL", "value": settings.coverup_model},
+            {"name": "OPTIMIZE_MODEL", "value": settings.optimize_model},
+        ]
+        if vertexai_project:
+            environment.append({"name": "VERTEXAI_PROJECT", "value": vertexai_project})
         request = {
             "name": self.job_name,
             "overrides": {
                 "container_overrides": [
                     {
                         "args": args,
-                        "env": [
-                            {"name": "COVERUP_MODEL", "value": settings.coverup_model},
-                            {"name": "OPTIMIZE_MODEL", "value": settings.optimize_model},
-                        ],
+                        "env": environment,
                     }
                 ],
                 "task_count": 1,
