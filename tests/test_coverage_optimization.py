@@ -23,6 +23,7 @@ from src.optimization.coveragepy import (
 from src.optimization.gepa import (
     CausalReflectionComponentSelector,
     CoverUpPromptAdapter,
+    LLMReflectionComponentSelector,
     build_coverage_report,
     bundle_digest,
     evaluate_bundle_batch_cached,
@@ -1370,15 +1371,15 @@ def test_reflection_compares_candidate_with_parent_and_balances_exemplars(tmp_pa
     proposed_templates = iter((parent_initial, proposed_initial))
 
     def reflection_lm(prompt):
-        if "Return JSON only with exactly these fields" in prompt:
-            return [json.dumps({
-                "failure_mode": "coverage_regression",
-                "root_cause": "one instruction changes generated behavior",
+        return [json.dumps({
+            "name": "update_prompt_component",
+            "arguments": {
+                "component": "initial",
+                "replacements": {"initial": next(proposed_templates)},
+                "diagnosis": "one instruction changes generated behavior",
                 "evidence": ["candidate and parent have different outcomes"],
-                "recommended_change": "make one conservative change",
-                "regression_risk": "preserve already covered behavior",
-            })]
-        return [f"<template>{next(proposed_templates)}</template>"]
+            },
+        })]
 
     adapter = CoverUpPromptAdapter(
         runner=FakeRunner(),
@@ -1632,7 +1633,108 @@ def test_causal_component_selector_returns_noop_without_failure_evidence():
     assert selected == []
 
 
-def test_prompt_mutation_runs_structured_diagnosis_first(tmp_path):
+def test_llm_component_selector_always_exposes_both_after_any_failure():
+    selector = LLMReflectionComponentSelector()
+    candidate = baseline_bundle().as_candidate()
+    trajectories = [{
+        "score": 0.1,
+        "attempt_traces": [
+            {"component": "initial", "outcome": "test_error"},
+        ],
+    }]
+
+    selected = selector(None, trajectories, [0.1], 0, candidate)
+
+    assert selected == ["initial", "error"]
+
+
+def test_prompt_mutation_can_update_all_components_in_one_call(tmp_path):
+    baseline = baseline_bundle()
+    improved_initial = baseline.initial.replace(
+        "Create new pytest test functions",
+        "Analyze reachability first.\nCreate new pytest test functions",
+    )
+    improved_error = "Coordinate repair with initial constraints.\n" + baseline.error
+    calls = []
+
+    def reflection_lm(prompt):
+        calls.append(prompt)
+        return [json.dumps({
+            "name": "update_prompt_component",
+            "arguments": {
+                "component": "all",
+                "replacements": {
+                    "initial": improved_initial,
+                    "error": improved_error,
+                },
+                "diagnosis": "generation and repair use inconsistent constraints",
+                "evidence": ["both stages have terminal failures"],
+            },
+        })]
+
+    adapter = CoverUpPromptAdapter(
+        runner=SimpleNamespace(),
+        candidate_dir=tmp_path,
+        targets_by_split={},
+        baseline=baseline,
+        reflection_lm=reflection_lm,
+    )
+    proposals = adapter.propose_new_texts(
+        baseline.as_candidate(),
+        {
+            "initial": [{"Feedback": "initial failed"}],
+            "error": [],
+        },
+        ["initial", "error"],
+    )
+
+    assert proposals == {"initial": improved_initial, "error": improved_error}
+    assert len(calls) == 1
+    decision = json.loads(
+        (tmp_path / "reflection_decisions.jsonl").read_text(encoding="utf-8")
+    )
+    assert decision["one_call"] is True
+    assert decision["selection"] == "all"
+    assert decision["changed_components"] == ["initial", "error"]
+    assert decision["status"] == "accepted"
+
+
+def test_prompt_mutation_rejects_partial_all_update_atomically(tmp_path):
+    baseline = baseline_bundle()
+    adapter = CoverUpPromptAdapter(
+        runner=SimpleNamespace(),
+        candidate_dir=tmp_path,
+        targets_by_split={},
+        baseline=baseline,
+        reflection_lm=lambda prompt: [json.dumps({
+            "name": "update_prompt_component",
+            "arguments": {
+                "component": "all",
+                "replacements": {"initial": baseline.initial},
+                "diagnosis": "both stages failed",
+                "evidence": ["both stages have failures"],
+            },
+        })],
+    )
+
+    proposals = adapter.propose_new_texts(
+        baseline.as_candidate(),
+        {
+            "initial": [{"Feedback": "initial failed"}],
+            "error": [{"Feedback": "repair failed"}],
+        },
+        ["initial", "error"],
+    )
+
+    assert proposals == baseline.as_candidate()
+    decision = json.loads(
+        (tmp_path / "reflection_decisions.jsonl").read_text(encoding="utf-8")
+    )
+    assert decision["selection"] == "all"
+    assert decision["status"] == "incomplete_replacements"
+
+
+def test_prompt_mutation_selects_and_updates_component_in_one_call(tmp_path):
     baseline = baseline_bundle()
     calls = []
     improved = baseline.initial.replace(
@@ -1642,15 +1744,15 @@ def test_prompt_mutation_runs_structured_diagnosis_first(tmp_path):
 
     def reflection_lm(prompt):
         calls.append(prompt)
-        if len(calls) == 1:
-            return [json.dumps({
-                "failure_mode": "missing_precondition",
-                "root_cause": "the template does not require reachability analysis",
+        return [json.dumps({
+            "name": "update_prompt_component",
+            "arguments": {
+                "component": "initial",
+                "replacements": {"initial": improved},
+                "diagnosis": "inspect branch preconditions while preserving formatting",
                 "evidence": ["the generated test missed the guarded branch"],
-                "recommended_change": "inspect branch preconditions before choosing inputs",
-                "regression_risk": "preserve valid output formatting",
-            })]
-        return [f"<template>{improved}</template>"]
+            },
+        })]
 
     adapter = CoverUpPromptAdapter(
         runner=SimpleNamespace(),
@@ -1670,10 +1772,120 @@ def test_prompt_mutation_runs_structured_diagnosis_first(tmp_path):
     )
 
     assert proposals["initial"] == improved
-    assert len(calls) == 2
-    assert "Return JSON only with exactly these fields" in calls[0]
-    assert "missing_precondition" in calls[1]
-    assert "Validated structured diagnosis" in calls[1]
+    assert len(calls) == 1
+    assert '"component": "initial, error, or all"' in calls[0]
+    assert "update_prompt_component" in calls[0]
+
+
+def test_local_smoke_real_gepa_uses_one_call_all_flow(tmp_path):
+    package_dir = tmp_path / "sample_repo" / "pkg"
+    package_dir.mkdir(parents=True)
+    (package_dir / "module.py").write_text(
+        "def target(value):\n    return value + 1\n", encoding="utf-8"
+    )
+    baseline = baseline_bundle()
+    improved_initial = "Analyze branch reachability first.\n" + baseline.initial
+    improved_error = "Preserve valid test behavior during repair.\n" + baseline.error
+    lm_calls = []
+
+    class FakeRunner:
+        config = SimpleNamespace(
+            project_root=tmp_path,
+            package_dir=package_dir,
+            coverup_model="local-fake-coverup",
+            max_attempts=2,
+            repeat_tests=1,
+            pytest_args="",
+            max_concurrency=1,
+            rate_limit=None,
+        )
+
+        def evaluate_batch(
+            self, targets, prompt_path, *, candidate_id=None, split=None,
+            workspace_kind="candidate",
+        ):
+            prompt = json.loads(Path(prompt_path).read_text(encoding="utf-8"))
+            changed = prompt["initial"] != baseline.initial
+            score = 0.8 if changed else 0.2
+            results = []
+            for target in targets:
+                traces = [{
+                    "attempt": 1,
+                    "component": "initial",
+                    "outcome": "test_error",
+                    "generated_test": "def test_target(): assert missing_name",
+                    "execution_error": "NameError: missing_name",
+                    "next_component": "error",
+                }, {
+                    "attempt": 2,
+                    "component": "error",
+                    "outcome": "no_coverage_gain_unrepairable",
+                    "generated_test": "def test_target(): assert True",
+                    "remaining_lines": [2],
+                    "remaining_branches": [],
+                }]
+                results.append(SimpleNamespace(
+                    target=target,
+                    score={
+                        "score": score,
+                        "statement_gain": score,
+                        "branch_gain": 1.0,
+                        "covered_statements": 8 if changed else 2,
+                        "num_statements": 10,
+                        "covered_branches": 0,
+                        "num_branches": 0,
+                        "valid": True,
+                    },
+                    feedback="local deterministic failure evidence",
+                    attempt_traces=traces,
+                ))
+            return SimpleNamespace(
+                run_id=f"local-{candidate_id}-{split}",
+                tests_workspace=str(tmp_path / "generated" / str(candidate_id)),
+                results=results,
+                exit_code=0,
+            )
+
+    def reflection_lm(prompt):
+        lm_calls.append(prompt)
+        return [json.dumps({
+            "name": "update_prompt_component",
+            "arguments": {
+                "component": "all",
+                "replacements": {
+                    "initial": improved_initial,
+                    "error": improved_error,
+                },
+                "diagnosis": "generation and repair need a coordinated contract",
+                "evidence": ["both attempts terminate without full coverage"],
+            },
+        })]
+
+    train = [SymbolTarget("project", "pkg/module.py", "target", "train")]
+    validation = [
+        SymbolTarget("project", "pkg/module.py", "target", "validation")
+    ]
+    result = optimize(
+        runner=FakeRunner(),
+        train_targets=train,
+        validation_targets=validation,
+        baseline=baseline,
+        reflection_lm=reflection_lm,
+        artifacts_dir=tmp_path / "artifacts",
+        auto=None,
+        max_metric_calls=3,
+    )
+
+    assert len(lm_calls) == 1
+    assert result.best_bundle.initial == improved_initial
+    assert result.best_bundle.error == improved_error
+    decisions = (tmp_path / "artifacts" / "candidates" /
+                 "reflection_decisions.jsonl").read_text(encoding="utf-8")
+    decision = json.loads(decisions.splitlines()[-1])
+    assert decision["one_call"] is True
+    assert decision["selection"] == "all"
+    assert decision["changed_components"] == ["initial", "error"]
+    assert decision["status"] == "accepted"
 
 
 def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
@@ -1732,7 +1944,7 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
     assert set(captured["seed_candidate"]) == {"initial", "error"}
     assert captured["cache_evaluation"] is False
     assert captured["reflection_minibatch_size"] == 8
-    assert isinstance(captured["module_selector"], CausalReflectionComponentSelector)
+    assert isinstance(captured["module_selector"], LLMReflectionComponentSelector)
     assert result.best_bundle == baseline
 
 

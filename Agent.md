@@ -22,7 +22,7 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
 2. `seed_candidate` phải đúng bằng baseline đầu vào. Baseline luôn nằm trong search space và là phương án fallback.
 3. Feedback theo example phải là score riêng của symbol đó. Không trả cùng một aggregate score cho mọi example. Trung bình các score theo symbol phải khớp final micro-average coverage.
 4. Reflection record phải có target path/symbol, source context được đánh số dòng, lỗi/coverage feedback và score của từng replicate. Nếu thiếu target context, proposer gần như chỉ đoán mò.
-5. Mỗi proposal chỉ nên thay đổi một component. Không cho prompt phình vô hạn hoặc hard-code tên file, symbol hay số dòng từ tập train.
+5. Mỗi proposal có thể thay đổi `initial`, `error`, hoặc cả hai khi reflection chọn `all`; `all` luôn là lựa chọn hợp lệ dù direct failure evidence chỉ có ở một stage. Update `all` phải hợp lệ nguyên tử cho cả hai component. Không cho prompt phình vô hạn hoặc hard-code tên file, symbol hay số dòng từ tập train.
 6. Giữ chính xác các placeholder bắt buộc:
    - `initial`: `{filename}`, `{coverage_targets}`, `{source_excerpt}`
    - `error`: `{error}`
@@ -56,7 +56,7 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
 - `--evaluation-replicates 2`: giảm nhiễu do LLM generation khi đánh giá candidate quan trọng.
 - `--max-concurrency 10`: trần mặc định cho CoverUp; hạ xuống nếu gặp HTTP 429 hoặc giới hạn quota.
 - Budget: `light=120`, `medium=300`, `heavy=600` metric calls.
-- Search dùng Pareto selection, hybrid frontier, causal component selection trên `initial`/`error`, reflection minibatch 8, merge candidates và evaluation cache. Reflection tái dựng đầy đủ `failing test -> error -> repaired test -> outcome`, chạy structured diagnosis trước mutation và không đưa baseline test vào từng record.
+- Search dùng Pareto selection, hybrid frontier, reflection minibatch 8, merge candidates và evaluation cache. Khi có failure, selector chuyển cả `initial` và `error`; reflection LM chọn `initial`, `error`, hoặc `all` và trả replacement trong cùng một structured function call. Reflection tái dựng đầy đủ `failing test -> error -> repaired test -> outcome` và không đưa baseline test vào từng record.
 
 ## Lệnh kiểm tra bắt buộc sau khi sửa
 
