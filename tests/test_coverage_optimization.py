@@ -394,17 +394,19 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
 
     def fake_subprocess_run(command, **kwargs):
         commands.append(command)
-        target_specs.append(json.loads(
+        specs = json.loads(
             Path(command[command.index("--target-spec-file") + 1]).read_text(
                 encoding="utf-8"
             )
-        ))
+        )
+        target_specs.append(specs)
+        spec = specs[0]
         trace_path = Path(command[command.index("--trace-file") + 1])
         trace_path.write_text(
             json.dumps({
-                "source_file": "pkg/a.py",
-                "symbol": "first",
-                "name": "first",
+                "source_file": spec["source_file"],
+                "symbol": spec["symbol"],
+                "name": spec["symbol"],
                 "component": "initial",
                 "outcome": "coverage_gain_saved",
             }) + "\n",
@@ -426,7 +428,9 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
     ))
     targets = [
         SymbolTarget("project", "pkg/a.py", "first", "train"),
-        SymbolTarget("project", "pkg/b.py", "Second.method", "train"),
+        # Deliberately repeat the qualname in another file. Exact target specs and
+        # per-target workspaces must prevent filename/counter races.
+        SymbolTarget("project", "pkg/b.py", "first", "train"),
     ]
     stale_empty_workspace = (
         artifacts_dir / "generated_tests" / "train" / "tests_candidate_candidate"
@@ -444,14 +448,23 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
         workspace_kind="baseline",
     )
 
-    command = commands[0]
-    assert command[command.index("--target-symbols") + 1] == "first,Second.method"
-    assert target_specs[0] == [
-        {"source_file": "pkg/a.py", "symbol": "first"},
-        {"source_file": "pkg/b.py", "symbol": "Second.method"},
-    ]
-    assert command[command.index("--max-concurrency") + 1] == "10"
-    assert "--trace-file" in command
+    assert len(commands) == 4
+    assert {
+        command[command.index("--target-symbols") + 1] for command in commands
+    } == {"first"}
+    assert all(len(spec) == 1 for spec in target_specs)
+    assert {spec[0]["source_file"] for spec in target_specs} == {
+        "pkg/a.py", "pkg/b.py",
+    }
+    assert len({
+        command[command.index("--tests-dir") + 1] for command in commands
+    }) == 4
+    assert all(
+        command[command.index("--max-concurrency") + 1] == "1"
+        for command in commands
+    )
+    assert all("--trace-file" in command for command in commands)
+    assert all("--no-final-coverage" in command for command in commands)
     assert Path(record.tests_workspace) == stale_empty_workspace.resolve()
     assert Path(baseline_record.tests_workspace) == (
         artifacts_dir / "generated_tests" / "train" / "tests_base_line_baseline"
@@ -459,7 +472,7 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
     assert Path(record.tests_workspace).is_dir()
     assert len(record.results) == 2
     assert record.results[0].attempt_traces[0]["component"] == "initial"
-    assert record.results[1].attempt_traces == []
+    assert record.results[1].attempt_traces[0]["component"] == "initial"
 
 
 @pytest.mark.parametrize("split", ["train", "validation", "test"])
@@ -476,39 +489,33 @@ def test_runner_batches_generation_but_scores_and_reports_each_target_separately
     coverup_commands = []
     coverage_test_paths = []
     coverage_basetemps = []
+    generation_barrier = threading.Barrier(2)
     coverage_barrier = threading.Barrier(2)
 
     def fake_subprocess_run(command, **kwargs):
         coverup_commands.append(command)
         workspace = Path(command[command.index("--tests-dir") + 1])
-        first_test = workspace / "test_opt_1.py"
-        second_test = workspace / "test_opt_2.py"
-        first_test.write_text("def test_first(): pass\n", encoding="utf-8")
-        second_test.write_text("def test_second(): pass\n", encoding="utf-8")
+        spec = json.loads(Path(
+            command[command.index("--target-spec-file") + 1]
+        ).read_text(encoding="utf-8"))[0]
+        generated_test = f"def test_{spec['symbol']}(): pass"
+        test_path = workspace / "test_opt_1.py"
+        test_path.write_text(generated_test + "\n", encoding="utf-8")
         trace_path = Path(command[command.index("--trace-file") + 1])
         trace_path.write_text(
-            "\n".join([
-                json.dumps({
-                    "source_file": "pkg/a.py",
-                    "symbol": "first",
-                    "name": "first",
-                    "component": "initial",
-                    "outcome": "coverage_gain_saved",
-                    "generated_test": "def test_first(): pass",
-                    "saved_test": str(first_test),
-                }),
-                json.dumps({
-                    "source_file": "pkg/b.py",
-                    "symbol": "second",
-                    "name": "second",
-                    "component": "initial",
-                    "outcome": "coverage_gain_saved",
-                    "generated_test": "def test_second(): pass",
-                    "saved_test": str(second_test),
-                }),
-            ]) + "\n",
+            json.dumps({
+                "source_file": spec["source_file"],
+                "symbol": spec["symbol"],
+                "name": spec["symbol"],
+                "component": "initial",
+                "outcome": "coverage_gain_saved",
+                "generated_test": generated_test,
+                "saved_test": str(test_path),
+            }) + "\n",
             encoding="utf-8",
         )
+        # Proves target generation itself is concurrent, not merely coverage.
+        generation_barrier.wait(timeout=2)
         return SimpleNamespace(returncode=0, stdout="coverup ok")
 
     def fake_run_coverage(**kwargs):
@@ -519,7 +526,7 @@ def test_runner_batches_generation_but_scores_and_reports_each_target_separately
         # A serial implementation times out here; both target coverage workers
         # must enter before either is allowed to produce its report.
         coverage_barrier.wait(timeout=2)
-        first = selected[0].name == "test_opt_1.py"
+        first = "test_first" in selected[0].read_text(encoding="utf-8")
         source_file = "pkg/a.py" if first else "pkg/b.py"
         symbol = "first" if first else "second"
         executed = [1] if first else []
@@ -551,7 +558,6 @@ def test_runner_batches_generation_but_scores_and_reports_each_target_separately
 
     monkeypatch.setattr("src.optimization.runner.subprocess.run", fake_subprocess_run)
     monkeypatch.setattr("src.optimization.runner.run_coverage", fake_run_coverage)
-    monkeypatch.setattr("src.optimization.runner.os.cpu_count", lambda: 2)
     runner = CoverUpExperimentRunner(ExperimentConfig(
         project_root=tmp_path,
         package_dir=package_dir,
@@ -569,17 +575,29 @@ def test_runner_batches_generation_but_scores_and_reports_each_target_separately
         targets, prompt_path, candidate_id="candidate", split=split,
     )
 
-    assert len(coverup_commands) == 1
-    command = coverup_commands[0]
-    assert command[command.index("--target-symbols") + 1] == "first,second"
-    assert {paths[0].name for paths in coverage_test_paths} == {
-        "test_opt_1.py", "test_opt_2.py",
-    }
+    assert len(coverup_commands) == 2
+    assert {
+        command[command.index("--target-symbols") + 1]
+        for command in coverup_commands
+    } == {"first", "second"}
+    assert all(
+        command[command.index("--max-concurrency") + 1] == "1"
+        for command in coverup_commands
+    )
+    assert all("--no-final-coverage" in command for command in coverup_commands)
+    assert len(coverage_test_paths) == 2
+    assert len({paths[0].name for paths in coverage_test_paths}) == 2
     assert len(set(coverage_basetemps)) == 2
     assert len({path.parent for path in coverage_basetemps}) == 1
     assert coverage_basetemps[0].parent.name == "pytest_tmp"
     generated_root = artifacts_dir / "generated_tests" / split
     assert len(list(generated_root.iterdir())) == 1
+    persistent_workspace = Path(record.tests_workspace)
+    assert len(list(persistent_workspace.glob("test_opt_*.py"))) == 2
+    for result in record.results:
+        saved_test = Path(result.attempt_traces[0]["saved_test"])
+        assert saved_test.parent == persistent_workspace
+        assert saved_test.is_file()
     run_dir = artifacts_dir / "runs" / "candidate" / split / record.run_id
     assert [path.name for path in run_dir.iterdir()] == ["record.json"]
     first_result, second_result = record.results
@@ -605,40 +623,40 @@ def test_local_smoke_gepa_receives_each_subsample_trace_from_one_batch_workspace
         encoding="utf-8",
     )
     artifacts_dir = tmp_path / "artifacts"
-    generated_by_name = {}
     coverup_commands = []
 
     def fake_subprocess_run(command, **kwargs):
         coverup_commands.append(command)
         workspace = Path(command[command.index("--tests-dir") + 1])
-        specs = json.loads(Path(
+        spec = json.loads(Path(
             command[command.index("--target-spec-file") + 1]
-        ).read_text(encoding="utf-8"))
-        traces = []
-        for index, spec in enumerate(specs, start=1):
-            test_path = workspace / f"test_opt_{index}.py"
-            generated_test = f"def test_{spec['symbol']}(): pass"
-            test_path.write_text(generated_test + "\n", encoding="utf-8")
-            generated_by_name[test_path.name] = spec
-            traces.append({
-                "source_file": spec["source_file"],
-                "symbol": spec["symbol"],
-                "name": spec["symbol"],
-                "component": "initial",
-                "outcome": "coverage_gain_saved",
-                "generated_test": generated_test,
-                "saved_test": str(test_path),
-            })
+        ).read_text(encoding="utf-8"))[0]
+        test_path = workspace / "test_opt_1.py"
+        generated_test = f"def test_{spec['symbol']}(): pass"
+        test_path.write_text(generated_test + "\n", encoding="utf-8")
+        trace = {
+            "source_file": spec["source_file"],
+            "symbol": spec["symbol"],
+            "name": spec["symbol"],
+            "component": "initial",
+            "outcome": "coverage_gain_saved",
+            "generated_test": generated_test,
+            "saved_test": str(test_path),
+        }
         Path(command[command.index("--trace-file") + 1]).write_text(
-            "".join(json.dumps(trace) + "\n" for trace in traces),
+            json.dumps(trace) + "\n",
             encoding="utf-8",
         )
         return SimpleNamespace(returncode=0, stdout="local generator ok")
 
     def fake_run_coverage(**kwargs):
         assert len(kwargs["test_paths"]) == 1
-        spec = generated_by_name[Path(kwargs["test_paths"][0]).name]
-        is_first = spec["symbol"] == "first"
+        generated_test = Path(kwargs["test_paths"][0]).read_text(encoding="utf-8")
+        is_first = "test_first" in generated_test
+        spec = {
+            "source_file": "pkg/a.py" if is_first else "pkg/b.py",
+            "symbol": "first" if is_first else "second",
+        }
         kwargs["output"].write_text(json.dumps({
             "files": {
                 spec["source_file"]: {
@@ -691,10 +709,11 @@ def test_local_smoke_gepa_receives_each_subsample_trace_from_one_batch_workspace
         baseline.as_candidate(), evaluated, ["initial"],
     )["initial"]
 
-    assert len(coverup_commands) == 1
-    assert coverup_commands[0][
-        coverup_commands[0].index("--target-symbols") + 1
-    ] == "first,second"
+    assert len(coverup_commands) == 2
+    assert {
+        command[command.index("--target-symbols") + 1]
+        for command in coverup_commands
+    } == {"first", "second"}
     assert len(list((artifacts_dir / "generated_tests" / "train").iterdir())) == 1
     assert [output["target"]["symbol"] for output in evaluated.outputs] == [
         "first", "second",
@@ -1653,6 +1672,79 @@ def test_exact_target_spec_does_not_match_same_name_in_another_file(monkeypatch)
     )
 
 
+def test_coverup_no_final_coverage_still_runs_generation_setup(tmp_path, monkeypatch):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    coverup_module = importlib.import_module("coverup.coverup")
+    package_dir = tmp_path / "pkg"
+    tests_dir = tmp_path / "tests"
+    package_dir.mkdir()
+    tests_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    args = coverup_module.parse_args([
+        "--package-dir", str(package_dir),
+        "--tests-dir", str(tests_dir),
+        "--model", "fake-model",
+        "--log-file", str(tmp_path / "coverup.log"),
+        "--no-checkpoint",
+        "--no-final-coverage",
+    ])
+    coverage_calls = []
+    chatter_instances = []
+
+    class FakeChatter:
+        def __init__(self, **kwargs):
+            chatter_instances.append(kwargs)
+
+        def __getattr__(self, name):
+            if name.startswith("set_") or name == "add_function":
+                return lambda *args, **kwargs: None
+            raise AttributeError(name)
+
+    class FakePrompter:
+        @staticmethod
+        def get_functions():
+            return []
+
+    class FakeProgress:
+        def __init__(self, **kwargs):
+            pass
+
+        def update_cost(self, *args):
+            pass
+
+        def update_counters(self, *args):
+            pass
+
+        def close(self):
+            pass
+
+    def fake_measure_suite_coverage(**kwargs):
+        coverage_calls.append(kwargs)
+        return {"files": {}, "summary": {"percent_covered": 0.0}}
+
+    monkeypatch.setattr(coverup_module, "parse_args", lambda: args)
+    monkeypatch.setattr(coverup_module, "log_file", None)
+    monkeypatch.setattr(coverup_module, "add_to_pythonpath", lambda path: None)
+    monkeypatch.setattr(coverup_module.llm, "Chatter", FakeChatter)
+    monkeypatch.setitem(
+        coverup_module.prompter_registry, "gpt-v2", lambda cmd_args: FakePrompter()
+    )
+    monkeypatch.setattr(
+        coverup_module, "measure_suite_coverage", fake_measure_suite_coverage
+    )
+    monkeypatch.setattr(coverup_module, "Progress", FakeProgress)
+    monkeypatch.setattr(coverup_module, "get_required_modules", lambda: [])
+
+    assert coverup_module.main() == 0
+    coverup_module.log_file.close()
+    assert chatter_instances == [{"model": "fake-model"}]
+    # Initial coverage is needed to find missing segments; only the redundant
+    # whole-suite pass after generation is skipped.
+    assert len(coverage_calls) == 1
+
+
 def test_baseline_preflight_rejects_missing_coverage_denominators():
     with pytest.raises(RuntimeError, match="Coverage lookup failed"):
         validate_reference_evaluation([{
@@ -1920,12 +2012,15 @@ def test_runner_partitions_targets_by_project(tmp_path, monkeypatch):
 
     def fake_subprocess_run(command, **kwargs):
         commands.append(command)
+        spec = json.loads(Path(
+            command[command.index("--target-spec-file") + 1]
+        ).read_text(encoding="utf-8"))[0]
         trace_path = Path(command[command.index("--trace-file") + 1])
         trace_path.write_text(
             json.dumps({
-                "source_file": "alpha/a.py",
-                "symbol": "first",
-                "name": "first",
+                "source_file": spec["source_file"],
+                "symbol": spec["symbol"],
+                "name": spec["symbol"],
                 "component": "initial",
                 "outcome": "coverage_gain_saved",
             }) + "\n",
@@ -2003,13 +2098,24 @@ def test_runner_partitions_targets_by_project(tmp_path, monkeypatch):
         beta_command[beta_command.index("--package-dir") + 1]
     ).resolve() == beta_pkg.resolve()
     alpha_tests_dir = Path(alpha_command[alpha_command.index("--tests-dir") + 1])
-    assert alpha_tests_dir.parts[-2:] == ("tests_candidate_candidate", "alpha")
     beta_tests_dir = Path(beta_command[beta_command.index("--tests-dir") + 1])
-    assert beta_tests_dir.parts[-2:] == ("tests_candidate_candidate", "beta")
+    assert alpha_tests_dir.parent.name == "target_workspaces"
+    assert beta_tests_dir.parent.name == "target_workspaces"
+    assert alpha_tests_dir != beta_tests_dir
+    assert not alpha_tests_dir.exists()
+    assert not beta_tests_dir.exists()
+    persistent_workspace = Path(record.tests_workspace)
+    assert {path.name for path in persistent_workspace.iterdir()} == {"alpha", "beta"}
     assert len(coverage_outputs) == 2
     assert {
         str(kwargs["package_dir"].resolve()) for kwargs in coverage_outputs
     } == {str(alpha_pkg.resolve()), str(beta_pkg.resolve())}
+    assert {
+        Path(kwargs["tests_dir"]).resolve() for kwargs in coverage_outputs
+    } == {
+        (persistent_workspace / "alpha").resolve(),
+        (persistent_workspace / "beta").resolve(),
+    }
     assert [result.target.symbol for result in record.results] == [
         "Second.method", "first",
     ]

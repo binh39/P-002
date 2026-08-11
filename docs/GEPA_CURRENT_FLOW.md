@@ -189,29 +189,31 @@ duoc danh gia lai tren full train khi tao coverage report.
 
 ### 4.4 Cach mot batch duoc chay vat ly
 
-Moi project trong batch dung mot CoverUp process va mot generated-tests workspace.
-CoverUp tu chay cac target song song theo `--max-concurrency`. Sau generation, trace
-`saved_test` anh xa moi test file ve dung `source_file + qualname`; cac coverage/pytest
-pass chi chay test cua target dang cham va duoc dua vao bounded thread pool. So worker
-la `min(targets trong project, max_concurrency, CPU count)`:
+Moi target trong batch dung mot CoverUp process va mot workspace tam rieng. Mot bounded
+thread pool chay song song tron vong doi target voi so worker
+`min(targets trong batch, max_concurrency)`. CoverUp con dung `--max-concurrency 1` de
+khong nhan binh phuong so process/API request. Sau generation, chi cac file co
+trace `saved_test` dung `source_file + qualname` duoc copy vao mot generated-tests
+workspace luu ben chung cua candidate; workspace tam duoc xoa ngay. Luot coverage
+whole-suite cuoi cua CoverUp duoc bo qua vi runner se cham target ngay sau do:
 
 ```text
 batch targets [A, B, C, D]
             |
             v
-one CoverUp process / project
+bounded target lifecycle pool
+   | CoverUp(A) in temp-A -> trace(A) -> copy test_A.py
+   | CoverUp(B) in temp-B -> trace(B) -> copy test_B.py
+   | CoverUp(C) in temp-C -> trace(C) -> copy test_C.py
+   | CoverUp(D) in temp-D -> trace(D) -> copy test_D.py
             |
             v
-one shared generated-tests workspace
-   | trace(A) -> test_1.py
-   | trace(B) -> test_2.py
-   | trace(C) -> test_3.py
-   | trace(D) -> test_4.py
+one persistent candidate workspace
             |
-            +==> pytest test_1.py -> coverage/feedback A
-            +==> pytest test_2.py -> coverage/feedback B
-            +==> pytest test_3.py -> coverage/feedback C
-            +==> pytest test_4.py -> coverage/feedback D
+            +==> pytest test_A.py -> coverage/feedback A
+            +==> pytest test_B.py -> coverage/feedback B
+            +==> pytest test_C.py -> coverage/feedback C
+            +==> pytest test_D.py -> coverage/feedback D
             |
             v
 exact-batch batch.json
@@ -219,17 +221,18 @@ exact-batch batch.json
 
 Neu mot target khong luu duoc test, runner dung mot collector file rong de lay denominator
 zero-coverage. Neu test cua mot target fail, chi target do nhan score 0; cac target khac
-van giu score va feedback doc lap. Moi coverage worker co `COVERAGE_FILE`, pytest
+van giu score va feedback doc lap. Moi target worker co `COVERAGE_FILE`, pytest
 `--basetemp` rieng, tat cache provider va khong ghi bytecode, nen khong tranh chap file.
-`rate_limit` chi ap dung trong CoverUp; project generation van tuan tu de khong nhan quota
-LLM, trong khi local coverage scoring tan dung cac CPU cua cung mot Cloud Run task.
+Neu co `rate_limit`, runner dung mot worker vi limiter cua CoverUp la process-local;
+neu khong, generation va local coverage deu tan dung pool chung cua Cloud Run task.
 
 ### 4.5 Ket luan ngan gon
 
 ```text
 Logical API seen by GEPA : per requested batch of examples
 Adapter cache unit       : exact requested batch per candidate/replicate
-Physical CoverUp unit    : one process/workspace per project in the batch
+Physical CoverUp unit    : one temporary process/workspace per target
+Persistent artifact unit: one consolidated workspace per candidate/split
 Coverage unit            : traced test file(s) of one target
 Score returned to GEPA   : one weighted score per requested example
 ```
@@ -240,22 +243,19 @@ Score returned to GEPA   : one weighted score per requested example
 Minibatch [SymbolTarget A, SymbolTarget B, ...]
     |
     v
-Create shared batch workspace
+Create one persistent candidate workspace
 <artifacts>/generated_tests/<split>/<candidate-batch-id>/
     |
     v
-Write run inputs
-    +-- prompt.json
-    +-- target_spec.json: source_file + exact qualname
-    |
-    v
-Run CoverUp subprocess
+Run bounded target workers; each creates a temporary workspace
     +-- initial prompt
     +-- error prompt when generated test fails
-    +-- append attempt_trace.jsonl
+    +-- exact target_spec: source_file + qualname
+    +-- append target-specific attempt_trace.jsonl
     |
     v
-Map trace.saved_test to each exact source_file + qualname
+Copy traced test to the persistent workspace and rewrite trace.saved_test
+    +-- delete temporary workspace
     |
     v
 Run coverage.py on only the mapped test file(s) of one target

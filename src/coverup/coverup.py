@@ -167,6 +167,9 @@ def parse_args(args=None):
                     action=argparse.BooleanOptionalAction,
                     help='prompt LLM for new tests')
 
+    ap.add_argument('--no-final-coverage', action='store_true',
+                    help='skip the final whole-suite coverage pass after generated tests are saved')
+
     ap.add_argument('--isolate-tests', default=True,
                     action=argparse.BooleanOptionalAction,
                     help='run tests in isolation (to work around any state pollution) when measuring suite coverage')
@@ -1041,7 +1044,7 @@ def main():
 
     # --- (4) show final coverage
 
-    if args.prompt_for_tests:
+    if args.prompt_for_tests and not args.no_final_coverage:
         try:
             print("Measuring coverage...  ", end='', flush=True)
             coverage = measure_suite_coverage(tests_dir=args.tests_dir, source_dir=args.package_dir,
@@ -1062,17 +1065,18 @@ def main():
 
         print(summary_coverage(coverage, args.source_files))
 
-    # --- (5) save state and show missing modules, if appropriate
-
+        # Save final coverage only when it was measured.
         if args.checkpoint:
             state.set_final_coverage(coverage)
             state.save_checkpoint(args.checkpoint)
 
-        if not args.install_missing_modules and (required := get_required_modules()):
-            print(f"Some modules seem to be missing:  {', '.join(str(m) for m in required)}")
-            if args.write_requirements_to:
-                with args.write_requirements_to.open("a") as f:
-                    for module in required:
-                        f.write(f"{module}\n")
+    # --- (5) show missing modules, if appropriate
+
+    if not args.install_missing_modules and (required := get_required_modules()):
+        print(f"Some modules seem to be missing:  {', '.join(str(m) for m in required)}")
+        if args.write_requirements_to:
+            with args.write_requirements_to.open("a") as f:
+                for module in required:
+                    f.write(f"{module}\n")
 
     return 0

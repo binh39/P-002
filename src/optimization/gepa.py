@@ -119,7 +119,9 @@ def _evaluation_digest(
         # scoring. Schema 12 preserves denominators from pytest exit 1 while
         # assigning failing generated suites zero covered units. Schema 13
         # batches CoverUp generation and scores only each target's traced tests.
-        "cache_schema": 13,
+        # Schema 14 restores isolated per-target CoverUp processes in one bounded
+        # pool, consolidates traced tests, and skips redundant final-suite coverage.
+        "cache_schema": 14,
         "config": config_values,
         "targets": [_target_identity(target) for target in targets],
         "sources": source_hashes,
@@ -182,7 +184,7 @@ def evaluate_bundle_batch_cached(
 
     # GEPA may sample the same example more than once in a minibatch. Evaluate each
     # identity once so CoverUp does not generate duplicate tests or return ambiguous
-    # per-target results inside the shared batch workspace.
+    # per-target results inside the consolidated candidate workspace.
     unique_targets: list[SymbolTarget] = []
     seen_targets: set[tuple[str, str, str, str]] = set()
     for target in targets:
@@ -227,10 +229,10 @@ def evaluate_bundle_batch_cached(
         run_candidate_id = f"{digest}-{evaluation_digest}"
         if replicate:
             run_candidate_id += f"-r{replicate}"
-        # Generate the whole GEPA minibatch in one CoverUp process/workspace.
-        # The runner maps saved tests back to their source target and performs
-        # a separate pytest/coverage pass for each target, preserving per-example
-        # feedback without creating one generated-tests folder per symbol.
+        # The runner evaluates each target in an isolated temporary CoverUp
+        # workspace using a bounded global pool, then consolidates only tests
+        # attributed by trace into one persistent candidate workspace. Each target
+        # still gets a separate pytest/coverage pass and per-example feedback.
         records = [runner.evaluate_batch(
             targets,
             candidate,
