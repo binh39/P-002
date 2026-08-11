@@ -487,25 +487,6 @@ export default function OptimizationRun() {
         />
       </div>
 
-      {evolutionQuery.data ? (
-        <EvolutionPanel evolution={evolutionQuery.data} />
-      ) : evolutionQuery.isError ? (
-        <section className="platform-card evolution-card">
-          <div className="empty-state" role="alert">
-            Evolution logs could not be loaded. The optimization status will continue updating.
-          </div>
-        </section>
-      ) : (
-        <section className="platform-card evolution-card">
-          <div className="evolution-empty" role="status">
-            <span className="baseline-spinner" aria-hidden="true" />
-            <div>
-              <strong>Loading Cloud Run evolution log…</strong>
-            </div>
-          </div>
-        </section>
-      )}
-
       {run.finalComparison && (
         <section className="platform-card">
           <div className="card-heading">
@@ -552,6 +533,25 @@ export default function OptimizationRun() {
               }
               tone="orange"
             />
+          </div>
+        </section>
+      )}
+
+      {evolutionQuery.data ? (
+        <EvolutionPanel evolution={evolutionQuery.data} />
+      ) : evolutionQuery.isError ? (
+        <section className="platform-card evolution-card">
+          <div className="empty-state" role="alert">
+            Evolution logs could not be loaded. The optimization status will continue updating.
+          </div>
+        </section>
+      ) : (
+        <section className="platform-card evolution-card">
+          <div className="evolution-empty" role="status">
+            <span className="baseline-spinner" aria-hidden="true" />
+            <div>
+              <strong>Loading Cloud Run evolution log…</strong>
+            </div>
           </div>
         </section>
       )}
