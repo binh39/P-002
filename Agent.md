@@ -56,7 +56,7 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
 - `--evaluation-replicates 2`: giảm nhiễu do LLM generation khi đánh giá candidate quan trọng.
 - `--max-concurrency 10`: trần mặc định cho CoverUp; hạ xuống nếu gặp HTTP 429 hoặc giới hạn quota.
 - Budget: `light=120`, `medium=300`, `heavy=600` metric calls.
-- Search dùng Pareto selection, hybrid frontier, round-robin trên `initial`/`error`, reflection minibatch 8, merge candidates và evaluation cache.
+- Search dùng Pareto selection, hybrid frontier, causal component selection trên `initial`/`error`, reflection minibatch 8, merge candidates và evaluation cache. Reflection tái dựng đầy đủ `failing test -> error -> repaired test -> outcome`, chạy structured diagnosis trước mutation và không đưa baseline test vào từng record.
 
 ## Lệnh kiểm tra bắt buộc sau khi sửa
 

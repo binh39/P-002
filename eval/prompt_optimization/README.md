@@ -412,8 +412,8 @@ sửa/thay thế.
 
 Trong mỗi vòng reflection:
 
-1. GEPA chọn `initial` hoặc `error` theo round-robin với reflection minibatch 8;
-   merge có thể ghép các component tốt.
+1. GEPA chọn `initial` hoặc `error` theo causal failure evidence với reflection minibatch 8;
+   `error` chỉ eligible khi trace thực sự chạy repair, và merge có thể ghép các component tốt.
 2. Cả bundle được validate và hash để tạo candidate ID ổn định.
 3. Mỗi batch dùng một generated-tests workspace chung theo project; test của từng symbol
    được chọn chính xác bằng `source_file + qualname`. Sau generation, coverage/pytest của
@@ -422,10 +422,11 @@ Trong mỗi vòng reflection:
 4. Mỗi example nhận score riêng của symbol, được scale theo số statement/branch để mean
    của GEPA đúng bằng micro-average cuối cùng.
 5. Feedback chứa file, symbol, source lines liên quan, coverage còn thiếu và kết quả từng
-   replicate. Structured trace còn ghi component thực sự được gọi, prompt input, test code,
-   traceback, coverage gain/remaining và trạng thái dừng của từng attempt. Trước reflection,
-   evidence dài được cắt gọn và mỗi component chỉ học từ trajectory đã thực sự chạy nó.
-6. Proposal phải giữ placeholder, có giới hạn độ dài và chỉ thay đổi một component để
+   replicate. Structured trace tái dựng episode đầy đủ `initial test -> error -> repaired test
+   -> outcome`, giữ traceback và coverage gain/remaining nhưng không lặp baseline test trong
+   mỗi record. Causal selector chọn component đã tạo failure có impact lớn nhất.
+6. Reflection chạy structured JSON diagnosis trước mutation. Proposal phải giữ placeholder,
+   có giới hạn độ dài và chỉ thay đổi một component để
    giảm prompt inflation và cải thiện credit assignment.
 
 Kết quả metric được cache theo `prompt hash + split` tại

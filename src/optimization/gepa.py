@@ -309,38 +309,111 @@ def _clip_text(value: Any, limit: int, *, keep_tail: bool = False) -> str:
     return marker + text[-available:] if keep_tail else text[:available] + marker
 
 
-def _compact_component_attempts(
-    attempts: Sequence[Mapping[str, Any]], component: str,
+def _compact_attempt(attempt: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep one observable CoverUp action/result without raw transcript noise."""
+    row = {
+        key: attempt[key]
+        for key in (
+            "attempt", "replicate", "component", "outcome", "next_component",
+            "finish_reason", "missing_imports", "gained_lines", "gained_branches",
+            "remaining_lines", "remaining_branches",
+        )
+        if key in attempt
+    }
+    if "prompt_input" in attempt:
+        row["prompt_input"] = _clip_text(
+            attempt["prompt_input"], 6_000, keep_tail=True
+        )
+    if "generated_test" in attempt:
+        row["generated_test"] = _clip_text(attempt["generated_test"], 10_000)
+    if "execution_error" in attempt:
+        row["execution_error"] = _clip_text(
+            attempt["execution_error"], 6_000, keep_tail=True
+        )
+    if "assistant_response" in attempt:
+        row["assistant_response"] = _clip_text(
+            attempt["assistant_response"], 3_000
+        )
+    return row
+
+
+def _build_execution_episodes(
+    attempts: Sequence[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Keep concise causal evidence instead of sending entire pytest transcripts."""
-    matching = [attempt for attempt in attempts if attempt.get("component") == component]
-    compact = []
-    for attempt in matching[-2:]:
-        row = {
-            key: attempt[key]
-            for key in (
-                "attempt", "replicate", "component", "outcome", "next_component",
-                "finish_reason", "missing_imports", "gained_lines", "gained_branches",
-                "remaining_lines", "remaining_branches",
-            )
-            if key in attempt
-        }
-        if "prompt_input" in attempt:
-            row["prompt_input"] = _clip_text(
-                attempt["prompt_input"], 8_000, keep_tail=True
-            )
-        if "generated_test" in attempt:
-            row["generated_test"] = _clip_text(attempt["generated_test"], 12_000)
-        if "execution_error" in attempt:
-            row["execution_error"] = _clip_text(
-                attempt["execution_error"], 8_000, keep_tail=True
-            )
-        if "assistant_response" in attempt:
-            row["assistant_response"] = _clip_text(
-                attempt["assistant_response"], 4_000
-            )
-        compact.append(row)
-    return compact
+    """Reconstruct initial generation and every subsequent repair transition.
+
+    Attempts are grouped by replicate.  Each error-stage attempt points back to
+    the concrete failing test and execution error that caused that repair, so
+    reflection sees the causal before/after sequence instead of disconnected
+    component-local snippets.
+    """
+    grouped: dict[int, list[Mapping[str, Any]]] = {}
+    for attempt in attempts:
+        replicate = int(attempt.get("replicate", 0) or 0)
+        grouped.setdefault(replicate, []).append(attempt)
+
+    episodes: list[dict[str, Any]] = []
+    for replicate, values in sorted(grouped.items()):
+        initial_attempts: list[dict[str, Any]] = []
+        repair_transitions: list[dict[str, Any]] = []
+        previous_test_attempt: Mapping[str, Any] | None = None
+
+        for attempt in values:
+            component = attempt.get("component")
+            if component == "initial":
+                initial_attempts.append(_compact_attempt(attempt))
+            elif component == "error":
+                transition = {
+                    "attempt": attempt.get("attempt"),
+                    "replicate": replicate,
+                    "failing_test": _clip_text(
+                        (previous_test_attempt or {}).get("generated_test", ""),
+                        10_000,
+                    ),
+                    "error": _clip_text(
+                        (previous_test_attempt or {}).get("execution_error", ""),
+                        6_000,
+                        keep_tail=True,
+                    ),
+                    "repair_prompt_input": _clip_text(
+                        attempt.get("prompt_input", ""), 6_000, keep_tail=True
+                    ),
+                    "repaired_test": _clip_text(
+                        attempt.get("generated_test", ""), 10_000
+                    ),
+                    "outcome": attempt.get("outcome", "unknown"),
+                }
+                for key in (
+                    "execution_error", "finish_reason", "missing_imports",
+                    "gained_lines", "gained_branches", "remaining_lines",
+                    "remaining_branches",
+                ):
+                    if key in attempt:
+                        output_key = (
+                            "execution_error_after"
+                            if key == "execution_error"
+                            else key
+                        )
+                        value = attempt[key]
+                        transition[output_key] = (
+                            _clip_text(value, 6_000, keep_tail=True)
+                            if key == "execution_error"
+                            else value
+                        )
+                repair_transitions.append(transition)
+
+            if attempt.get("generated_test"):
+                previous_test_attempt = attempt
+
+        terminal = _compact_attempt(values[-1]) if values else {}
+        episodes.append({
+            "replicate": replicate,
+            "initial_attempts": initial_attempts,
+            "repair_transitions": repair_transitions,
+            "terminal_outcome": terminal.get("outcome", "unknown"),
+            "terminal_component": terminal.get("component", "unknown"),
+        })
+    return episodes
 
 
 def _attempts_with_replicates(samples: Sequence[Mapping[str, Any]]) -> list[dict]:
@@ -657,6 +730,94 @@ def _source_context(
     return "\n".join(rendered)
 
 
+_FAILURE_SEVERITY = {
+    "model_request_failed": 1.0,
+    "malformed_response": 1.0,
+    "empty_response": 1.0,
+    "missing_python_block": 1.0,
+    "missing_imports": 0.9,
+    "coverage_timeout": 0.9,
+    "test_error_unrepairable": 1.0,
+    "max_attempts_exhausted": 1.0,
+    "test_error": 0.8,
+    "no_coverage_gain_unrepairable": 0.9,
+}
+
+
+def _attempt_failure_severity(attempt: Mapping[str, Any]) -> float:
+    outcome = str(attempt.get("outcome", ""))
+    if outcome in _FAILURE_SEVERITY:
+        return _FAILURE_SEVERITY[outcome]
+    if outcome == "coverage_gain_saved":
+        gained = len(attempt.get("gained_lines", [])) + len(
+            attempt.get("gained_branches", [])
+        )
+        remaining = len(attempt.get("remaining_lines", [])) + len(
+            attempt.get("remaining_branches", [])
+        )
+        total = gained + remaining
+        return remaining / total if total else 0.0
+    return 0.0
+
+
+class CausalReflectionComponentSelector:
+    """Select the prompt that produced the highest-impact observed failures."""
+
+    def __call__(
+        self,
+        state: Any,
+        trajectories: list[Mapping[str, Any]],
+        subsample_scores: list[float],
+        candidate_idx: int,
+        candidate: dict[str, str],
+    ) -> list[str]:
+        del state, subsample_scores, candidate_idx
+        priority = {component: 0.0 for component in candidate}
+        evidence = {component: 0 for component in candidate}
+
+        for trajectory in trajectories:
+            target_score = min(1.0, max(0.0, float(trajectory.get("score", 0.0))))
+            target_gap = max(0.05, 1.0 - target_score)
+            attempts = list(trajectory.get("attempt_traces", []))
+            terminal_by_replicate: dict[int, int] = {}
+            for index, attempt in enumerate(attempts):
+                replicate = int(attempt.get("replicate", 0) or 0)
+                terminal_by_replicate[replicate] = index
+
+            for index, attempt in enumerate(attempts):
+                component = str(attempt.get("component", ""))
+                if component not in priority:
+                    continue
+                severity = _attempt_failure_severity(attempt)
+                if severity <= 0:
+                    continue
+                replicate = int(attempt.get("replicate", 0) or 0)
+                terminal_multiplier = (
+                    1.5 if terminal_by_replicate.get(replicate) == index else 1.0
+                )
+                priority[component] += target_gap * severity * terminal_multiplier
+                evidence[component] += 1
+
+        eligible = [
+            component for component in candidate
+            if evidence.get(component, 0) > 0
+        ]
+        if not eligible:
+            # A no-op proposal is preferable to inventing a mutation without causal
+            # evidence. GEPA will reject the duplicate candidate.
+            return []
+
+        selected = max(
+            eligible,
+            key=lambda component: (
+                priority[component],
+                evidence[component],
+                component == "initial",
+            ),
+        )
+        return [selected]
+
+
 @dataclass
 class PromptOptimizationResult:
     best_bundle: PromptBundle
@@ -912,7 +1073,6 @@ class CoverUpPromptAdapter:
                 worst = samples[representative_replicate]
                 attempt_traces = _attempts_with_replicates(samples)
                 parent_attempt_traces = _attempts_with_replicates(parent_samples)
-                baseline_attempt_traces = _attempts_with_replicates(baseline_samples)
                 parent_replicate_scores = [
                     float(sample["score"]) for sample in parent_samples
                 ]
@@ -949,11 +1109,6 @@ class CoverUpPromptAdapter:
                             "attempt_traces", []
                         )
                     ),
-                    "baseline_test": _representative_test(
-                        baseline_samples[representative_replicate].get(
-                            "attempt_traces", []
-                        )
-                    ),
                     "feedback": "\n\n".join(
                         f"Replicate {replicate}:\n{sample['feedback']}"
                         for replicate, sample in enumerate(samples)
@@ -961,7 +1116,6 @@ class CoverUpPromptAdapter:
                     "coverage": worst.get("coverage"),
                     "attempt_traces": attempt_traces,
                     "parent_attempt_traces": parent_attempt_traces,
-                    "baseline_attempt_traces": baseline_attempt_traces,
                     "source_context": _source_context(
                         self.runner, target, worst.get("coverage")
                     ),
@@ -1063,14 +1217,8 @@ class CoverUpPromptAdapter:
                                 trajectory.get("parent_attempt_traces", [])
                             ),
                         ),
-                        "baseline_test": trajectory.get(
-                            "baseline_test",
-                            _representative_test(
-                                trajectory.get("baseline_attempt_traces", [])
-                            ),
-                        ),
-                        "component_attempts": _compact_component_attempts(
-                            trajectory.get("attempt_traces", []), component
+                        "execution_episodes": _build_execution_episodes(
+                            trajectory.get("attempt_traces", [])
                         ),
                     },
                     "Feedback": (
@@ -1079,7 +1227,8 @@ class CoverUpPromptAdapter:
                         f"{trajectory.get('comparison_source', 'baseline')} "
                         f"(delta={float(trajectory.get('score_delta', 0.0)):+.4f}).\n"
                         f"{_clip_text(trajectory['feedback'], 6_000, keep_tail=True)}\n"
-                        "Compare the candidate and parent/baseline tests. Preserve causal "
+                        "Use the labelled initial-to-repair episodes and compare the "
+                        "candidate with its direct parent when present. Preserve causal "
                         "behaviors associated with positive deltas and correct behaviors "
                         "associated with regressions or failures. Infer one reusable prompting "
                         "improvement from the contrast. "
@@ -1090,7 +1239,7 @@ class CoverUpPromptAdapter:
             ]
         trace_path = self.candidate_dir / "reflection_traces.jsonl"
         trace_payload = {
-            "schema_version": 1,
+            "schema_version": 2,
             "candidate_digest": bundle_digest(PromptBundle.from_candidate(candidate)),
             "components_to_update": list(components_to_update),
             "records": result,
@@ -1126,6 +1275,86 @@ class CoverUpPromptAdapter:
             stripped = stripped[:-3]
         return stripped.strip()
 
+    @staticmethod
+    def _extract_diagnosis(response: str, component: str) -> dict[str, Any] | None:
+        stripped = response.strip()
+        if stripped.startswith("```") and stripped.endswith("```"):
+            stripped = re.sub(r"^```(?:json)?\s*", "", stripped)
+            stripped = stripped[:-3].strip()
+        start = stripped.find("{")
+        end = stripped.rfind("}")
+        if start < 0 or end <= start:
+            return None
+        try:
+            diagnosis = json.loads(stripped[start:end + 1])
+        except json.JSONDecodeError:
+            return None
+        required = {
+            "failure_mode", "root_cause", "evidence", "recommended_change",
+            "regression_risk",
+        }
+        if not isinstance(diagnosis, dict) or not required.issubset(diagnosis):
+            return None
+        if not isinstance(diagnosis["evidence"], list):
+            return None
+        diagnosis["responsible_component"] = component
+        return diagnosis
+
+    def _diagnose_component(
+        self,
+        candidate: dict[str, str],
+        component: str,
+        evidence_rows: Sequence[Mapping[str, Any]],
+    ) -> dict[str, Any]:
+        evidence = json.dumps(evidence_rows, indent=2, ensure_ascii=False)
+        prompt = f"""
+You are diagnosing a reusable two-stage CoverUp pytest-generation system before any prompt mutation.
+The stages are `initial` test generation and conditional `error` repair. The causal selector chose `{component}` because outputs generated by that component had the highest-impact observed failures.
+
+Current initial template:
+<initial_template>{candidate['initial']}</initial_template>
+
+Current error template:
+<error_template>{candidate['error']}</error_template>
+
+Labelled end-to-end execution evidence:
+<evidence>{evidence}</evidence>
+
+Diagnose one reusable, evidence-supported weakness in the selected `{component}` component. Use the full initial -> failing test -> error -> repaired test -> outcome episodes for causal attribution. Do not propose a complete template and do not copy target-specific file names, symbols, line numbers, or literal values into the recommended change.
+
+Return JSON only with exactly these fields:
+{{
+  "failure_mode": "short reusable category",
+  "root_cause": "specific weakness in the current instruction",
+  "evidence": ["two or more concise observations when available"],
+  "recommended_change": "one conservative operational change",
+  "regression_risk": "what useful behavior the edit must preserve"
+}}
+"""
+        response = self._lm_text(self.reflection_lm(prompt))
+        diagnosis = self._extract_diagnosis(response, component)
+        if diagnosis is None:
+            # Keep mutation structurally diagnosis-first even when a provider emits
+            # malformed JSON. The conservative fallback prevents the malformed
+            # response from being mistaken for a replacement template.
+            diagnosis = {
+                "failure_mode": "unclassified_execution_or_coverage_failure",
+                "root_cause": (
+                    f"The {component} template produced unresolved failures in the "
+                    "labelled execution episodes, but the diagnosis response was invalid."
+                ),
+                "evidence": [
+                    "Use only the supplied execution episodes and final feedback."
+                ],
+                "recommended_change": (
+                    "Make one conservative operational clarification supported by "
+                    "the observed failures."
+                ),
+                "regression_risk": "Preserve every effective instruction in the current template.",
+                "responsible_component": component,
+            }
+        return diagnosis
+
     def propose_new_texts(
         self,
         candidate: dict[str, str],
@@ -1139,70 +1368,24 @@ class CoverUpPromptAdapter:
             if not evidence_rows:
                 proposals[component] = current
                 continue
-            evidence = json.dumps(
-                evidence_rows,
-                indent=2,
-                ensure_ascii=False,
+            diagnosis = self._diagnose_component(
+                candidate, component, evidence_rows
             )
             placeholders = COMPONENT_PLACEHOLDERS[component]
             prompt = f"""
 You are optimizing one reusable CoverUp pytest-generation template that will be used by another LLM to generate Python tests.
-Your goal is to improve the template so that the downstream test-generation LLM produces higher-quality pytest tests with the highest achievable code coverage, with particular emphasis on:
-1. Branch coverage
-2. Statement coverage
-The final optimization score is defined as: score = 0.4 * statement_coverage + 0.6 * branch_coverage.
-Therefore, branch coverage is more important than statement coverage, but the optimized template should improve both whenever possible.
 Component: {component} Role: {COMPONENT_ROLES[component]}
 Required literal placeholders: {', '.join(placeholders)}
 Maximum length: {self.max_component_chars[component]} characters
-Current template: <current_template> {current} </current_template>
-Contrastive execution evidence from representative successful, failing, and regressed targets: <evidence> {evidence} </evidence>
-Your task is to revise the current template so that a downstream LLM is more likely to generate effective tests that exercise previously uncovered statements and branches.
-Analyze the execution evidence carefully before making any change. When optimizing the template, follow these principles:
-1. Optimize for coverage behavior, not wording quality alone. The revised template should cause the downstream LLM to make better testing decisions, not merely make the instruction sound clearer or more polished.
-2. Prioritize branch coverage. Because branch coverage contributes 60% of the final score, prefer changes that help the downstream LLM: - identify uncovered decision outcomes, - reason about both true and false branches, - exercise alternative control-flow paths, - reach nested and compound conditions, - trigger exception-handling branches, - cover early returns, - cover loop-entry and loop-exit behavior, - cover match/case alternatives when applicable, - and construct inputs that force execution through currently uncovered branches.
-3. Improve statement coverage as well. Encourage the downstream LLM to reach executable statements that remain uncovered, especially statements that are only reachable through specific branches, state configurations, exceptions, boundary values, or dependency behavior.
-4. Learn from contrastive evidence. Compare successful, failing, and regressed targets and infer general patterns such as: - which testing strategies consistently increase coverage, - which instructions cause the test generator to miss important paths, - which behaviors lead to regressions, - which kinds of inputs expose additional branches, - which setup or mocking strategies help execution reach deeper code, - and which unnecessary behaviors waste test-generation effort.
-5. Convert observed failures into reusable operational guidance. If evidence shows that the downstream LLM repeatedly misses a particular class of behavior, revise the template to explicitly guide it toward a better strategy.
-Prefer rules such as:
-- inspect uncovered control-flow before adding redundant tests,
-- target uncovered branch outcomes directly,
-- vary one relevant input or state dimension at a time,
-- reason about preconditions required to reach a target branch,
-- use boundary, empty, null-like, invalid, exceptional, and alternative-state inputs when relevant,
-- minimize duplicated tests that execute already-covered paths,
-- repair failing tests when those failures prevent execution from reaching useful code,
-- and prioritize tests that are likely to unlock multiple uncovered statements or branches.
-6. Encourage coverage-directed iteration. The optimized instruction should make the downstream LLM use available coverage feedback as a search signal:
-- identify what remains uncovered,
-- infer why it remains uncovered,
-- propose a test specifically targeting it,
-- execute or validate that test when the surrounding system allows it,
-- and avoid spending effort on already-saturated paths.
-7. Prefer actionable guidance over generic statements. Avoid vague instructions such as:
-- "write comprehensive tests",
-- "maximize coverage",
-- "consider edge cases", unless they are accompanied by concrete operational guidance explaining how to do so.
-8. Do not overfit to individual examples. Never include target-specific:
-- file names,
-- function names,
-- class names,
-- variable names,
-- literal line numbers,
-- repository-specific details,
-- exact test values that only apply to one target,
-- or implementation-specific facts that would not generalize.
-9. Preserve useful existing behavior. The new template should be a conservative improvement over the current template.
-Do not remove effective instructions unless the evidence clearly indicates that they are harmful, redundant, misleading, or consume valuable prompt space.
-10. Prefer concise, high-value instructions. The template has a strict character limit. Each added instruction should justify its cost by being likely to improve downstream coverage behavior.
-Remove redundancy, repeated goals, unnecessary explanations, scoring formulas, or generic testing advice if they do not directly help the downstream LLM generate better tests.
-11. Respect the optimization objective. When there is a trade-off between two possible revisions, prefer the revision that is more likely to improve: 0.4 * statement_coverage + 0.6 * branch_coverage In particular, a revision that significantly improves branch exploration may be preferable even if its statement-coverage improvement is smaller.
-12. Preserve all required placeholders exactly. Every required literal placeholder listed above must appear exactly as required in the revised template. Do not rename, remove, escape, paraphrase, or alter them. 13. Keep the revised template general and reusable. It must remain suitable for many different Python functions, modules, repositories, and testing situations. Before producing the final revision, internally determine:
-- what behavior in the current template is already effective,
-- what specific weakness is supported by the evidence,
-- what single or small set of changes is most likely to improve downstream branch and statement coverage,
-- and whether the change is sufficiently general to help unseen targets. Propose one conservative, evidence-supported revision of the template. Return only the complete revised template between the following tags: <template> ... </template>
-Do not include explanations, analysis, markdown fences, scores, comments, or any text outside the <template> tags.
+Current template:
+<current_template>{current}</current_template>
+
+Validated structured diagnosis:
+<diagnosis>{json.dumps(diagnosis, indent=2, ensure_ascii=False)}</diagnosis>
+
+Apply exactly one conservative, operational change that addresses the diagnosis. Optimize behavior rather than prose: the downstream model should reach more uncovered statements and branches while continuing to produce valid, deterministic pytest modules. Preserve useful existing instructions and the diagnosis's regression guard. Do not add file names, symbols, line numbers, repository-specific facts, or example-specific literal values. Remove or replace wording only when the diagnosis identifies it as harmful or misleading. Keep the result concise; do not restate the scoring formula or add generic testing checklists.
+
+Preserve every required literal placeholder exactly. Return only the complete revised template between <template> and </template>, with no analysis or markdown fences.
 """
             last_error = ""
             for _ in range(2):
@@ -1248,7 +1431,7 @@ def _optimization_run_digest(
     evaluation_replicates: int,
 ) -> str:
     payload = {
-        "optimizer_schema": 8,
+        "optimizer_schema": 9,
         "baseline": baseline.as_candidate(),
         "train": [_target_identity(target) for target in train_targets],
         "validation": [_target_identity(target) for target in validation_targets],
@@ -1375,7 +1558,7 @@ def optimize(
         frontier_type="hybrid",
         skip_perfect_score=False,
         reflection_minibatch_size=min(8, len(train_targets)),
-        module_selector="round_robin",
+        module_selector=CausalReflectionComponentSelector(),
         use_merge=True,
         max_merge_invocations=5,
         max_metric_calls=max_metric_calls,

@@ -21,6 +21,7 @@ from src.optimization.coveragepy import (
     symbol_coverage,
 )
 from src.optimization.gepa import (
+    CausalReflectionComponentSelector,
     CoverUpPromptAdapter,
     build_coverage_report,
     bundle_digest,
@@ -1229,7 +1230,8 @@ def test_direct_gepa_adapter_returns_distinct_per_symbol_scores_and_context(tmp_
     assert "pkg/a.py::first" == reflective["initial"][0]["Inputs"]["target"]
     assert "def first" in reflective["initial"][0]["Inputs"]["source_context"]
     assert (
-        reflective["initial"][0]["Generated Outputs"]["component_attempts"][0]
+        reflective["initial"][0]["Generated Outputs"]["execution_episodes"][0]
+        ["initial_attempts"][0]
         ["generated_test"]
         == "def test_first(): pass"
     )
@@ -1366,12 +1368,24 @@ def test_reflection_compares_candidate_with_parent_and_balances_exemplars(tmp_pa
         "Contrastive marker: compare causal outcomes.",
     )
     proposed_templates = iter((parent_initial, proposed_initial))
+
+    def reflection_lm(prompt):
+        if "Return JSON only with exactly these fields" in prompt:
+            return [json.dumps({
+                "failure_mode": "coverage_regression",
+                "root_cause": "one instruction changes generated behavior",
+                "evidence": ["candidate and parent have different outcomes"],
+                "recommended_change": "make one conservative change",
+                "regression_risk": "preserve already covered behavior",
+            })]
+        return [f"<template>{next(proposed_templates)}</template>"]
+
     adapter = CoverUpPromptAdapter(
         runner=FakeRunner(),
         candidate_dir=tmp_path / "candidates",
         targets_by_split={},
         baseline=baseline,
-        reflection_lm=lambda prompt: [f"<template>{next(proposed_templates)}</template>"],
+        reflection_lm=reflection_lm,
     )
     parent_updates = adapter.propose_new_texts(
         baseline.as_candidate(),
@@ -1409,8 +1423,7 @@ def test_reflection_compares_candidate_with_parent_and_balances_exemplars(tmp_pa
     assert improved_output["exemplar_type"] == "positive"
     assert "test_candidate_improved_target" in improved_output["candidate_test"]
     assert "test_parent_improved_target" in improved_output["parent_test"]
-    assert "test_baseline_improved_target" in improved_output["baseline_test"]
-    assert improved_output["baseline_test"] != improved_output["parent_test"]
+    assert "baseline_test" not in improved_output
     assert improved["Inputs"]["changed_components"] == ["initial"]
 
     regressed_output = regressed["Generated Outputs"]
@@ -1430,7 +1443,7 @@ def test_reflection_compares_candidate_with_parent_and_balances_exemplars(tmp_pa
     ] == ["regression", "positive"]
     trace_path = tmp_path / "candidates" / "reflection_traces.jsonl"
     trace = json.loads(trace_path.read_text(encoding="utf-8").splitlines()[-1])
-    assert trace["schema_version"] == 1
+    assert trace["schema_version"] == 2
     assert trace["candidate_digest"] == bundle_digest(
         PromptBundle.from_candidate(candidate)
     )
@@ -1441,7 +1454,7 @@ def test_reflection_compares_candidate_with_parent_and_balances_exemplars(tmp_pa
     ] == ["regression", "positive"]
 
 
-def test_reflection_uses_only_attempts_from_the_component_being_optimized(tmp_path):
+def test_reflection_uses_only_trajectories_that_exercised_component(tmp_path):
     baseline = baseline_bundle()
     adapter = CoverUpPromptAdapter(
         runner=SimpleNamespace(),
@@ -1478,6 +1491,189 @@ def test_reflection_uses_only_attempts_from_the_component_being_optimized(tmp_pa
         baseline.as_candidate(), reflective, ["initial"]
     )
     assert unchanged["initial"] == baseline.initial
+
+
+def test_reflection_reconstructs_initial_error_repair_episode(tmp_path):
+    baseline = baseline_bundle()
+    adapter = CoverUpPromptAdapter(
+        runner=SimpleNamespace(),
+        candidate_dir=tmp_path,
+        targets_by_split={},
+        baseline=baseline,
+        reflection_lm=lambda prompt: ["<template>unused</template>"],
+    )
+    evaluation = SimpleNamespace(trajectories=[{
+        "target": {"source_file": "pkg/a.py", "symbol": "first"},
+        "score": 0.5,
+        "replicate_scores": [0.5],
+        "feedback": "one branch remains",
+        "source_context": "def first(value): ...",
+        "attempt_traces": [
+            {
+                "attempt": 1,
+                "replicate": 0,
+                "component": "initial",
+                "outcome": "test_error",
+                "generated_test": "def test_initial(): assert broken",
+                "execution_error": "NameError: broken",
+                "next_component": "error",
+            },
+            {
+                "attempt": 2,
+                "replicate": 0,
+                "component": "error",
+                "outcome": "test_error",
+                "prompt_input": "Repair NameError: broken",
+                "generated_test": "def test_repair_one(): assert still_broken",
+                "execution_error": "NameError: still_broken",
+                "next_component": "error",
+            },
+            {
+                "attempt": 3,
+                "replicate": 0,
+                "component": "error",
+                "outcome": "coverage_gain_saved",
+                "prompt_input": "Repair NameError: still_broken",
+                "generated_test": "def test_repair_two(): assert True",
+                "gained_lines": [2],
+                "gained_branches": [[2, 3]],
+                "remaining_lines": [],
+                "remaining_branches": [],
+            },
+        ],
+    }])
+
+    row = adapter.make_reflective_dataset(
+        baseline.as_candidate(), evaluation, ["error"]
+    )["error"][0]
+    output = row["Generated Outputs"]
+    episode = output["execution_episodes"][0]
+
+    assert "baseline_test" not in output
+    assert episode["initial_attempts"][0]["generated_test"].startswith(
+        "def test_initial"
+    )
+    assert len(episode["repair_transitions"]) == 2
+    first, second = episode["repair_transitions"]
+    assert first["failing_test"].startswith("def test_initial")
+    assert first["error"] == "NameError: broken"
+    assert first["repaired_test"].startswith("def test_repair_one")
+    assert first["execution_error_after"] == "NameError: still_broken"
+    assert second["failing_test"].startswith("def test_repair_one")
+    assert second["error"] == "NameError: still_broken"
+    assert second["repaired_test"].startswith("def test_repair_two")
+    assert second["outcome"] == "coverage_gain_saved"
+
+
+def test_causal_component_selector_prefers_terminal_error_failures():
+    selector = CausalReflectionComponentSelector()
+    candidate = baseline_bundle().as_candidate()
+    trajectories = [{
+        "score": 0.2,
+        "attempt_traces": [
+            {
+                "attempt": 1,
+                "component": "initial",
+                "outcome": "test_error",
+            },
+            {
+                "attempt": 2,
+                "component": "error",
+                "outcome": "test_error",
+            },
+            {
+                "attempt": 3,
+                "component": "error",
+                "outcome": "no_coverage_gain_unrepairable",
+            },
+        ],
+    }]
+
+    selected = selector(None, trajectories, [0.2], 0, candidate)
+
+    assert selected == ["error"]
+
+
+def test_causal_component_selector_never_selects_unexercised_error():
+    selector = CausalReflectionComponentSelector()
+    candidate = baseline_bundle().as_candidate()
+    trajectories = [{
+        "score": 0.1,
+        "attempt_traces": [{
+            "attempt": 1,
+            "component": "initial",
+            "outcome": "no_coverage_gain_unrepairable",
+        }],
+    }]
+
+    selected = selector(None, trajectories, [0.1], 0, candidate)
+
+    assert selected == ["initial"]
+
+
+def test_causal_component_selector_returns_noop_without_failure_evidence():
+    selector = CausalReflectionComponentSelector()
+    candidate = baseline_bundle().as_candidate()
+    trajectories = [{
+        "score": 1.0,
+        "attempt_traces": [{
+            "attempt": 1,
+            "component": "initial",
+            "outcome": "coverage_gain_saved",
+            "gained_lines": [1],
+            "remaining_lines": [],
+            "gained_branches": [],
+            "remaining_branches": [],
+        }],
+    }]
+
+    selected = selector(None, trajectories, [1.0], 0, candidate)
+
+    assert selected == []
+
+
+def test_prompt_mutation_runs_structured_diagnosis_first(tmp_path):
+    baseline = baseline_bundle()
+    calls = []
+    improved = baseline.initial.replace(
+        "Create new pytest test functions",
+        "Inspect the causal failure first.\nCreate new pytest test functions",
+    )
+
+    def reflection_lm(prompt):
+        calls.append(prompt)
+        if len(calls) == 1:
+            return [json.dumps({
+                "failure_mode": "missing_precondition",
+                "root_cause": "the template does not require reachability analysis",
+                "evidence": ["the generated test missed the guarded branch"],
+                "recommended_change": "inspect branch preconditions before choosing inputs",
+                "regression_risk": "preserve valid output formatting",
+            })]
+        return [f"<template>{improved}</template>"]
+
+    adapter = CoverUpPromptAdapter(
+        runner=SimpleNamespace(),
+        candidate_dir=tmp_path,
+        targets_by_split={},
+        baseline=baseline,
+        reflection_lm=reflection_lm,
+    )
+    proposals = adapter.propose_new_texts(
+        baseline.as_candidate(),
+        {"initial": [{
+            "Inputs": {"target": "pkg/a.py::first"},
+            "Generated Outputs": {"execution_episodes": []},
+            "Feedback": "a guarded branch remains",
+        }]},
+        ["initial"],
+    )
+
+    assert proposals["initial"] == improved
+    assert len(calls) == 2
+    assert "Return JSON only with exactly these fields" in calls[0]
+    assert "missing_precondition" in calls[1]
+    assert "Validated structured diagnosis" in calls[1]
 
 
 def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
@@ -1536,7 +1732,7 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
     assert set(captured["seed_candidate"]) == {"initial", "error"}
     assert captured["cache_evaluation"] is False
     assert captured["reflection_minibatch_size"] == 8
-    assert captured["module_selector"] == "round_robin"
+    assert isinstance(captured["module_selector"], CausalReflectionComponentSelector)
     assert result.best_bundle == baseline
 
 

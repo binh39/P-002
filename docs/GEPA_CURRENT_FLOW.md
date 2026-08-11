@@ -79,7 +79,7 @@ Environment
                 | GEPA search                             |
                 | seed candidate = baseline               |
                 | Pareto + hybrid frontier                |
-                | round-robin: initial <-> error           |
+                | causal selector: initial or error       |
                 | reflection minibatch <= 8 examples      |
                 | merge enabled                           |
                 +-------------------+---------------------+
@@ -308,7 +308,7 @@ branch_gain
 ## 7. Vong reflection va sinh candidate
 
 ```text
-Select component by round-robin
+Select component from causal failure evidence
           |
           v
 Evaluate selected train examples with capture_traces=true
@@ -317,20 +317,21 @@ Evaluate selected train examples with capture_traces=true
 Keep weak trajectories (raw score < 1 when available)
           |
           v
-Filter evidence by actual trace.component
+Reconstruct labelled execution episodes
           |
-          +-- optimizing initial
-          |      only attempts that used initial
-          |
-          +-- optimizing error
-          |      only attempts that used error
+          +-- initial generated test
+          +-- execution error
+          +-- each repaired test and its outcome
           |
           v
 Compact evidence
-    +-- source context <= 8,000 chars
-    +-- feedback <= 4,000 chars
-    +-- last 2 matching attempts
-    +-- generated test / traceback / remaining coverage
+    +-- source context <= 12,000 chars
+    +-- feedback <= 6,000 chars
+    +-- every ordered attempt grouped by replicate
+    +-- failing test / repair / traceback / remaining coverage
+          |
+          v
+Run structured JSON diagnosis for the selected component
           |
           v
 OPTIMIZE_MODEL proposes one complete revised template
@@ -359,7 +360,7 @@ Cau hinh hien tai:
 seed_candidate              = exact baseline bundle
 candidate_selection_strategy = pareto
 frontier_type               = hybrid
-module_selector             = round_robin(initial, error only)
+module_selector             = causal(initial or exercised error)
 reflection_minibatch_size   = min(8, number_of_train_targets)
 use_merge                   = true
 max_merge_invocations       = 5
@@ -480,5 +481,5 @@ Promotion                : false
 ```
 
 Day la artifact cu voi dataset 25/20/20. Run moi se dung dataset 50/30/30,
-reflection minibatch 8, chi round-robin `initial/error`, va neu `best_index=0` thi dung
+reflection minibatch 8, causal selection `initial/error`, va neu `best_index=0` thi dung
 ngay sau GEPA search ma khong tao run test.
