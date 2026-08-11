@@ -29,6 +29,7 @@ from src.optimization.gepa import (
     bundle_digest,
     evaluate_bundle_batch_cached,
     evaluate_bundle_cached,
+    log_reflection_request,
     optimize,
     validate_bundle,
     validate_reference_evaluation,
@@ -314,6 +315,38 @@ def test_run_streamed_forwards_retains_and_unbuffers_output(capsys):
     assert "[streaming smoke] started" in visible
     assert "streamed-child-output" in visible
     assert "[streaming smoke] finished with exit code 0" in visible
+
+
+def test_run_streamed_can_capture_without_echoing_child_output(capsys):
+    completed = run_streamed(
+        [sys.executable, "-u", "-c", "print('captured-only')"],
+        label="hidden worker",
+        echo=False,
+    )
+
+    assert completed.stdout.strip() == "captured-only"
+    assert capsys.readouterr().out == ""
+
+
+def test_reflection_request_log_contains_exact_model_payload(capsys):
+    request = {
+        "messages": [
+            {"role": "system", "content": "system instructions"},
+            {"role": "user", "content": "full evidence\nwith newline"},
+        ],
+        "tools": [{"type": "function", "function": {"name": "update"}}],
+        "tool_choice": {"type": "function", "function": {"name": "update"}},
+    }
+
+    log_reflection_request(request)
+
+    output = capsys.readouterr().out
+    assert output.startswith("PROMPTOPT_REFLECTION_REQUEST_BEGIN\n")
+    assert output.endswith("PROMPTOPT_REFLECTION_REQUEST_END\n")
+    payload = output.removeprefix(
+        "PROMPTOPT_REFLECTION_REQUEST_BEGIN\n"
+    ).removesuffix("PROMPTOPT_REFLECTION_REQUEST_END\n")
+    assert json.loads(payload) == request
 
 
 def test_run_coverage_does_not_mask_real_pytest_failures(tmp_path, monkeypatch):

@@ -427,6 +427,7 @@ class CoverUpExperimentRunner:
                 cwd=self.config.project_root.resolve(),
                 env=environment,
                 label=f"CoverUp {job.target.source_file}::{job.target.symbol}",
+                echo=False,
             )
             raw_traces = _load_attempt_traces(job.attempt_trace)
             try:

@@ -64,9 +64,18 @@ UPDATE_PROMPT_COMPONENT_TOOL = {
     },
 }
 AUTO_METRIC_BUDGETS = {"light": 120, "medium": 300, "heavy": 600}
+REFLECTION_REQUEST_BEGIN = "PROMPTOPT_REFLECTION_REQUEST_BEGIN"
+REFLECTION_REQUEST_END = "PROMPTOPT_REFLECTION_REQUEST_END"
 
 _DIGEST_LOCKS: dict[str, threading.Lock] = {}
 _DIGEST_LOCKS_GUARD = threading.Lock()
+
+
+def log_reflection_request(request: Mapping[str, Any]) -> None:
+    """Print the exact native-tool request sent to the optimization model."""
+    print(REFLECTION_REQUEST_BEGIN, flush=True)
+    print(json.dumps(request, indent=2, ensure_ascii=False), flush=True)
+    print(REFLECTION_REQUEST_END, flush=True)
 
 
 def _digest_lock(key: str) -> threading.Lock:
@@ -1427,25 +1436,30 @@ In one decision, choose `initial`, `error`, or `all`, then call `update_prompt_c
 
 Use the full initial -> failing test -> error -> repaired test -> outcome episodes for causal attribution. Make conservative operational changes. Preserve useful instructions and required literal placeholders. Do not add target-specific file names, symbols, line numbers, repository facts, or literal values. Keep every replacement within its component's maximum length. Include a concise reusable diagnosis with its regression guard and at least one evidence observation in the function arguments. Do not answer with JSON or prose outside the function call.
 """
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You optimize reusable CoverUp prompt components. "
+                    "Finish by calling update_prompt_component exactly once."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ]
+        tools = [UPDATE_PROMPT_COMPONENT_TOOL]
+        tool_choice = {
+            "type": "function",
+            "function": {"name": "update_prompt_component"},
+        }
+        request = {
+            "messages": messages,
+            "tools": tools,
+            "tool_choice": tool_choice,
+        }
+        log_reflection_request(request)
         try:
             update = self._extract_component_update(
-                self.reflection_lm(
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": (
-                                "You optimize reusable CoverUp prompt components. "
-                                "Finish by calling update_prompt_component exactly once."
-                            ),
-                        },
-                        {"role": "user", "content": prompt},
-                    ],
-                    tools=[UPDATE_PROMPT_COMPONENT_TOOL],
-                    tool_choice={
-                        "type": "function",
-                        "function": {"name": "update_prompt_component"},
-                    },
-                )
+                self.reflection_lm(**request)
             )
         except (TypeError, ValueError):
             update = None

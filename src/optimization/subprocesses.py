@@ -16,11 +16,12 @@ def run_streamed(
     cwd: str | Path | None = None,
     env: Mapping[str, str] | None = None,
     label: str | None = None,
+    echo: bool = True,
 ) -> subprocess.CompletedProcess[str]:
-    """Run a child process while forwarding and retaining output immediately."""
+    """Run a child process, retaining output and optionally echoing it live."""
     child_env = dict(os.environ if env is None else env)
     child_env["PYTHONUNBUFFERED"] = "1"
-    if label:
+    if echo and label:
         with _OUTPUT_LOCK:
             print(f"==> [{label}] started", flush=True)
     process = subprocess.Popen(
@@ -41,13 +42,15 @@ def run_streamed(
             text = decoder.decode(chunk)
             if text:
                 output.append(text)
-                with _OUTPUT_LOCK:
-                    print(text, end="", flush=True)
+                if echo:
+                    with _OUTPUT_LOCK:
+                        print(text, end="", flush=True)
         final_text = decoder.decode(b"", final=True)
         if final_text:
             output.append(final_text)
-            with _OUTPUT_LOCK:
-                print(final_text, end="", flush=True)
+            if echo:
+                with _OUTPUT_LOCK:
+                    print(final_text, end="", flush=True)
     except BaseException:
         process.terminate()
         process.wait()
@@ -55,7 +58,7 @@ def run_streamed(
     finally:
         process.stdout.close()
     returncode = process.wait()
-    if label:
+    if echo and label:
         with _OUTPUT_LOCK:
             print(f"==> [{label}] finished with exit code {returncode}", flush=True)
     return subprocess.CompletedProcess(

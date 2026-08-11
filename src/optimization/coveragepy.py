@@ -123,7 +123,7 @@ def run_coverage(
         *shlex.split(pytest_args, posix=os.name != "nt"),
     ]
     completed = run_streamed(
-        run_cmd, cwd=project_root, env=run_env, label="coverage pytest",
+        run_cmd, cwd=project_root, env=run_env, label="coverage pytest", echo=False,
     )
     # coverage.py writes usable execution data when pytest finishes with test
     # failures (exit 1), as well as when it passes or collects no tests.  Export
@@ -136,7 +136,7 @@ def run_coverage(
     # batch and is deleted afterwards, so pretty-printing just wastes disk.
     report = run_streamed(
         [sys.executable, "-m", "coverage", "json", "-o", str(output.resolve())],
-        cwd=project_root, env=run_env, label="coverage json",
+        cwd=project_root, env=run_env, label="coverage json", echo=False,
     )
     if report.returncode:
         return report
