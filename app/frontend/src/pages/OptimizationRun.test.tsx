@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -126,8 +126,11 @@ describe("optimization run", () => {
     expect(screen.getByText("Baseline prompt")).toBeInTheDocument();
     expect(screen.getByText("Final selected prompt")).toBeInTheDocument();
     expect(screen.getByText("+0.500")).toBeInTheDocument();
-    expect(screen.getByText("Locked baseline vs optimized result")).toBeInTheDocument();
-    expect(screen.getByText("Optimized prompt promoted")).toBeInTheDocument();
+    const resultsCard = screen.getByText("Evaluation results").closest("section");
+    expect(resultsCard).not.toBeNull();
+    expect(within(resultsCard!).getByText("Validation")).toBeInTheDocument();
+    expect(within(resultsCard!).getByText("Final locked test")).toBeInTheDocument();
+    expect(within(resultsCard!).getByText("Promoted")).toBeInTheDocument();
     expect(screen.getByText("candidate_prompt.json")).toBeInTheDocument();
     expect(screen.getByText("Live GEPA evolution")).toBeInTheDocument();
     expect(screen.getAllByText("Iteration 2")).toHaveLength(2);
