@@ -56,14 +56,14 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
 - `--evaluation-replicates 2`: giảm nhiễu do LLM generation khi đánh giá candidate quan trọng.
 - `--max-concurrency 10`: trần mặc định cho CoverUp; hạ xuống nếu gặp HTTP 429 hoặc giới hạn quota.
 - Budget: `light=120`, `medium=300`, `heavy=600` metric calls.
-- Search dùng Pareto selection, hybrid frontier, reflection minibatch 8, merge candidates và evaluation cache. Khi có failure, selector chuyển cả `initial` và `error`; reflection LM chọn `initial`, `error`, hoặc `all` và trả replacement trong cùng một structured function call. Reflection tái dựng đầy đủ `failing test -> error -> repaired test -> outcome` và không đưa baseline test vào từng record.
+- Search dùng Pareto selection, hybrid frontier, reflection minibatch 8, merge candidates và evaluation cache. Khi có failure, selector chuyển cả `initial` và `error`; reflection LM chọn `initial`, `error`, hoặc `all` và trả replacement bằng một native `update_prompt_component` tool call. Reflection tái dựng đầy đủ `failing test -> error -> repaired test -> outcome` và không đưa baseline test vào từng record.
 
 ## Lệnh kiểm tra bắt buộc sau khi sửa
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests -q
 .\.venv\Scripts\ruff.exe check src\optimization tests\test_coverage_optimization.py
-python -m py_compile src\coverup\coverup.py src\optimization\gepa.py src\optimization\metrics.py src\optimization\cli.py src\optimization\runner.py src\optimization\prompts.py
+python -m py_compile src\coverup\coverup.py src\optimization\gepa.py src\optimization\metrics.py src\optimization\cli.py src\optimization\runner.py src\optimization\prompts.py src\optimization\subprocesses.py
 git diff --check
 ```
 

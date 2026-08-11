@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import random
+import sys
 from pathlib import Path
 
 import dspy
@@ -682,6 +683,10 @@ def finalize(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(line_buffering=True, write_through=True)
     # Load model defaults before argparse evaluates environment-backed options.
     load_dotenv(Path.cwd() / ".env")
     args = parser().parse_args()

@@ -413,7 +413,7 @@ sửa/thay thế.
 Trong mỗi vòng reflection:
 
 1. Khi có failure evidence, GEPA chuyển cả `initial` và `error` cho reflection LM với
-   minibatch 8. Trong đúng một structured function call, LM chọn `initial`, `error`, hoặc
+   minibatch 8. Trong đúng một native `update_prompt_component` tool call, LM chọn `initial`, `error`, hoặc
    `all` và trả luôn complete replacement. `all` luôn được phép, kể cả khi direct evidence
    chỉ có ở một stage; update này chỉ được áp dụng khi cả hai replacement hợp lệ và thực sự đổi.
 2. Cả bundle được validate và hash để tạo candidate ID ổn định.

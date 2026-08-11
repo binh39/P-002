@@ -1,5 +1,6 @@
 import asyncio
 import json
+import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -43,6 +44,26 @@ from src.optimization.runner import (
     _traces_for_target,
     _zero_coverage_like,
 )
+from src.optimization.subprocesses import run_streamed
+
+
+def tool_call_response(component, replacements, *, diagnosis="root cause", evidence=None):
+    arguments = {
+        "component": component,
+        "replacements": replacements,
+        "diagnosis": diagnosis,
+        "evidence": evidence or ["observed failure"],
+    }
+    return [{
+        "text": None,
+        "tool_calls": [{
+            "type": "function",
+            "function": {
+                "name": "update_prompt_component",
+                "arguments": json.dumps(arguments),
+            },
+        }],
+    }]
 
 
 def coverage(*, executed_lines=(), missing_lines=(), executed_branches=(), missing_branches=()):
@@ -139,7 +160,7 @@ def test_run_coverage_exports_zero_coverage_when_pytest_collects_no_tests(
             stderr=None,
         )
 
-    monkeypatch.setattr("src.optimization.coveragepy.subprocess.run", fake_run)
+    monkeypatch.setattr("src.optimization.coveragepy.run_streamed", fake_run)
     package_dir = tmp_path / "pkg"
     tests_dir = tmp_path / "tests"
     package_dir.mkdir()
@@ -176,7 +197,7 @@ def test_run_coverage_collects_only_explicit_target_test_paths(tmp_path, monkeyp
             args=command, returncode=5, stdout="no tests ran", stderr=None
         )
 
-    monkeypatch.setattr("src.optimization.coveragepy.subprocess.run", fake_run)
+    monkeypatch.setattr("src.optimization.coveragepy.run_streamed", fake_run)
     package_dir = tmp_path / "pkg"
     tests_dir = tmp_path / "shared-tests"
     pytest_temp_root = tmp_path / "pytest-temp"
@@ -271,6 +292,30 @@ def test_optimization_cli_defaults_to_five_test_repetitions():
     assert args.repeat_tests == 5
 
 
+def test_run_streamed_forwards_retains_and_unbuffers_output(capsys):
+    completed = run_streamed(
+        [
+            sys.executable,
+            "-u",
+            "-c",
+            (
+                "import os; "
+                "print('unbuffered=' + os.environ['PYTHONUNBUFFERED']); "
+                "print('streamed-child-output')"
+            ),
+        ],
+        label="streaming smoke",
+    )
+
+    visible = capsys.readouterr().out
+    assert completed.returncode == 0
+    assert "unbuffered=1" in completed.stdout
+    assert "streamed-child-output" in completed.stdout
+    assert "[streaming smoke] started" in visible
+    assert "streamed-child-output" in visible
+    assert "[streaming smoke] finished with exit code 0" in visible
+
+
 def test_run_coverage_does_not_mask_real_pytest_failures(tmp_path, monkeypatch):
     calls = []
 
@@ -287,7 +332,7 @@ def test_run_coverage_does_not_mask_real_pytest_failures(tmp_path, monkeypatch):
             args=command, returncode=1, stdout="test failed", stderr=None
         )
 
-    monkeypatch.setattr("src.optimization.coveragepy.subprocess.run", fake_run)
+    monkeypatch.setattr("src.optimization.coveragepy.run_streamed", fake_run)
     package_dir = tmp_path / "pkg"
     tests_dir = tmp_path / "tests"
     package_dir.mkdir()
@@ -318,7 +363,7 @@ def test_runner_keeps_denominators_but_scores_failing_suite_as_zero(
     baseline_bundle().save(prompt_path)
 
     monkeypatch.setattr(
-        "src.optimization.runner.subprocess.run",
+        "src.optimization.runner.run_streamed",
         lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="coverup ok"),
     )
 
@@ -419,7 +464,7 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
     def fake_run_coverage(**kwargs):
         return SimpleNamespace(returncode=1, stdout="no generated tests")
 
-    monkeypatch.setattr("src.optimization.runner.subprocess.run", fake_subprocess_run)
+    monkeypatch.setattr("src.optimization.runner.run_streamed", fake_subprocess_run)
     monkeypatch.setattr("src.optimization.runner.run_coverage", fake_run_coverage)
     runner = CoverUpExperimentRunner(ExperimentConfig(
         project_root=tmp_path,
@@ -558,7 +603,7 @@ def test_runner_batches_generation_but_scores_and_reports_each_target_separately
             stdout="first passed" if first else "second-target failure",
         )
 
-    monkeypatch.setattr("src.optimization.runner.subprocess.run", fake_subprocess_run)
+    monkeypatch.setattr("src.optimization.runner.run_streamed", fake_subprocess_run)
     monkeypatch.setattr("src.optimization.runner.run_coverage", fake_run_coverage)
     runner = CoverUpExperimentRunner(ExperimentConfig(
         project_root=tmp_path,
@@ -681,7 +726,7 @@ def test_local_smoke_gepa_receives_each_subsample_trace_from_one_batch_workspace
         }), encoding="utf-8")
         return SimpleNamespace(returncode=0, stdout=f"{spec['symbol']} passed")
 
-    monkeypatch.setattr("src.optimization.runner.subprocess.run", fake_subprocess_run)
+    monkeypatch.setattr("src.optimization.runner.run_streamed", fake_subprocess_run)
     monkeypatch.setattr("src.optimization.runner.run_coverage", fake_run_coverage)
     runner = CoverUpExperimentRunner(ExperimentConfig(
         project_root=tmp_path,
@@ -745,7 +790,7 @@ def test_runner_salvages_measured_scores_after_coverup_process_failure(
     baseline_bundle().save(prompt_path)
 
     monkeypatch.setattr(
-        "src.optimization.runner.subprocess.run",
+        "src.optimization.runner.run_streamed",
         lambda *args, **kwargs: SimpleNamespace(
             returncode=1, stdout="provider returned an empty response"
         ),
@@ -835,7 +880,7 @@ def test_existing_baseline_tests_are_scored_without_coverup(tmp_path, monkeypatc
 
     monkeypatch.setattr("src.optimization.runner.run_coverage", fake_run_coverage)
     monkeypatch.setattr(
-        "src.optimization.runner.subprocess.run",
+        "src.optimization.runner.run_streamed",
         lambda *args, **kwargs: pytest.fail("CoverUp must not be invoked"),
     )
     runner = CoverUpExperimentRunner(ExperimentConfig(
@@ -1370,16 +1415,13 @@ def test_reflection_compares_candidate_with_parent_and_balances_exemplars(tmp_pa
     )
     proposed_templates = iter((parent_initial, proposed_initial))
 
-    def reflection_lm(prompt):
-        return [json.dumps({
-            "name": "update_prompt_component",
-            "arguments": {
-                "component": "initial",
-                "replacements": {"initial": next(proposed_templates)},
-                "diagnosis": "one instruction changes generated behavior",
-                "evidence": ["candidate and parent have different outcomes"],
-            },
-        })]
+    def reflection_lm(**kwargs):
+        return tool_call_response(
+            "initial",
+            {"initial": next(proposed_templates)},
+            diagnosis="one instruction changes generated behavior",
+            evidence=["candidate and parent have different outcomes"],
+        )
 
     adapter = CoverUpPromptAdapter(
         runner=FakeRunner(),
@@ -1648,6 +1690,29 @@ def test_llm_component_selector_always_exposes_both_after_any_failure():
     assert selected == ["initial", "error"]
 
 
+def test_component_update_parser_accepts_native_tool_call_objects_only():
+    arguments = {
+        "component": "initial",
+        "replacements": {"initial": baseline_bundle().initial},
+        "diagnosis": "preserve reachability constraints",
+        "evidence": ["the initial attempt missed a branch"],
+    }
+    native_response = [{
+        "text": None,
+        "tool_calls": [SimpleNamespace(function=SimpleNamespace(
+            name="update_prompt_component",
+            arguments=json.dumps(arguments),
+        ))],
+    }]
+
+    parsed = CoverUpPromptAdapter._extract_component_update(native_response)
+
+    assert parsed == arguments
+    assert CoverUpPromptAdapter._extract_component_update(
+        [json.dumps(arguments)]
+    ) is None
+
+
 def test_prompt_mutation_can_update_all_components_in_one_call(tmp_path):
     baseline = baseline_bundle()
     improved_initial = baseline.initial.replace(
@@ -1657,20 +1722,14 @@ def test_prompt_mutation_can_update_all_components_in_one_call(tmp_path):
     improved_error = "Coordinate repair with initial constraints.\n" + baseline.error
     calls = []
 
-    def reflection_lm(prompt):
-        calls.append(prompt)
-        return [json.dumps({
-            "name": "update_prompt_component",
-            "arguments": {
-                "component": "all",
-                "replacements": {
-                    "initial": improved_initial,
-                    "error": improved_error,
-                },
-                "diagnosis": "generation and repair use inconsistent constraints",
-                "evidence": ["both stages have terminal failures"],
-            },
-        })]
+    def reflection_lm(**kwargs):
+        calls.append(kwargs)
+        return tool_call_response(
+            "all",
+            {"initial": improved_initial, "error": improved_error},
+            diagnosis="generation and repair use inconsistent constraints",
+            evidence=["both stages have terminal failures"],
+        )
 
     adapter = CoverUpPromptAdapter(
         runner=SimpleNamespace(),
@@ -1697,6 +1756,8 @@ def test_prompt_mutation_can_update_all_components_in_one_call(tmp_path):
     assert decision["selection"] == "all"
     assert decision["changed_components"] == ["initial", "error"]
     assert decision["status"] == "accepted"
+    assert calls[0]["tools"][0]["function"]["name"] == "update_prompt_component"
+    assert calls[0]["tool_choice"]["function"]["name"] == "update_prompt_component"
 
 
 def test_prompt_mutation_rejects_partial_all_update_atomically(tmp_path):
@@ -1706,15 +1767,12 @@ def test_prompt_mutation_rejects_partial_all_update_atomically(tmp_path):
         candidate_dir=tmp_path,
         targets_by_split={},
         baseline=baseline,
-        reflection_lm=lambda prompt: [json.dumps({
-            "name": "update_prompt_component",
-            "arguments": {
-                "component": "all",
-                "replacements": {"initial": baseline.initial},
-                "diagnosis": "both stages failed",
-                "evidence": ["both stages have failures"],
-            },
-        })],
+        reflection_lm=lambda **kwargs: tool_call_response(
+            "all",
+            {"initial": baseline.initial},
+            diagnosis="both stages failed",
+            evidence=["both stages have failures"],
+        ),
     )
 
     proposals = adapter.propose_new_texts(
@@ -1742,17 +1800,14 @@ def test_prompt_mutation_selects_and_updates_component_in_one_call(tmp_path):
         "Inspect the causal failure first.\nCreate new pytest test functions",
     )
 
-    def reflection_lm(prompt):
-        calls.append(prompt)
-        return [json.dumps({
-            "name": "update_prompt_component",
-            "arguments": {
-                "component": "initial",
-                "replacements": {"initial": improved},
-                "diagnosis": "inspect branch preconditions while preserving formatting",
-                "evidence": ["the generated test missed the guarded branch"],
-            },
-        })]
+    def reflection_lm(**kwargs):
+        calls.append(kwargs)
+        return tool_call_response(
+            "initial",
+            {"initial": improved},
+            diagnosis="inspect branch preconditions while preserving formatting",
+            evidence=["the generated test missed the guarded branch"],
+        )
 
     adapter = CoverUpPromptAdapter(
         runner=SimpleNamespace(),
@@ -1773,8 +1828,8 @@ def test_prompt_mutation_selects_and_updates_component_in_one_call(tmp_path):
 
     assert proposals["initial"] == improved
     assert len(calls) == 1
-    assert '"component": "initial, error, or all"' in calls[0]
-    assert "update_prompt_component" in calls[0]
+    assert "`all` is always allowed" in calls[0]["messages"][-1]["content"]
+    assert calls[0]["tools"][0]["type"] == "function"
 
 
 def test_local_smoke_real_gepa_uses_one_call_all_flow(tmp_path):
@@ -1846,20 +1901,14 @@ def test_local_smoke_real_gepa_uses_one_call_all_flow(tmp_path):
                 exit_code=0,
             )
 
-    def reflection_lm(prompt):
-        lm_calls.append(prompt)
-        return [json.dumps({
-            "name": "update_prompt_component",
-            "arguments": {
-                "component": "all",
-                "replacements": {
-                    "initial": improved_initial,
-                    "error": improved_error,
-                },
-                "diagnosis": "generation and repair need a coordinated contract",
-                "evidence": ["both attempts terminate without full coverage"],
-            },
-        })]
+    def reflection_lm(**kwargs):
+        lm_calls.append(kwargs)
+        return tool_call_response(
+            "all",
+            {"initial": improved_initial, "error": improved_error},
+            diagnosis="generation and repair need a coordinated contract",
+            evidence=["both attempts terminate without full coverage"],
+        )
 
     train = [SymbolTarget("project", "pkg/module.py", "target", "train")]
     validation = [
@@ -2462,7 +2511,7 @@ def test_runner_partitions_targets_by_project(tmp_path, monkeypatch):
         }), encoding="utf-8")
         return SimpleNamespace(returncode=0, stdout="coverage ok")
 
-    monkeypatch.setattr("src.optimization.runner.subprocess.run", fake_subprocess_run)
+    monkeypatch.setattr("src.optimization.runner.run_streamed", fake_subprocess_run)
     monkeypatch.setattr("src.optimization.runner.run_coverage", fake_run_coverage)
     runner = CoverUpExperimentRunner(ExperimentConfig(
         project_root=tmp_path,
@@ -2573,7 +2622,7 @@ def test_existing_baseline_tests_are_scored_per_project(tmp_path, monkeypatch):
 
     monkeypatch.setattr("src.optimization.runner.run_coverage", fake_run_coverage)
     monkeypatch.setattr(
-        "src.optimization.runner.subprocess.run",
+        "src.optimization.runner.run_streamed",
         lambda *args, **kwargs: pytest.fail("CoverUp must not be invoked"),
     )
     runner = CoverUpExperimentRunner(ExperimentConfig(

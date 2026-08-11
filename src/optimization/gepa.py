@@ -28,6 +28,41 @@ COMPONENT_ROLES = {
     "initial": "Generate the first complete pytest module from source and missing coverage.",
     "error": "Repair a complete pytest module after an execution or collection error.",
 }
+UPDATE_PROMPT_COMPONENT_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "update_prompt_component",
+        "description": (
+            "Select initial, error, or all and return complete replacement "
+            "templates in the same call. The all selection is always allowed."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "component": {
+                    "type": "string",
+                    "enum": ["initial", "error", "all"],
+                },
+                "replacements": {
+                    "type": "object",
+                    "properties": {
+                        "initial": {"type": "string"},
+                        "error": {"type": "string"},
+                    },
+                    "additionalProperties": False,
+                },
+                "diagnosis": {"type": "string"},
+                "evidence": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                },
+            },
+            "required": ["component", "replacements", "diagnosis", "evidence"],
+            "additionalProperties": False,
+        },
+    },
+}
 AUTO_METRIC_BUDGETS = {"light": 120, "medium": 300, "heavy": 600}
 
 _DIGEST_LOCKS: dict[str, threading.Lock] = {}
@@ -1274,34 +1309,29 @@ class CoverUpPromptAdapter:
         return result
 
     @staticmethod
-    def _lm_text(raw: Any) -> str:
-        if isinstance(raw, str):
-            return raw
-        if isinstance(raw, Sequence) and raw:
-            first = raw[0]
-            if isinstance(first, str):
-                return first
-            if isinstance(first, dict) and "text" in first:
-                return str(first["text"])
-        raise TypeError("Reflection LM returned no usable text")
+    def _member(value: Any, name: str) -> Any:
+        return value.get(name) if isinstance(value, Mapping) else getattr(value, name, None)
 
-    @staticmethod
-    def _extract_component_update(response: str) -> dict[str, Any] | None:
-        stripped = response.strip()
-        if stripped.startswith("```") and stripped.endswith("```"):
-            stripped = re.sub(r"^```(?:json)?\s*", "", stripped)
-            stripped = stripped[:-3].strip()
-        start = stripped.find("{")
-        end = stripped.rfind("}")
-        if start < 0 or end <= start:
+    @classmethod
+    def _extract_component_update(cls, response: Any) -> dict[str, Any] | None:
+        if isinstance(response, (str, bytes)) or not isinstance(response, Sequence):
             return None
-        try:
-            call = json.loads(stripped[start:end + 1])
-        except json.JSONDecodeError:
+        if len(response) != 1:
             return None
-        if not isinstance(call, dict) or call.get("name") != "update_prompt_component":
+        tool_calls = cls._member(response[0], "tool_calls")
+        if not isinstance(tool_calls, Sequence) or len(tool_calls) != 1:
             return None
-        arguments = call.get("arguments")
+        function = cls._member(tool_calls[0], "function")
+        if function is None:
+            return None
+        if cls._member(function, "name") != "update_prompt_component":
+            return None
+        arguments = cls._member(function, "arguments")
+        if isinstance(arguments, str):
+            try:
+                arguments = json.loads(arguments)
+            except json.JSONDecodeError:
+                return None
         if not isinstance(arguments, dict):
             return None
         required = {"component", "replacements", "diagnosis", "evidence"}
@@ -1309,7 +1339,16 @@ class CoverUpPromptAdapter:
             return None
         if not isinstance(arguments["replacements"], dict):
             return None
-        if not isinstance(arguments["evidence"], list):
+        if not isinstance(arguments["diagnosis"], str) or not arguments["diagnosis"].strip():
+            return None
+        if (
+            not isinstance(arguments["evidence"], list)
+            or not arguments["evidence"]
+            or not all(
+                isinstance(item, str) and item.strip()
+                for item in arguments["evidence"]
+            )
+        ):
             return None
         return arguments
 
@@ -1384,22 +1423,29 @@ Eligible component contracts:
 Labelled end-to-end execution evidence by component:
 <evidence>{json.dumps(evidence, indent=2, ensure_ascii=False)}</evidence>
 
-In one decision, choose `initial`, `error`, or `all`, then produce every complete revised template selected. Use the full initial -> failing test -> error -> repaired test -> outcome episodes for causal attribution. Make conservative operational changes. Preserve useful instructions and required literal placeholders. Do not add target-specific file names, symbols, line numbers, repository facts, or literal values. Keep every replacement within its component's maximum length.
+In one decision, choose `initial`, `error`, or `all`, then call `update_prompt_component` exactly once with every complete revised template selected. `all` is always allowed, even when direct evidence exists for only one stage. When selecting `all`, provide both `initial` and `error` replacements and change both; the update is rejected atomically otherwise. For a single component, provide only that component's replacement.
 
-Return JSON only, representing this single function call:
-{{
-  "name": "update_prompt_component",
-  "arguments": {{
-    "component": "initial, error, or all",
-    "replacements": {{"selected component name": "complete revised template"}},
-    "diagnosis": "concise reusable root cause and regression guard",
-    "evidence": ["concise observations supporting the attribution"]
-  }}
-}}
+Use the full initial -> failing test -> error -> repaired test -> outcome episodes for causal attribution. Make conservative operational changes. Preserve useful instructions and required literal placeholders. Do not add target-specific file names, symbols, line numbers, repository facts, or literal values. Keep every replacement within its component's maximum length. Include a concise reusable diagnosis with its regression guard and at least one evidence observation in the function arguments. Do not answer with JSON or prose outside the function call.
 """
         try:
             update = self._extract_component_update(
-                self._lm_text(self.reflection_lm(prompt))
+                self.reflection_lm(
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You optimize reusable CoverUp prompt components. "
+                                "Finish by calling update_prompt_component exactly once."
+                            ),
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    tools=[UPDATE_PROMPT_COMPONENT_TOOL],
+                    tool_choice={
+                        "type": "function",
+                        "function": {"name": "update_prompt_component"},
+                    },
+                )
             )
         except (TypeError, ValueError):
             update = None
@@ -1489,7 +1535,7 @@ def _optimization_run_digest(
     evaluation_replicates: int,
 ) -> str:
     payload = {
-        "optimizer_schema": 10,
+        "optimizer_schema": 11,
         "baseline": baseline.as_candidate(),
         "train": [_target_identity(target) for target in train_targets],
         "validation": [_target_identity(target) for target in validation_targets],

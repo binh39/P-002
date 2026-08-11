@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .subprocesses import run_streamed
+
 # pytest.ExitCode.NO_TESTS_COLLECTED.  Keep this local instead of importing
 # pytest in the production coverage wrapper.
 _NO_TESTS_COLLECTED = 5
@@ -120,9 +122,8 @@ def run_coverage(
         *(("--count", str(repeat_tests)) if repeat_tests else ()),
         *shlex.split(pytest_args, posix=os.name != "nt"),
     ]
-    completed = subprocess.run(
-        run_cmd, cwd=project_root, env=run_env, text=True,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+    completed = run_streamed(
+        run_cmd, cwd=project_root, env=run_env, label="coverage pytest",
     )
     # coverage.py writes usable execution data when pytest finishes with test
     # failures (exit 1), as well as when it passes or collects no tests.  Export
@@ -133,10 +134,9 @@ def run_coverage(
         return completed
     # Compact JSON (no --pretty-print): the report is only used to score the
     # batch and is deleted afterwards, so pretty-printing just wastes disk.
-    report = subprocess.run(
+    report = run_streamed(
         [sys.executable, "-m", "coverage", "json", "-o", str(output.resolve())],
-        cwd=project_root, env=run_env, text=True,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+        cwd=project_root, env=run_env, label="coverage json",
     )
     if report.returncode:
         return report

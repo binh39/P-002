@@ -5,7 +5,6 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import sys
 import time
 import uuid
@@ -17,6 +16,7 @@ from pathlib import Path
 from .coveragepy import SymbolCoverage, load_report, run_coverage, symbol_coverage
 from .metrics import build_feedback, score_symbol
 from .models import BatchRunRecord, BatchTargetResult, ExperimentConfig, RunRecord, SymbolTarget
+from .subprocesses import run_streamed
 
 
 def _now() -> str:
@@ -381,7 +381,7 @@ class CoverUpExperimentRunner:
             coverup_log = run_dir / f"coverup_{artifact_token}.log"
             target_trace = run_dir / f"attempt_trace_{artifact_token}.jsonl"
             command = [
-                sys.executable, "-m", "coverup",
+                sys.executable, "-u", "-m", "coverup",
                 "--package-dir", str(package_dirs[target.project]),
                 "--tests-dir", str(temporary_workspace),
                 "--target-symbols", target.symbol,
@@ -422,14 +422,11 @@ class CoverUpExperimentRunner:
             ))
 
         def evaluate_target(job: _TargetEvaluationJob) -> _TargetEvaluationOutcome:
-            completed = subprocess.run(
+            completed = run_streamed(
                 job.command,
                 cwd=self.config.project_root.resolve(),
                 env=environment,
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                check=False,
+                label=f"CoverUp {job.target.source_file}::{job.target.symbol}",
             )
             raw_traces = _load_attempt_traces(job.attempt_trace)
             try:
