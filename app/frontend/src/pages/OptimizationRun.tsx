@@ -461,81 +461,93 @@ export default function OptimizationRun() {
         </section>
       )}
 
-      <div className="platform-stats-grid baseline-metrics-grid">
-        <StatCard
-          label="Baseline validation"
-          value={score(run.baselineValidationScore)}
-          detail="Parent prompt score"
-        />
-        <StatCard
-          label="Candidate validation"
-          value={score(run.candidateValidationScore)}
-          detail="Best candidate score"
-          tone="violet"
-        />
-        <StatCard
-          label="Absolute gain"
-          value={gain === null ? "—" : `${gain >= 0 ? "+" : ""}${gain.toFixed(3)}`}
-          detail="Candidate minus baseline"
-          tone="green"
-        />
-        <StatCard
-          label="Candidates"
-          value={run.candidateCount}
-          detail={`${run.metricCalls} metric calls`}
-          tone="orange"
-        />
-      </div>
-
-      {run.finalComparison && (
-        <section className="platform-card">
-          <div className="card-heading">
-            <div>
-              <h2>Locked baseline vs optimized result</h2>
-              <p>
-                Final paired coverage from the cloud pipeline; this is not a second frontend-run
-                comparison.
-              </p>
-            </div>
+      <section className="platform-card optimization-results-card">
+        <div className="card-heading optimization-results-heading">
+          <div>
+            <h2>Evaluation results</h2>
+            <p>Validation performance and the final locked-test decision.</p>
+          </div>
+          {run.finalComparison && (
             <StatusBadge tone={run.finalComparison.promoted ? "success" : "warning"}>
-              {run.finalComparison.promoted ? "Optimized prompt promoted" : "Baseline retained"}
+              {run.finalComparison.promoted ? "Promoted" : "Baseline retained"}
             </StatusBadge>
+          )}
+        </div>
+
+        <div className="optimization-result-section">
+          <div className="optimization-result-heading">
+            <h3>Validation</h3>
+            <p>Best scores from the GEPA search.</p>
           </div>
           <div className="platform-stats-grid baseline-metrics-grid">
             <StatCard
-              label="Baseline final score"
-              value={score(run.finalComparison.baselineMetrics.score)}
-              detail="Candidate zero on locked split"
+              label="Baseline"
+              value={score(run.baselineValidationScore)}
+              detail="Parent prompt"
             />
             <StatCard
-              label="Optimized final score"
-              value={score(run.finalComparison.candidateMetrics.score)}
-              detail="GEPA proposal on the same split"
+              label="Candidate"
+              value={score(run.candidateValidationScore)}
+              detail="Best proposal"
               tone="violet"
             />
             <StatCard
-              label="Final absolute gain"
-              value={
-                run.finalComparison.absoluteGain === null
-                  ? "—"
-                  : `${run.finalComparison.absoluteGain >= 0 ? "+" : ""}${run.finalComparison.absoluteGain.toFixed(3)}`
-              }
-              detail="Optimized minus baseline"
+              label="Gain"
+              value={gain === null ? "—" : `${gain >= 0 ? "+" : ""}${gain.toFixed(3)}`}
+              detail="Candidate minus baseline"
               tone="green"
             />
             <StatCard
-              label="Decision"
-              value={run.finalComparison.promoted ? "Promote" : "Retain baseline"}
-              detail={
-                run.finalComparison.skipped
-                  ? run.finalComparison.reason || "Unchanged candidate"
-                  : "Strictly-better promotion gate"
-              }
+              label="Candidates"
+              value={run.candidateCount}
+              detail={`${run.metricCalls} metric calls`}
               tone="orange"
             />
           </div>
-        </section>
-      )}
+        </div>
+
+        {run.finalComparison && (
+          <div className="optimization-result-section is-final">
+            <div className="optimization-result-heading">
+              <h3>Final locked test</h3>
+              <p>Baseline and optimized prompt on the same held-out targets.</p>
+            </div>
+            <div className="platform-stats-grid baseline-metrics-grid">
+              <StatCard
+                label="Baseline"
+                value={score(run.finalComparison.baselineMetrics.score)}
+                detail="Candidate zero"
+              />
+              <StatCard
+                label="Optimized"
+                value={score(run.finalComparison.candidateMetrics.score)}
+                detail="GEPA proposal"
+                tone="violet"
+              />
+              <StatCard
+                label="Gain"
+                value={
+                  run.finalComparison.absoluteGain === null
+                    ? "—"
+                    : `${run.finalComparison.absoluteGain >= 0 ? "+" : ""}${run.finalComparison.absoluteGain.toFixed(3)}`
+                }
+                detail="Optimized minus baseline"
+                tone="green"
+              />
+              <StatCard
+                label="Decision"
+                value={run.finalComparison.promoted ? "Promote" : "Retain baseline"}
+                detail={
+                  run.finalComparison.skipped
+                    ? run.finalComparison.reason || "Unchanged candidate"
+                    : "Strict improvement required"
+                }
+                tone="orange"
+              />
+            </div>
+          </div>
+        )}
+      </section>
 
       {evolutionQuery.data ? (
         <EvolutionPanel evolution={evolutionQuery.data} />
