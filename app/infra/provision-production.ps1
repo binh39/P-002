@@ -1,8 +1,8 @@
 param(
-    [string]$ProjectId = "vinai-505107",
+    [string]$ProjectId = "project-7df9f963-9fe0-4b76-b3d",
     [string]$Region = "asia-southeast1",
     [string]$Repository = "promptopt",
-    [string]$Bucket = "vinai-505107-promptopt-sources",
+    [string]$Bucket = "project-7df9f963-9fe0-4b76-b3d-promptopt-sources",
     [string]$GitHubRepository = "binh39/P-002",
     [string]$WorkloadIdentityPool = "github-actions",
     [string]$WorkloadIdentityProvider = "p002-main"

@@ -32,14 +32,14 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PROJECT_ID: vinai-505107
+  PROJECT_ID: project-7df9f963-9fe0-4b76-b3d
   REGION: asia-southeast1
   REPOSITORY: promptopt
   SERVICE: promptopt-api
-  RUNTIME_SERVICE_ACCOUNT: promptopt-api@vinai-505107.iam.gserviceaccount.com
-  SOURCE_BUCKET: vinai-505107-promptopt-sources
+  RUNTIME_SERVICE_ACCOUNT: promptopt-api@project-7df9f963-9fe0-4b76-b3d.iam.gserviceaccount.com
+  SOURCE_BUCKET: project-7df9f963-9fe0-4b76-b3d-promptopt-sources
   GEPA_JOB: promptopt-gepa-runner
-  RUNNER_SERVICE_ACCOUNT: promptopt-runner@vinai-505107.iam.gserviceaccount.com
+  RUNNER_SERVICE_ACCOUNT: promptopt-runner@project-7df9f963-9fe0-4b76-b3d.iam.gserviceaccount.com
 
 jobs:
   deploy:
@@ -51,9 +51,9 @@ jobs:
         name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
         with:
-          project_id: vinai-505107
-          workload_identity_provider: projects/509384558275/locations/global/workloadIdentityPools/github-actions/providers/p002-main
-          service_account: github-backend-deploy@vinai-505107.iam.gserviceaccount.com
+          project_id: project-7df9f963-9fe0-4b76-b3d
+          workload_identity_provider: projects/861862240028/locations/global/workloadIdentityPools/github-actions/providers/p002-main
+          service_account: github-backend-deploy@project-7df9f963-9fe0-4b76-b3d.iam.gserviceaccount.com
           token_format: access_token
       - uses: google-github-actions/setup-gcloud@v3
       - name: Extract bundled sample repositories
@@ -71,8 +71,8 @@ jobs:
           password: ${{ steps.auth.outputs.access_token }}
       - name: Build and push images
         env:
-          API_IMAGE: asia-southeast1-docker.pkg.dev/vinai-505107/promptopt/api:${{ github.sha }}
-          GEPA_IMAGE: asia-southeast1-docker.pkg.dev/vinai-505107/promptopt/gepa-runner:${{ github.sha }}
+          API_IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/api:${{ github.sha }}
+          GEPA_IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/gepa-runner:${{ github.sha }}
         run: |
           docker build --file app/Dockerfile --tag "$API_IMAGE" .
           docker build --file cloud/Dockerfile.web --tag "$GEPA_IMAGE" .
@@ -80,7 +80,7 @@ jobs:
           docker push "$GEPA_IMAGE"
       - name: Deploy isolated GEPA job
         env:
-          GEPA_IMAGE: asia-southeast1-docker.pkg.dev/vinai-505107/promptopt/gepa-runner:${{ github.sha }}
+          GEPA_IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/gepa-runner:${{ github.sha }}
         run: |
           gcloud run jobs deploy "$GEPA_JOB" \
             --project "$PROJECT_ID" \
@@ -104,7 +104,7 @@ jobs:
             --quiet
       - name: Deploy Cloud Run
         env:
-          IMAGE: asia-southeast1-docker.pkg.dev/vinai-505107/promptopt/api:${{ github.sha }}
+          IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/api:${{ github.sha }}
         run: |
           gcloud run deploy "$SERVICE" \
             --project "$PROJECT_ID" \

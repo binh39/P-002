@@ -1,7 +1,7 @@
 param(
-    [string]$ProjectId = "vinai-505107",
+    [string]$ProjectId = "project-7df9f963-9fe0-4b76-b3d",
     [string]$Region = "asia-southeast1",
-    [string]$Bucket = "vinai-505107-promptopt-sources",
+    [string]$Bucket = "project-7df9f963-9fe0-4b76-b3d-promptopt-sources",
     [string]$Queue = "promptopt-baseline"
 )
 

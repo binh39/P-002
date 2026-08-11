@@ -130,7 +130,6 @@ async def test_optimization_passes_locked_multi_project_snapshot_to_cloud():
     )
     service.set_optimization_dispatcher(InlineOptimizationDispatcher(service.execute_optimization))
     run = await service.request_optimization(experiment.id, experiment.owner_id, full_access=True)
-    run = await service.request_optimization(experiment.id, experiment.owner_id, full_access=True)
 
     assert run.status == ExperimentStatus.OPTIMIZATION_SUCCEEDED
     assert run.candidate_validation_score == 0.8

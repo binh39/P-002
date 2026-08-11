@@ -48,8 +48,3 @@ def test_production_requires_cloud_gepa_execution_backend():
 def test_production_requires_admin_vertexai_project():
     with pytest.raises(ValidationError, match="ADMIN_VERTEXAI_PROJECT is required"):
         production_settings(admin_vertexai_project=" ")
-
-
-def test_production_requires_admin_vertexai_project():
-    with pytest.raises(ValidationError, match="ADMIN_VERTEXAI_PROJECT is required"):
-        production_settings(admin_vertexai_project=" ")
