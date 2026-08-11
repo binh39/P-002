@@ -82,20 +82,27 @@ jobs:
         env:
           GEPA_IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/gepa-runner:${{ github.sha }}
         run: |
-          gcloud run jobs deploy "$GEPA_JOB" \
-            --project "$PROJECT_ID" \
-            --region "$REGION" \
-            --image "$GEPA_IMAGE" \
-            --service-account "$RUNNER_SERVICE_ACCOUNT" \
-            --command python \
-            --args=-m,cloud.run_job,--help \
-            --cpu 8 \
-            --memory 8Gi \
-            --tasks 1 \
-            --parallelism 1 \
-            --max-retries 0 \
-            --task-timeout 86400s \
-            --set-env-vars "COVERUP_MODEL=vertex_ai/gemini-3.6-flash,OPTIMIZE_MODEL=vertex_ai/gemini-3.6-flash,VERTEXAI_PROJECT=$PROJECT_ID,VERTEXAI_LOCATION=global"
+          for attempt in 1 2 3; do
+            if gcloud run jobs deploy "$GEPA_JOB" \
+              --project "$PROJECT_ID" \
+              --region "$REGION" \
+              --image "$GEPA_IMAGE" \
+              --service-account "$RUNNER_SERVICE_ACCOUNT" \
+              --command python \
+              --args=-m,cloud.run_job,--help \
+              --cpu 8 \
+              --memory 8Gi \
+              --tasks 1 \
+              --parallelism 1 \
+              --max-retries 0 \
+              --task-timeout 86400s \
+              --set-env-vars "COVERUP_MODEL=vertex_ai/gemini-3.6-flash,OPTIMIZE_MODEL=vertex_ai/gemini-3.6-flash,VERTEXAI_PROJECT=$PROJECT_ID,VERTEXAI_LOCATION=global"; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            echo "Cloud Run job provisioning failed transiently; retrying in 30 seconds."
+            sleep 30
+          done
           gcloud run jobs add-iam-policy-binding "$GEPA_JOB" \
             --project "$PROJECT_ID" \
             --region "$REGION" \
@@ -106,17 +113,24 @@ jobs:
         env:
           IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/api:${{ github.sha }}
         run: |
-          gcloud run deploy "$SERVICE" \
-            --project "$PROJECT_ID" \
-            --region "$REGION" \
-            --image "$IMAGE" \
-            --service-account "$RUNTIME_SERVICE_ACCOUNT" \
-            --allow-unauthenticated \
-            --port 8080 \
-            --cpu 1 \
-            --memory 512Mi \
-            --timeout 1800 \
-            --min 0 \
-            --max 3 \
-            --concurrency 40 \
-            --env-vars-file app/infra/cloud-run-env.yaml
+          for attempt in 1 2 3; do
+            if gcloud run deploy "$SERVICE" \
+              --project "$PROJECT_ID" \
+              --region "$REGION" \
+              --image "$IMAGE" \
+              --service-account "$RUNTIME_SERVICE_ACCOUNT" \
+              --allow-unauthenticated \
+              --port 8080 \
+              --cpu 1 \
+              --memory 512Mi \
+              --timeout 1800 \
+              --min 0 \
+              --max 3 \
+              --concurrency 40 \
+              --env-vars-file app/infra/cloud-run-env.yaml; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            echo "Cloud Run service provisioning failed transiently; retrying in 30 seconds."
+            sleep 30
+          done
