@@ -5009,12 +5009,13 @@ textarea {
   color: #acb9ca;
 }
 
-:root[data-theme="dark"]
-  :where(.data-table tbody tr:nth-child(even), .platform-table tbody tr:nth-child(even)) {
+:root[data-theme="dark"] .data-table tbody tr:nth-child(even),
+:root[data-theme="dark"] .platform-table tbody tr:nth-child(even) {
   background: rgba(17, 27, 43, 0.72);
 }
 
-:root[data-theme="dark"] :where(.data-table tbody tr:hover, .platform-table tbody tr:hover) {
+:root[data-theme="dark"] .data-table tbody tr:hover,
+:root[data-theme="dark"] .platform-table tbody tr:hover {
   background: rgba(49, 168, 255, 0.08);
 }
 
@@ -5113,6 +5114,39 @@ textarea {
 :root[data-theme="dark"] .dashboard-status-running {
   color: #8bd2ff;
   background: rgba(3, 105, 161, 0.24);
+}
+
+:root[data-theme="dark"] .comparison-decision {
+  border-color: rgba(245, 158, 11, 0.32);
+  background: rgba(120, 53, 15, 0.2);
+}
+
+:root[data-theme="dark"] .comparison-decision strong {
+  color: #ffd28a;
+}
+
+:root[data-theme="dark"] .comparison-decision p {
+  color: #cbb58c;
+}
+
+:root[data-theme="dark"] .comparison-decision.is-blocked .status-warning {
+  border-color: rgba(251, 191, 36, 0.34);
+  color: #ffe1a3;
+  background: #4a2d12;
+  box-shadow: inset 0 0 0 1px rgba(255, 225, 163, 0.04);
+}
+
+:root[data-theme="dark"] .comparison-decision.is-promoted {
+  border-color: rgba(52, 211, 153, 0.28);
+  background: rgba(6, 78, 59, 0.22);
+}
+
+:root[data-theme="dark"] .comparison-decision.is-promoted strong {
+  color: #8ce8c5;
+}
+
+:root[data-theme="dark"] .comparison-decision.is-promoted p {
+  color: #9cc9b8;
 }
 
 :root[data-theme="dark"] .empty-state {
