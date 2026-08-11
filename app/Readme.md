@@ -300,7 +300,7 @@ service-account JSON key.
 | Resource | Value |
 | --- | --- |
 | GCP/Firebase project | `vinai-505107` |
-| Admin Vertex AI project | `gen-lang-client-0475767921` |
+| Admin Vertex AI project | `project-7df9f963-9fe0-4b76-b3d` |
 | Region | `asia-southeast1` |
 | Hosting/API | `https://vinai-505107.web.app`, `/api/v1` |
 | Cloud Run API | `promptopt-api` |
@@ -316,7 +316,7 @@ Firebase Hosting rewrite lÃ  public, nhÆ°ng API business endpoints váº«n 
 Runner identity chá»‰ Ä‘Æ°á»£c cáº¥p quyá»n tá»‘i thiá»ƒu trÃªn opaque runner exchange objects vÃ  Vertex AI.
 Admin executions override only `VERTEXAI_PROJECT`; the API, Cloud Run Job, GCS, Firestore and non-admin
 executions remain in `vinai-505107`. The runner identity must have `roles/aiplatform.user` and
-`roles/serviceusage.serviceUsageConsumer` on `gen-lang-client-0475767921`.
+`roles/serviceusage.serviceUsageConsumer` on `project-7df9f963-9fe0-4b76-b3d`.
 
 ## Production smoke
 

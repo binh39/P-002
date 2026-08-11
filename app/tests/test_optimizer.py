@@ -89,7 +89,7 @@ async def test_optimization_passes_locked_multi_project_snapshot_to_cloud():
 
         async def optimize(self, **kwargs):
             self.calls.append(kwargs)
-            assert kwargs["vertexai_project"] == "gen-lang-client-0475767921"
+            assert kwargs["vertexai_project"] == "project-7df9f963-9fe0-4b76-b3d"
             assert kwargs["baseline"].digest() == prompt.digest()
             assert [target.id for target in kwargs["train"]] == [keys[0]]
             assert [target.id for target in kwargs["validation"]] == [keys[1]]
@@ -126,9 +126,10 @@ async def test_optimization_passes_locked_multi_project_snapshot_to_cloud():
         storage,
         cloud_optimizer=cloud,
         samples=FakeSamples(),
-        admin_vertexai_project="gen-lang-client-0475767921",
+        admin_vertexai_project="project-7df9f963-9fe0-4b76-b3d",
     )
     service.set_optimization_dispatcher(InlineOptimizationDispatcher(service.execute_optimization))
+    run = await service.request_optimization(experiment.id, experiment.owner_id, full_access=True)
     run = await service.request_optimization(experiment.id, experiment.owner_id, full_access=True)
 
     assert run.status == ExperimentStatus.OPTIMIZATION_SUCCEEDED

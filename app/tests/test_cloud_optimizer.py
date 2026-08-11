@@ -162,12 +162,12 @@ async def test_cloud_gepa_optimizer_uses_isolated_web_prefix_and_maps_result():
         validation=targets["validation"],
         holdout=targets["test"],
         settings=ExperimentSettings(),
-        vertexai_project="gen-lang-client-0475767921",
+        vertexai_project="project-7df9f963-9fe0-4b76-b3d",
     )
     admin_environment = {
         item["name"]: item["value"] for item in client.request["overrides"]["container_overrides"][0]["env"]
     }
-    assert admin_environment["VERTEXAI_PROJECT"] == "gen-lang-client-0475767921"
+    assert admin_environment["VERTEXAI_PROJECT"] == "project-7df9f963-9fe0-4b76-b3d"
 
 
 @pytest.mark.asyncio

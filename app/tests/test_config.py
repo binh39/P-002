@@ -37,12 +37,17 @@ def test_production_cloud_run_job_configuration_is_valid():
     assert settings.experiment_dispatcher == "cloud_tasks"
     assert settings.optimization_execution_backend == "cloud_run_job"
     assert settings.cloud_run_gepa_timeout_seconds == 86400
-    assert settings.admin_vertexai_project == "gen-lang-client-0475767921"
+    assert settings.admin_vertexai_project == "project-7df9f963-9fe0-4b76-b3d"
 
 
 def test_production_requires_cloud_gepa_execution_backend():
     with pytest.raises(ValidationError, match="OPTIMIZATION_EXECUTION_BACKEND=cloud_run_job"):
         production_settings(optimization_execution_backend="inline")
+
+
+def test_production_requires_admin_vertexai_project():
+    with pytest.raises(ValidationError, match="ADMIN_VERTEXAI_PROJECT is required"):
+        production_settings(admin_vertexai_project=" ")
 
 
 def test_production_requires_admin_vertexai_project():

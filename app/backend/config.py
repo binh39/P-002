@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     storage_backend: Literal["local", "gcs"] = "local"
     analysis_dispatcher: Literal["inline", "cloud_tasks"] = "inline"
     gcp_project_id: str = "vinai-505107"
-    admin_vertexai_project: str = "gen-lang-client-0475767921"
+    admin_vertexai_project: str = "project-7df9f963-9fe0-4b76-b3d"
     gcp_service_account_email: str = ""
     gcs_bucket: str = ""
     cloud_tasks_location: str = "asia-southeast1"
@@ -84,6 +84,8 @@ class Settings(BaseSettings):
                 raise ValueError("EXPERIMENT_WORKER_URL and EXPERIMENT_TASK_AUDIENCE are required in production")
             if self.optimization_execution_backend != "cloud_run_job" or not self.cloud_run_gepa_job:
                 raise ValueError("OPTIMIZATION_EXECUTION_BACKEND=cloud_run_job and CLOUD_RUN_GEPA_JOB are required")
+            if not self.admin_vertexai_project.strip():
+                raise ValueError("ADMIN_VERTEXAI_PROJECT is required in production")
             if not self.admin_vertexai_project.strip():
                 raise ValueError("ADMIN_VERTEXAI_PROJECT is required in production")
         return self
