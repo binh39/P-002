@@ -18,8 +18,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  FIREBASE_PROJECT_ID: vinai-505107
-  FIREBASE_WEB_APP_ID: 1:509384558275:web:748a06848ce29067a3c476
+  FIREBASE_PROJECT_ID: project-7df9f963-9fe0-4b76-b3d
+  FIREBASE_WEB_APP_ID: 1:861862240028:web:25b6f12238bce0664be4d9
 
 jobs:
   deploy:
@@ -46,9 +46,9 @@ jobs:
         name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
         with:
-          project_id: vinai-505107
-          workload_identity_provider: projects/509384558275/locations/global/workloadIdentityPools/github-actions/providers/p002-main
-          service_account: github-frontend-deploy@vinai-505107.iam.gserviceaccount.com
+          project_id: project-7df9f963-9fe0-4b76-b3d
+          workload_identity_provider: projects/861862240028/locations/global/workloadIdentityPools/github-actions/providers/p002-main
+          service_account: github-frontend-deploy@project-7df9f963-9fe0-4b76-b3d.iam.gserviceaccount.com
       - name: Load Firebase Web App config
         shell: bash
         run: |

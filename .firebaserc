@@ -1,13 +1,13 @@
 {
   "projects": {
-    "default": "vinai-505107",
-    "prod": "vinai-505107"
+    "default": "project-7df9f963-9fe0-4b76-b3d",
+    "prod": "project-7df9f963-9fe0-4b76-b3d"
   },
   "targets": {
-    "vinai-505107": {
+    "project-7df9f963-9fe0-4b76-b3d": {
       "hosting": {
         "frontend": [
-          "vinai-505107"
+          "project-7df9f963-9fe0-4b76-b3d"
         ]
       }
     }
