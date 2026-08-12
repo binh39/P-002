@@ -10,6 +10,7 @@ import Login from "@/pages/Login";
 import NotFound from "@/pages/NotFound";
 
 const Comparison = lazy(() => import("@/pages/Comparison"));
+const CoverageGuide = lazy(() => import("@/pages/CoverageGuide"));
 const CreateExperiment = lazy(() => import("@/pages/CreateExperiment"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Datasets = lazy(() => import("@/pages/Datasets"));
@@ -114,6 +115,9 @@ function RoutedApplication() {
           </Route>
           <Route path="/datasets">
             <Datasets />
+          </Route>
+          <Route path="/docs/coverage">
+            <CoverageGuide />
           </Route>
           <Route path="/playground">
             <Playground />

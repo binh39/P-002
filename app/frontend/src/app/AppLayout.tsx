@@ -11,6 +11,7 @@ const pathByNavigationId: Record<NavigationId, string> = {
   projects: "/projects",
   experiments: "/experiments",
   datasets: "/datasets",
+  coverage: "/docs/coverage",
   playground: "/playground",
   registry: "/prompts",
   settings: "/settings",
@@ -20,6 +21,7 @@ function currentNavigationId(pathname: string): NavigationId {
   if (pathname.startsWith("/projects")) return "projects";
   if (pathname.startsWith("/experiments") || pathname.startsWith("/runs")) return "experiments";
   if (pathname.startsWith("/datasets")) return "datasets";
+  if (pathname.startsWith("/docs/coverage")) return "coverage";
   if (pathname.startsWith("/playground")) return "playground";
   if (pathname.startsWith("/prompts")) return "registry";
   if (pathname.startsWith("/settings")) return "settings";
