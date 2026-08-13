@@ -16,6 +16,7 @@ export type NavigationId =
   | "projects"
   | "experiments"
   | "datasets"
+  | "coverage"
   | "playground"
   | "registry"
   | "settings";
@@ -29,13 +30,14 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { id: "dashboard", label: "Overview", Icon: BarChart3 },
-  { id: "projects", label: "Projects", Icon: FolderGit2 },
-  { id: "experiments", label: "Experiments", Icon: FlaskConical },
-  { id: "datasets", label: "Datasets", Icon: Blocks },
-  { id: "registry", label: "Prompt registry", Icon: MessageSquareCode },
-  { id: "playground", label: "Playground", Icon: Sparkles },
-] satisfies Array<{ id: NavigationId; label: string; Icon: typeof BarChart3 }>;
+  { id: "dashboard" as NavigationId, label: "Dashboard", Icon: IC.Dashboard },
+  { id: "projects" as NavigationId, label: "Projects", Icon: IC.Code },
+  { id: "experiments" as NavigationId, label: "Experiments", Icon: IC.Flask },
+  { id: "datasets" as NavigationId, label: "Datasets", Icon: IC.Database },
+  { id: "coverage" as NavigationId, label: "Coverage Guide", Icon: IC.Code },
+  { id: "registry" as NavigationId, label: "Prompt Registry", Icon: IC.CheckSquare },
+  { id: "playground" as NavigationId, label: "Playground", Icon: IC.Play },
+];
 
 export default function Sidebar({
   currentPage,

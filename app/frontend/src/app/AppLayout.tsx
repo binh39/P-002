@@ -6,7 +6,28 @@ import { useAuth } from "@/auth/AuthProvider";
 import { currentNavigationId, pathByNavigationId } from "@/app/navigation";
 import Sidebar, { type NavigationId } from "@/components/Sidebar";
 import TopNav from "@/components/TopNav";
-import AppFooter from "@/components/AppFooter";
+
+const pathByNavigationId: Record<NavigationId, string> = {
+  dashboard: "/dashboard",
+  projects: "/projects",
+  experiments: "/experiments",
+  datasets: "/datasets",
+  coverage: "/docs/coverage",
+  playground: "/playground",
+  registry: "/prompts",
+  settings: "/settings",
+};
+
+function currentNavigationId(pathname: string): NavigationId {
+  if (pathname.startsWith("/projects")) return "projects";
+  if (pathname.startsWith("/experiments") || pathname.startsWith("/runs")) return "experiments";
+  if (pathname.startsWith("/datasets")) return "datasets";
+  if (pathname.startsWith("/docs/coverage")) return "coverage";
+  if (pathname.startsWith("/playground")) return "playground";
+  if (pathname.startsWith("/prompts")) return "registry";
+  if (pathname.startsWith("/settings")) return "settings";
+  return "dashboard";
+}
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth();
