@@ -314,9 +314,9 @@ service-account JSON key.
 
 Firebase Hosting rewrite lÃ  public, nhÆ°ng API business endpoints váº«n yÃªu cáº§u Firebase bearer token.
 Runner identity chá»‰ Ä‘Æ°á»£c cáº¥p quyá»n tá»‘i thiá»ƒu trÃªn opaque runner exchange objects vÃ  Vertex AI.
-Admin executions override only `VERTEXAI_PROJECT`; the API, Cloud Run Job, GCS, Firestore and non-admin
-executions run in `project-7df9f963-9fe0-4b76-b3d`. The runner identity must have `roles/aiplatform.user` and
-`roles/serviceusage.serviceUsageConsumer` on `project-7df9f963-9fe0-4b76-b3d`.
+Only model calls use `VERTEXAI_PROJECT=vinbuildphase`; the API, Cloud Run Job, GCS, Firestore and other
+deployment resources remain in `project-7df9f963-9fe0-4b76-b3d`. The runner identity must have
+`roles/aiplatform.user` and `roles/serviceusage.serviceUsageConsumer` on `vinbuildphase`.
 
 ## Production smoke
 

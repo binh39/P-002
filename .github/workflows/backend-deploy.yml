@@ -33,6 +33,7 @@ concurrency:
 
 env:
   PROJECT_ID: project-7df9f963-9fe0-4b76-b3d
+  MODEL_PROJECT_ID: vinbuildphase
   REGION: asia-southeast1
   REPOSITORY: promptopt
   SERVICE: promptopt-api
@@ -96,7 +97,7 @@ jobs:
               --parallelism 1 \
               --max-retries 0 \
               --task-timeout 86400s \
-              --set-env-vars "COVERUP_MODEL=vertex_ai/gemini-3.6-flash,OPTIMIZE_MODEL=vertex_ai/gemini-3.6-flash,VERTEXAI_PROJECT=$PROJECT_ID,VERTEXAI_LOCATION=global"; then
+              --set-env-vars "COVERUP_MODEL=vertex_ai/gemini-3.6-flash,OPTIMIZE_MODEL=vertex_ai/gemini-3.6-flash,VERTEXAI_PROJECT=$MODEL_PROJECT_ID,VERTEXAI_LOCATION=global"; then
               break
             fi
             if [ "$attempt" -eq 3 ]; then exit 1; fi

@@ -12,7 +12,8 @@
 
 [CmdletBinding()]
 param(
-    [string]$ProjectId = "",
+    [string]$ProjectId = "project-7df9f963-9fe0-4b76-b3d",
+    [string]$VertexProjectId = "",
     [string]$Region = "asia-southeast1",
     [string]$Bucket = "p002-gepa-artifacts",
     [string]$Image = "",
@@ -71,21 +72,22 @@ function Test-Gcloud {
 }
 
 # ---------------------------------------------------------------------------
-# Resolve project id (parameter > .env > error)
+# Resolve the model project independently from the deployment project.
 # ---------------------------------------------------------------------------
-if (-not $ProjectId) {
-    $ProjectId = Get-EnvValue "VERTEXAI_PROJECT"
+if (-not $VertexProjectId) {
+    $VertexProjectId = Get-EnvValue "VERTEXAI_PROJECT"
 }
-if (-not $ProjectId -or $ProjectId -eq "your-google-cloud-project") {
-    throw "ProjectId not set. Pass -ProjectId or set VERTEXAI_PROJECT in .env"
+if (-not $VertexProjectId -or $VertexProjectId -eq "your-google-cloud-project") {
+    throw "VertexProjectId not set. Pass -VertexProjectId or set VERTEXAI_PROJECT in .env"
 }
 if (-not $Image) {
     $Image = "gcr.io/$ProjectId/p002-gepa"
 }
 
-Write-Host "==> Project : $ProjectId"
-Write-Host "==> Region  : $Region"
-Write-Host "==> Bucket  : gs://$Bucket (artifacts root)"
+Write-Host "==> Deploy project : $ProjectId"
+Write-Host "==> Model project  : $VertexProjectId"
+Write-Host "==> Region         : $Region"
+Write-Host "==> Bucket         : gs://$Bucket (artifacts root)"
 
 # ---------------------------------------------------------------------------
 # Sync dataset + prompt into cloud/inputs (they must end up inside the image)
@@ -114,7 +116,8 @@ Write-Host "==> Inputs synced to cloud/inputs"
 # Enable APIs
 # ---------------------------------------------------------------------------
 Write-Host "==> Enabling required APIs..."
-Invoke-Gcloud services enable run.googleapis.com cloudbuild.googleapis.com aiplatform.googleapis.com storage.googleapis.com --project $ProjectId
+Invoke-Gcloud services enable run.googleapis.com cloudbuild.googleapis.com storage.googleapis.com --project $ProjectId
+Invoke-Gcloud services enable aiplatform.googleapis.com --project $VertexProjectId
 
 # ---------------------------------------------------------------------------
 # Artifacts bucket
@@ -138,8 +141,10 @@ if (Test-Gcloud iam service-accounts describe $saEmail --project $ProjectId) {
 }
 
 Write-Host "==> Granting Vertex AI + GCS permissions (idempotent)..."
-Invoke-Gcloud projects add-iam-policy-binding $ProjectId `
+Invoke-Gcloud projects add-iam-policy-binding $VertexProjectId `
     --member "serviceAccount:$saEmail" --role roles/aiplatform.user --quiet
+Invoke-Gcloud projects add-iam-policy-binding $VertexProjectId `
+    --member "serviceAccount:$saEmail" --role roles/serviceusage.serviceUsageConsumer --quiet
 Invoke-Gcloud storage buckets add-iam-policy-binding "gs://$Bucket" `
     --member "serviceAccount:$saEmail" --role roles/storage.objectUser --quiet
 
@@ -166,7 +171,7 @@ if (-not $vertexLocation) { $vertexLocation = "global" }
 $envPairs = @(
     "COVERUP_MODEL=$coverupModel",
     "OPTIMIZE_MODEL=$optimizeModel",
-    "VERTEXAI_PROJECT=$ProjectId",
+    "VERTEXAI_PROJECT=$VertexProjectId",
     "VERTEXAI_LOCATION=$vertexLocation"
 )
 foreach ($key in @("OPENAI_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY")) {

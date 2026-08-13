@@ -1,5 +1,6 @@
 param(
     [string]$ProjectId = "project-7df9f963-9fe0-4b76-b3d",
+    [string]$ModelProjectId = "vinbuildphase",
     [string]$Region = "asia-southeast1",
     [string]$Bucket = "project-7df9f963-9fe0-4b76-b3d-promptopt-sources",
     [string]$Queue = "promptopt-baseline"
@@ -35,7 +36,8 @@ function Test-GcloudResource {
     return $Exists
 }
 
-Invoke-Gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudtasks.googleapis.com aiplatform.googleapis.com --project $ProjectId
+Invoke-Gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudtasks.googleapis.com --project $ProjectId
+Invoke-Gcloud services enable aiplatform.googleapis.com --project $ModelProjectId
 
 if (-not (Test-GcloudResource iam service-accounts describe $RunnerAccount --project $ProjectId)) {
     Invoke-Gcloud iam service-accounts create $RunnerAccountName --project $ProjectId --display-name "PromptOpt isolated runner"
@@ -57,7 +59,8 @@ else {
 
 $PrefixCondition = "expression=resource.name.startsWith('projects/_/buckets/$Bucket/objects/runner-jobs/'),title=PromptOptRunnerJobPrefix,description=Restrict runner access to opaque execution objects"
 Invoke-Gcloud storage buckets add-iam-policy-binding "gs://$Bucket" --member "serviceAccount:$RunnerAccount" --role $RunnerObjectRoleResource --condition $PrefixCondition
-Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$RunnerAccount" --role roles/aiplatform.user --condition None
+Invoke-Gcloud projects add-iam-policy-binding $ModelProjectId --member "serviceAccount:$RunnerAccount" --role roles/aiplatform.user --condition None
+Invoke-Gcloud projects add-iam-policy-binding $ModelProjectId --member "serviceAccount:$RunnerAccount" --role roles/serviceusage.serviceUsageConsumer --condition None
 Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$ApiAccount" --role $ApiOperationRoleResource --condition None
 Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$ApiAccount" --role roles/logging.viewer --condition None
 Invoke-Gcloud iam service-accounts add-iam-policy-binding $RunnerAccount --project $ProjectId --member "serviceAccount:$DeployAccount" --role roles/iam.serviceAccountUser

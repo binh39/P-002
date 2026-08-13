@@ -1,5 +1,6 @@
 param(
     [string]$ProjectId = "project-7df9f963-9fe0-4b76-b3d",
+    [string]$ModelProjectId = "vinbuildphase",
     [string]$Region = "asia-southeast1",
     [string]$Repository = "promptopt",
     [string]$Bucket = "project-7df9f963-9fe0-4b76-b3d-promptopt-sources",
@@ -77,7 +78,6 @@ if ($LASTEXITCODE -ne 0 -or $BillingEnabled -ne "True") {
 Write-Host "[2/10] Enabling Google Cloud APIs..."
 Invoke-Gcloud services enable `
     artifactregistry.googleapis.com `
-    aiplatform.googleapis.com `
     cloudtasks.googleapis.com `
     datastore.googleapis.com `
     firebase.googleapis.com `
@@ -91,6 +91,7 @@ Invoke-Gcloud services enable `
     storage.googleapis.com `
     sts.googleapis.com `
     --project $ProjectId
+Invoke-Gcloud services enable aiplatform.googleapis.com --project $ModelProjectId
 
 Write-Host "[3/10] Creating service accounts..."
 Ensure-ServiceAccount $ApiAccountName "PromptOpt API runtime"
@@ -145,7 +146,16 @@ Add-ProjectRole "serviceAccount:$ApiAccount" "roles/cloudtasks.enqueuer"
 Add-ProjectRole "serviceAccount:$ApiAccount" "roles/datastore.user"
 Add-ProjectRole "serviceAccount:$ApiAccount" "roles/firebaseauth.viewer"
 Add-ProjectRole "serviceAccount:$ApiAccount" $ApiOperationRoleResource
-Add-ProjectRole "serviceAccount:$RunnerAccount" "roles/aiplatform.user"
+Invoke-Gcloud projects add-iam-policy-binding $ModelProjectId `
+    --member "serviceAccount:$RunnerAccount" `
+    --role roles/aiplatform.user `
+    --condition=None `
+    --quiet
+Invoke-Gcloud projects add-iam-policy-binding $ModelProjectId `
+    --member "serviceAccount:$RunnerAccount" `
+    --role roles/serviceusage.serviceUsageConsumer `
+    --condition=None `
+    --quiet
 Add-ProjectRole "serviceAccount:$BackendDeployAccount" "roles/run.admin"
 Add-ProjectRole "serviceAccount:$BackendDeployAccount" "roles/serviceusage.serviceUsageConsumer"
 Add-ProjectRole "serviceAccount:$FrontendDeployAccount" "roles/firebasehosting.admin"

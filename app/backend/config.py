@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     storage_backend: Literal["local", "gcs"] = "local"
     analysis_dispatcher: Literal["inline", "cloud_tasks"] = "inline"
     gcp_project_id: str = "project-7df9f963-9fe0-4b76-b3d"
-    admin_vertexai_project: str = "project-7df9f963-9fe0-4b76-b3d"
+    admin_vertexai_project: str = "vinbuildphase"
     gcp_service_account_email: str = ""
     gcs_bucket: str = ""
     cloud_tasks_location: str = "asia-southeast1"

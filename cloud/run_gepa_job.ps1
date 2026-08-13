@@ -14,7 +14,7 @@
 param(
     [string]$JobName = "p002-gepa",
     [string]$Region = "asia-southeast1",
-    [string]$ProjectId = "",
+    [string]$ProjectId = "project-7df9f963-9fe0-4b76-b3d",
     [string]$Bucket = "p002-gepa-artifacts",
     [string]$ArtifactsName = "prompt_optimization_v3",
     [string]$DownloadTo = "eval/prompt_optimization_v3_cloud",
@@ -29,20 +29,6 @@ param(
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 
-if (-not $ProjectId) {
-    $envFile = Join-Path $root ".env"
-    if (Test-Path -LiteralPath $envFile) {
-        $line = Get-Content -LiteralPath $envFile |
-            Where-Object { $_ -match "^VERTEXAI_PROJECT\s*=" } |
-            Select-Object -First 1
-        if ($line) {
-            $ProjectId = ($line -replace "^VERTEXAI_PROJECT\s*=", "").Trim().Trim('"')
-        }
-    }
-}
-if (-not $ProjectId) {
-    throw "ProjectId not set. Pass -ProjectId or set VERTEXAI_PROJECT in .env"
-}
 if (-not $Image) {
     $Image = "gcr.io/$ProjectId/p002-gepa"
 }
