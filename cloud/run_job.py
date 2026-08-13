@@ -127,6 +127,7 @@ def main() -> int:
 
         command = [
             sys.executable,
+            "-u",
             "-m",
             "src.optimization.cli",
             "--artifacts-dir",

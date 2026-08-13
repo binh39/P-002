@@ -5,6 +5,7 @@ from backend.api.dependencies import CurrentUser, InternalTask
 from .schemas import (
     ComparisonRunResponse,
     CreateExperimentRequest,
+    EvolutionResponse,
     ExperimentListResponse,
     ExperimentResponse,
     OptimizationRunResponse,
@@ -42,12 +43,26 @@ async def delete_experiment(experiment_id: str, user: CurrentUser, request: Requ
 
 @router.post("/{experiment_id}/optimize", response_model=OptimizationRunResponse, status_code=status.HTTP_202_ACCEPTED)
 async def request_optimization(experiment_id: str, user: CurrentUser, request: Request):
-    return await request.app.state.services.experiments.request_optimization(experiment_id, user.uid)
+    return await request.app.state.services.experiments.request_optimization(
+        experiment_id,
+        user.uid,
+        full_access=user.has_full_access,
+    )
 
 
 @router.get("/optimization-runs/{run_id}", response_model=OptimizationRunResponse)
 async def get_optimization_run(run_id: str, user: CurrentUser, request: Request):
     return await request.app.state.services.experiments.get_optimization_run(run_id, user.uid)
+
+
+@router.post("/optimization-runs/{run_id}/cancel", response_model=OptimizationRunResponse)
+async def cancel_optimization(run_id: str, user: CurrentUser, request: Request):
+    return await request.app.state.services.experiments.cancel_optimization(run_id, user.uid)
+
+
+@router.get("/optimization-runs/{run_id}/evolution", response_model=EvolutionResponse)
+async def get_optimization_evolution(run_id: str, user: CurrentUser, request: Request):
+    return await request.app.state.services.experiments.get_optimization_evolution(run_id, user.uid)
 
 
 @router.get("/optimization-runs/{run_id}/artifacts/{artifact_name}")

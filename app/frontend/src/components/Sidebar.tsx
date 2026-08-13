@@ -1,4 +1,15 @@
-import { IC } from "./Icons";
+import {
+  BarChart3,
+  Blocks,
+  FlaskConical,
+  FolderGit2,
+  LogOut,
+  MessageSquareCode,
+  Settings,
+  Sparkles,
+} from "lucide-react";
+
+import { Brand } from "@/components/Brand";
 
 export type NavigationId =
   | "dashboard"
@@ -35,242 +46,61 @@ export default function Sidebar({
   onSignOut,
   isOpen = false,
 }: SidebarProps) {
+  const initials = user.name
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
   return (
-    <aside
-      className={`sidebar ${isOpen ? "sidebar-open" : ""}`}
-      style={{
-        width: 224,
-        minWidth: 224,
-        background: "#131626",
-        display: "flex",
-        flexDirection: "column",
-        height: "100vh",
-      }}
-    >
-      {/* Logo */}
-      <div
-        style={{
-          padding: "24px 20px 20px",
-          borderBottom: "1px solid rgba(255,255,255,0.07)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 8,
+    <aside className={`sidebar ${isOpen ? "sidebar-open" : ""}`} aria-label="Main navigation">
+      <div className="sidebar-brand">
+        <Brand />
+      </div>
 
-              background: "linear-gradient(135deg, #4F6EF7, #7C3AED)",
-
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+      <nav className="sidebar-navigation">
+        <p className="sidebar-label">Workspace</p>
+        {navItems.map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            type="button"
+            className={currentPage === id ? "is-active" : ""}
+            onClick={() => onNavigate(id)}
+            aria-current={currentPage === id ? "page" : undefined}
           >
-            <IC.Zap />
-          </div>
-          <div>
-            <div
-              style={{
-                color: "#fff",
-                fontSize: 14,
-                fontWeight: 600,
-                letterSpacing: "-0.01em",
-              }}
-            >
-              PromptOpt
-            </div>
-            <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 11 }}>AI Platform</div>
-          </div>
-        </div>
-      </div>
+            <Icon size={17} strokeWidth={1.8} />
+            <span>{label}</span>
+          </button>
+        ))}
 
-      {/* Project selector */}
-      <div
-        style={{
-          padding: "12px 16px",
-          borderBottom: "1px solid rgba(255,255,255,0.07)",
-        }}
-      >
+        <p className="sidebar-label sidebar-system-label">System</p>
         <button
-          style={{
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-
-            background: "rgba(255,255,255,0.06)",
-            border: "1px solid rgba(255,255,255,0.1)",
-
-            borderRadius: 8,
-            padding: "8px 12px",
-            cursor: "pointer",
-            color: "rgba(255,255,255,0.7)",
-
-            fontSize: 12.5,
-            fontWeight: 500,
-          }}
-        >
-          <span>PromptOpt Research</span>
-          <IC.ChevronDown />
-        </button>
-      </div>
-
-      {/* Nav */}
-      <nav style={{ flex: 1, padding: "12px 12px", overflowY: "auto" }}>
-        <div
-          style={{
-            fontSize: 10,
-            fontWeight: 600,
-            color: "rgba(255,255,255,0.25)",
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            padding: "4px 8px 8px",
-          }}
-        >
-          Menu
-        </div>
-        {navItems.map(({ id, label, Icon }) => {
-          const active = currentPage === id;
-
-          return (
-            <button
-              key={id}
-              onClick={() => onNavigate(id)}
-              style={{
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-
-                padding: "9px 12px",
-                borderRadius: 8,
-                marginBottom: 2,
-
-                background: active
-                  ? "linear-gradient(90deg, rgba(79,110,247,0.25), rgba(124,58,237,0.15))"
-                  : "transparent",
-
-                border: active ? "1px solid rgba(79,110,247,0.3)" : "1px solid transparent",
-
-                color: active ? "#fff" : "rgba(255,255,255,0.5)",
-
-                cursor: "pointer",
-                fontSize: 13.5,
-                fontWeight: active ? 500 : 400,
-
-                textAlign: "left",
-                transition: "all 0.15s",
-              }}
-            >
-              <span style={{ color: active ? "#6B8FFF" : "rgba(255,255,255,0.35)" }}>
-                <Icon />
-              </span>
-              {label}
-            </button>
-          );
-        })}
-
-        <div
-          style={{
-            fontSize: 10,
-            fontWeight: 600,
-            color: "rgba(255,255,255,0.25)",
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            padding: "12px 8px 8px",
-            marginTop: 8,
-            borderTop: "1px solid rgba(255,255,255,0.06)",
-          }}
-        >
-          System
-        </div>
-        <button
+          type="button"
+          className={currentPage === "settings" ? "is-active" : ""}
           onClick={() => onNavigate("settings")}
-          style={{
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-
-            padding: "9px 12px",
-            borderRadius: 8,
-
-            background: currentPage === "settings" ? "rgba(79,110,247,0.2)" : "transparent",
-
-            border: "1px solid transparent",
-
-            color: currentPage === "settings" ? "#fff" : "rgba(255,255,255,0.5)",
-
-            cursor: "pointer",
-            fontSize: 13.5,
-            fontWeight: 400,
-            textAlign: "left",
-          }}
+          aria-current={currentPage === "settings" ? "page" : undefined}
         >
-          <span style={{ color: "rgba(255,255,255,0.35)" }}>
-            <IC.Settings />
-          </span>
-          Settings
+          <Settings size={17} strokeWidth={1.8} />
+          <span>Settings</span>
         </button>
       </nav>
 
-      {/* User */}
-      <div
-        style={{
-          padding: "16px",
-          borderTop: "1px solid rgba(255,255,255,0.07)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 8,
-
-              background: "linear-gradient(135deg, #4F6EF7, #7C3AED)",
-
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-
-              color: "#fff",
-              fontSize: 13,
-              fontWeight: 600,
-            }}
-          >
-            {user.photoUrl ? (
-              <img
-                src={user.photoUrl}
-                alt=""
-                referrerPolicy="no-referrer"
-                style={{ width: "100%", height: "100%", borderRadius: 8 }}
-              />
-            ) : (
-              user.name.slice(0, 1).toUpperCase()
-            )}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div
-              style={{
-                color: "rgba(255,255,255,0.85)",
-                fontSize: 13,
-                fontWeight: 500,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {user.name}
-            </div>
-            <div style={{ color: "rgba(255,255,255,0.3)", fontSize: 11 }}>{user.role}</div>
-          </div>
-          <button className="sidebar-signout" onClick={onSignOut} aria-label="Sign out">
-            Sign out
-          </button>
-        </div>
+      <div className="sidebar-user">
+        <span className="sidebar-avatar">
+          {user.photoUrl ? (
+            <img src={user.photoUrl} alt="" referrerPolicy="no-referrer" />
+          ) : (
+            initials
+          )}
+        </span>
+        <span className="sidebar-user-copy">
+          <strong>{user.name}</strong>
+          <small>{user.role}</small>
+        </span>
+        <button type="button" onClick={onSignOut} aria-label="Sign out" title="Sign out">
+          <LogOut size={16} />
+        </button>
       </div>
     </aside>
   );

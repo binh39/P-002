@@ -18,6 +18,7 @@ from .schemas import (
     ComparisonRunRecord,
     ComparisonRunResponse,
     CreateExperimentRequest,
+    EvolutionResponse,
     ExperimentListResponse,
     ExperimentRecord,
     ExperimentResponse,
@@ -86,11 +87,13 @@ class ExperimentService:
         storage: ObjectStorage,
         cloud_optimizer=None,
         samples: SampleProjectCatalog | None = None,
+        admin_vertexai_project: str = "",
     ):
         self.repository, self.projects, self.functions = repository, projects, functions
         self.storage = storage
         self.cloud_optimizer = cloud_optimizer
         self.samples = samples
+        self.admin_vertexai_project = admin_vertexai_project.strip()
         self.optimization_dispatcher: OptimizationDispatcher | None = None
         self.comparison_dispatcher: ComparisonDispatcher | None = None
 
@@ -231,7 +234,13 @@ class ExperimentService:
             raise AppError(409, "EXPERIMENT_ACTIVE", "A running experiment cannot be deleted")
         await self.repository.delete(item.id)
 
-    async def request_optimization(self, experiment_id: str, owner_id: str) -> OptimizationRunResponse:
+    async def request_optimization(
+        self,
+        experiment_id: str,
+        owner_id: str,
+        *,
+        full_access: bool = False,
+    ) -> OptimizationRunResponse:
         item = await self._owned(experiment_id, owner_id)
         previous_status = item.status
         if previous_status != ExperimentStatus.DRAFT:
@@ -260,6 +269,7 @@ class ExperimentService:
             experiment_id=item.id,
             status=ExperimentStatus.OPTIMIZATION_QUEUED,
             parent_prompt_digest=parent.digest(),
+            vertexai_project=self.admin_vertexai_project if full_access else None,
             created_at=now,
         )
         await self.repository.create_optimization_run(run)
@@ -288,6 +298,107 @@ class ExperimentService:
             raise AppError(404, "OPTIMIZATION_RUN_NOT_FOUND", "Optimization run was not found")
         await self._owned(run.experiment_id, owner_id)
         return OptimizationRunResponse.model_validate(run)
+
+    async def cancel_optimization(self, run_id: str, owner_id: str) -> OptimizationRunResponse:
+        run = await self.repository.get_optimization_run(run_id)
+        if run is None:
+            raise AppError(404, "OPTIMIZATION_RUN_NOT_FOUND", "Optimization run was not found")
+        item = await self._owned(run.experiment_id, owner_id)
+        if run.status == ExperimentStatus.CANCELLED:
+            return OptimizationRunResponse.model_validate(run)
+        active_statuses = {
+            ExperimentStatus.OPTIMIZATION_QUEUED,
+            ExperimentStatus.OPTIMIZING,
+            ExperimentStatus.CANDIDATE_EVALUATING,
+        }
+        if run.status not in active_statuses:
+            raise AppError(409, "OPTIMIZATION_NOT_ACTIVE", "Only an active optimization can be cancelled")
+        if run.cloud_artifact_prefix:
+            if self.cloud_optimizer is None or not hasattr(self.cloud_optimizer, "cancel"):
+                raise AppError(503, "CANCELLATION_UNAVAILABLE", "Cloud Run cancellation is not configured")
+            try:
+                await self.cloud_optimizer.cancel(
+                    run.cloud_artifact_prefix,
+                    started_at=run.started_at,
+                )
+            except Exception as exc:
+                detail = str(exc).strip() or type(exc).__name__
+                raise AppError(503, "CANCELLATION_FAILED", detail[:500]) from exc
+            if hasattr(self.cloud_optimizer, "evolution"):
+                try:
+                    evolution = await self.cloud_optimizer.evolution(
+                        run.cloud_artifact_prefix,
+                        started_at=run.started_at,
+                    )
+                    if evolution.available and evolution.iterations:
+                        object_name = self._optimization_artifact_name(item, run, "evolution.json")
+                        await self.storage.write(
+                            object_name,
+                            evolution.model_dump_json(indent=2).encode(),
+                            "application/json",
+                        )
+                        run.artifact_objects["evolution.json"] = object_name
+                except Exception:
+                    # Cancellation must succeed even if the optional history snapshot fails.
+                    pass
+        now = datetime.now(UTC)
+        run.status = ExperimentStatus.CANCELLED
+        run.finished_at = now
+        item.status = ExperimentStatus.CANCELLED
+        item.updated_at = now
+        await self.repository.save_optimization_run(run)
+        await self.repository.save(item)
+        return OptimizationRunResponse.model_validate(run)
+
+    async def get_optimization_evolution(self, run_id: str, owner_id: str) -> EvolutionResponse:
+        run = await self.repository.get_optimization_run(run_id)
+        if run is None:
+            raise AppError(404, "OPTIMIZATION_RUN_NOT_FOUND", "Optimization run was not found")
+        item = await self._owned(run.experiment_id, owner_id)
+        snapshot_object = run.artifact_objects.get("evolution.json")
+        if snapshot_object:
+            try:
+                return EvolutionResponse.model_validate_json(await self.storage.read(snapshot_object))
+            except Exception:
+                # A missing/corrupt cache must not hide logs that are still retained.
+                pass
+        if self.cloud_optimizer is None or not hasattr(self.cloud_optimizer, "evolution"):
+            return EvolutionResponse(
+                available=False,
+                message="Evolution logs are only available for Cloud Run GEPA jobs.",
+            )
+        if not run.cloud_artifact_prefix:
+            return EvolutionResponse(
+                available=False,
+                message="The Cloud Run execution has not started yet.",
+            )
+        evolution = await self.cloud_optimizer.evolution(
+            run.cloud_artifact_prefix,
+            started_at=run.started_at,
+        )
+        if (
+            evolution.available
+            and evolution.iterations
+            and run.status
+            not in {
+                ExperimentStatus.OPTIMIZATION_QUEUED,
+                ExperimentStatus.OPTIMIZING,
+                ExperimentStatus.CANDIDATE_EVALUATING,
+            }
+        ):
+            try:
+                object_name = self._optimization_artifact_name(item, run, "evolution.json")
+                await self.storage.write(
+                    object_name,
+                    evolution.model_dump_json(indent=2).encode(),
+                    "application/json",
+                )
+                run.artifact_objects["evolution.json"] = object_name
+                await self.repository.save_optimization_run(run)
+            except Exception:
+                # Returning the parsed history is more important than caching it.
+                pass
+        return evolution
 
     async def get_optimization_artifact(self, run_id: str, artifact_name: str, owner_id: str) -> bytes:
         run = await self.repository.get_optimization_run(run_id)
@@ -363,6 +474,7 @@ class ExperimentService:
                         validation=targets["validation"],
                         holdout=holdout,
                         settings=item.settings,
+                        vertexai_project=run.vertexai_project,
                     )
                     run.cloud_deadline_at = datetime.now(UTC) + timedelta(seconds=self.cloud_optimizer.timeout_seconds)
                     await self.repository.save_optimization_run(run)
@@ -374,6 +486,7 @@ class ExperimentService:
                     validation=targets["validation"],
                     holdout=holdout,
                     settings=item.settings,
+                    vertexai_project=run.vertexai_project,
                 )
             artifact_payloads = {
                 "candidate_prompt.json": (result.candidate.as_json().encode(), "application/json"),
@@ -382,9 +495,19 @@ class ExperimentService:
                     "application/json",
                 ),
             }
+            if run.cloud_artifact_prefix and hasattr(self.cloud_optimizer, "evolution"):
+                evolution = await self.cloud_optimizer.evolution(
+                    run.cloud_artifact_prefix,
+                    started_at=run.started_at,
+                )
+                if evolution.available and evolution.iterations:
+                    artifact_payloads["evolution.json"] = (
+                        evolution.model_dump_json(indent=2).encode(),
+                        "application/json",
+                    )
             artifact_objects = {}
             for name, (content, content_type) in artifact_payloads.items():
-                object_name = f"artifacts/{item.owner_id}/{item.id}/{run.id}/{name}"
+                object_name = self._optimization_artifact_name(item, run, name)
                 await self.storage.write(object_name, content, content_type)
                 artifact_objects[name] = object_name
             run.status = ExperimentStatus.OPTIMIZATION_SUCCEEDED
@@ -675,6 +798,14 @@ class ExperimentService:
         if item is None or item.owner_id != owner_id:
             raise AppError(404, "EXPERIMENT_NOT_FOUND", "Experiment was not found")
         return item
+
+    @staticmethod
+    def _optimization_artifact_name(
+        item: ExperimentRecord,
+        run: OptimizationRunRecord,
+        name: str,
+    ) -> str:
+        return f"artifacts/{item.owner_id}/{item.id}/{run.id}/{name}"
 
     async def _list_functions(self, project_id: str):
         if self.samples and self.samples.contains(project_id):

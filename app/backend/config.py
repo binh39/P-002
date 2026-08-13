@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     app_port: int = Field(default=8000, ge=1, le=65535)
     app_host: str = "0.0.0.0"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
-    cors_origins: str = "http://localhost:5173,https://vinaip002.web.app"
+    cors_origins: str = "http://localhost:5173,https://project-7df9f963-9fe0-4b76-b3d.web.app,https://c3-app-002.io.vn"
     api_prefix: str = "/api/v1"
 
     # Authentication and Google Cloud
@@ -26,7 +26,8 @@ class Settings(BaseSettings):
     repository_backend: Literal["memory", "firestore"] = "memory"
     storage_backend: Literal["local", "gcs"] = "local"
     analysis_dispatcher: Literal["inline", "cloud_tasks"] = "inline"
-    gcp_project_id: str = "vinaip002"
+    gcp_project_id: str = "project-7df9f963-9fe0-4b76-b3d"
+    admin_vertexai_project: str = "vinbuildphase"
     gcp_service_account_email: str = ""
     gcs_bucket: str = ""
     cloud_tasks_location: str = "asia-southeast1"
@@ -83,6 +84,10 @@ class Settings(BaseSettings):
                 raise ValueError("EXPERIMENT_WORKER_URL and EXPERIMENT_TASK_AUDIENCE are required in production")
             if self.optimization_execution_backend != "cloud_run_job" or not self.cloud_run_gepa_job:
                 raise ValueError("OPTIMIZATION_EXECUTION_BACKEND=cloud_run_job and CLOUD_RUN_GEPA_JOB are required")
+            if not self.admin_vertexai_project.strip():
+                raise ValueError("ADMIN_VERTEXAI_PROJECT is required in production")
+            if not self.admin_vertexai_project.strip():
+                raise ValueError("ADMIN_VERTEXAI_PROJECT is required in production")
         return self
 
 

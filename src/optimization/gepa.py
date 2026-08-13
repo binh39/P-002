@@ -6,7 +6,6 @@ import json
 import re
 import threading
 from collections.abc import Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -29,10 +28,54 @@ COMPONENT_ROLES = {
     "initial": "Generate the first complete pytest module from source and missing coverage.",
     "error": "Repair a complete pytest module after an execution or collection error.",
 }
+UPDATE_PROMPT_COMPONENT_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "update_prompt_component",
+        "description": (
+            "Select initial, error, or all and return complete replacement "
+            "templates in the same call. The all selection is always allowed."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "component": {
+                    "type": "string",
+                    "enum": ["initial", "error", "all"],
+                },
+                "replacements": {
+                    "type": "object",
+                    "properties": {
+                        "initial": {"type": "string"},
+                        "error": {"type": "string"},
+                    },
+                    "additionalProperties": False,
+                },
+                "diagnosis": {"type": "string"},
+                "evidence": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                },
+            },
+            "required": ["component", "replacements", "diagnosis", "evidence"],
+            "additionalProperties": False,
+        },
+    },
+}
 AUTO_METRIC_BUDGETS = {"light": 120, "medium": 300, "heavy": 600}
+REFLECTION_REQUEST_BEGIN = "PROMPTOPT_REFLECTION_REQUEST_BEGIN"
+REFLECTION_REQUEST_END = "PROMPTOPT_REFLECTION_REQUEST_END"
 
 _DIGEST_LOCKS: dict[str, threading.Lock] = {}
 _DIGEST_LOCKS_GUARD = threading.Lock()
+
+
+def log_reflection_request(request: Mapping[str, Any]) -> None:
+    """Print the exact native-tool request sent to the optimization model."""
+    print(REFLECTION_REQUEST_BEGIN, flush=True)
+    print(json.dumps(request, indent=2, ensure_ascii=False), flush=True)
+    print(REFLECTION_REQUEST_END, flush=True)
 
 
 def _digest_lock(key: str) -> threading.Lock:
@@ -118,8 +161,11 @@ def _evaluation_digest(
         # Schema 10 fixed PYTHONHASHSEED across CoverUp and coverage subprocesses.
         # Schema 11 makes repeat_tests effective during generation and final
         # scoring. Schema 12 preserves denominators from pytest exit 1 while
-        # assigning failing generated suites zero covered units.
-        "cache_schema": 12,
+        # assigning failing generated suites zero covered units. Schema 13
+        # batches CoverUp generation and scores only each target's traced tests.
+        # Schema 14 restores isolated per-target CoverUp processes in one bounded
+        # pool, consolidates traced tests, and skips redundant final-suite coverage.
+        "cache_schema": 14,
         "config": config_values,
         "targets": [_target_identity(target) for target in targets],
         "sources": source_hashes,
@@ -165,7 +211,7 @@ def evaluate_bundle_batch_cached(
     workspace_kind: str = "candidate",
     replicate: int = 0,
 ) -> dict:
-    """Evaluate a split with one isolated CoverUp workspace per target and cache it."""
+    """Evaluate and cache one batch with isolated per-target coverage scores."""
     if not targets:
         raise ValueError("Batch evaluation requires at least one target")
     if replicate < 0:
@@ -179,6 +225,19 @@ def evaluate_bundle_batch_cached(
         raise ValueError(
             f"Batch targets do not match requested split {split!r}: {sorted(target_splits)}"
         )
+
+    # GEPA may sample the same example more than once in a minibatch. Evaluate each
+    # identity once so CoverUp does not generate duplicate tests or return ambiguous
+    # per-target results inside the consolidated candidate workspace.
+    unique_targets: list[SymbolTarget] = []
+    seen_targets: set[tuple[str, str, str, str]] = set()
+    for target in targets:
+        identity = _target_identity(target)
+        if identity not in seen_targets:
+            seen_targets.add(identity)
+            unique_targets.append(target)
+    targets = unique_targets
+
     digest = bundle_digest(bundle)
     evaluation_digest = _evaluation_digest(runner, targets)
     lock_key = (
@@ -214,51 +273,41 @@ def evaluate_bundle_batch_cached(
         run_candidate_id = f"{digest}-{evaluation_digest}"
         if replicate:
             run_candidate_id += f"-r{replicate}"
-        def evaluate_target(target: SymbolTarget) -> Any:
-            identity = json.dumps(_target_identity(target), ensure_ascii=True)
-            target_digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:10]
-            return runner.evaluate_batch(
-                [target],
-                candidate,
-                candidate_id=f"{run_candidate_id}-{target_digest}",
-                split=split,
-                workspace_kind=workspace_kind,
-            )
-
-        configured_concurrency = int(
-            getattr(getattr(runner, "config", None), "max_concurrency", 1) or 1
-        )
-        # A configured rate limit is process-local in CoverUp. Running several
-        # subprocesses would multiply it, so preserve the requested global cap.
-        max_workers = 1 if getattr(getattr(runner, "config", None), "rate_limit", None) else max(
-            1, min(configured_concurrency, len(targets))
-        )
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            records = list(executor.map(evaluate_target, targets))
+        # The runner evaluates each target in an isolated temporary CoverUp
+        # workspace using a bounded global pool, then consolidates only tests
+        # attributed by trace into one persistent candidate workspace. Each target
+        # still gets a separate pytest/coverage pass and per-example feedback.
+        records = [runner.evaluate_batch(
+            targets,
+            candidate,
+            candidate_id=run_candidate_id,
+            split=split,
+            workspace_kind=workspace_kind,
+        )]
 
         results = []
         for record in records:
-            if len(record.results) != 1:
+            if len(record.results) != len(targets):
                 raise RuntimeError(
-                    "Isolated target evaluation returned an unexpected result count: "
-                    f"{len(record.results)}"
+                    "Minibatch evaluation returned an unexpected result count: "
+                    f"{len(record.results)} for {len(targets)} targets"
                 )
-            target_result = record.results[0]
-            target = target_result.target
-            results.append({
-                "prompt_digest": digest,
-                "evaluation_digest": evaluation_digest,
-                "replicate": replicate,
-                "target": target.__dict__,
-                "run_id": record.run_id,
-                "score": (
-                    float(target_result.score["score"])
-                    if target_result.score else 0.0
-                ),
-                "coverage": target_result.score,
-                "feedback": target_result.feedback,
-                "attempt_traces": getattr(target_result, "attempt_traces", []),
-            })
+            for target_result in record.results:
+                target = target_result.target
+                results.append({
+                    "prompt_digest": digest,
+                    "evaluation_digest": evaluation_digest,
+                    "replicate": replicate,
+                    "target": target.__dict__,
+                    "run_id": record.run_id,
+                    "score": (
+                        float(target_result.score["score"])
+                        if target_result.score else 0.0
+                    ),
+                    "coverage": target_result.score,
+                    "feedback": target_result.feedback,
+                    "attempt_traces": getattr(target_result, "attempt_traces", []),
+                })
         batch = {
             "prompt_digest": digest,
             "evaluation_digest": evaluation_digest,
@@ -304,38 +353,111 @@ def _clip_text(value: Any, limit: int, *, keep_tail: bool = False) -> str:
     return marker + text[-available:] if keep_tail else text[:available] + marker
 
 
-def _compact_component_attempts(
-    attempts: Sequence[Mapping[str, Any]], component: str,
+def _compact_attempt(attempt: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep one observable CoverUp action/result without raw transcript noise."""
+    row = {
+        key: attempt[key]
+        for key in (
+            "attempt", "replicate", "component", "outcome", "next_component",
+            "finish_reason", "missing_imports", "gained_lines", "gained_branches",
+            "remaining_lines", "remaining_branches",
+        )
+        if key in attempt
+    }
+    if "prompt_input" in attempt:
+        row["prompt_input"] = _clip_text(
+            attempt["prompt_input"], 6_000, keep_tail=True
+        )
+    if "generated_test" in attempt:
+        row["generated_test"] = _clip_text(attempt["generated_test"], 10_000)
+    if "execution_error" in attempt:
+        row["execution_error"] = _clip_text(
+            attempt["execution_error"], 6_000, keep_tail=True
+        )
+    if "assistant_response" in attempt:
+        row["assistant_response"] = _clip_text(
+            attempt["assistant_response"], 3_000
+        )
+    return row
+
+
+def _build_execution_episodes(
+    attempts: Sequence[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Keep concise causal evidence instead of sending entire pytest transcripts."""
-    matching = [attempt for attempt in attempts if attempt.get("component") == component]
-    compact = []
-    for attempt in matching[-2:]:
-        row = {
-            key: attempt[key]
-            for key in (
-                "attempt", "replicate", "component", "outcome", "next_component",
-                "finish_reason", "missing_imports", "gained_lines", "gained_branches",
-                "remaining_lines", "remaining_branches",
-            )
-            if key in attempt
-        }
-        if "prompt_input" in attempt:
-            row["prompt_input"] = _clip_text(
-                attempt["prompt_input"], 8_000, keep_tail=True
-            )
-        if "generated_test" in attempt:
-            row["generated_test"] = _clip_text(attempt["generated_test"], 12_000)
-        if "execution_error" in attempt:
-            row["execution_error"] = _clip_text(
-                attempt["execution_error"], 8_000, keep_tail=True
-            )
-        if "assistant_response" in attempt:
-            row["assistant_response"] = _clip_text(
-                attempt["assistant_response"], 4_000
-            )
-        compact.append(row)
-    return compact
+    """Reconstruct initial generation and every subsequent repair transition.
+
+    Attempts are grouped by replicate.  Each error-stage attempt points back to
+    the concrete failing test and execution error that caused that repair, so
+    reflection sees the causal before/after sequence instead of disconnected
+    component-local snippets.
+    """
+    grouped: dict[int, list[Mapping[str, Any]]] = {}
+    for attempt in attempts:
+        replicate = int(attempt.get("replicate", 0) or 0)
+        grouped.setdefault(replicate, []).append(attempt)
+
+    episodes: list[dict[str, Any]] = []
+    for replicate, values in sorted(grouped.items()):
+        initial_attempts: list[dict[str, Any]] = []
+        repair_transitions: list[dict[str, Any]] = []
+        previous_test_attempt: Mapping[str, Any] | None = None
+
+        for attempt in values:
+            component = attempt.get("component")
+            if component == "initial":
+                initial_attempts.append(_compact_attempt(attempt))
+            elif component == "error":
+                transition = {
+                    "attempt": attempt.get("attempt"),
+                    "replicate": replicate,
+                    "failing_test": _clip_text(
+                        (previous_test_attempt or {}).get("generated_test", ""),
+                        10_000,
+                    ),
+                    "error": _clip_text(
+                        (previous_test_attempt or {}).get("execution_error", ""),
+                        6_000,
+                        keep_tail=True,
+                    ),
+                    "repair_prompt_input": _clip_text(
+                        attempt.get("prompt_input", ""), 6_000, keep_tail=True
+                    ),
+                    "repaired_test": _clip_text(
+                        attempt.get("generated_test", ""), 10_000
+                    ),
+                    "outcome": attempt.get("outcome", "unknown"),
+                }
+                for key in (
+                    "execution_error", "finish_reason", "missing_imports",
+                    "gained_lines", "gained_branches", "remaining_lines",
+                    "remaining_branches",
+                ):
+                    if key in attempt:
+                        output_key = (
+                            "execution_error_after"
+                            if key == "execution_error"
+                            else key
+                        )
+                        value = attempt[key]
+                        transition[output_key] = (
+                            _clip_text(value, 6_000, keep_tail=True)
+                            if key == "execution_error"
+                            else value
+                        )
+                repair_transitions.append(transition)
+
+            if attempt.get("generated_test"):
+                previous_test_attempt = attempt
+
+        terminal = _compact_attempt(values[-1]) if values else {}
+        episodes.append({
+            "replicate": replicate,
+            "initial_attempts": initial_attempts,
+            "repair_transitions": repair_transitions,
+            "terminal_outcome": terminal.get("outcome", "unknown"),
+            "terminal_component": terminal.get("component", "unknown"),
+        })
+    return episodes
 
 
 def _attempts_with_replicates(samples: Sequence[Mapping[str, Any]]) -> list[dict]:
@@ -652,6 +774,115 @@ def _source_context(
     return "\n".join(rendered)
 
 
+_FAILURE_SEVERITY = {
+    "model_request_failed": 1.0,
+    "malformed_response": 1.0,
+    "empty_response": 1.0,
+    "missing_python_block": 1.0,
+    "missing_imports": 0.9,
+    "coverage_timeout": 0.9,
+    "test_error_unrepairable": 1.0,
+    "max_attempts_exhausted": 1.0,
+    "test_error": 0.8,
+    "no_coverage_gain_unrepairable": 0.9,
+}
+
+
+def _attempt_failure_severity(attempt: Mapping[str, Any]) -> float:
+    outcome = str(attempt.get("outcome", ""))
+    if outcome in _FAILURE_SEVERITY:
+        return _FAILURE_SEVERITY[outcome]
+    if outcome == "coverage_gain_saved":
+        gained = len(attempt.get("gained_lines", [])) + len(
+            attempt.get("gained_branches", [])
+        )
+        remaining = len(attempt.get("remaining_lines", [])) + len(
+            attempt.get("remaining_branches", [])
+        )
+        total = gained + remaining
+        return remaining / total if total else 0.0
+    return 0.0
+
+
+class CausalReflectionComponentSelector:
+    """Select the prompt that produced the highest-impact observed failures."""
+
+    def __call__(
+        self,
+        state: Any,
+        trajectories: list[Mapping[str, Any]],
+        subsample_scores: list[float],
+        candidate_idx: int,
+        candidate: dict[str, str],
+    ) -> list[str]:
+        del state, subsample_scores, candidate_idx
+        priority = {component: 0.0 for component in candidate}
+        evidence = {component: 0 for component in candidate}
+
+        for trajectory in trajectories:
+            target_score = min(1.0, max(0.0, float(trajectory.get("score", 0.0))))
+            target_gap = max(0.05, 1.0 - target_score)
+            attempts = list(trajectory.get("attempt_traces", []))
+            terminal_by_replicate: dict[int, int] = {}
+            for index, attempt in enumerate(attempts):
+                replicate = int(attempt.get("replicate", 0) or 0)
+                terminal_by_replicate[replicate] = index
+
+            for index, attempt in enumerate(attempts):
+                component = str(attempt.get("component", ""))
+                if component not in priority:
+                    continue
+                severity = _attempt_failure_severity(attempt)
+                if severity <= 0:
+                    continue
+                replicate = int(attempt.get("replicate", 0) or 0)
+                terminal_multiplier = (
+                    1.5 if terminal_by_replicate.get(replicate) == index else 1.0
+                )
+                priority[component] += target_gap * severity * terminal_multiplier
+                evidence[component] += 1
+
+        eligible = [
+            component for component in candidate
+            if evidence.get(component, 0) > 0
+        ]
+        if not eligible:
+            # A no-op proposal is preferable to inventing a mutation without causal
+            # evidence. GEPA will reject the duplicate candidate.
+            return []
+
+        selected = max(
+            eligible,
+            key=lambda component: (
+                priority[component],
+                evidence[component],
+                component == "initial",
+            ),
+        )
+        return [selected]
+
+
+class LLMReflectionComponentSelector:
+    """Let the reflection LM choose either component or both after any failure."""
+
+    def __call__(
+        self,
+        state: Any,
+        trajectories: list[Mapping[str, Any]],
+        subsample_scores: list[float],
+        candidate_idx: int,
+        candidate: dict[str, str],
+    ) -> list[str]:
+        del state, subsample_scores, candidate_idx
+        has_failure = any(
+            str(attempt.get("component", "")) in candidate
+            and _attempt_failure_severity(attempt) > 0
+            for trajectory in trajectories
+            for attempt in trajectory.get("attempt_traces", [])
+        )
+        return list(candidate) if has_failure else []
+
+
 @dataclass
 class PromptOptimizationResult:
     best_bundle: PromptBundle
@@ -708,9 +939,26 @@ class CoverUpPromptAdapter:
                     int(coverage["num_statements"]), int(coverage["num_branches"])
                 )
 
-    def _weighted_score(self, result: dict, full_results: list[dict]) -> float:
-        self._remember_reference_units(full_results)
-        identities = [_result_identity(item) for item in full_results]
+    def _weighted_score(
+        self,
+        result: dict,
+        evaluated_results: list[dict],
+        reference_targets: list[SymbolTarget],
+    ) -> float:
+        self._remember_reference_units(evaluated_results)
+        reference_identities = [
+            _target_identity(target) for target in reference_targets
+        ]
+        # ``optimize`` preflights the baseline over the complete split, so the
+        # denominator remains stable even when GEPA evaluates only a minibatch.
+        # Direct adapter users without a preflight fall back to the evaluated
+        # rows rather than assigning unknown targets zero executable units.
+        identities = (
+            reference_identities
+            if reference_identities
+            and all(identity in self.reference_units for identity in reference_identities)
+            else [_result_identity(item) for item in evaluated_results]
+        )
         total_statements = sum(
             self.reference_units.get(identity, (0, 0))[0] for identity in identities
         )
@@ -721,7 +969,7 @@ class CoverUpPromptAdapter:
         valid = coverage is not None and coverage.get("valid") is not False
         covered_statements = int(coverage["covered_statements"]) if valid else 0
         covered_branches = int(coverage["covered_branches"]) if valid else 0
-        count = len(full_results)
+        count = len(identities)
         statement = (
             count * 0.4 * covered_statements / total_statements
             if total_statements else 0.4
@@ -783,7 +1031,7 @@ class CoverUpPromptAdapter:
         if len(splits) != 1:
             raise ValueError(f"GEPA minibatch mixes dataset splits: {sorted(splits)}")
         split = next(iter(splits))
-        full_targets = self.targets_by_split[split]
+        reference_targets = self.targets_by_split[split]
         validation_error = validate_bundle(bundle)
         if validation_error:
             outputs = [{"target": target.__dict__, "score": 0.0} for target in batch]
@@ -804,9 +1052,10 @@ class CoverUpPromptAdapter:
                 trajectories=trajectories,
             )
 
-        repeated_batches = self._evaluate_replicates(
-            full_targets, bundle, split=split
-        )
+        # GEPA deliberately supplies a reflection/evaluation minibatch here.
+        # Run only that batch; complete split evaluations are reserved for the
+        # baseline preflight and final validation paths outside this adapter.
+        repeated_batches = self._evaluate_replicates(batch, bundle, split=split)
         lookups = [
             {_result_identity(result): result for result in record["results"]}
             for record in repeated_batches
@@ -829,7 +1078,7 @@ class CoverUpPromptAdapter:
                 comparison_bundle_digest = bundle_digest(comparison_bundle)
                 if comparison_bundle_digest not in batches_by_digest:
                     batches_by_digest[comparison_bundle_digest] = self._evaluate_replicates(
-                        full_targets, comparison_bundle, split=split
+                        batch, comparison_bundle, split=split
                     )
                 return batches_by_digest[comparison_bundle_digest]
 
@@ -851,7 +1100,9 @@ class CoverUpPromptAdapter:
             identity = _target_identity(target)
             samples = [lookup[identity] for lookup in lookups]
             weighted_scores = [
-                self._weighted_score(sample, record["results"])
+                self._weighted_score(
+                    sample, record["results"], reference_targets
+                )
                 for sample, record in zip(samples, repeated_batches, strict=True)
             ]
             raw_scores = [float(sample["score"]) for sample in samples]
@@ -887,7 +1138,6 @@ class CoverUpPromptAdapter:
                 worst = samples[representative_replicate]
                 attempt_traces = _attempts_with_replicates(samples)
                 parent_attempt_traces = _attempts_with_replicates(parent_samples)
-                baseline_attempt_traces = _attempts_with_replicates(baseline_samples)
                 parent_replicate_scores = [
                     float(sample["score"]) for sample in parent_samples
                 ]
@@ -924,11 +1174,6 @@ class CoverUpPromptAdapter:
                             "attempt_traces", []
                         )
                     ),
-                    "baseline_test": _representative_test(
-                        baseline_samples[representative_replicate].get(
-                            "attempt_traces", []
-                        )
-                    ),
                     "feedback": "\n\n".join(
                         f"Replicate {replicate}:\n{sample['feedback']}"
                         for replicate, sample in enumerate(samples)
@@ -936,7 +1181,6 @@ class CoverUpPromptAdapter:
                     "coverage": worst.get("coverage"),
                     "attempt_traces": attempt_traces,
                     "parent_attempt_traces": parent_attempt_traces,
-                    "baseline_attempt_traces": baseline_attempt_traces,
                     "source_context": _source_context(
                         self.runner, target, worst.get("coverage")
                     ),
@@ -1038,14 +1282,8 @@ class CoverUpPromptAdapter:
                                 trajectory.get("parent_attempt_traces", [])
                             ),
                         ),
-                        "baseline_test": trajectory.get(
-                            "baseline_test",
-                            _representative_test(
-                                trajectory.get("baseline_attempt_traces", [])
-                            ),
-                        ),
-                        "component_attempts": _compact_component_attempts(
-                            trajectory.get("attempt_traces", []), component
+                        "execution_episodes": _build_execution_episodes(
+                            trajectory.get("attempt_traces", [])
                         ),
                     },
                     "Feedback": (
@@ -1054,7 +1292,8 @@ class CoverUpPromptAdapter:
                         f"{trajectory.get('comparison_source', 'baseline')} "
                         f"(delta={float(trajectory.get('score_delta', 0.0)):+.4f}).\n"
                         f"{_clip_text(trajectory['feedback'], 6_000, keep_tail=True)}\n"
-                        "Compare the candidate and parent/baseline tests. Preserve causal "
+                        "Use the labelled initial-to-repair episodes and compare the "
+                        "candidate with its direct parent when present. Preserve causal "
                         "behaviors associated with positive deltas and correct behaviors "
                         "associated with regressions or failures. Infer one reusable prompting "
                         "improvement from the contrast. "
@@ -1065,7 +1304,7 @@ class CoverUpPromptAdapter:
             ]
         trace_path = self.candidate_dir / "reflection_traces.jsonl"
         trace_payload = {
-            "schema_version": 1,
+            "schema_version": 2,
             "candidate_digest": bundle_digest(PromptBundle.from_candidate(candidate)),
             "components_to_update": list(components_to_update),
             "records": result,
@@ -1079,27 +1318,80 @@ class CoverUpPromptAdapter:
         return result
 
     @staticmethod
-    def _lm_text(raw: Any) -> str:
-        if isinstance(raw, str):
-            return raw
-        if isinstance(raw, Sequence) and raw:
-            first = raw[0]
-            if isinstance(first, str):
-                return first
-            if isinstance(first, dict) and "text" in first:
-                return str(first["text"])
-        raise TypeError("Reflection LM returned no usable text")
+    def _member(value: Any, name: str) -> Any:
+        return value.get(name) if isinstance(value, Mapping) else getattr(value, name, None)
 
-    @staticmethod
-    def _extract_template(response: str) -> str:
-        match = re.search(r"<template>\s*(.*?)\s*</template>", response, re.DOTALL)
-        if match:
-            return match.group(1).strip()
-        stripped = response.strip()
-        if stripped.startswith("```") and stripped.endswith("```"):
-            stripped = re.sub(r"^```[^\n]*\n?", "", stripped)
-            stripped = stripped[:-3]
-        return stripped.strip()
+    @classmethod
+    def _extract_component_update(cls, response: Any) -> dict[str, Any] | None:
+        if isinstance(response, (str, bytes)) or not isinstance(response, Sequence):
+            return None
+        if len(response) != 1:
+            return None
+        tool_calls = cls._member(response[0], "tool_calls")
+        if not isinstance(tool_calls, Sequence) or len(tool_calls) != 1:
+            return None
+        function = cls._member(tool_calls[0], "function")
+        if function is None:
+            return None
+        if cls._member(function, "name") != "update_prompt_component":
+            return None
+        arguments = cls._member(function, "arguments")
+        if isinstance(arguments, str):
+            try:
+                arguments = json.loads(arguments)
+            except json.JSONDecodeError:
+                return None
+        if not isinstance(arguments, dict):
+            return None
+        required = {"component", "replacements", "diagnosis", "evidence"}
+        if not required.issubset(arguments):
+            return None
+        if not isinstance(arguments["replacements"], dict):
+            return None
+        if not isinstance(arguments["diagnosis"], str) or not arguments["diagnosis"].strip():
+            return None
+        if (
+            not isinstance(arguments["evidence"], list)
+            or not arguments["evidence"]
+            or not all(
+                isinstance(item, str) and item.strip()
+                for item in arguments["evidence"]
+            )
+        ):
+            return None
+        return arguments
+
+    def _log_reflection_decision(
+        self,
+        candidate: dict[str, str],
+        components: Sequence[str],
+        *,
+        status: str,
+        selection: str | None = None,
+        changed_components: Sequence[str] = (),
+        detail: str | None = None,
+    ) -> None:
+        payload = {
+            "schema_version": 1,
+            "timestamp": datetime.now(UTC).isoformat(),
+            "candidate_digest": bundle_digest(PromptBundle.from_candidate(candidate)),
+            "one_call": True,
+            "offered_components": list(components),
+            "selection": selection,
+            "changed_components": list(changed_components),
+            "status": status,
+            "detail": detail,
+        }
+        path = self.candidate_dir / "reflection_decisions.jsonl"
+        with _digest_lock(f"reflection-decisions:{path.resolve()}"):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as output:
+                output.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        changed = ",".join(changed_components) or "none"
+        print(
+            "Reflection function call: "
+            f"status={status} selection={selection or 'none'} changed={changed}"
+        )
 
     def propose_new_texts(
         self,
@@ -1107,63 +1399,129 @@ class CoverUpPromptAdapter:
         reflective_dataset: Mapping[str, Sequence[Mapping[str, Any]]],
         components_to_update: list[str],
     ) -> dict[str, str]:
-        proposals: dict[str, str] = {}
-        for component in components_to_update:
-            current = candidate[component]
-            evidence_rows = list(reflective_dataset.get(component, []))
-            if not evidence_rows:
-                proposals[component] = current
-                continue
-            evidence = json.dumps(
-                evidence_rows,
-                indent=2,
-                ensure_ascii=False,
+        proposals = {
+            component: candidate[component] for component in components_to_update
+        }
+        evidence = {
+            component: list(reflective_dataset.get(component, []))
+            for component in components_to_update
+        }
+        if not any(evidence.values()):
+            self._log_reflection_decision(
+                candidate, components_to_update, status="no_failure_evidence"
             )
-            placeholders = COMPONENT_PLACEHOLDERS[component]
-            prompt = f"""You are optimizing one reusable CoverUp pytest-generation template.
+            return proposals
 
-Component: {component}
-Role: {COMPONENT_ROLES[component]}
-Required literal placeholders: {', '.join(placeholders)}
-Maximum length: {self.max_component_chars[component]} characters
+        contracts = {
+            component: {
+                "role": COMPONENT_ROLES[component],
+                "required_literal_placeholders": list(COMPONENT_PLACEHOLDERS[component]),
+                "maximum_characters": self.max_component_chars[component],
+            }
+            for component in evidence
+        }
+        prompt = f"""
+You are optimizing a reusable two-stage CoverUp pytest-generation system. The stages are `initial` test generation and conditional `error` repair.
 
-Current template:
-<current_template>
-{current}
-</current_template>
+Current templates:
+<templates>{json.dumps(candidate, indent=2, ensure_ascii=False)}</templates>
 
-Contrastive execution evidence from representative positive, failing, and regressed targets:
-<evidence>
-{evidence}
-</evidence>
+Eligible component contracts:
+<contracts>{json.dumps(contracts, indent=2, ensure_ascii=False)}</contracts>
 
-Propose one conservative, generalizable improvement supported by the evidence. Preserve
-useful behavior from the current template. Prefer precise operational guidance over long
-checklists, repeated goals, score formulas, or generic claims. Never include target-specific
-file names, symbols, or line numbers. Preserve every required placeholder exactly. Return
-only the complete revised template between <template> and </template> tags.
+Labelled end-to-end execution evidence by component:
+<evidence>{json.dumps(evidence, indent=2, ensure_ascii=False)}</evidence>
+
+In one decision, choose `initial`, `error`, or `all`, then call `update_prompt_component` exactly once with every complete revised template selected. `all` is always allowed, even when direct evidence exists for only one stage. When selecting `all`, provide both `initial` and `error` replacements and change both; the update is rejected atomically otherwise. For a single component, provide only that component's replacement.
+
+Use the full initial -> failing test -> error -> repaired test -> outcome episodes for causal attribution. Make conservative operational changes. Preserve useful instructions and required literal placeholders. Do not add target-specific file names, symbols, line numbers, repository facts, or literal values. Keep every replacement within its component's maximum length. Include a concise reusable diagnosis with its regression guard and at least one evidence observation in the function arguments. Do not answer with JSON or prose outside the function call.
 """
-            last_error = ""
-            for _ in range(2):
-                response = self._lm_text(self.reflection_lm(prompt))
-                proposal = self._extract_template(response)
-                error = validate_template(proposal, placeholders)
-                if not error and len(proposal) <= self.max_component_chars[component]:
-                    proposals[component] = proposal
-                    break
-                last_error = error or (
-                    f"Template has {len(proposal)} characters, above the allowed "
-                    f"{self.max_component_chars[component]}."
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You optimize reusable CoverUp prompt components. "
+                    "Finish by calling update_prompt_component exactly once."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ]
+        tools = [UPDATE_PROMPT_COMPONENT_TOOL]
+        tool_choice = {
+            "type": "function",
+            "function": {"name": "update_prompt_component"},
+        }
+        request = {
+            "messages": messages,
+            "tools": tools,
+            "tool_choice": tool_choice,
+        }
+        log_reflection_request(request)
+        try:
+            update = self._extract_component_update(
+                self.reflection_lm(**request)
+            )
+        except (TypeError, ValueError):
+            update = None
+        if update is None:
+            self._log_reflection_decision(
+                candidate, components_to_update, status="invalid_function_call"
+            )
+            return proposals
+
+        selection = str(update["component"])
+        selected = set(evidence) if selection == "all" else {selection}
+        if not selected or not selected.issubset(evidence):
+            self._log_reflection_decision(
+                candidate, components_to_update, status="invalid_selection",
+                selection=selection,
+            )
+            return proposals
+        if selection == "all" and selected != set(COMPONENT_PLACEHOLDERS):
+            self._log_reflection_decision(
+                candidate, components_to_update, status="invalid_all_contract",
+                selection=selection,
+            )
+            return proposals
+        replacements = update["replacements"]
+        if set(replacements) != selected:
+            self._log_reflection_decision(
+                candidate, components_to_update, status="incomplete_replacements",
+                selection=selection,
+            )
+            return proposals
+        for component in selected:
+            replacement = replacements[component]
+            if not isinstance(replacement, str):
+                self._log_reflection_decision(
+                    candidate, components_to_update, status="invalid_replacement_type",
+                    selection=selection, detail=component,
                 )
-                prompt += (
-                    f"\nThe previous response was invalid: {last_error}\n"
-                    "Return a corrected complete template and nothing else."
+                return proposals
+            if error := validate_template(
+                replacement, COMPONENT_PLACEHOLDERS[component]
+            ):
+                self._log_reflection_decision(
+                    candidate, components_to_update, status="invalid_template",
+                    selection=selection, detail=f"{component}: {error}",
                 )
-            else:
-                raise ValueError(
-                    f"Reflection LM failed to produce a valid {component} template: "
-                    f"{last_error}"
+                return proposals
+            if len(replacement) > self.max_component_chars[component]:
+                self._log_reflection_decision(
+                    candidate, components_to_update, status="template_too_long",
+                    selection=selection, detail=component,
                 )
+                return proposals
+        if selection == "all" and any(
+            replacements[component] == candidate[component]
+            for component in selected
+        ):
+            self._log_reflection_decision(
+                candidate, components_to_update, status="all_requires_both_changes",
+                selection=selection,
+            )
+            return proposals
+        proposals.update(replacements)
         proposed_candidate = {**candidate, **proposals}
         changed_components = [
             component for component in components_to_update
@@ -1176,6 +1534,10 @@ only the complete revised template between <template> and </template> tags.
                 "parent_candidate": dict(candidate),
                 "changed_components": changed_components,
             }
+        self._log_reflection_decision(
+            candidate, components_to_update, status="accepted",
+            selection=selection, changed_components=changed_components,
+        )
         return proposals
 
 
@@ -1187,7 +1549,7 @@ def _optimization_run_digest(
     evaluation_replicates: int,
 ) -> str:
     payload = {
-        "optimizer_schema": 8,
+        "optimizer_schema": 11,
         "baseline": baseline.as_candidate(),
         "train": [_target_identity(target) for target in train_targets],
         "validation": [_target_identity(target) for target in validation_targets],
@@ -1314,12 +1676,12 @@ def optimize(
         frontier_type="hybrid",
         skip_perfect_score=False,
         reflection_minibatch_size=min(8, len(train_targets)),
-        module_selector="round_robin",
+        module_selector=LLMReflectionComponentSelector(),
         use_merge=True,
         max_merge_invocations=5,
         max_metric_calls=max_metric_calls,
         run_dir=str(artifacts_dir / "gepa_direct_logs" / run_digest),
-        # The adapter already caches whole isolated-split evaluations. GEPA's
+        # The adapter already caches split/batch evaluations. GEPA's
         # per-example cache uses integer ids shared by its train and validation
         # ListDataLoaders, which can otherwise reuse a train score as validation.
         cache_evaluation=False,

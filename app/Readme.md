@@ -19,7 +19,7 @@ ngÃ y **2026-08-08**.
 6. Candidate sá»‘ 0 vÃ  candidate tá»‘i Æ°u Ä‘Æ°á»£c so sÃ¡nh trÃªn locked test split.
 7. Prompt Ä‘á»§ Ä‘iá»u kiá»‡n Ä‘Æ°á»£c táº¡o á»Ÿ tráº¡ng thÃ¡i `in_review`, rá»“i approve/reject cÃ³ audit data.
 
-Production hiá»‡n táº¡i: [https://vinaip002.web.app](https://vinaip002.web.app).
+Production hiá»‡n táº¡i: [https://project-7df9f963-9fe0-4b76-b3d.web.app](https://project-7df9f963-9fe0-4b76-b3d.web.app).
 
 á»¨ng dá»¥ng **chÆ°a production-complete**. CÃ¡c pháº§n cÃ²n thiáº¿u quan trá»ng nháº¥t lÃ  production smoke cho
 ba sample repo sau báº£n runner má»›i, idempotency/cancellation/checkpoint, quota/cost controls,
@@ -299,20 +299,24 @@ service-account JSON key.
 
 | Resource | Value |
 | --- | --- |
-| GCP/Firebase project | `vinaip002` |
+| GCP/Firebase project | `project-7df9f963-9fe0-4b76-b3d` |
+| Admin Vertex AI project | `project-7df9f963-9fe0-4b76-b3d` |
 | Region | `asia-southeast1` |
-| Hosting/API | `https://vinaip002.web.app`, `/api/v1` |
+| Hosting/API | `https://project-7df9f963-9fe0-4b76-b3d.web.app`, `/api/v1` |
 | Cloud Run API | `promptopt-api` |
 | CoverUp Job | `promptopt-coverup-runner` |
 | GEPA Job | `promptopt-gepa-runner` |
-| Artifact Registry | `asia-southeast1-docker.pkg.dev/vinaip002/promptopt` |
-| Private bucket | `vinaip002-promptopt-sources` |
+| Artifact Registry | `asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt` |
+| Private bucket | `project-7df9f963-9fe0-4b76-b3d-promptopt-sources` |
 | Cloud Tasks queues | `promptopt-analysis`, `promptopt-baseline` |
-| Runtime identity | `promptopt-api@vinaip002.iam.gserviceaccount.com` |
-| Runner identity | `promptopt-runner@vinaip002.iam.gserviceaccount.com` |
+| Runtime identity | `promptopt-api@project-7df9f963-9fe0-4b76-b3d.iam.gserviceaccount.com` |
+| Runner identity | `promptopt-runner@project-7df9f963-9fe0-4b76-b3d.iam.gserviceaccount.com` |
 
 Firebase Hosting rewrite lÃ  public, nhÆ°ng API business endpoints váº«n yÃªu cáº§u Firebase bearer token.
 Runner identity chá»‰ Ä‘Æ°á»£c cáº¥p quyá»n tá»‘i thiá»ƒu trÃªn opaque runner exchange objects vÃ  Vertex AI.
+Only model calls use `VERTEXAI_PROJECT=vinbuildphase`; the API, Cloud Run Job, GCS, Firestore and other
+deployment resources remain in `project-7df9f963-9fe0-4b76-b3d`. The runner identity must have
+`roles/aiplatform.user` and `roles/serviceusage.serviceUsageConsumer` on `vinbuildphase`.
 
 ## Production smoke
 

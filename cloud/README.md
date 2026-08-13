@@ -32,7 +32,8 @@ Chạy thử nhỏ trước khi chạy full 450 metric calls (tốn tiền LLM):
 
 ## Cấu hình mặc định
 
-- Project: đọc từ `VERTEXAI_PROJECT` trong `.env` (hoặc truyền `-ProjectId`)
+- Project deploy mặc định: `project-7df9f963-9fe0-4b76-b3d` (hoặc truyền `-ProjectId`)
+- Project gọi model: đọc từ `VERTEXAI_PROJECT` trong `.env` (hoặc truyền `-VertexProjectId`)
 - Region: `asia-southeast1` · Job: `p002-gepa` · Bucket: `p002-gepa-artifacts`
 - 4 vCPU / 8 GiB, timeout 24h, `--max-retries 0`
 - Model: đọc từ `COVERUP_MODEL` / `OPTIMIZE_MODEL` trong `.env`
@@ -134,8 +135,9 @@ Sau khi job chạy xong, script tải toàn bộ `gs://p002-gepa-artifacts/promp
   với sqlite coverage), xong upload toàn bộ lên GCS. Mỗi execution bắt đầu với workspace sạch — không còn
   guard "incomplete workspace". Không tự tái dùng cache giữa các lần chạy; muốn so sánh nhiều lần, đổi
   `-ArtifactsName` mỗi lần.
-- **Vertex AI auth**: job dùng service account `p002-gepa-sa`, đã gán `roles/aiplatform.user` —
-  không cần API key khi model là `vertex_ai/...`.
+- **Vertex AI auth**: job dùng service account `p002-gepa-sa`, đã gán `roles/aiplatform.user`
+  và `roles/serviceusage.serviceUsageConsumer` trên project gọi model — không cần API key khi model là
+  `vertex_ai/...`.
 - **Chạy lại khi code thay đổi**: chạy lại `deploy_gepa_job.ps1` (build image mới + update job).
 
 ## Lệnh xóa Storage

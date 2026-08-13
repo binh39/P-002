@@ -5,16 +5,18 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import sys
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
 from .coveragepy import SymbolCoverage, load_report, run_coverage, symbol_coverage
 from .metrics import build_feedback, score_symbol
 from .models import BatchRunRecord, BatchTargetResult, ExperimentConfig, RunRecord, SymbolTarget
+from .subprocesses import run_streamed
 
 
 def _now() -> str:
@@ -108,6 +110,99 @@ def _traces_for_target(traces: list[dict], target: SymbolTarget) -> list[dict]:
     return result
 
 
+def _saved_tests_for_target(
+    traces: list[dict], target: SymbolTarget, *, workspace: Path,
+) -> list[Path]:
+    """Return only saved test modules attributed to one exact target."""
+    workspace = workspace.resolve()
+    result: list[Path] = []
+    seen: set[Path] = set()
+    for trace in _traces_for_target(traces, target):
+        saved_test = trace.get("saved_test")
+        if not saved_test:
+            continue
+        path = Path(str(saved_test))
+        if not path.is_absolute():
+            path = workspace / path
+        path = path.resolve()
+        if path != workspace and workspace not in path.parents:
+            continue
+        if path.is_file() and path not in seen:
+            seen.add(path)
+            result.append(path)
+    return result
+
+
+def _target_artifact_token(target: SymbolTarget) -> str:
+    identity = json.dumps(
+        [target.project, target.source_file, target.symbol, target.split],
+        ensure_ascii=True,
+    )
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()[:12]
+
+
+def _consolidate_saved_tests(
+    traces: list[dict],
+    target: SymbolTarget,
+    *,
+    source_workspace: Path,
+    destination_workspace: Path,
+    token: str,
+) -> tuple[list[dict], list[Path]]:
+    """Copy one target's saved tests into the persistent candidate workspace."""
+    source_workspace = source_workspace.resolve()
+    destination_workspace = destination_workspace.resolve()
+    sources = _saved_tests_for_target(
+        traces, target, workspace=source_workspace,
+    )
+    replacements: dict[Path, Path] = {}
+    copied: list[Path] = []
+    for index, source in enumerate(sources, start=1):
+        destination = destination_workspace / f"test_opt_{token}_{index}.py"
+        shutil.copyfile(source, destination)
+        replacements[source.resolve()] = destination.resolve()
+        copied.append(destination.resolve())
+
+    rewritten = []
+    for original in traces:
+        trace = dict(original)
+        saved_test = trace.get("saved_test")
+        if saved_test:
+            source = Path(str(saved_test))
+            if not source.is_absolute():
+                source = source_workspace / source
+            replacement = replacements.get(source.resolve())
+            if replacement is not None:
+                trace["saved_test"] = str(replacement)
+        rewritten.append(trace)
+    return rewritten, copied
+
+
+@dataclass(frozen=True)
+class _TargetEvaluationJob:
+    target: SymbolTarget
+    package_dir: Path
+    final_workspace: Path
+    temporary_workspace: Path
+    target_spec: Path
+    coverup_log: Path
+    attempt_trace: Path
+    command: list[str]
+    artifact_token: str
+
+
+@dataclass
+class _TargetEvaluationOutcome:
+    target_result: BatchTargetResult
+    command: list[str]
+    generator_exit_code: int
+    stdout: str
+    coverup_log: str
+    attempt_traces: list[dict]
+    generated_tests: list[Path]
+    coverage_after: Path
+
+
 def _prune_run_dir(run_dir: Path) -> None:
     """Keep only record.json in a batch run directory after it is scored.
 
@@ -119,15 +214,16 @@ def _prune_run_dir(run_dir: Path) -> None:
     else in the run directory is read afterwards.
     """
     for stale in run_dir.iterdir():
-        if not stale.is_file():
-            continue
         if stale.name == "record.json":
             continue
-        stale.unlink(missing_ok=True)
+        if stale.is_dir():
+            shutil.rmtree(stale)
+        else:
+            stale.unlink(missing_ok=True)
 
 
 class CoverUpExperimentRunner:
-    """Evaluate one prompt on one symbol in an isolated copy of the test suite."""
+    """Generate one prompt batch and score each symbol with only its traced tests."""
 
     def __init__(self, config: ExperimentConfig) -> None:
         self.config = config
@@ -172,7 +268,7 @@ class CoverUpExperimentRunner:
         split: str | None = None,
         workspace_kind: str = "candidate",
     ) -> BatchRunRecord:
-        """Evaluate one prompt on many symbols with one CoverUp and coverage run."""
+        """Evaluate targets concurrently and retain one consolidated candidate suite."""
         if not targets:
             raise ValueError("evaluate_batch requires at least one target")
         target_splits = {target.split for target in targets}
@@ -255,49 +351,40 @@ class CoverUpExperimentRunner:
             tuple(sorted({package_dir.parent for package_dir in package_dirs.values()})),
         )
 
-        stdout_parts: list[str] = []
-        generated_tests: list[str] = []
-        results: list[BatchTargetResult] = []
-        merged_attempt_traces: list[dict] = []
-        coverup_logs: list[Path] = []
-        project_traces: list[Path] = []
-        after_jsons: list[Path] = []
-        final_exit_code = 0
-        started_at = _now()
-        started = time.monotonic()
+        final_workspaces: dict[str, Path] = {}
         for project in projects:
-            group = grouped[project]
-            package_dir = package_dirs[project]
             workspace = work_tests if not multi_project else work_tests / project
             if multi_project:
                 workspace.mkdir(parents=True, exist_ok=False)
-            safe_project = re.sub(r"[^A-Za-z0-9_.-]+", "_", project).strip("._-")
-            suffix = "" if not multi_project else f"_{safe_project}"
-            coverup_log = run_dir / f"coverup{suffix}.log"
-            project_trace = run_dir / f"attempt_trace{suffix}.jsonl"
-            target_spec = run_dir / f"target_spec{suffix}.json"
-            after_json = run_dir / f"coverage_after{suffix}.json"
+            final_workspaces[project] = workspace.resolve()
+
+        temporary_root = run_dir / "target_workspaces"
+        pytest_temp_root = run_dir / "pytest_tmp"
+        temporary_root.mkdir(parents=True, exist_ok=False)
+        pytest_temp_root.mkdir(parents=True, exist_ok=False)
+        jobs: list[_TargetEvaluationJob] = []
+        for index, target in enumerate(targets):
+            # Including the input position makes all paths collision-free even if
+            # a malformed dataset contains the same target more than once.
+            artifact_token = f"{_target_artifact_token(target)}_{index:04d}"
+            temporary_workspace = temporary_root / artifact_token
+            temporary_workspace.mkdir(parents=True, exist_ok=False)
+            target_spec = run_dir / f"target_spec_{artifact_token}.json"
             target_spec.write_text(
                 json.dumps(
-                    [
-                        {
-                            "source_file": target.source_file,
-                            "symbol": target.symbol,
-                        }
-                        for target in group
-                    ],
+                    [{"source_file": target.source_file, "symbol": target.symbol}],
                     indent=2,
                     ensure_ascii=False,
                 ),
                 encoding="utf-8",
             )
-
-            symbols = list(dict.fromkeys(target.symbol for target in group))
+            coverup_log = run_dir / f"coverup_{artifact_token}.log"
+            target_trace = run_dir / f"attempt_trace_{artifact_token}.jsonl"
             command = [
-                sys.executable, "-m", "coverup",
-                "--package-dir", str(package_dir),
-                "--tests-dir", str(workspace),
-                "--target-symbols", ",".join(symbols),
+                sys.executable, "-u", "-m", "coverup",
+                "--package-dir", str(package_dirs[target.project]),
+                "--tests-dir", str(temporary_workspace),
+                "--target-symbols", target.symbol,
                 "--target-spec-file", str(target_spec),
                 "--prompt", "gpt-v2",
                 "--prompt-template-file", str(prompt_copy),
@@ -305,8 +392,11 @@ class CoverUpExperimentRunner:
                 "--max-attempts", str(self.config.max_attempts),
                 "--prefix", "opt",
                 "--log-file", str(coverup_log),
-                "--trace-file", str(project_trace),
+                "--trace-file", str(target_trace),
                 "--no-checkpoint",
+                # Target-specific coverage below is authoritative. Avoid CoverUp's
+                # redundant final suite pass, especially expensive with repeats.
+                "--no-final-coverage",
             ]
             if self.config.repeat_tests:
                 command.extend(["--repeat-tests", str(self.config.repeat_tests)])
@@ -314,37 +404,63 @@ class CoverUpExperimentRunner:
                 command.append("--no-repeat-tests")
             if self.config.pytest_args:
                 command.extend(["--pytest-args", self.config.pytest_args])
-            command.extend(["--max-concurrency", str(self.config.max_concurrency)])
+            # Global parallelism is owned by the outer pool. Keeping a child at
+            # one prevents max_concurrency squared processes and API requests.
+            command.extend(["--max-concurrency", "1"])
             if self.config.rate_limit is not None:
                 command.extend(["--rate-limit", str(self.config.rate_limit)])
+            jobs.append(_TargetEvaluationJob(
+                target=target,
+                package_dir=package_dirs[target.project],
+                final_workspace=final_workspaces[target.project],
+                temporary_workspace=temporary_workspace,
+                target_spec=target_spec,
+                coverup_log=coverup_log,
+                attempt_trace=target_trace,
+                command=command,
+                artifact_token=artifact_token,
+            ))
 
-            before_tests = {path.name for path in workspace.glob("test_opt_*.py")}
-            completed = subprocess.run(
-                command,
+        def evaluate_target(job: _TargetEvaluationJob) -> _TargetEvaluationOutcome:
+            completed = run_streamed(
+                job.command,
                 cwd=self.config.project_root.resolve(),
                 env=environment,
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                check=False,
+                label=f"CoverUp {job.target.source_file}::{job.target.symbol}",
+                echo=False,
             )
-            final_exit_code = completed.returncode
-            stdout_parts.append(completed.stdout)
-            project_root_resolved = self.config.project_root.resolve()
-            generated_tests.extend(
-                sorted(
-                    _display_path(path, project_root_resolved)
-                    for path in workspace.glob("test_opt_*.py")
-                    if path.name not in before_tests
+            raw_traces = _load_attempt_traces(job.attempt_trace)
+            try:
+                rewritten_traces, copied_tests = _consolidate_saved_tests(
+                    raw_traces,
+                    job.target,
+                    source_workspace=job.temporary_workspace,
+                    destination_workspace=job.final_workspace,
+                    token=job.artifact_token,
                 )
-            )
-            attempt_traces = _load_attempt_traces(project_trace)
-            merged_attempt_traces.extend(attempt_traces)
+            finally:
+                # Temporary per-target folders provide the old isolation and are
+                # discarded as soon as their attributed tests have been retained.
+                shutil.rmtree(job.temporary_workspace, ignore_errors=True)
 
+            target_traces = _traces_for_target(rewritten_traces, job.target)
+            selected_tests = _saved_tests_for_target(
+                rewritten_traces, job.target, workspace=job.final_workspace,
+            )
+            if not selected_tests:
+                empty_test = run_dir / f"empty_target_{job.artifact_token}.py"
+                empty_test.write_text(
+                    "# No generated test was saved for this target.\n",
+                    encoding="utf-8",
+                )
+                selected_tests = [empty_test]
+            after_json = run_dir / f"coverage_after_{job.artifact_token}.json"
             after = run_coverage(
                 project_root=self.config.project_root.resolve(),
-                package_dir=package_dir,
-                tests_dir=workspace,
+                package_dir=job.package_dir,
+                tests_dir=job.final_workspace,
+                test_paths=selected_tests,
+                pytest_basetemp=pytest_temp_root / job.artifact_token,
                 output=after_json,
                 pytest_args=self.config.pytest_args,
                 repeat_tests=self.config.repeat_tests,
@@ -352,84 +468,143 @@ class CoverUpExperimentRunner:
             )
             if after.returncode:
                 feedback = (
-                    "Score: 0. The generated test suite failed under coverage.py:\n"
+                    "Score: 0. The generated tests for this target failed under "
+                    "coverage.py:\n"
                     f"{after.stdout[-4000:]}"
                 )
-                # pytest exit 1 still leaves a complete coverage data file and
-                # run_coverage exports it to JSON.  Preserve its structural
-                # denominators, but never reward lines reached by failing tests.
-                # Other failures do not produce JSON and remain unmeasurable.
                 report = load_report(after_json) if after_json.is_file() else None
-                for target in group:
-                    score_data = None
-                    if report is not None:
-                        try:
-                            measured_cov = symbol_coverage(
-                                report, target.source_file, target.symbol
-                            )
-                        except KeyError:
-                            pass
-                        else:
-                            zero_cov = _zero_coverage_like(measured_cov)
-                            score_data = score_symbol(zero_cov, zero_cov).as_dict()
-                            score_data["valid"] = True
-                            score_data["tests_passed"] = False
-                            score_data["pytest_exit_code"] = after.returncode
-                            score_data["generator_exit_code"] = completed.returncode
-                    results.append(BatchTargetResult(
-                        target=target,
-                        score=score_data,
-                        feedback=feedback,
-                        attempt_traces=_traces_for_target(attempt_traces, target),
-                    ))
+                score_data = None
+                if report is not None:
+                    try:
+                        measured_cov = symbol_coverage(
+                            report, job.target.source_file, job.target.symbol
+                        )
+                    except KeyError:
+                        pass
+                    else:
+                        zero_cov = _zero_coverage_like(measured_cov)
+                        score_data = score_symbol(zero_cov, zero_cov).as_dict()
+                        score_data["valid"] = True
+                        score_data["tests_passed"] = False
+                        score_data["pytest_exit_code"] = after.returncode
+                        score_data["generator_exit_code"] = completed.returncode
+                target_result = BatchTargetResult(
+                    target=job.target,
+                    score=score_data,
+                    feedback=feedback,
+                    attempt_traces=target_traces,
+                )
             else:
                 report = load_report(after_json)
-                for target in group:
-                    try:
-                        after_cov = symbol_coverage(report, target.source_file, target.symbol)
-                    except KeyError as exc:
-                        results.append(BatchTargetResult(
-                            target=target,
-                            feedback=f"Score: 0. Coverage lookup failed: {exc}",
-                            attempt_traces=_traces_for_target(attempt_traces, target),
-                        ))
-                        continue
-                    before_cov = _zero_coverage_like(after_cov)
-                    metric_result = score_symbol(before_cov, after_cov)
+                try:
+                    after_cov = symbol_coverage(
+                        report, job.target.source_file, job.target.symbol
+                    )
+                except KeyError as exc:
+                    target_result = BatchTargetResult(
+                        target=job.target,
+                        feedback=f"Score: 0. Coverage lookup failed: {exc}",
+                        attempt_traces=target_traces,
+                    )
+                else:
+                    metric_result = score_symbol(
+                        _zero_coverage_like(after_cov), after_cov
+                    )
                     score_data = metric_result.as_dict()
-                    # The coverage run is the authority for test validity.  CoverUp may
-                    # exit non-zero after some concurrent segments have already produced
-                    # passing tests; invalidating the whole batch destroys useful signal.
                     score_data["valid"] = True
                     score_data["generator_exit_code"] = completed.returncode
-                    results.append(BatchTargetResult(
-                        target=target,
+                    target_result = BatchTargetResult(
+                        target=job.target,
                         score=score_data,
                         feedback=build_feedback(
-                            metric_result, coverup_exit_code=completed.returncode
+                            metric_result,
+                            coverup_exit_code=completed.returncode,
                         ),
-                        attempt_traces=_traces_for_target(attempt_traces, target),
-                    ))
-            coverup_logs.append(coverup_log)
-            project_traces.append(project_trace)
-            after_jsons.append(after_json)
-        # Preserve the caller's target order in the merged results even though
-        # per-project batches are executed in sorted project order.
-        result_order = {id(target): index for index, target in enumerate(targets)}
-        results.sort(key=lambda result: result_order[id(result.target)])
-        elapsed = time.monotonic() - started
-        stdout_file.write_text("\n".join(stdout_parts), encoding="utf-8")
-        if multi_project:
-            attempt_trace.write_text(
-                "".join(json.dumps(trace) + "\n" for trace in merged_attempt_traces),
-                encoding="utf-8",
+                        attempt_traces=target_traces,
+                    )
+            coverup_log_text = (
+                job.coverup_log.read_text(encoding="utf-8")
+                if job.coverup_log.is_file()
+                else ""
             )
+            return _TargetEvaluationOutcome(
+                target_result=target_result,
+                command=job.command,
+                generator_exit_code=completed.returncode,
+                stdout=completed.stdout,
+                coverup_log=coverup_log_text,
+                attempt_traces=rewritten_traces,
+                generated_tests=copied_tests,
+                coverage_after=after_json,
+            )
+
+        started_at = _now()
+        started = time.monotonic()
+        # A configured limiter is process-local, so multiple CoverUp processes
+        # would exceed it. Preserve its semantics by serializing that rare mode.
+        worker_count = (
+            1
+            if self.config.rate_limit is not None
+            else min(len(jobs), max(1, self.config.max_concurrency))
+        )
+        if worker_count == 1:
+            outcomes = [evaluate_target(job) for job in jobs]
+        else:
+            with ThreadPoolExecutor(
+                max_workers=worker_count,
+                thread_name_prefix="target-evaluation",
+            ) as executor:
+                # map preserves caller order while each complete target lifecycle
+                # (generation, consolidation and coverage) runs independently.
+                outcomes = list(executor.map(evaluate_target, jobs))
+
+        results = [outcome.target_result for outcome in outcomes]
+        after_jsons = [outcome.coverage_after for outcome in outcomes]
+        merged_attempt_traces = [
+            trace for outcome in outcomes for trace in outcome.attempt_traces
+        ]
+        project_root_resolved = self.config.project_root.resolve()
+        generated_tests = [
+            _display_path(path, project_root_resolved)
+            for outcome in outcomes
+            for path in outcome.generated_tests
+        ]
+        final_exit_code = next(
+            (
+                outcome.generator_exit_code
+                for outcome in outcomes
+                if outcome.generator_exit_code
+            ),
+            0,
+        )
+        elapsed = time.monotonic() - started
+        stdout_file.write_text(
+            "\n".join(
+                f"=== {outcome.target_result.target.project}:"
+                f"{outcome.target_result.target.symbol} ===\n{outcome.stdout}"
+                for outcome in outcomes
+            ),
+            encoding="utf-8",
+        )
+        attempt_trace.write_text(
+            "".join(json.dumps(trace) + "\n" for trace in merged_attempt_traces),
+            encoding="utf-8",
+        )
+        merged_coverup_log = run_dir / "coverup.log"
+        merged_coverup_log.write_text(
+            "\n".join(
+                f"=== {outcome.target_result.target.project}:"
+                f"{outcome.target_result.target.symbol} ===\n{outcome.coverup_log}"
+                for outcome in outcomes
+            ),
+            encoding="utf-8",
+        )
 
         record = BatchRunRecord(
             run_id=run_id,
             split=split,
             targets=targets,
-            command=command,
+            command=outcomes[0].command,
             started_at=started_at,
             finished_at=_now(),
             exit_code=final_exit_code,
@@ -441,9 +616,7 @@ class CoverUpExperimentRunner:
                 str(after_jsons[0].relative_to(run_dir)) if after_jsons else None
             ),
             stdout_file=str(stdout_file.relative_to(run_dir)),
-            coverup_log_file=(
-                str(coverup_logs[0].relative_to(run_dir)) if coverup_logs else ""
-            ),
+            coverup_log_file=str(merged_coverup_log.relative_to(run_dir)),
             attempt_trace_file=(
                 str(attempt_trace.relative_to(run_dir)) if attempt_trace.exists() else ""
             ),

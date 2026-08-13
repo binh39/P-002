@@ -77,7 +77,7 @@ export default function Settings() {
                 <div className="integration-row">
                   <div>
                     <strong>Google Cloud</strong>
-                    <span>Project vinaip002 · asia-southeast1</span>
+                    <span>Project project-7df9f963-9fe0-4b76-b3d · asia-southeast1</span>
                   </div>
                   <StatusBadge tone="success">Connected</StatusBadge>
                 </div>

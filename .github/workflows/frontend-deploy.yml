@@ -18,8 +18,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  FIREBASE_PROJECT_ID: vinaip002
-  FIREBASE_WEB_APP_ID: 1:891999064201:web:69022a3951a6ff42eaf658
+  FIREBASE_PROJECT_ID: project-7df9f963-9fe0-4b76-b3d
+  FIREBASE_WEB_APP_ID: 1:861862240028:web:25b6f12238bce0664be4d9
 
 jobs:
   deploy:
@@ -46,9 +46,9 @@ jobs:
         name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
         with:
-          project_id: vinaip002
-          workload_identity_provider: projects/891999064201/locations/global/workloadIdentityPools/github-actions/providers/p002-main
-          service_account: github-frontend-deploy@vinaip002.iam.gserviceaccount.com
+          project_id: project-7df9f963-9fe0-4b76-b3d
+          workload_identity_provider: projects/861862240028/locations/global/workloadIdentityPools/github-actions/providers/p002-main
+          service_account: github-frontend-deploy@project-7df9f963-9fe0-4b76-b3d.iam.gserviceaccount.com
       - name: Load Firebase Web App config
         shell: bash
         run: |
@@ -64,7 +64,7 @@ jobs:
         working-directory: app/frontend
         env:
           VITE_AUTH_MODE: firebase
-          VITE_DATA_MODE: demo
+          VITE_DATA_MODE: connected
           VITE_API_BASE_URL: /api/v1
         run: npm run build
       - name: Deploy Firebase Hosting

@@ -210,7 +210,7 @@ Pipeline tạo run ID dạng:
 isort-train-batch-a1b2c3d4
 ```
 
-Mỗi target của một candidate có một workspace test rỗng, độc lập dưới thư mục
+Mỗi batch/project của một candidate có một workspace test rỗng dùng chung dưới thư mục
 `<artifacts-dir>/generated_tests/<split>/`:
 
 ```text
@@ -237,7 +237,7 @@ Runner gọi:
 ```powershell
 python -m coverup `
   --package-dir src/sample_repo/isort/isort `
-  --tests-dir <isolated-tests> `
+  --tests-dir <shared-batch-tests> `
   --target-symbols process,Trie.search,Config.is_supported_filetype,grid `
   --prompt gpt-v2 `
   --prompt-template-file <run-dir>/prompt.json `
@@ -412,30 +412,36 @@ sửa/thay thế.
 
 Trong mỗi vòng reflection:
 
-1. GEPA chọn `initial` hoặc `error` theo round-robin với reflection minibatch 8;
-   merge có thể ghép các component tốt.
+1. Khi có failure evidence, GEPA chuyển cả `initial` và `error` cho reflection LM với
+   minibatch 8. Trong đúng một native `update_prompt_component` tool call, LM chọn `initial`, `error`, hoặc
+   `all` và trả luôn complete replacement. `all` luôn được phép, kể cả khi direct evidence
+   chỉ có ở một stage; update này chỉ được áp dụng khi cả hai replacement hợp lệ và thực sự đổi.
 2. Cả bundle được validate và hash để tạo candidate ID ổn định.
-3. Mỗi symbol chạy trong workspace test riêng, được chọn chính xác bằng
-   `source_file + qualname`; các target vẫn có thể chạy song song theo `max_concurrency`.
+3. Mỗi batch dùng một generated-tests workspace chung theo project; test của từng symbol
+   được chọn chính xác bằng `source_file + qualname`. Sau generation, coverage/pytest của
+   các target chạy trong bounded thread pool theo `min(max_concurrency, CPU count)`, với
+   coverage data, pytest basetemp và cache cô lập cho từng target.
 4. Mỗi example nhận score riêng của symbol, được scale theo số statement/branch để mean
    của GEPA đúng bằng micro-average cuối cùng.
 5. Feedback chứa file, symbol, source lines liên quan, coverage còn thiếu và kết quả từng
-   replicate. Structured trace còn ghi component thực sự được gọi, prompt input, test code,
-   traceback, coverage gain/remaining và trạng thái dừng của từng attempt. Trước reflection,
-   evidence dài được cắt gọn và mỗi component chỉ học từ trajectory đã thực sự chạy nó.
-6. Proposal phải giữ placeholder, có giới hạn độ dài và chỉ thay đổi một component để
-   giảm prompt inflation và cải thiện credit assignment.
+   replicate. Structured trace tái dựng episode đầy đủ `initial test -> error -> repaired test
+   -> outcome`, giữ traceback và coverage gain/remaining nhưng không lặp baseline test trong
+   mỗi record. Reflection LM dùng toàn bộ episode để tự attribution component.
+6. Function call trả diagnosis, evidence và replacement trong cùng một model response. Proposal
+   phải giữ placeholder và giới hạn độ dài. Decision được ghi tại
+   `candidates/reflection_decisions.jsonl`; update `all` được validate nguyên tử.
 
 Kết quả metric được cache theo `prompt hash + split` tại
 `candidates/evaluations/<candidate-id>/<evaluation-digest>/<split>/batch.json`.
 `evaluation-digest` bao gồm model/config, target set và source hashes nên cache cũ không
 thể âm thầm được dùng sau khi code hoặc protocol thay đổi. Các replicate bổ sung dùng
-`batch_r1.json`, `batch_r2.json`, ... và workspace riêng. Khi GEPA gọi metric cho từng
-example, pipeline lấy đúng score từ workspace cô lập của symbol đó thay vì coverage của
-test suite dùng chung. Cache per-example nội bộ của GEPA được tắt để ID integer của train
+`batch_r1.json`, `batch_r2.json`, ... và workspace riêng theo batch. CoverUp sinh cả batch
+trong một process; sau đó pipeline dùng `trace.saved_test` để chạy pytest/coverage chỉ trên
+test file của từng `source_file + qualname`, nên GEPA vẫn nhận đúng score và feedback theo
+symbol. Cache per-example nội bộ của GEPA được tắt để ID integer của train
 không thể va chạm với validation; cache artifact phía adapter vẫn được giữ nguyên.
 
-Evaluation isolation, generated workspace layout và deterministic Python hash ordering hiện dùng cache schema 10. Artifact từ schema cũ không được tái sử
+Batch generation, per-target test-file scoring và deterministic Python hash ordering hiện dùng cache schema 13. Artifact từ schema cũ không được tái sử
 dụng; với benchmark quyết định vẫn nên chọn một `--artifacts-dir` mới.
 
 Sau khi compile xong, pipeline lưu:

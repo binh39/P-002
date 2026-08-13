@@ -5,9 +5,12 @@ import os
 import shlex
 import subprocess
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from .subprocesses import run_streamed
 
 # pytest.ExitCode.NO_TESTS_COLLECTED.  Keep this local instead of importing
 # pytest in the production coverage wrapper.
@@ -86,21 +89,41 @@ def run_coverage(
     *, project_root: Path, package_dir: Path, tests_dir: Path, output: Path,
     pytest_args: str = "", repeat_tests: int = 0,
     env: dict[str, str] | None = None,
+    test_paths: Sequence[Path] | None = None,
+    pytest_basetemp: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
+    """Run coverage for a whole suite or an isolated subset of pytest paths."""
     output.parent.mkdir(parents=True, exist_ok=True)
     run_env = os.environ.copy()
     run_env.update(env or {})
     run_env["COVERAGE_FILE"] = str(output.with_suffix(".data").resolve())
+    # Concurrent target scorers may execute the same generated module. Avoid
+    # cross-process races and leftover artifacts in a shared __pycache__.
+    run_env["PYTHONDONTWRITEBYTECODE"] = "1"
+    selected_tests = (
+        [str(path.resolve()) for path in test_paths]
+        if test_paths is not None
+        else [str(tests_dir.resolve())]
+    )
+    if not selected_tests:
+        raise ValueError("test_paths must contain at least one path when provided")
+    resolved_basetemp = None
+    if pytest_basetemp is not None:
+        resolved_basetemp = pytest_basetemp.resolve()
+        resolved_basetemp.parent.mkdir(parents=True, exist_ok=True)
     run_cmd = [
         sys.executable, "-m", "coverage", "run", "--branch",
-        f"--source={package_dir.resolve()}", "-m", "pytest", str(tests_dir.resolve()),
-        "--disable-warnings", "-q",
+        f"--source={package_dir.resolve()}", "-m", "pytest", *selected_tests,
+        "--disable-warnings", "-q", "-p", "no:cacheprovider",
+        *(
+            ("--basetemp", str(resolved_basetemp))
+            if resolved_basetemp is not None else ()
+        ),
         *(("--count", str(repeat_tests)) if repeat_tests else ()),
         *shlex.split(pytest_args, posix=os.name != "nt"),
     ]
-    completed = subprocess.run(
-        run_cmd, cwd=project_root, env=run_env, text=True,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+    completed = run_streamed(
+        run_cmd, cwd=project_root, env=run_env, label="coverage pytest", echo=False,
     )
     # coverage.py writes usable execution data when pytest finishes with test
     # failures (exit 1), as well as when it passes or collects no tests.  Export
@@ -111,10 +134,9 @@ def run_coverage(
         return completed
     # Compact JSON (no --pretty-print): the report is only used to score the
     # batch and is deleted afterwards, so pretty-printing just wastes disk.
-    report = subprocess.run(
+    report = run_streamed(
         [sys.executable, "-m", "coverage", "json", "-o", str(output.resolve())],
-        cwd=project_root, env=run_env, text=True,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+        cwd=project_root, env=run_env, label="coverage json", echo=False,
     )
     if report.returncode:
         return report

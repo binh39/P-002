@@ -3,7 +3,10 @@ import { z } from "zod";
 const envSchema = z
   .object({
     VITE_AUTH_MODE: z.enum(["demo", "firebase"]).default("demo"),
-    VITE_DATA_MODE: z.enum(["demo", "connected"]).default("demo"),
+    VITE_DATA_MODE: z.preprocess(
+      (value) => (value === "api" ? "connected" : value),
+      z.enum(["demo", "connected"]).default("demo"),
+    ),
     VITE_API_BASE_URL: z.string().min(1).default("/api/v1"),
     VITE_FIREBASE_API_KEY: z.string().optional(),
     VITE_FIREBASE_AUTH_DOMAIN: z.string().optional(),

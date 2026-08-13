@@ -1,6 +1,6 @@
 [
   {
-    "origin": ["https://vinaip002.web.app", "https://c3-app-002.io.vn"],
+    "origin": ["https://project-7df9f963-9fe0-4b76-b3d.web.app", "https://c3-app-002.io.vn"],
     "method": ["PUT"],
     "responseHeader": ["Content-Type"],
     "maxAgeSeconds": 3600

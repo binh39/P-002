@@ -83,6 +83,38 @@ export interface OptimizationRun {
   finishedAt: string | null;
 }
 
+export interface EvolutionIteration {
+  iteration: number;
+  strategy: string;
+  parentProgram: string | null;
+  parentValidationScore: number | null;
+  component: string | null;
+  proposedPrompt: string | null;
+  parentMinibatchSum: number | null;
+  candidateMinibatchSum: number | null;
+  decision: string;
+  fullValidation: boolean;
+  bestStatement: number | null;
+  bestBranch: number | null;
+  bestScore: number | null;
+  paretoChanged: boolean;
+}
+
+export interface EvolutionMetricPoint {
+  iteration: number;
+  statement: number | null;
+  branch: number | null;
+  score: number | null;
+}
+
+export interface OptimizationEvolution {
+  available: boolean;
+  source: string;
+  message: string;
+  iterations: EvolutionIteration[];
+  metrics: EvolutionMetricPoint[];
+}
+
 export interface ComparisonMetrics {
   score: number | null;
   statementCoverage: number | null;

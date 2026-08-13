@@ -22,7 +22,7 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
 2. `seed_candidate` phải đúng bằng baseline đầu vào. Baseline luôn nằm trong search space và là phương án fallback.
 3. Feedback theo example phải là score riêng của symbol đó. Không trả cùng một aggregate score cho mọi example. Trung bình các score theo symbol phải khớp final micro-average coverage.
 4. Reflection record phải có target path/symbol, source context được đánh số dòng, lỗi/coverage feedback và score của từng replicate. Nếu thiếu target context, proposer gần như chỉ đoán mò.
-5. Mỗi proposal chỉ nên thay đổi một component. Không cho prompt phình vô hạn hoặc hard-code tên file, symbol hay số dòng từ tập train.
+5. Mỗi proposal có thể thay đổi `initial`, `error`, hoặc cả hai khi reflection chọn `all`; `all` luôn là lựa chọn hợp lệ dù direct failure evidence chỉ có ở một stage. Update `all` phải hợp lệ nguyên tử cho cả hai component. Không cho prompt phình vô hạn hoặc hard-code tên file, symbol hay số dòng từ tập train.
 6. Giữ chính xác các placeholder bắt buộc:
    - `initial`: `{filename}`, `{coverage_targets}`, `{source_excerpt}`
    - `error`: `{error}`
@@ -31,7 +31,7 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
    Nếu GEPA chọn lại đúng baseline (bundle digest không đổi), bỏ toàn bộ final split evaluation vì không có proposal mới để so sánh; report phải ghi rõ evaluation đã được skip.
 9. `--baseline-tests-dir` chỉ là historical reference bổ sung, không được dùng làm promotion gate thay cho paired baseline/proposal.
 10. Kết quả CoverUp không hợp lệ hoặc thiếu coverage phải nhận 0 covered units nhưng vẫn giữ denominator tham chiếu của baseline, tránh việc lỗi lại làm score tăng giả.
-11. Cache evaluation phải tách theo prompt digest, evaluation digest, split và replicate. Mỗi target phải chạy trong workspace riêng và được chọn bằng `source_file + qualname`; không dùng cache per-example integer-ID của GEPA chung cho train/validation. Evaluation digest phải phản ánh model/config, target identity và source hash. Khi nghi ngờ benchmark cũ, dùng artifacts directory mới.
+11. Cache evaluation phải tách theo prompt digest, evaluation digest, split và replicate. Mỗi target sinh test trong workspace tạm cô lập và chạy trọn vòng đời bằng bounded worker pool; chỉ các test được trace bằng `source_file + qualname` mới được gom vào một workspace lưu bền chung của candidate rồi chấm riêng với coverage data, pytest basetemp và cache cô lập. Workspace tạm phải được xóa sau khi gom. Không dùng cache per-example integer-ID của GEPA chung cho train/validation. Evaluation digest phải phản ánh model/config, target identity và source hash. Khi nghi ngờ benchmark cũ, dùng artifacts directory mới.
 12. Generation của CoverUp giữ temperature mặc định 0 để ổn định; reflection model có thể dùng temperature 0.7 để tăng độ đa dạng proposal.
 13. Provider có thể trả `finish_reason=stop` với `content=null`. CoverUp phải retry/bỏ riêng segment, tuyệt đối không để một response rỗng làm crash toàn batch.
 14. Exit code của tiến trình sinh test không được tự động xóa score của các test đã pass coverage.py. Coverage pass là nguồn xác nhận validity; lưu exit code riêng để chẩn đoán.
@@ -46,7 +46,7 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
   failure output as GEPA feedback. Collection/internal/usage errors remain
   unmeasurable and invalid.
 - A baseline with zero covered units may enter GEPA as long as every target has valid non-zero statement denominators. Candidate failures are then scored as zero against those fixed reference units.
-- Evaluation cache schema `10` invalidates older caches that discarded zero-test denominators, omitted structured traces, shared coverage across targets, stored generated workspaces outside the artifacts tree, or ran CoverUp and coverage with different randomized hash ordering.
+- Evaluation cache schema `14` invalidates older caches that discarded zero-test denominators, omitted structured traces, scored a target with another target's tests, stored generated workspaces outside the artifacts tree, ran CoverUp and coverage with different randomized hash ordering, or used the slower project-wide CoverUp process and redundant final-suite coverage pass.
 - When reporting repeated evaluation failures, skip wrapper lines such as `Replicate 0:` and show the first substantive feedback line.
 
 ## Cấu hình khuyến nghị
@@ -56,14 +56,14 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
 - `--evaluation-replicates 2`: giảm nhiễu do LLM generation khi đánh giá candidate quan trọng.
 - `--max-concurrency 10`: trần mặc định cho CoverUp; hạ xuống nếu gặp HTTP 429 hoặc giới hạn quota.
 - Budget: `light=120`, `medium=300`, `heavy=600` metric calls.
-- Search dùng Pareto selection, hybrid frontier, round-robin trên `initial`/`error`, reflection minibatch 8, merge candidates và evaluation cache.
+- Search dùng Pareto selection, hybrid frontier, reflection minibatch 8, merge candidates và evaluation cache. Khi có failure, selector chuyển cả `initial` và `error`; reflection LM chọn `initial`, `error`, hoặc `all` và trả replacement bằng một native `update_prompt_component` tool call. Reflection tái dựng đầy đủ `failing test -> error -> repaired test -> outcome` và không đưa baseline test vào từng record.
 
 ## Lệnh kiểm tra bắt buộc sau khi sửa
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests -q
 .\.venv\Scripts\ruff.exe check src\optimization tests\test_coverage_optimization.py
-python -m py_compile src\coverup\coverup.py src\optimization\gepa.py src\optimization\metrics.py src\optimization\cli.py src\optimization\runner.py src\optimization\prompts.py
+python -m py_compile src\coverup\coverup.py src\optimization\gepa.py src\optimization\metrics.py src\optimization\cli.py src\optimization\runner.py src\optimization\prompts.py src\optimization\subprocesses.py
 git diff --check
 ```
 

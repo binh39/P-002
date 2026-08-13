@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 
 import { useAuth } from "@/auth/AuthProvider";
+import { currentNavigationId, pathByNavigationId } from "@/app/navigation";
 import Sidebar, { type NavigationId } from "@/components/Sidebar";
 import TopNav from "@/components/TopNav";
 
@@ -40,6 +41,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
+      <div className="ambient-orb ambient-orb-one" aria-hidden="true" />
+      <div className="ambient-orb ambient-orb-two" aria-hidden="true" />
       {sidebarOpen && (
         <button
           className="mobile-backdrop"
@@ -56,8 +62,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       />
       <div className="app-main">
         <TopNav onMenu={() => setSidebarOpen(true)} />
-        <main className="main-scroll" id="main-content">
-          {children}
+        <main className="main-scroll" id="main-content" key={location}>
+          <div className="page-stage">{children}</div>
+          <AppFooter />
         </main>
       </div>
     </div>

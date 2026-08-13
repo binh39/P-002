@@ -79,7 +79,7 @@ Environment
                 | GEPA search                             |
                 | seed candidate = baseline               |
                 | Pareto + hybrid frontier                |
-                | round-robin: initial <-> error           |
+                | causal selector: initial or error       |
                 | reflection minibatch <= 8 examples      |
                 | merge enabled                           |
                 +-------------------+---------------------+
@@ -151,14 +151,10 @@ validation.
 
 ### 4.3 Batch cache cua adapter
 
-Mac du GEPA co the chi hoi score cua mot minibatch, adapter luon xac dinh
-`full_targets` cua split va cache ca split cho candidate do:
+Adapter danh gia dung target trong batch GEPA yeu cau va cache chinh batch do:
 
 ```text
 GEPA asks for [A, B] from train
-            |
-            v
-adapter resolves full train = [A, B, C, ... Y]
             |
             v
 cache key =
@@ -172,7 +168,7 @@ cache key =
 Neu cache da co:
 
 ```text
-load full-split batch.json
+load exact-batch batch.json
        |
        +--> return only score A and B to GEPA
 ```
@@ -180,84 +176,89 @@ load full-split batch.json
 Neu cache chua co:
 
 ```text
-evaluate every target in the split once
+evaluate only unique targets [A, B]
        |
-       +--> write full-split batch.json
+       +--> write exact-batch batch.json
        |
        +--> return only score A and B to GEPA
 ```
 
-Vi vay, lan metric dau tien cua mot `candidate + split + replicate` co chi phi vat ly
-bang toan bo split. Cac lan GEPA hoi example khac cua cung khoa chi doc cache.
+Baseline preflight van chay toan bo train/validation de co dinh denominator. Candidate
+trong reflection chi ton chi phi cua minibatch duoc yeu cau. Candidate thang cuoc moi
+duoc danh gia lai tren full train khi tao coverage report.
 
-### 4.4 Cach full-split batch duoc chay vat ly
+### 4.4 Cach mot batch duoc chay vat ly
 
-“Batch ca split” khong co nghia la nhieu symbol dung chung mot test workspace. Adapter
-tach no thanh mot run cho moi target:
-
-```text
-full split targets = [A, B, C, D]
-                  |
-                  v
-       ThreadPoolExecutor(max_workers)
-          |        |        |        |
-          v        v        v        v
-       run[A]   run[B]   run[C]   run[D]
-          |        |        |        |
-          v        v        v        v
-       tests_A  tests_B  tests_C  tests_D
-          |        |        |        |
-          v        v        v        v
-       pytest+A pytest+B pytest+C pytest+D
-          |        |        |        |
-          +--------+--------+--------+
-                           |
-                           v
-                  full-split batch.json
-```
-
-Moi `run[X]` goi `runner.evaluate_batch([X], ...)`, tuc danh sach target cua runner
-co dung mot phan tu. Ten ham con chu `batch` de ho tro API tong quat, nhung GEPA adapter
-hien tai co lap no theo target.
-
-Neu co `rate_limit`, `max_workers` bi ep ve 1 vi rate limiter cua CoverUp la
-process-local. Neu khong co rate limit:
+Moi target trong batch dung mot CoverUp process va mot workspace tam rieng. Mot bounded
+thread pool chay song song tron vong doi target voi so worker
+`min(targets trong batch, max_concurrency)`. CoverUp con dung `--max-concurrency 1` de
+khong nhan binh phuong so process/API request. Sau generation, chi cac file co
+trace `saved_test` dung `source_file + qualname` duoc copy vao mot generated-tests
+workspace luu ben chung cua candidate; workspace tam duoc xoa ngay. Luot coverage
+whole-suite cuoi cua CoverUp duoc bo qua vi runner se cham target ngay sau do:
 
 ```text
-max_workers = min(max_concurrency, number_of_targets)
+batch targets [A, B, C, D]
+            |
+            v
+bounded target lifecycle pool
+   | CoverUp(A) in temp-A -> trace(A) -> copy test_A.py
+   | CoverUp(B) in temp-B -> trace(B) -> copy test_B.py
+   | CoverUp(C) in temp-C -> trace(C) -> copy test_C.py
+   | CoverUp(D) in temp-D -> trace(D) -> copy test_D.py
+            |
+            v
+one persistent candidate workspace
+            |
+            +==> pytest test_A.py -> coverage/feedback A
+            +==> pytest test_B.py -> coverage/feedback B
+            +==> pytest test_C.py -> coverage/feedback C
+            +==> pytest test_D.py -> coverage/feedback D
+            |
+            v
+exact-batch batch.json
 ```
+
+Neu mot target khong luu duoc test, runner dung mot collector file rong de lay denominator
+zero-coverage. Neu test cua mot target fail, chi target do nhan score 0; cac target khac
+van giu score va feedback doc lap. Moi target worker co `COVERAGE_FILE`, pytest
+`--basetemp` rieng, tat cache provider va khong ghi bytecode, nen khong tranh chap file.
+Neu co `rate_limit`, runner dung mot worker vi limiter cua CoverUp la process-local;
+neu khong, generation va local coverage deu tan dung pool chung cua Cloud Run task.
 
 ### 4.5 Ket luan ngan gon
 
 ```text
 Logical API seen by GEPA : per requested batch of examples
-Adapter cache unit       : full split per candidate/replicate
-Physical CoverUp unit    : one target/example per process and workspace
+Adapter cache unit       : exact requested batch per candidate/replicate
+Physical CoverUp unit    : one temporary process/workspace per target
+Persistent artifact unit: one consolidated workspace per candidate/split
+Coverage unit            : traced test file(s) of one target
 Score returned to GEPA   : one weighted score per requested example
 ```
 
 ## 5. Mot target duoc cham nhu the nao?
 
 ```text
-SymbolTarget
+Minibatch [SymbolTarget A, SymbolTarget B, ...]
     |
     v
-Create isolated workspace
-<artifacts>/generated_tests/<split>/<candidate-target-id>/
+Create one persistent candidate workspace
+<artifacts>/generated_tests/<split>/<candidate-batch-id>/
     |
     v
-Write run inputs
-    +-- prompt.json
-    +-- target_spec.json: source_file + exact qualname
-    |
-    v
-Run CoverUp subprocess
+Run bounded target workers; each creates a temporary workspace
     +-- initial prompt
     +-- error prompt when generated test fails
-    +-- append attempt_trace.jsonl
+    +-- exact target_spec: source_file + qualname
+    +-- append target-specific attempt_trace.jsonl
     |
     v
-Run coverage.py on only that generated workspace
+Copy traced test to the persistent workspace and rewrite trace.saved_test
+    +-- delete temporary workspace
+    |
+    v
+Run coverage.py on only the mapped test file(s) of one target
     |
     +-- invalid pytest/collection --> score 0
     |
@@ -307,7 +308,7 @@ branch_gain
 ## 7. Vong reflection va sinh candidate
 
 ```text
-Select component by round-robin
+Select component from causal failure evidence
           |
           v
 Evaluate selected train examples with capture_traces=true
@@ -316,20 +317,21 @@ Evaluate selected train examples with capture_traces=true
 Keep weak trajectories (raw score < 1 when available)
           |
           v
-Filter evidence by actual trace.component
+Reconstruct labelled execution episodes
           |
-          +-- optimizing initial
-          |      only attempts that used initial
-          |
-          +-- optimizing error
-          |      only attempts that used error
+          +-- initial generated test
+          +-- execution error
+          +-- each repaired test and its outcome
           |
           v
 Compact evidence
-    +-- source context <= 8,000 chars
-    +-- feedback <= 4,000 chars
-    +-- last 2 matching attempts
-    +-- generated test / traceback / remaining coverage
+    +-- source context <= 12,000 chars
+    +-- feedback <= 6,000 chars
+    +-- every ordered attempt grouped by replicate
+    +-- failing test / repair / traceback / remaining coverage
+          |
+          v
+Run structured JSON diagnosis for the selected component
           |
           v
 OPTIMIZE_MODEL proposes one complete revised template
@@ -358,7 +360,7 @@ Cau hinh hien tai:
 seed_candidate              = exact baseline bundle
 candidate_selection_strategy = pareto
 frontier_type               = hybrid
-module_selector             = round_robin(initial, error only)
+module_selector             = causal(initial or exercised error)
 reflection_minibatch_size   = min(8, number_of_train_targets)
 use_merge                   = true
 max_merge_invocations       = 5
@@ -373,7 +375,7 @@ trung nhau. Cache artifact cua adapter moi la nguon cache chinh xac, vi khoa cua
 prompt, split, target set, source hash, config va replicate.
 
 `max_metric_calls` la budget logic cua GEPA. No khong bang truc tiep so subprocess
-CoverUp, vi mot metric request co the gay full-split cache miss hoac chi doc lai cache.
+CoverUp, vi mot metric request co the gay exact-batch cache miss hoac chi doc lai cache.
 
 ## 9. Final decision va nhanh skip moi
 
@@ -428,11 +430,11 @@ da chon dung baseline, nghia la khong co prompt moi can so sanh.
 |                   +-- baseline_batch.json
 |
 +-- generated_tests/
-|   +-- train/<candidate-target-id>/
-|   +-- validation/<candidate-target-id>/
-|   +-- test/<candidate-target-id>/
+|   +-- train/<candidate-batch-id>/
+|   +-- validation/<candidate-batch-id>/
+|   +-- test/<candidate-batch-id>/
 |
-+-- runs/<candidate-target-id>/<split>/<run-id>/
++-- runs/<candidate-batch-id>/<split>/<run-id>/
 |   +-- prompt.json
 |   +-- target_spec.json
 |   +-- coverup.log
@@ -479,5 +481,5 @@ Promotion                : false
 ```
 
 Day la artifact cu voi dataset 25/20/20. Run moi se dung dataset 50/30/30,
-reflection minibatch 8, chi round-robin `initial/error`, va neu `best_index=0` thi dung
+reflection minibatch 8, causal selection `initial/error`, va neu `best_index=0` thi dung
 ngay sau GEPA search ma khong tao run test.
