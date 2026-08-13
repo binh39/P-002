@@ -22,6 +22,8 @@ from src.optimization.coveragepy import (
     symbol_coverage,
 )
 from src.optimization.gepa import (
+    STRATEGY_PLAYBOOK_BEGIN,
+    STRATEGY_PLAYBOOK_END,
     BestParetoCandidateSelector,
     CausalReflectionComponentSelector,
     CoverUpPromptAdapter,
@@ -49,12 +51,38 @@ from src.optimization.runner import (
 from src.optimization.subprocesses import run_streamed
 
 
-def tool_call_response(component, replacements, *, diagnosis="root cause", evidence=None):
+def tool_call_response(
+    component,
+    replacements,
+    *,
+    diagnosis="root cause",
+    evidence=None,
+    playbooks=None,
+    strategy_delta=None,
+):
+    default_playbook = {
+        "observations": ["Branch failures expose missing precondition analysis."],
+        "decision_steps": [
+            "Identify the uncovered behavior and its preconditions.",
+            "Construct a deterministic test and assert observable behavior.",
+        ],
+        "failure_modes": ["Do not produce tests without meaningful assertions."],
+        "regression_guards": ["Preserve already-correct tests and required output format."],
+    }
     arguments = {
         "component": component,
         "replacements": replacements,
         "diagnosis": diagnosis,
         "evidence": evidence or ["observed failure"],
+        "playbooks": playbooks or {
+            name: dict(default_playbook) for name in replacements
+        },
+        "strategy_delta": strategy_delta or {
+            "added": ["Analyze branch preconditions before generating tests."],
+            "refined": [],
+            "preserved": ["Keep deterministic tests and meaningful assertions."],
+            "pruned": [],
+        },
     }
     return [{
         "text": None,
@@ -1758,12 +1786,13 @@ def test_llm_component_selector_always_exposes_both_after_any_failure():
 
 
 def test_component_update_parser_accepts_native_tool_call_objects_only():
-    arguments = {
-        "component": "initial",
-        "replacements": {"initial": baseline_bundle().initial},
-        "diagnosis": "preserve reachability constraints",
-        "evidence": ["the initial attempt missed a branch"],
-    }
+    response = tool_call_response(
+        "initial",
+        {"initial": baseline_bundle().initial},
+        diagnosis="preserve reachability constraints",
+        evidence=["the initial attempt missed a branch"],
+    )
+    arguments = json.loads(response[0]["tool_calls"][0]["function"]["arguments"])
     native_response = [{
         "text": None,
         "tool_calls": [SimpleNamespace(function=SimpleNamespace(
@@ -1778,6 +1807,26 @@ def test_component_update_parser_accepts_native_tool_call_objects_only():
     assert CoverUpPromptAdapter._extract_component_update(
         [json.dumps(arguments)]
     ) is None
+
+
+def test_component_update_parser_rejects_missing_strategy_contract():
+    incomplete = {
+        "component": "initial",
+        "replacements": {"initial": baseline_bundle().initial},
+        "diagnosis": "a narrow patch without a reusable strategy",
+        "evidence": ["one branch was missed"],
+    }
+    response = [{
+        "text": None,
+        "tool_calls": [{
+            "function": {
+                "name": "update_prompt_component",
+                "arguments": json.dumps(incomplete),
+            },
+        }],
+    }]
+
+    assert CoverUpPromptAdapter._extract_component_update(response) is None
 
 
 def test_prompt_mutation_can_update_all_components_in_one_call(tmp_path):
@@ -1814,7 +1863,10 @@ def test_prompt_mutation_can_update_all_components_in_one_call(tmp_path):
         ["initial", "error"],
     )
 
-    assert proposals == {"initial": improved_initial, "error": improved_error}
+    assert proposals["initial"].startswith(improved_initial)
+    assert proposals["error"].startswith(improved_error)
+    assert STRATEGY_PLAYBOOK_BEGIN in proposals["initial"]
+    assert STRATEGY_PLAYBOOK_END in proposals["error"]
     assert len(calls) == 1
     decision = json.loads(
         (tmp_path / "reflection_decisions.jsonl").read_text(encoding="utf-8")
@@ -1823,6 +1875,11 @@ def test_prompt_mutation_can_update_all_components_in_one_call(tmp_path):
     assert decision["selection"] == "all"
     assert decision["changed_components"] == ["initial", "error"]
     assert decision["status"] == "accepted"
+    assert decision["strategy_delta"]["added"]
+    strategy_record = json.loads(
+        (tmp_path / "strategy_playbooks.jsonl").read_text(encoding="utf-8")
+    )
+    assert set(strategy_record["playbooks"]) == {"initial", "error"}
     assert calls[0]["tools"][0]["function"]["name"] == "update_prompt_component"
     assert calls[0]["tool_choice"]["function"]["name"] == "update_prompt_component"
 
@@ -1893,10 +1950,82 @@ def test_prompt_mutation_selects_and_updates_component_in_one_call(tmp_path):
         ["initial"],
     )
 
-    assert proposals["initial"] == improved
+    assert proposals["initial"].startswith(improved)
+    assert proposals["initial"].count(STRATEGY_PLAYBOOK_BEGIN) == 1
     assert len(calls) == 1
     assert "`all` is always allowed" in calls[0]["messages"][-1]["content"]
     assert calls[0]["tools"][0]["type"] == "function"
+
+
+def test_prompt_mutation_consolidates_inherited_strategy_without_duplicate_blocks(
+    tmp_path,
+):
+    baseline = baseline_bundle()
+    calls = []
+    first_playbook = {
+        "initial": {
+            "observations": ["- First learned observation."],
+            "decision_steps": ["1. First step.", "2) Second step."],
+            "failure_modes": ["First failure mode."],
+            "regression_guards": ["First regression guard."],
+        },
+    }
+    second_playbook = {
+        "initial": {
+            "observations": [
+                "First learned observation.",
+                "Second contrastive observation.",
+            ],
+            "decision_steps": [
+                "First refined step.",
+                "Second refined step.",
+                "Verify the observable branch effect.",
+            ],
+            "failure_modes": ["Second failure mode."],
+            "regression_guards": ["Second regression guard."],
+        },
+    }
+
+    def reflection_lm(**kwargs):
+        calls.append(kwargs)
+        playbooks = first_playbook if len(calls) == 1 else second_playbook
+        return tool_call_response(
+            "initial",
+            {"initial": baseline.initial},
+            playbooks=playbooks,
+            strategy_delta={
+                "added": ["Add contrastive reasoning."],
+                "refined": [],
+                "preserved": ["Preserve supported strategy."],
+                "pruned": [],
+            },
+        )
+
+    adapter = CoverUpPromptAdapter(
+        runner=SimpleNamespace(),
+        candidate_dir=tmp_path,
+        targets_by_split={},
+        baseline=baseline,
+        reflection_lm=reflection_lm,
+    )
+    first = adapter.propose_new_texts(
+        baseline.as_candidate(), {"initial": [{"Feedback": "first"}]}, ["initial"]
+    )
+    second = adapter.propose_new_texts(
+        first, {"initial": [{"Feedback": "second"}]}, ["initial"]
+    )
+
+    assert second["initial"].count(STRATEGY_PLAYBOOK_BEGIN) == 1
+    assert "1. 1." not in first["initial"]
+    assert "- - First" not in first["initial"]
+    assert "First learned observation." in second["initial"]
+    assert "Second contrastive observation." in second["initial"]
+    assert "First failure mode." not in second["initial"]
+    assert STRATEGY_PLAYBOOK_BEGIN in calls[1]["messages"][-1]["content"]
+    records = (tmp_path / "strategy_playbooks.jsonl").read_text(
+        encoding="utf-8"
+    ).splitlines()
+    assert len(records) == 2
 
 
 def test_local_smoke_real_gepa_uses_one_call_all_flow(tmp_path):
@@ -1993,8 +2122,10 @@ def test_local_smoke_real_gepa_uses_one_call_all_flow(tmp_path):
     )
 
     assert len(lm_calls) == 1
-    assert result.best_bundle.initial == improved_initial
-    assert result.best_bundle.error == improved_error
+    assert result.best_bundle.initial.startswith(improved_initial)
+    assert result.best_bundle.error.startswith(improved_error)
+    assert STRATEGY_PLAYBOOK_BEGIN in result.best_bundle.initial
+    assert STRATEGY_PLAYBOOK_BEGIN in result.best_bundle.error
     decisions = (tmp_path / "artifacts" / "candidates" /
                  "reflection_decisions.jsonl").read_text(encoding="utf-8")
     decision = json.loads(decisions.splitlines()[-1])

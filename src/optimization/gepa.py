@@ -66,8 +66,71 @@ UPDATE_PROMPT_COMPONENT_TOOL = {
                     "items": {"type": "string"},
                     "minItems": 1,
                 },
+                "playbooks": {
+                    "type": "object",
+                    "properties": {
+                        component: {
+                            "type": "object",
+                            "properties": {
+                                "observations": {
+                                    "type": "array",
+                                    "items": {"type": "string", "maxLength": 320},
+                                    "minItems": 1,
+                                    "maxItems": 6,
+                                },
+                                "decision_steps": {
+                                    "type": "array",
+                                    "items": {"type": "string", "maxLength": 320},
+                                    "minItems": 2,
+                                    "maxItems": 10,
+                                },
+                                "failure_modes": {
+                                    "type": "array",
+                                    "items": {"type": "string", "maxLength": 320},
+                                    "minItems": 1,
+                                    "maxItems": 6,
+                                },
+                                "regression_guards": {
+                                    "type": "array",
+                                    "items": {"type": "string", "maxLength": 320},
+                                    "minItems": 1,
+                                    "maxItems": 6,
+                                },
+                            },
+                            "required": [
+                                "observations",
+                                "decision_steps",
+                                "failure_modes",
+                                "regression_guards",
+                            ],
+                            "additionalProperties": False,
+                        }
+                        for component in COMPONENT_PLACEHOLDERS
+                    },
+                    "additionalProperties": False,
+                },
+                "strategy_delta": {
+                    "type": "object",
+                    "properties": {
+                        action: {
+                            "type": "array",
+                            "items": {"type": "string", "maxLength": 320},
+                            "maxItems": 8,
+                        }
+                        for action in ("added", "refined", "preserved", "pruned")
+                    },
+                    "required": ["added", "refined", "preserved", "pruned"],
+                    "additionalProperties": False,
+                },
             },
-            "required": ["component", "replacements", "diagnosis", "evidence"],
+            "required": [
+                "component",
+                "replacements",
+                "diagnosis",
+                "evidence",
+                "playbooks",
+                "strategy_delta",
+            ],
             "additionalProperties": False,
         },
     },
@@ -75,6 +138,20 @@ UPDATE_PROMPT_COMPONENT_TOOL = {
 AUTO_METRIC_BUDGETS = {"light": 120, "medium": 300, "heavy": 600}
 REFLECTION_REQUEST_BEGIN = "PROMPTOPT_REFLECTION_REQUEST_BEGIN"
 REFLECTION_REQUEST_END = "PROMPTOPT_REFLECTION_REQUEST_END"
+STRATEGY_PLAYBOOK_BEGIN = "[GEPA STRATEGY PLAYBOOK]"
+STRATEGY_PLAYBOOK_END = "[END GEPA STRATEGY PLAYBOOK]"
+STRATEGY_SECTIONS = (
+    ("observations", "Key observations and learned lessons"),
+    ("decision_steps", "Decision procedure"),
+    ("failure_modes", "Failure modes to avoid"),
+    ("regression_guards", "Regression guards"),
+)
+STRATEGY_DELTA_ACTIONS = ("added", "refined", "preserved", "pruned")
+_STRATEGY_PLAYBOOK = re.compile(
+    rf"\n*{re.escape(STRATEGY_PLAYBOOK_BEGIN)}.*?"
+    rf"{re.escape(STRATEGY_PLAYBOOK_END)}\n*",
+    re.DOTALL,
+)
 
 _DIGEST_LOCKS: dict[str, threading.Lock] = {}
 _DIGEST_LOCKS_GUARD = threading.Lock()
@@ -110,6 +187,56 @@ def log_reflection_request(request: Mapping[str, Any]) -> None:
     print(REFLECTION_REQUEST_BEGIN, flush=True)
     print(json.dumps(request, indent=2, ensure_ascii=False), flush=True)
     print(REFLECTION_REQUEST_END, flush=True)
+
+
+def _strategy_playbook_from_prompt(prompt: str) -> str | None:
+    match = _STRATEGY_PLAYBOOK.search(prompt)
+    return match.group(0).strip() if match else None
+
+
+def _valid_string_list(
+    value: Any,
+    *,
+    minimum: int,
+    maximum: int,
+) -> bool:
+    return (
+        isinstance(value, list)
+        and minimum <= len(value) <= maximum
+        and all(
+            isinstance(item, str) and item.strip() and len(item) <= 320
+            for item in value
+        )
+    )
+
+
+def _valid_strategy_playbook(value: Any) -> bool:
+    if not isinstance(value, dict) or set(value) != {
+        name for name, _ in STRATEGY_SECTIONS
+    }:
+        return False
+    return (
+        _valid_string_list(value["observations"], minimum=1, maximum=6)
+        and _valid_string_list(value["decision_steps"], minimum=2, maximum=10)
+        and _valid_string_list(value["failure_modes"], minimum=1, maximum=6)
+        and _valid_string_list(value["regression_guards"], minimum=1, maximum=6)
+    )
+
+
+def _compile_strategy_playbook(template: str, playbook: Mapping[str, list[str]]) -> str:
+    """Replace the managed playbook so strategies accumulate without duplicate blocks."""
+    base = _STRATEGY_PLAYBOOK.sub("\n", template).rstrip()
+    sections = [STRATEGY_PLAYBOOK_BEGIN]
+    for key, title in STRATEGY_SECTIONS:
+        sections.append(f"\n{title}:")
+        for index, item in enumerate(playbook[key], start=1):
+            prefix = f"{index}." if key == "decision_steps" else "-"
+            normalized = re.sub(
+                r"^\s*(?:(?:[-*•])|(?:\d+[.)]))\s+", "", item
+            ).strip()
+            sections.append(f"{prefix} {normalized}")
+    sections.append(f"\n{STRATEGY_PLAYBOOK_END}")
+    return f"{base}\n\n" + "\n".join(sections)
 
 
 def _digest_lock(key: str) -> threading.Lock:
@@ -957,7 +1084,7 @@ class CoverUpPromptAdapter:
         self.evaluation_replicates = evaluation_replicates
         self.reference_units: dict[tuple[str, str, str, str], tuple[int, int]] = {}
         self.max_component_chars = {
-            name: max(600, len(text) * 3)
+            name: max(4_000, len(text) * 6)
             for name, text in baseline.as_candidate().items()
         }
         self.candidate_lineage: dict[str, dict[str, Any]] = {}
@@ -1382,7 +1509,14 @@ class CoverUpPromptAdapter:
                 return None
         if not isinstance(arguments, dict):
             return None
-        required = {"component", "replacements", "diagnosis", "evidence"}
+        required = {
+            "component",
+            "replacements",
+            "diagnosis",
+            "evidence",
+            "playbooks",
+            "strategy_delta",
+        }
         if not required.issubset(arguments):
             return None
         if not isinstance(arguments["replacements"], dict):
@@ -1398,6 +1532,26 @@ class CoverUpPromptAdapter:
             )
         ):
             return None
+        if not isinstance(arguments["playbooks"], dict):
+            return None
+        if not arguments["playbooks"] or not all(
+            component in COMPONENT_PLACEHOLDERS
+            and _valid_strategy_playbook(playbook)
+            for component, playbook in arguments["playbooks"].items()
+        ):
+            return None
+        strategy_delta = arguments["strategy_delta"]
+        if (
+            not isinstance(strategy_delta, dict)
+            or set(strategy_delta) != set(STRATEGY_DELTA_ACTIONS)
+            or not all(
+                _valid_string_list(
+                    strategy_delta[action], minimum=0, maximum=8
+                )
+                for action in STRATEGY_DELTA_ACTIONS
+            )
+        ):
+            return None
         return arguments
 
     def _log_reflection_decision(
@@ -1409,6 +1563,7 @@ class CoverUpPromptAdapter:
         selection: str | None = None,
         changed_components: Sequence[str] = (),
         detail: str | None = None,
+        strategy_delta: Mapping[str, Sequence[str]] | None = None,
     ) -> None:
         payload = {
             "schema_version": 1,
@@ -1420,6 +1575,10 @@ class CoverUpPromptAdapter:
             "changed_components": list(changed_components),
             "status": status,
             "detail": detail,
+            "strategy_delta": {
+                action: list((strategy_delta or {}).get(action, []))
+                for action in STRATEGY_DELTA_ACTIONS
+            },
         }
         path = self.candidate_dir / "reflection_decisions.jsonl"
         with _digest_lock(f"reflection-decisions:{path.resolve()}"):
@@ -1459,6 +1618,10 @@ class CoverUpPromptAdapter:
             }
             for component in evidence
         }
+        existing_playbooks = {
+            component: _strategy_playbook_from_prompt(candidate[component])
+            for component in evidence
+        }
         prompt = f"""
 You are optimizing a reusable two-stage CoverUp pytest-generation system. The stages are `initial` test generation and conditional `error` repair.
 
@@ -1468,12 +1631,17 @@ Current templates:
 Eligible component contracts:
 <contracts>{json.dumps(contracts, indent=2, ensure_ascii=False)}</contracts>
 
+Existing managed strategy playbooks inherited from this candidate:
+<existing_playbooks>{json.dumps(existing_playbooks, indent=2, ensure_ascii=False)}</existing_playbooks>
+
 Labelled end-to-end execution evidence by component:
 <evidence>{json.dumps(evidence, indent=2, ensure_ascii=False)}</evidence>
 
 In one decision, choose `initial`, `error`, or `all`, then call `update_prompt_component` exactly once with every complete revised template selected. `all` is always allowed, even when direct evidence exists for only one stage. When selecting `all`, provide both `initial` and `error` replacements and change both; the update is rejected atomically otherwise. For a single component, provide only that component's replacement.
 
-Use the full initial -> failing test -> error -> repaired test -> outcome episodes for causal attribution. Make conservative operational changes. Preserve useful instructions and required literal placeholders. Do not add target-specific file names, symbols, line numbers, repository facts, or literal values. Keep every replacement within its component's maximum length. Include a concise reusable diagnosis with its regression guard and at least one evidence observation in the function arguments. Do not answer with JSON or prose outside the function call.
+Use the full initial -> failing test -> error -> repaired test -> outcome episodes for causal attribution. Induce a reusable strategy playbook rather than making a narrow textual patch. For every selected component, return a FULL consolidated playbook containing key observations, a concrete multi-step decision procedure, failure modes, and regression guards. Preserve inherited strategies supported by positive or tied evidence; refine or prune one only when contrastive evidence justifies it. Describe the changes in strategy_delta.
+
+The replacement is the complete operational template excluding the managed playbook block; the optimizer will compile the returned playbook into it. Preserve useful instructions and required literal placeholders. Do not add target-specific file names, symbols, line numbers, repository facts, or literal values. Keep every compiled replacement within its component's maximum length. Include a reusable diagnosis and at least one evidence observation. Do not answer with JSON or prose outside the function call.
 """
         messages = [
             {
@@ -1529,6 +1697,13 @@ Use the full initial -> failing test -> error -> repaired test -> outcome episod
                 selection=selection,
             )
             return proposals
+        playbooks = update["playbooks"]
+        if set(playbooks) != selected:
+            self._log_reflection_decision(
+                candidate, components_to_update, status="incomplete_playbooks",
+                selection=selection,
+            )
+            return proposals
         for component in selected:
             replacement = replacements[component]
             if not isinstance(replacement, str):
@@ -1537,6 +1712,10 @@ Use the full initial -> failing test -> error -> repaired test -> outcome episod
                     selection=selection, detail=component,
                 )
                 return proposals
+            replacement = _compile_strategy_playbook(
+                replacement, playbooks[component]
+            )
+            replacements[component] = replacement
             if error := validate_template(
                 replacement, COMPONENT_PLACEHOLDERS[component]
             ):
@@ -1572,10 +1751,37 @@ Use the full initial -> failing test -> error -> repaired test -> outcome episod
             ] = {
                 "parent_candidate": dict(candidate),
                 "changed_components": changed_components,
+                "playbooks": {
+                    component: playbooks[component]
+                    for component in changed_components
+                },
+                "strategy_delta": dict(update["strategy_delta"]),
             }
+            strategy_path = self.candidate_dir / "strategy_playbooks.jsonl"
+            strategy_payload = {
+                "schema_version": 1,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "parent_digest": bundle_digest(PromptBundle.from_candidate(candidate)),
+                "candidate_digest": bundle_digest(
+                    PromptBundle.from_candidate(proposed_candidate)
+                ),
+                "changed_components": changed_components,
+                "playbooks": {
+                    component: playbooks[component]
+                    for component in changed_components
+                },
+                "strategy_delta": update["strategy_delta"],
+            }
+            with _digest_lock(f"strategy-playbooks:{strategy_path.resolve()}"):
+                strategy_path.parent.mkdir(parents=True, exist_ok=True)
+                with strategy_path.open("a", encoding="utf-8") as output:
+                    output.write(
+                        json.dumps(strategy_payload, ensure_ascii=False) + "\n"
+                    )
         self._log_reflection_decision(
             candidate, components_to_update, status="accepted",
             selection=selection, changed_components=changed_components,
+            strategy_delta=update["strategy_delta"],
         )
         return proposals
 
@@ -1588,7 +1794,7 @@ def _optimization_run_digest(
     evaluation_replicates: int,
 ) -> str:
     payload = {
-        "optimizer_schema": 11,
+        "optimizer_schema": 13,
         "baseline": baseline.as_candidate(),
         "train": [_target_identity(target) for target in train_targets],
         "validation": [_target_identity(target) for target in validation_targets],

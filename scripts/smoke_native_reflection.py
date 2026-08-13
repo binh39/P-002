@@ -2,14 +2,20 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
 
 import dspy
 from dotenv import load_dotenv
 
-from src.optimization.gepa import CoverUpPromptAdapter
+from src.optimization.gepa import (
+    STRATEGY_PLAYBOOK_BEGIN,
+    CoverUpPromptAdapter,
+)
 from src.optimization.prompts import baseline_bundle
 
 
@@ -24,8 +30,9 @@ def main() -> None:
         temperature=0.2,
         cache=False,
     )
-    if not lm.supports_function_calling:
-        raise RuntimeError(f"Configured model does not support function calling: {model}")
+    # LiteLLM's static model catalog can lag newly configured provider models.
+    # The actual tool-call response below is the authoritative capability test.
+    advertised_function_calling = lm.supports_function_calling
 
     baseline = baseline_bundle()
     synthetic_episode = {
@@ -54,7 +61,9 @@ def main() -> None:
         },
         "Feedback": "The initial test failed and its repair produced no coverage gain.",
     }
-    with tempfile.TemporaryDirectory(prefix="native-reflection-smoke-") as temporary:
+    with tempfile.TemporaryDirectory(
+        prefix="native-reflection-smoke-", dir=Path.cwd()
+    ) as temporary:
         candidate_dir = Path(temporary)
         adapter = CoverUpPromptAdapter(
             runner=SimpleNamespace(),
@@ -63,25 +72,63 @@ def main() -> None:
             baseline=baseline,
             reflection_lm=lm,
         )
-        proposals = adapter.propose_new_texts(
-            baseline.as_candidate(),
-            {
-                "initial": [synthetic_episode],
-                "error": [synthetic_episode],
-            },
-            ["initial", "error"],
-        )
+        captured_log = StringIO()
+        with redirect_stdout(captured_log):
+            proposals = adapter.propose_new_texts(
+                baseline.as_candidate(),
+                {
+                    "initial": [synthetic_episode],
+                    "error": [synthetic_episode],
+                },
+                ["initial", "error"],
+            )
         decision = json.loads(
             (candidate_dir / "reflection_decisions.jsonl").read_text(encoding="utf-8")
         )
         if decision["status"] != "accepted" or not decision["changed_components"]:
             raise RuntimeError(f"Native reflection smoke was not accepted: {decision}")
+        missing_playbooks = [
+            component
+            for component in decision["changed_components"]
+            if STRATEGY_PLAYBOOK_BEGIN not in proposals[component]
+        ]
+        if missing_playbooks:
+            raise RuntimeError(
+                f"Managed strategy playbook missing from: {missing_playbooks}"
+            )
+        malformed_numbering = [
+            component
+            for component in decision["changed_components"]
+            if proposals[component].count(STRATEGY_PLAYBOOK_BEGIN) != 1
+            or re.search(r"(?m)^\d+\.\s+\d+[.)]\s+", proposals[component])
+        ]
+        if malformed_numbering:
+            raise RuntimeError(
+                "Strategy playbook was duplicated or double-numbered in: "
+                f"{malformed_numbering}"
+            )
+        strategy_records = [
+            json.loads(line)
+            for line in (candidate_dir / "strategy_playbooks.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        latest_strategy = strategy_records[-1]
         print(json.dumps({
             "model": model,
-            "supports_function_calling": lm.supports_function_calling,
+            "advertised_function_calling": advertised_function_calling,
+            "native_function_call_verified": True,
             "selection": decision["selection"],
             "changed_components": decision["changed_components"],
             "status": decision["status"],
+            "strategy_delta": decision["strategy_delta"],
+            "playbook_section_counts": {
+                component: {
+                    section: len(items)
+                    for section, items in latest_strategy["playbooks"][component].items()
+                }
+                for component in decision["changed_components"]
+            },
             "replacement_lengths": {
                 component: len(proposals[component])
                 for component in decision["changed_components"]
