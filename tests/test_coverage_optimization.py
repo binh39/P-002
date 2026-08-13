@@ -96,6 +96,56 @@ def tool_call_response(
     }]
 
 
+def test_coverup_runtime_hides_playbook_markers_and_does_not_expand_its_fields_twice(
+    tmp_path,
+    monkeypatch,
+):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    prompter_class = importlib.import_module(
+        "coverup.prompt.gpt_v2"
+    ).GptV2Prompter
+    prompt_path = tmp_path / "prompt.json"
+    prompt_path.write_text(
+        json.dumps({
+            "initial": (
+                "Generate tests for {filename}.\n{source_excerpt}\n"
+                f"{STRATEGY_PLAYBOOK_BEGIN}\n"
+                "Preserve {filename}, {coverage_targets}, and {source_excerpt}.\n"
+                f"{STRATEGY_PLAYBOOK_END}"
+            ),
+            "error": (
+                "Repair this failure:\n{error}\n"
+                f"{STRATEGY_PLAYBOOK_BEGIN}\n"
+                "Preserve the required {error} field.\n"
+                f"{STRATEGY_PLAYBOOK_END}"
+            ),
+        }),
+        encoding="utf-8",
+    )
+    prompter = prompter_class(SimpleNamespace(prompt_template_file=prompt_path))
+
+    initial = prompter._render(
+        "initial",
+        "",
+        filename="UNIQUE_FILE.py",
+        coverage_targets="UNIQUE_TARGETS",
+        source_excerpt="UNIQUE_SOURCE_BODY",
+    )
+    error = prompter._render("error", "", error="UNIQUE_TRACEBACK")
+
+    assert STRATEGY_PLAYBOOK_BEGIN not in initial
+    assert STRATEGY_PLAYBOOK_END not in initial
+    assert initial.count("UNIQUE_FILE.py") == 1
+    assert initial.count("UNIQUE_SOURCE_BODY") == 1
+    assert "{filename}, {coverage_targets}, and {source_excerpt}" in initial
+    assert STRATEGY_PLAYBOOK_BEGIN not in error
+    assert STRATEGY_PLAYBOOK_END not in error
+    assert error.count("UNIQUE_TRACEBACK") == 1
+    assert "{error}" in error
+
+
 def coverage(*, executed_lines=(), missing_lines=(), executed_branches=(), missing_branches=()):
     return SymbolCoverage(
         source_file="pkg/module.py",

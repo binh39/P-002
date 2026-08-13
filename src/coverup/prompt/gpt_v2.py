@@ -1,7 +1,30 @@
 import json
-import typing as T
-from .prompter import *
+import re
+from collections.abc import Callable
+
 import coverup.codeinfo as codeinfo
+
+from ..segment import CodeSegment
+from .prompter import Prompter, mk_message
+
+_STRATEGY_PLAYBOOK = re.compile(
+    r"\n*\[GEPA STRATEGY PLAYBOOK\]\s*(.*?)\s*"
+    r"\[END GEPA STRATEGY PLAYBOOK\]\n*",
+    re.DOTALL,
+)
+_RUNTIME_PLACEHOLDERS = ("filename", "coverage_targets", "source_excerpt", "error")
+
+
+def _runtime_template(template: str) -> str:
+    """Hide optimizer delimiters and prevent playbook fields from expanding twice."""
+
+    def render_playbook(match: re.Match[str]) -> str:
+        playbook = match.group(1).strip()
+        for name in _RUNTIME_PLACEHOLDERS:
+            playbook = playbook.replace(f"{{{name}}}", f"{{{{{name}}}}}")
+        return f"\n\n{playbook}\n"
+
+    return _STRATEGY_PLAYBOOK.sub(render_playbook, template)
 
 
 class GptV2Prompter(Prompter):
@@ -15,11 +38,11 @@ class GptV2Prompter(Prompter):
                 self.templates = json.load(f)
 
     def _render(self, name: str, default: str, **values) -> str:
-        template = self.templates.get(name, default)
+        template = _runtime_template(self.templates.get(name, default))
         return template.format(**values)
 
 
-    def initial_prompt(self, segment: CodeSegment) -> T.List[dict]:
+    def initial_prompt(self, segment: CodeSegment) -> list[dict]:
         filename = segment.path.relative_to(self.args.src_base_dir)
         if "initial" in self.templates:
             return [mk_message(self._render(
@@ -52,7 +75,7 @@ Respond ONLY with the Python code enclosed in backticks, without any explanation
         ]
 
 
-    def error_prompt(self, segment: CodeSegment, error: str) -> T.List[dict] | None:
+    def error_prompt(self, segment: CodeSegment, error: str) -> list[dict] | None:
         if "error" in self.templates:
             return [mk_message(self._render("error", self.templates["error"], error=error))]
         return [mk_message(f"""\
@@ -88,5 +111,5 @@ Use the get_info tool function as necessary.
         return f"Unable to obtain information on {name}."
 
 
-    def get_functions(self) -> T.List[T.Callable]:
+    def get_functions(self) -> list[Callable]:
         return [self.get_info]

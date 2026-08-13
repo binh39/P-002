@@ -326,7 +326,9 @@ def _evaluation_digest(
         # batches CoverUp generation and scores only each target's traced tests.
         # Schema 14 restores isolated per-target CoverUp processes in one bounded
         # pool, consolidates traced tests, and skips redundant final-suite coverage.
-        "cache_schema": 14,
+        # Schema 15 strips optimizer-only playbook delimiters at runtime and
+        # prevents placeholders mentioned inside the playbook from expanding.
+        "cache_schema": 15,
         "config": config_values,
         "targets": [_target_identity(target) for target in targets],
         "sources": source_hashes,
