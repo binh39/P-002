@@ -1,15 +1,7 @@
-import {
-  BarChart3,
-  Blocks,
-  FlaskConical,
-  FolderGit2,
-  LogOut,
-  MessageSquareCode,
-  Settings,
-  Sparkles,
-} from "lucide-react";
+import { LogOut, Settings } from "lucide-react";
 
 import { Brand } from "@/components/Brand";
+import { IC } from "@/components/Icons";
 
 export type NavigationId =
   | "dashboard"
@@ -69,7 +61,7 @@ export default function Sidebar({
             onClick={() => onNavigate(id)}
             aria-current={currentPage === id ? "page" : undefined}
           >
-            <Icon size={17} strokeWidth={1.8} />
+            <Icon />
             <span>{label}</span>
           </button>
         ))}

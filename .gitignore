@@ -72,3 +72,5 @@ out/
 src/sample_repo
 coverup-log
 /eval/prompt_optimization*/
+
+.claude
