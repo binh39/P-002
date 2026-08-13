@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import os
 import random
 import re
 import threading
@@ -115,6 +116,8 @@ RUN_TEST_EXPERIMENT_TOOL = {
 AUTO_METRIC_BUDGETS = {"light": 120, "medium": 300, "heavy": 600}
 REFLECTION_REQUEST_BEGIN = "PROMPTOPT_REFLECTION_REQUEST_BEGIN"
 REFLECTION_REQUEST_END = "PROMPTOPT_REFLECTION_REQUEST_END"
+FULL_LOG_BEGIN = "PROMPTOPT_DEV_FULL_LOG_BEGIN"
+FULL_LOG_END = "PROMPTOPT_DEV_FULL_LOG_END"
 MAX_OPTIMIZER_TEST_EXPERIMENTS = 3
 
 _DIGEST_LOCKS: dict[str, threading.Lock] = {}
@@ -151,6 +154,46 @@ def log_reflection_request(request: Mapping[str, Any]) -> None:
     print(REFLECTION_REQUEST_BEGIN, flush=True)
     print(json.dumps(request, indent=2, ensure_ascii=False), flush=True)
     print(REFLECTION_REQUEST_END, flush=True)
+
+
+def _full_reflection_logs_enabled() -> bool:
+    return os.environ.get("PROMPTOPT_FULL_REFLECTION_LOGS", "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
+def _log_value(value: Any) -> Any:
+    """Convert SDK response objects to JSON-compatible diagnostic output."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Mapping):
+        return {str(key): _log_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_log_value(item) for item in value]
+    for method_name in ("model_dump", "to_dict"):
+        method = getattr(value, method_name, None)
+        if callable(method):
+            try:
+                return _log_value(method())
+            except (TypeError, ValueError):
+                pass
+    attributes = getattr(value, "__dict__", None)
+    if isinstance(attributes, dict):
+        return _log_value(attributes)
+    return str(value)
+
+
+def log_full_reflection_event(event: str, payload: Any) -> None:
+    """Emit full dev diagnostics to stdout; Cloud Logging captures the stream."""
+    if not _full_reflection_logs_enabled():
+        return
+    print(FULL_LOG_BEGIN, flush=True)
+    print(json.dumps({
+        "timestamp": datetime.now(UTC).isoformat(),
+        "event": event,
+        "payload": _log_value(payload),
+    }, indent=2, ensure_ascii=False, default=str), flush=True)
+    print(FULL_LOG_END, flush=True)
 
 
 def _digest_lock(key: str) -> threading.Lock:
@@ -1578,17 +1621,28 @@ Choose one case. Infer a concrete causal defect in the failed test, then call ru
             }
             log_reflection_request(request)
             try:
-                proposed = self._extract_test_experiment(
-                    self.reflection_lm(**request)
+                response = self.reflection_lm(**request)
+                log_full_reflection_event(
+                    "optimizer_test_model_response",
+                    {"attempt": attempt, "response": response},
                 )
-            except (TypeError, ValueError):
+                proposed = self._extract_test_experiment(
+                    response
+                )
+            except (TypeError, ValueError) as exc:
+                log_full_reflection_event(
+                    "optimizer_test_response_error",
+                    {"attempt": attempt, "error": repr(exc)},
+                )
                 proposed = None
             if proposed is None or proposed["case_id"] not in case_targets:
-                history.append({
+                invalid = {
                     "attempt": attempt,
                     "success": False,
                     "validation_error": "Invalid run_test_experiment tool call.",
-                })
+                }
+                history.append(invalid)
+                log_full_reflection_event("optimizer_test_invalid_tool_call", invalid)
                 continue
             case = next(
                 value for value in visible_cases
@@ -1628,6 +1682,7 @@ Choose one case. Infer a concrete causal defect in the failed test, then call ru
                 "result": result,
             }
             history.append(experiment)
+            log_full_reflection_event("optimizer_test_execution", experiment)
             self._record_optimizer_experiment({
                 "schema_version": 1,
                 "timestamp": datetime.now(UTC).isoformat(),
@@ -1670,6 +1725,7 @@ Choose one case. Infer a concrete causal defect in the failed test, then call ru
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("a", encoding="utf-8") as output:
                 output.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        log_full_reflection_event("reflection_decision", payload)
         changed = ",".join(changed_components) or "none"
         print(
             "Reflection function call: "
@@ -1704,6 +1760,14 @@ Choose one case. Infer a concrete causal defect in the failed test, then call ru
             for component in evidence
         }
         cases, case_targets = self._optimizer_experiment_cases(evidence)
+        log_full_reflection_event(
+            "optimizer_experiment_cases",
+            {
+                "candidate": candidate,
+                "components_to_update": components_to_update,
+                "cases": cases,
+            },
+        )
         if not cases:
             self._log_reflection_decision(
                 candidate,
@@ -1770,10 +1834,17 @@ Preserve useful instructions and required literal placeholders. Do not copy targ
         }
         log_reflection_request(request)
         try:
-            update = self._extract_component_update(
-                self.reflection_lm(**request)
+            response = self.reflection_lm(**request)
+            log_full_reflection_event(
+                "prompt_update_model_response", response
             )
-        except (TypeError, ValueError):
+            update = self._extract_component_update(
+                response
+            )
+        except (TypeError, ValueError) as exc:
+            log_full_reflection_event(
+                "prompt_update_response_error", {"error": repr(exc)}
+            )
             update = None
         if update is None:
             self._log_reflection_decision(
@@ -1890,6 +1961,15 @@ Preserve useful instructions and required literal placeholders. Do not copy targ
                 "diagnosis": update["diagnosis"],
                 "evidence": update["evidence"],
             }
+            log_full_reflection_event(
+                "accepted_prompt_update",
+                {
+                    **lesson_payload,
+                    "parent_candidate": candidate,
+                    "proposed_candidate": proposed_candidate,
+                    "model_update": update,
+                },
+            )
             with _digest_lock(f"experiment-lessons:{lesson_path.resolve()}"):
                 lesson_path.parent.mkdir(parents=True, exist_ok=True)
                 with lesson_path.open("a", encoding="utf-8") as output:

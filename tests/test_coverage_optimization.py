@@ -432,6 +432,30 @@ def test_reflection_request_log_contains_exact_model_payload(capsys):
     assert json.loads(payload) == request
 
 
+def test_full_reflection_event_prints_only_when_enabled(monkeypatch, capsys):
+    from src.optimization.gepa import log_full_reflection_event
+
+    log_full_reflection_event("hidden", {"test_module": "def test_x(): pass"})
+    assert capsys.readouterr().out == ""
+
+    monkeypatch.setenv("PROMPTOPT_FULL_REFLECTION_LOGS", "true")
+    log_full_reflection_event(
+        "optimizer_test_execution",
+        {"test_module": "def test_x(): pass", "stdout": "1 passed"},
+    )
+
+    output = capsys.readouterr().out
+    assert output.startswith("PROMPTOPT_DEV_FULL_LOG_BEGIN\n")
+    assert output.endswith("PROMPTOPT_DEV_FULL_LOG_END\n")
+    payload = output.removeprefix(
+        "PROMPTOPT_DEV_FULL_LOG_BEGIN\n"
+    ).removesuffix("PROMPTOPT_DEV_FULL_LOG_END\n")
+    decoded = json.loads(payload)
+    assert decoded["event"] == "optimizer_test_execution"
+    assert decoded["payload"]["test_module"] == "def test_x(): pass"
+    assert decoded["payload"]["stdout"] == "1 passed"
+
+
 def test_run_coverage_does_not_mask_real_pytest_failures(tmp_path, monkeypatch):
     calls = []
 

@@ -342,7 +342,13 @@ class CoverUpExperimentRunner:
             "pytest_passed": completed.returncode == 0,
             "pytest_exit_code": completed.returncode,
             "score": 0.0,
-            "stdout": completed.stdout[-6000:],
+            "stdout": (
+                completed.stdout
+                if os.environ.get(
+                    "PROMPTOPT_FULL_REFLECTION_LOGS", ""
+                ).strip().lower() in {"1", "true", "yes", "on"}
+                else completed.stdout[-6000:]
+            ),
             "test_file": str(test_path),
         }
         if coverage_path.is_file():
