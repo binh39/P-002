@@ -66,61 +66,10 @@ UPDATE_PROMPT_COMPONENT_TOOL = {
                     "items": {"type": "string"},
                     "minItems": 1,
                 },
-                "playbooks": {
-                    "type": "object",
-                    "properties": {
-                        component: {
-                            "type": "object",
-                            "properties": {
-                                "observations": {
-                                    "type": "array",
-                                    "items": {"type": "string", "maxLength": 320},
-                                    "minItems": 1,
-                                    "maxItems": 6,
-                                },
-                                "decision_steps": {
-                                    "type": "array",
-                                    "items": {"type": "string", "maxLength": 320},
-                                    "minItems": 2,
-                                    "maxItems": 10,
-                                },
-                                "failure_modes": {
-                                    "type": "array",
-                                    "items": {"type": "string", "maxLength": 320},
-                                    "minItems": 1,
-                                    "maxItems": 6,
-                                },
-                                "regression_guards": {
-                                    "type": "array",
-                                    "items": {"type": "string", "maxLength": 320},
-                                    "minItems": 1,
-                                    "maxItems": 6,
-                                },
-                            },
-                            "required": [
-                                "observations",
-                                "decision_steps",
-                                "failure_modes",
-                                "regression_guards",
-                            ],
-                            "additionalProperties": False,
-                        }
-                        for component in COMPONENT_PLACEHOLDERS
-                    },
-                    "additionalProperties": False,
-                },
-                "strategy_delta": {
-                    "type": "object",
-                    "properties": {
-                        action: {
-                            "type": "array",
-                            "items": {"type": "string", "maxLength": 320},
-                            "maxItems": 8,
-                        }
-                        for action in ("added", "refined", "preserved", "pruned")
-                    },
-                    "required": ["added", "refined", "preserved", "pruned"],
-                    "additionalProperties": False,
+                "successful_experiment_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
                 },
             },
             "required": [
@@ -128,9 +77,37 @@ UPDATE_PROMPT_COMPONENT_TOOL = {
                 "replacements",
                 "diagnosis",
                 "evidence",
-                "playbooks",
-                "strategy_delta",
+                "successful_experiment_ids",
             ],
+            "additionalProperties": False,
+        },
+    },
+}
+RUN_TEST_EXPERIMENT_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "run_test_experiment",
+        "description": (
+            "Run one complete optimizer-authored pytest module against a failed "
+            "coverage case. The module is diagnostic teacher evidence only."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "case_id": {"type": "string"},
+                "test_module": {
+                    "type": "string",
+                    "description": "A complete executable pytest module.",
+                },
+                "hypothesis": {
+                    "type": "string",
+                    "description": (
+                        "The concrete causal change this test makes relative to "
+                        "the failed generated test."
+                    ),
+                },
+            },
+            "required": ["case_id", "test_module", "hypothesis"],
             "additionalProperties": False,
         },
     },
@@ -138,20 +115,7 @@ UPDATE_PROMPT_COMPONENT_TOOL = {
 AUTO_METRIC_BUDGETS = {"light": 120, "medium": 300, "heavy": 600}
 REFLECTION_REQUEST_BEGIN = "PROMPTOPT_REFLECTION_REQUEST_BEGIN"
 REFLECTION_REQUEST_END = "PROMPTOPT_REFLECTION_REQUEST_END"
-STRATEGY_PLAYBOOK_BEGIN = "[GEPA STRATEGY PLAYBOOK]"
-STRATEGY_PLAYBOOK_END = "[END GEPA STRATEGY PLAYBOOK]"
-STRATEGY_SECTIONS = (
-    ("observations", "Key observations and learned lessons"),
-    ("decision_steps", "Decision procedure"),
-    ("failure_modes", "Failure modes to avoid"),
-    ("regression_guards", "Regression guards"),
-)
-STRATEGY_DELTA_ACTIONS = ("added", "refined", "preserved", "pruned")
-_STRATEGY_PLAYBOOK = re.compile(
-    rf"\n*{re.escape(STRATEGY_PLAYBOOK_BEGIN)}.*?"
-    rf"{re.escape(STRATEGY_PLAYBOOK_END)}\n*",
-    re.DOTALL,
-)
+MAX_OPTIMIZER_TEST_EXPERIMENTS = 3
 
 _DIGEST_LOCKS: dict[str, threading.Lock] = {}
 _DIGEST_LOCKS_GUARD = threading.Lock()
@@ -187,56 +151,6 @@ def log_reflection_request(request: Mapping[str, Any]) -> None:
     print(REFLECTION_REQUEST_BEGIN, flush=True)
     print(json.dumps(request, indent=2, ensure_ascii=False), flush=True)
     print(REFLECTION_REQUEST_END, flush=True)
-
-
-def _strategy_playbook_from_prompt(prompt: str) -> str | None:
-    match = _STRATEGY_PLAYBOOK.search(prompt)
-    return match.group(0).strip() if match else None
-
-
-def _valid_string_list(
-    value: Any,
-    *,
-    minimum: int,
-    maximum: int,
-) -> bool:
-    return (
-        isinstance(value, list)
-        and minimum <= len(value) <= maximum
-        and all(
-            isinstance(item, str) and item.strip() and len(item) <= 320
-            for item in value
-        )
-    )
-
-
-def _valid_strategy_playbook(value: Any) -> bool:
-    if not isinstance(value, dict) or set(value) != {
-        name for name, _ in STRATEGY_SECTIONS
-    }:
-        return False
-    return (
-        _valid_string_list(value["observations"], minimum=1, maximum=6)
-        and _valid_string_list(value["decision_steps"], minimum=2, maximum=10)
-        and _valid_string_list(value["failure_modes"], minimum=1, maximum=6)
-        and _valid_string_list(value["regression_guards"], minimum=1, maximum=6)
-    )
-
-
-def _compile_strategy_playbook(template: str, playbook: Mapping[str, list[str]]) -> str:
-    """Replace the managed playbook so strategies accumulate without duplicate blocks."""
-    base = _STRATEGY_PLAYBOOK.sub("\n", template).rstrip()
-    sections = [STRATEGY_PLAYBOOK_BEGIN]
-    for key, title in STRATEGY_SECTIONS:
-        sections.append(f"\n{title}:")
-        for index, item in enumerate(playbook[key], start=1):
-            prefix = f"{index}." if key == "decision_steps" else "-"
-            normalized = re.sub(
-                r"^\s*(?:(?:[-*•])|(?:\d+[.)]))\s+", "", item
-            ).strip()
-            sections.append(f"{prefix} {normalized}")
-    sections.append(f"\n{STRATEGY_PLAYBOOK_END}")
-    return f"{base}\n\n" + "\n".join(sections)
 
 
 def _digest_lock(key: str) -> threading.Lock:
@@ -326,9 +240,7 @@ def _evaluation_digest(
         # batches CoverUp generation and scores only each target's traced tests.
         # Schema 14 restores isolated per-target CoverUp processes in one bounded
         # pool, consolidates traced tests, and skips redundant final-suite coverage.
-        # Schema 15 strips optimizer-only playbook delimiters at runtime and
-        # prevents placeholders mentioned inside the playbook from expanding.
-        "cache_schema": 15,
+        "cache_schema": 14,
         "config": config_values,
         "targets": [_target_identity(target) for target in targets],
         "sources": source_hashes,
@@ -1086,7 +998,7 @@ class CoverUpPromptAdapter:
         self.evaluation_replicates = evaluation_replicates
         self.reference_units: dict[tuple[str, str, str, str], tuple[int, int]] = {}
         self.max_component_chars = {
-            name: max(4_000, len(text) * 6)
+            name: max(600, len(text) * 3)
             for name, text in baseline.as_candidate().items()
         }
         self.candidate_lineage: dict[str, dict[str, Any]] = {}
@@ -1490,7 +1402,9 @@ class CoverUpPromptAdapter:
         return value.get(name) if isinstance(value, Mapping) else getattr(value, name, None)
 
     @classmethod
-    def _extract_component_update(cls, response: Any) -> dict[str, Any] | None:
+    def _extract_function_call(
+        cls, response: Any, expected_name: str,
+    ) -> dict[str, Any] | None:
         if isinstance(response, (str, bytes)) or not isinstance(response, Sequence):
             return None
         if len(response) != 1:
@@ -1501,7 +1415,7 @@ class CoverUpPromptAdapter:
         function = cls._member(tool_calls[0], "function")
         if function is None:
             return None
-        if cls._member(function, "name") != "update_prompt_component":
+        if cls._member(function, "name") != expected_name:
             return None
         arguments = cls._member(function, "arguments")
         if isinstance(arguments, str):
@@ -1511,13 +1425,33 @@ class CoverUpPromptAdapter:
                 return None
         if not isinstance(arguments, dict):
             return None
+        return arguments
+
+    @classmethod
+    def _extract_test_experiment(cls, response: Any) -> dict[str, str] | None:
+        arguments = cls._extract_function_call(response, "run_test_experiment")
+        if arguments is None or set(arguments) != {
+            "case_id", "test_module", "hypothesis",
+        }:
+            return None
+        if not all(
+            isinstance(arguments[name], str) and arguments[name].strip()
+            for name in ("case_id", "test_module", "hypothesis")
+        ):
+            return None
+        return arguments
+
+    @classmethod
+    def _extract_component_update(cls, response: Any) -> dict[str, Any] | None:
+        arguments = cls._extract_function_call(response, "update_prompt_component")
+        if arguments is None:
+            return None
         required = {
             "component",
             "replacements",
             "diagnosis",
             "evidence",
-            "playbooks",
-            "strategy_delta",
+            "successful_experiment_ids",
         }
         if not required.issubset(arguments):
             return None
@@ -1534,27 +1468,177 @@ class CoverUpPromptAdapter:
             )
         ):
             return None
-        if not isinstance(arguments["playbooks"], dict):
-            return None
-        if not arguments["playbooks"] or not all(
-            component in COMPONENT_PLACEHOLDERS
-            and _valid_strategy_playbook(playbook)
-            for component, playbook in arguments["playbooks"].items()
-        ):
-            return None
-        strategy_delta = arguments["strategy_delta"]
         if (
-            not isinstance(strategy_delta, dict)
-            or set(strategy_delta) != set(STRATEGY_DELTA_ACTIONS)
+            not isinstance(arguments["successful_experiment_ids"], list)
+            or not arguments["successful_experiment_ids"]
             or not all(
-                _valid_string_list(
-                    strategy_delta[action], minimum=0, maximum=8
-                )
-                for action in STRATEGY_DELTA_ACTIONS
+                isinstance(item, str) and item.strip()
+                for item in arguments["successful_experiment_ids"]
             )
         ):
             return None
         return arguments
+
+    def _optimizer_experiment_cases(
+        self,
+        evidence: Mapping[str, Sequence[Mapping[str, Any]]],
+    ) -> tuple[list[dict[str, Any]], dict[str, SymbolTarget]]:
+        targets = {
+            f"{target.source_file}::{target.symbol}": target
+            for split_targets in self.targets_by_split.values()
+            for target in split_targets
+        }
+        cases: list[dict[str, Any]] = []
+        case_targets: dict[str, SymbolTarget] = {}
+        seen: set[tuple[str, str]] = set()
+        for component, records in evidence.items():
+            for record in records:
+                inputs = record.get("Inputs", {})
+                outputs = record.get("Generated Outputs", {})
+                label = str(inputs.get("target", ""))
+                target = targets.get(label)
+                if target is None or (component, label) in seen:
+                    continue
+                baseline_score = float(
+                    outputs.get("candidate_score", outputs.get("symbol_score", 0.0))
+                )
+                if baseline_score >= 0.999999:
+                    continue
+                seen.add((component, label))
+                case_id = "case-" + hashlib.sha256(
+                    f"{component}\0{label}".encode()
+                ).hexdigest()[:10]
+                case_targets[case_id] = target
+                cases.append({
+                    "case_id": case_id,
+                    "component": component,
+                    "target": label,
+                    "baseline_score": baseline_score,
+                    "source_context": _clip_text(
+                        inputs.get("source_context", ""), 12_000
+                    ),
+                    "failed_test": _clip_text(
+                        outputs.get("candidate_test", ""), 12_000
+                    ),
+                    "execution_episodes": outputs.get("execution_episodes", []),
+                    "feedback": _clip_text(
+                        record.get("Feedback", ""), 6_000, keep_tail=True
+                    ),
+                })
+        return cases, case_targets
+
+    def _record_optimizer_experiment(self, payload: Mapping[str, Any]) -> None:
+        path = self.candidate_dir / "optimizer_test_experiments.jsonl"
+        with _digest_lock(f"optimizer-experiments:{path.resolve()}"):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as output:
+                output.write(
+                    json.dumps(payload, ensure_ascii=False, default=str) + "\n"
+                )
+
+    def _run_optimizer_test_experiments(
+        self,
+        candidate: dict[str, str],
+        cases: list[dict[str, Any]],
+        case_targets: Mapping[str, SymbolTarget],
+    ) -> list[dict[str, Any]]:
+        history: list[dict[str, Any]] = []
+        visible_cases = cases[:8]
+        for attempt in range(1, MAX_OPTIMIZER_TEST_EXPERIMENTS + 1):
+            prompt = f"""
+You are the diagnostic teacher for a reusable pytest-generation prompt. Do not rewrite the prompt yet. First prove a concrete strategy by repairing one failed case with an executable test.
+
+Current prompt templates:
+<templates>{json.dumps(candidate, indent=2, ensure_ascii=False)}</templates>
+
+Runnable failed cases:
+<cases>{json.dumps(visible_cases, indent=2, ensure_ascii=False)}</cases>
+
+Previous diagnostic experiments:
+<experiment_history>{json.dumps(history, indent=2, ensure_ascii=False)}</experiment_history>
+
+Choose one case. Infer a concrete causal defect in the failed test, then call run_test_experiment with a complete pytest module implementing the correction. You may revise a failed experiment on the next turn. Do not give generic advice and do not update the production prompt in this call.
+"""
+            request = {
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "Find an executable counterexample before distilling a "
+                            "prompt lesson. Call run_test_experiment exactly once."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                "tools": [RUN_TEST_EXPERIMENT_TOOL],
+                "tool_choice": {
+                    "type": "function",
+                    "function": {"name": "run_test_experiment"},
+                },
+            }
+            log_reflection_request(request)
+            try:
+                proposed = self._extract_test_experiment(
+                    self.reflection_lm(**request)
+                )
+            except (TypeError, ValueError):
+                proposed = None
+            if proposed is None or proposed["case_id"] not in case_targets:
+                history.append({
+                    "attempt": attempt,
+                    "success": False,
+                    "validation_error": "Invalid run_test_experiment tool call.",
+                })
+                continue
+            case = next(
+                value for value in visible_cases
+                if value["case_id"] == proposed["case_id"]
+            )
+            experiment_id = (
+                f"{bundle_digest(PromptBundle.from_candidate(candidate))}-"
+                f"{proposed['case_id']}-a{attempt}-{datetime.now(UTC).strftime('%H%M%S%f')}"
+            )
+            try:
+                result = self.runner.evaluate_optimizer_test(
+                    case_targets[proposed["case_id"]],
+                    proposed["test_module"],
+                    experiment_id=experiment_id,
+                )
+            except (OSError, RuntimeError, ValueError) as exc:
+                result = {
+                    "experiment_id": experiment_id,
+                    "pytest_passed": False,
+                    "score": 0.0,
+                    "validation_error": str(exc),
+                    "stdout": "",
+                }
+            improved = (
+                bool(result.get("pytest_passed"))
+                and float(result.get("score", 0.0))
+                > float(case["baseline_score"]) + 1e-9
+            )
+            experiment = {
+                "attempt": attempt,
+                "case_id": proposed["case_id"],
+                "target": case["target"],
+                "baseline_score": case["baseline_score"],
+                "hypothesis": proposed["hypothesis"],
+                "test_module": proposed["test_module"],
+                "success": improved,
+                "result": result,
+            }
+            history.append(experiment)
+            self._record_optimizer_experiment({
+                "schema_version": 1,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "candidate_digest": bundle_digest(
+                    PromptBundle.from_candidate(candidate)
+                ),
+                **experiment,
+            })
+            if improved:
+                break
+        return history
 
     def _log_reflection_decision(
         self,
@@ -1565,22 +1649,21 @@ class CoverUpPromptAdapter:
         selection: str | None = None,
         changed_components: Sequence[str] = (),
         detail: str | None = None,
-        strategy_delta: Mapping[str, Sequence[str]] | None = None,
+        experiment_ids: Sequence[str] = (),
+        optimizer_calls: int = 0,
     ) -> None:
         payload = {
             "schema_version": 1,
             "timestamp": datetime.now(UTC).isoformat(),
             "candidate_digest": bundle_digest(PromptBundle.from_candidate(candidate)),
-            "one_call": True,
+            "experiment_first": True,
+            "optimizer_calls": optimizer_calls,
             "offered_components": list(components),
             "selection": selection,
             "changed_components": list(changed_components),
             "status": status,
             "detail": detail,
-            "strategy_delta": {
-                action: list((strategy_delta or {}).get(action, []))
-                for action in STRATEGY_DELTA_ACTIONS
-            },
+            "successful_experiment_ids": list(experiment_ids),
         }
         path = self.candidate_dir / "reflection_decisions.jsonl"
         with _digest_lock(f"reflection-decisions:{path.resolve()}"):
@@ -1620,9 +1703,28 @@ class CoverUpPromptAdapter:
             }
             for component in evidence
         }
-        existing_playbooks = {
-            component: _strategy_playbook_from_prompt(candidate[component])
-            for component in evidence
+        cases, case_targets = self._optimizer_experiment_cases(evidence)
+        if not cases:
+            self._log_reflection_decision(
+                candidate,
+                components_to_update,
+                status="no_runnable_experiment_case",
+            )
+            return proposals
+        experiments = self._run_optimizer_test_experiments(
+            candidate, cases, case_targets
+        )
+        successful = [item for item in experiments if item.get("success")]
+        if not successful:
+            self._log_reflection_decision(
+                candidate,
+                components_to_update,
+                status="no_successful_test_experiment",
+                optimizer_calls=len(experiments),
+            )
+            return proposals
+        successful_ids = {
+            str(item["result"]["experiment_id"]) for item in successful
         }
         prompt = f"""
 You are optimizing a reusable two-stage CoverUp pytest-generation system. The stages are `initial` test generation and conditional `error` repair.
@@ -1633,24 +1735,25 @@ Current templates:
 Eligible component contracts:
 <contracts>{json.dumps(contracts, indent=2, ensure_ascii=False)}</contracts>
 
-Existing managed strategy playbooks inherited from this candidate:
-<existing_playbooks>{json.dumps(existing_playbooks, indent=2, ensure_ascii=False)}</existing_playbooks>
-
 Labelled end-to-end execution evidence by component:
 <evidence>{json.dumps(evidence, indent=2, ensure_ascii=False)}</evidence>
 
+Optimizer-authored test experiments:
+<test_experiments>{json.dumps(experiments, indent=2, ensure_ascii=False)}</test_experiments>
+
 In one decision, choose `initial`, `error`, or `all`, then call `update_prompt_component` exactly once with every complete revised template selected. `all` is always allowed, even when direct evidence exists for only one stage. When selecting `all`, provide both `initial` and `error` replacements and change both; the update is rejected atomically otherwise. For a single component, provide only that component's replacement.
 
-Use the full initial -> failing test -> error -> repaired test -> outcome episodes for causal attribution. Induce a reusable strategy playbook rather than making a narrow textual patch. For every selected component, return a FULL consolidated playbook containing key observations, a concrete multi-step decision procedure, failure modes, and regression guards. Preserve inherited strategies supported by positive or tied evidence; refine or prune one only when contrastive evidence justifies it. Describe the changes in strategy_delta.
+The successful diagnostic test is teacher evidence, not part of the candidate and not part of GEPA's score. Compare it with the failed generated test and encode only the smallest reusable causal lesson that made the experiment pass and cover more of the target. The replacement must operationalize that learned behavior; do not add generic advice such as "analyze carefully", "be robust", "handle edge cases", or "use appropriate mocks" without a concrete trigger and action.
 
-The replacement is the complete operational template excluding the managed playbook block; the optimizer will compile the returned playbook into it. Preserve useful instructions and required literal placeholders. Do not add target-specific file names, symbols, line numbers, repository facts, or literal values. Keep every compiled replacement within its component's maximum length. Include a reusable diagnosis and at least one evidence observation. Do not answer with JSON or prose outside the function call.
+Preserve useful instructions and required literal placeholders. Do not copy target-specific file names, symbols, line numbers, repository facts, assertions, constructor arguments, or literal values from the diagnostic test. Keep every replacement within its component's maximum length. Cite only successful experiment ids in successful_experiment_ids and explain the observed failed-to-successful behavior change in diagnosis and evidence. Do not answer with JSON or prose outside the function call.
 """
         messages = [
             {
                 "role": "system",
                 "content": (
-                    "You optimize reusable CoverUp prompt components. "
-                    "Finish by calling update_prompt_component exactly once."
+                        "You optimize reusable CoverUp prompt components. "
+                        "Distill only execution-proven behavior from successful "
+                        "test experiments, then call update_prompt_component once."
                 ),
             },
             {"role": "user", "content": prompt},
@@ -1674,7 +1777,21 @@ The replacement is the complete operational template excluding the managed playb
             update = None
         if update is None:
             self._log_reflection_decision(
-                candidate, components_to_update, status="invalid_function_call"
+                candidate,
+                components_to_update,
+                status="invalid_function_call",
+                optimizer_calls=len(experiments) + 1,
+            )
+            return proposals
+
+        cited_experiments = set(update["successful_experiment_ids"])
+        if not cited_experiments or not cited_experiments.issubset(successful_ids):
+            self._log_reflection_decision(
+                candidate,
+                components_to_update,
+                status="unverified_experiment_evidence",
+                experiment_ids=sorted(cited_experiments),
+                optimizer_calls=len(experiments) + 1,
             )
             return proposals
 
@@ -1699,13 +1816,6 @@ The replacement is the complete operational template excluding the managed playb
                 selection=selection,
             )
             return proposals
-        playbooks = update["playbooks"]
-        if set(playbooks) != selected:
-            self._log_reflection_decision(
-                candidate, components_to_update, status="incomplete_playbooks",
-                selection=selection,
-            )
-            return proposals
         for component in selected:
             replacement = replacements[component]
             if not isinstance(replacement, str):
@@ -1714,16 +1824,27 @@ The replacement is the complete operational template excluding the managed playb
                     selection=selection, detail=component,
                 )
                 return proposals
-            replacement = _compile_strategy_playbook(
-                replacement, playbooks[component]
-            )
-            replacements[component] = replacement
             if error := validate_template(
                 replacement, COMPONENT_PLACEHOLDERS[component]
             ):
                 self._log_reflection_decision(
                     candidate, components_to_update, status="invalid_template",
                     selection=selection, detail=f"{component}: {error}",
+                )
+                return proposals
+            leaked_targets = [
+                item["target"] for item in successful
+                if str(item["target"]).lower() in replacement.lower()
+            ]
+            if leaked_targets:
+                self._log_reflection_decision(
+                    candidate,
+                    components_to_update,
+                    status="target_specific_replacement",
+                    selection=selection,
+                    detail=", ".join(leaked_targets),
+                    experiment_ids=sorted(cited_experiments),
+                    optimizer_calls=len(experiments) + 1,
                 )
                 return proposals
             if len(replacement) > self.max_component_chars[component]:
@@ -1753,14 +1874,11 @@ The replacement is the complete operational template excluding the managed playb
             ] = {
                 "parent_candidate": dict(candidate),
                 "changed_components": changed_components,
-                "playbooks": {
-                    component: playbooks[component]
-                    for component in changed_components
-                },
-                "strategy_delta": dict(update["strategy_delta"]),
+                "successful_experiment_ids": sorted(cited_experiments),
+                "diagnosis": update["diagnosis"],
             }
-            strategy_path = self.candidate_dir / "strategy_playbooks.jsonl"
-            strategy_payload = {
+            lesson_path = self.candidate_dir / "experiment_lessons.jsonl"
+            lesson_payload = {
                 "schema_version": 1,
                 "timestamp": datetime.now(UTC).isoformat(),
                 "parent_digest": bundle_digest(PromptBundle.from_candidate(candidate)),
@@ -1768,22 +1886,21 @@ The replacement is the complete operational template excluding the managed playb
                     PromptBundle.from_candidate(proposed_candidate)
                 ),
                 "changed_components": changed_components,
-                "playbooks": {
-                    component: playbooks[component]
-                    for component in changed_components
-                },
-                "strategy_delta": update["strategy_delta"],
+                "successful_experiment_ids": sorted(cited_experiments),
+                "diagnosis": update["diagnosis"],
+                "evidence": update["evidence"],
             }
-            with _digest_lock(f"strategy-playbooks:{strategy_path.resolve()}"):
-                strategy_path.parent.mkdir(parents=True, exist_ok=True)
-                with strategy_path.open("a", encoding="utf-8") as output:
+            with _digest_lock(f"experiment-lessons:{lesson_path.resolve()}"):
+                lesson_path.parent.mkdir(parents=True, exist_ok=True)
+                with lesson_path.open("a", encoding="utf-8") as output:
                     output.write(
-                        json.dumps(strategy_payload, ensure_ascii=False) + "\n"
+                        json.dumps(lesson_payload, ensure_ascii=False) + "\n"
                     )
         self._log_reflection_decision(
             candidate, components_to_update, status="accepted",
             selection=selection, changed_components=changed_components,
-            strategy_delta=update["strategy_delta"],
+            experiment_ids=sorted(cited_experiments),
+            optimizer_calls=len(experiments) + 1,
         )
         return proposals
 
@@ -1796,7 +1913,7 @@ def _optimization_run_digest(
     evaluation_replicates: int,
 ) -> str:
     payload = {
-        "optimizer_schema": 13,
+        "optimizer_schema": 14,
         "baseline": baseline.as_candidate(),
         "train": [_target_identity(target) for target in train_targets],
         "validation": [_target_identity(target) for target in validation_targets],

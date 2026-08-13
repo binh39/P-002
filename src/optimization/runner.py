@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -258,6 +259,122 @@ class CoverUpExperimentRunner:
             coverup_log_file=batch.coverup_log_file,
             attempt_trace_file=batch.attempt_trace_file,
         )
+
+    def evaluate_optimizer_test(
+        self,
+        target: SymbolTarget,
+        test_module: str,
+        *,
+        experiment_id: str,
+    ) -> dict:
+        """Run one optimizer-authored diagnostic test without adding it to a candidate.
+
+        These experiments are teacher evidence for reflection only.  They live
+        under ``optimizer_experiments`` and are never copied into the generated
+        candidate workspace, so GEPA still scores a prompt by asking CoverUp to
+        generate a fresh test module from that prompt.
+        """
+        if not isinstance(test_module, str) or not test_module.strip():
+            raise ValueError("Optimizer experiment requires a non-empty test module")
+        if len(test_module.encode("utf-8")) > 64 * 1024:
+            raise ValueError("Optimizer experiment test module exceeds 64 KiB")
+        try:
+            tree = ast.parse(test_module)
+        except SyntaxError as exc:
+            return {
+                "experiment_id": experiment_id,
+                "target": target.__dict__,
+                "pytest_passed": False,
+                "pytest_exit_code": None,
+                "score": 0.0,
+                "validation_error": f"Invalid Python test module: {exc}",
+                "stdout": "",
+            }
+        has_test = any(
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name.startswith("test_")
+            for node in ast.walk(tree)
+        )
+        if not has_test:
+            return {
+                "experiment_id": experiment_id,
+                "target": target.__dict__,
+                "pytest_passed": False,
+                "pytest_exit_code": None,
+                "score": 0.0,
+                "validation_error": "The module defines no test_* function.",
+                "stdout": "",
+            }
+
+        safe_id = re.sub(
+            r"[^A-Za-z0-9_.-]+", "_", experiment_id
+        ).strip("._-")
+        if not safe_id:
+            raise ValueError("experiment_id must contain a safe path character")
+        run_dir = (
+            self.config.artifacts_dir.resolve()
+            / "optimizer_experiments"
+            / safe_id
+        )
+        run_dir.mkdir(parents=True, exist_ok=False)
+        test_path = run_dir / "test_optimizer_experiment.py"
+        test_path.write_text(test_module, encoding="utf-8")
+        coverage_path = run_dir / "coverage.json"
+        package_dir = self.config.package_dir_for(target.project).resolve()
+        environment = _test_environment(
+            self.config.project_root,
+            (package_dir.parent,),
+        )
+        completed = run_coverage(
+            project_root=self.config.project_root.resolve(),
+            package_dir=package_dir,
+            tests_dir=run_dir,
+            test_paths=[test_path],
+            pytest_basetemp=run_dir / "pytest_tmp",
+            output=coverage_path,
+            pytest_args=self.config.pytest_args,
+            repeat_tests=self.config.repeat_tests,
+            env=environment,
+        )
+        result = {
+            "experiment_id": experiment_id,
+            "target": target.__dict__,
+            "pytest_passed": completed.returncode == 0,
+            "pytest_exit_code": completed.returncode,
+            "score": 0.0,
+            "stdout": completed.stdout[-6000:],
+            "test_file": str(test_path),
+        }
+        if coverage_path.is_file():
+            try:
+                measured = symbol_coverage(
+                    load_report(coverage_path), target.source_file, target.symbol
+                )
+            except KeyError as exc:
+                result["coverage_error"] = str(exc)
+            else:
+                metric = score_symbol(_zero_coverage_like(measured), measured)
+                result.update({
+                    "score": metric.score if completed.returncode == 0 else 0.0,
+                    "measured_score": metric.score,
+                    "covered_statements": metric.covered_statements,
+                    "num_statements": metric.num_statements,
+                    "covered_branches": metric.covered_branches,
+                    "num_branches": metric.num_branches,
+                    "gained_lines": list(metric.gained_lines),
+                    "gained_branches": [list(branch) for branch in metric.gained_branches],
+                    "remaining_lines": list(metric.remaining_lines),
+                    "remaining_branches": [
+                        list(branch) for branch in metric.remaining_branches
+                    ],
+                })
+        (run_dir / "result.json").write_text(
+            json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        coverage_path.unlink(missing_ok=True)
+        coverage_path.with_suffix(".data").unlink(missing_ok=True)
+        shutil.rmtree(run_dir / "pytest_tmp", ignore_errors=True)
+        return result
 
     def evaluate_batch(
         self,

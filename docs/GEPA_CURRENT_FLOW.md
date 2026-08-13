@@ -334,23 +334,40 @@ Compact evidence
     +-- failing test / repair / traceback / remaining coverage
           |
           v
-Run structured JSON diagnosis for the selected component
+OPTIMIZE_MODEL writes a diagnostic pytest for one weak target
           |
           v
-OPTIMIZE_MODEL proposes one complete revised template
+Run the test in an isolated teacher experiment workspace
+          |
+          +-- pytest fails: record result and try another experiment
+          +-- target score does not improve: record result and try another experiment
+          +-- at most 3 experiments without success: keep prompt unchanged
+          |
+          v
+Keep only experiments whose test passes and target score beats baseline
+          |
+          v
+OPTIMIZE_MODEL extracts a reusable lesson and proposes one complete revised template
           |
           v
 Validate
     +-- required placeholders are preserved
     +-- no unsupported placeholders
+    +-- cited experiment IDs are real successful experiments
+    +-- no target-specific file/symbol/line leakage
     +-- component length <= max(600, 3 * baseline length)
           |
-          +-- invalid: retry reflection once
-          +-- still invalid: fail optimization
+          +-- invalid or generic: keep prompt unchanged
           |
           v
 Create candidate digest and evaluate candidate
 ```
+
+Diagnostic tests are teacher-side evidence only. They are saved under
+`optimizer_experiments/`, never copied into the candidate test workspace, and never
+counted as GEPA coverage. The candidate must improve only when CoverUp independently
+generates a new test from the revised prompt. Successful experiment lessons and prompt
+lineage are persisted for audit.
 
 Neu `initial` hoac `error` khong co trace thuc su trong trajectory, reflection dataset
 cua component do rong va adapter giu nguyen text; model reflection khong duoc goi.

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 import sys
 import threading
 import time
@@ -22,8 +23,6 @@ from src.optimization.coveragepy import (
     symbol_coverage,
 )
 from src.optimization.gepa import (
-    STRATEGY_PLAYBOOK_BEGIN,
-    STRATEGY_PLAYBOOK_END,
     BestParetoCandidateSelector,
     CausalReflectionComponentSelector,
     CoverUpPromptAdapter,
@@ -57,32 +56,14 @@ def tool_call_response(
     *,
     diagnosis="root cause",
     evidence=None,
-    playbooks=None,
-    strategy_delta=None,
+    successful_experiment_ids=None,
 ):
-    default_playbook = {
-        "observations": ["Branch failures expose missing precondition analysis."],
-        "decision_steps": [
-            "Identify the uncovered behavior and its preconditions.",
-            "Construct a deterministic test and assert observable behavior.",
-        ],
-        "failure_modes": ["Do not produce tests without meaningful assertions."],
-        "regression_guards": ["Preserve already-correct tests and required output format."],
-    }
     arguments = {
         "component": component,
         "replacements": replacements,
         "diagnosis": diagnosis,
         "evidence": evidence or ["observed failure"],
-        "playbooks": playbooks or {
-            name: dict(default_playbook) for name in replacements
-        },
-        "strategy_delta": strategy_delta or {
-            "added": ["Analyze branch preconditions before generating tests."],
-            "refined": [],
-            "preserved": ["Keep deterministic tests and meaningful assertions."],
-            "pruned": [],
-        },
+        "successful_experiment_ids": successful_experiment_ids or ["experiment-1"],
     }
     return [{
         "text": None,
@@ -96,54 +77,77 @@ def tool_call_response(
     }]
 
 
-def test_coverup_runtime_hides_playbook_markers_and_does_not_expand_its_fields_twice(
-    tmp_path,
-    monkeypatch,
+def experiment_tool_call_response(
+    case_id="case-1",
+    test_module="def test_target():\n    assert True\n",
+    hypothesis="replace the failed construction with a verified one",
 ):
-    import importlib
+    return [{
+        "text": None,
+        "tool_calls": [{
+            "type": "function",
+            "function": {
+                "name": "run_test_experiment",
+                "arguments": json.dumps({
+                    "case_id": case_id,
+                    "test_module": test_module,
+                    "hypothesis": hypothesis,
+                }),
+            },
+        }],
+    }]
 
-    monkeypatch.syspath_prepend(str(Path("src").resolve()))
-    prompter_class = importlib.import_module(
-        "coverup.prompt.gpt_v2"
-    ).GptV2Prompter
-    prompt_path = tmp_path / "prompt.json"
-    prompt_path.write_text(
-        json.dumps({
-            "initial": (
-                "Generate tests for {filename}.\n{source_excerpt}\n"
-                f"{STRATEGY_PLAYBOOK_BEGIN}\n"
-                "Preserve {filename}, {coverage_targets}, and {source_excerpt}.\n"
-                f"{STRATEGY_PLAYBOOK_END}"
-            ),
-            "error": (
-                "Repair this failure:\n{error}\n"
-                f"{STRATEGY_PLAYBOOK_BEGIN}\n"
-                "Preserve the required {error} field.\n"
-                f"{STRATEGY_PLAYBOOK_END}"
-            ),
-        }),
-        encoding="utf-8",
-    )
-    prompter = prompter_class(SimpleNamespace(prompt_template_file=prompt_path))
 
-    initial = prompter._render(
-        "initial",
-        "",
-        filename="UNIQUE_FILE.py",
-        coverage_targets="UNIQUE_TARGETS",
-        source_excerpt="UNIQUE_SOURCE_BODY",
-    )
-    error = prompter._render("error", "", error="UNIQUE_TRACEBACK")
+def requested_case_id(kwargs):
+    content = kwargs["messages"][-1]["content"]
+    match = re.search(r'"case_id":\s*"([^"]+)"', content)
+    assert match
+    return match.group(1)
 
-    assert STRATEGY_PLAYBOOK_BEGIN not in initial
-    assert STRATEGY_PLAYBOOK_END not in initial
-    assert initial.count("UNIQUE_FILE.py") == 1
-    assert initial.count("UNIQUE_SOURCE_BODY") == 1
-    assert "{filename}, {coverage_targets}, and {source_excerpt}" in initial
-    assert STRATEGY_PLAYBOOK_BEGIN not in error
-    assert STRATEGY_PLAYBOOK_END not in error
-    assert error.count("UNIQUE_TRACEBACK") == 1
-    assert "{error}" in error
+
+def successful_experiment_id(kwargs):
+    content = kwargs["messages"][-1]["content"]
+    matches = re.findall(r'"experiment_id":\s*"([^"]+)"', content)
+    assert matches
+    return matches[-1]
+
+
+class SuccessfulOptimizerExperimentRunner:
+    def evaluate_optimizer_test(
+        self, target, test_module, *, experiment_id,
+    ):
+        assert "def test_" in test_module
+        return {
+            "experiment_id": experiment_id,
+            "target": target.__dict__,
+            "pytest_passed": True,
+            "pytest_exit_code": 0,
+            "score": 1.0,
+            "covered_statements": 2,
+            "num_statements": 2,
+            "covered_branches": 2,
+            "num_branches": 2,
+            "remaining_lines": [],
+            "remaining_branches": [],
+            "stdout": "2 passed",
+        }
+
+
+def runnable_reflection_record(
+    *, target="pkg/a.py::first", score=0.2, feedback="a branch remains",
+):
+    return {
+        "Inputs": {
+            "target": target,
+            "source_context": "1: def first(value):\n2:     return value + 1",
+        },
+        "Generated Outputs": {
+            "candidate_score": score,
+            "candidate_test": "def test_first(): assert missing_name",
+            "execution_episodes": [],
+        },
+        "Feedback": feedback,
+    }
 
 
 def coverage(*, executed_lines=(), missing_lines=(), executed_branches=(), missing_branches=()):
@@ -1013,6 +1017,47 @@ def test_existing_baseline_tests_are_scored_without_coverup(tmp_path, monkeypatc
     assert record.results[0].score["valid"] is True
 
 
+def test_optimizer_test_experiment_runs_in_separate_teacher_workspace(tmp_path):
+    package_dir = tmp_path / "sample_repo" / "pkg"
+    package_dir.mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    (package_dir / "module.py").write_text(
+        "def target(value):\n"
+        "    if value > 0:\n"
+        "        return 'positive'\n"
+        "    return 'other'\n",
+        encoding="utf-8",
+    )
+    artifacts = tmp_path / "artifacts"
+    runner = CoverUpExperimentRunner(ExperimentConfig(
+        project_root=tmp_path,
+        package_dir=package_dir,
+        tests_dir=tmp_path / "sample_repo" / "tests",
+        artifacts_dir=artifacts,
+        coverup_model="unused",
+        repeat_tests=1,
+    ))
+    target = SymbolTarget("project", "pkg/module.py", "target", "train")
+
+    result = runner.evaluate_optimizer_test(
+        target,
+        "from pkg.module import target\n\n"
+        "def test_positive():\n"
+        "    assert target(1) == 'positive'\n\n"
+        "def test_other():\n"
+        "    assert target(0) == 'other'\n",
+        experiment_id="teacher-case-1",
+    )
+
+    experiment_dir = artifacts / "optimizer_experiments" / "teacher-case-1"
+    assert result["pytest_passed"] is True
+    assert result["score"] == 1.0
+    assert result["covered_branches"] == result["num_branches"] == 2
+    assert (experiment_dir / "test_optimizer_experiment.py").is_file()
+    assert (experiment_dir / "result.json").is_file()
+    assert not (artifacts / "generated_tests").exists()
+
+
 def test_score_symbol_uses_statement_and_branch_gain():
     before = coverage(
         executed_lines=(1,), missing_lines=(2, 3),
@@ -1558,35 +1603,25 @@ def test_reflection_compares_candidate_with_parent_and_balances_exemplars(tmp_pa
         "Parent marker: preserve verified behavior.\n"
         "Contrastive marker: compare causal outcomes.",
     )
-    proposed_templates = iter((parent_initial, proposed_initial))
-
-    def reflection_lm(**kwargs):
-        return tool_call_response(
-            "initial",
-            {"initial": next(proposed_templates)},
-            diagnosis="one instruction changes generated behavior",
-            evidence=["candidate and parent have different outcomes"],
-        )
-
     adapter = CoverUpPromptAdapter(
         runner=FakeRunner(),
         candidate_dir=tmp_path / "candidates",
         targets_by_split={},
         baseline=baseline,
-        reflection_lm=reflection_lm,
+        reflection_lm=None,
     )
-    parent_updates = adapter.propose_new_texts(
-        baseline.as_candidate(),
-        {"initial": [{"Feedback": "add one evidence-backed instruction"}]},
-        ["initial"],
-    )
-    parent = {**baseline.as_candidate(), **parent_updates}
-    candidate_updates = adapter.propose_new_texts(
-        parent,
-        {"initial": [{"Feedback": "compare the candidate with its direct parent"}]},
-        ["initial"],
-    )
-    candidate = {**parent, **candidate_updates}
+    parent = {**baseline.as_candidate(), "initial": parent_initial}
+    candidate = {**parent, "initial": proposed_initial}
+    adapter.candidate_lineage[bundle_digest(PromptBundle.from_candidate(parent))] = {
+        "parent_candidate": baseline.as_candidate(),
+        "changed_components": ["initial"],
+    }
+    adapter.candidate_lineage[
+        bundle_digest(PromptBundle.from_candidate(candidate))
+    ] = {
+        "parent_candidate": parent,
+        "changed_components": ["initial"],
+    }
     targets = [
         SymbolTarget("project", "pkg/a.py", "improved_target", "train"),
         SymbolTarget("project", "pkg/b.py", "regressed_target", "train"),
@@ -1859,7 +1894,7 @@ def test_component_update_parser_accepts_native_tool_call_objects_only():
     ) is None
 
 
-def test_component_update_parser_rejects_missing_strategy_contract():
+def test_component_update_parser_rejects_missing_successful_experiment():
     incomplete = {
         "component": "initial",
         "replacements": {"initial": baseline_bundle().initial},
@@ -1879,7 +1914,7 @@ def test_component_update_parser_rejects_missing_strategy_contract():
     assert CoverUpPromptAdapter._extract_component_update(response) is None
 
 
-def test_prompt_mutation_can_update_all_components_in_one_call(tmp_path):
+def test_prompt_mutation_runs_successful_test_before_updating_all_components(tmp_path):
     baseline = baseline_bundle()
     improved_initial = baseline.initial.replace(
         "Create new pytest test functions",
@@ -1890,70 +1925,81 @@ def test_prompt_mutation_can_update_all_components_in_one_call(tmp_path):
 
     def reflection_lm(**kwargs):
         calls.append(kwargs)
+        if kwargs["tools"][0]["function"]["name"] == "run_test_experiment":
+            return experiment_tool_call_response(requested_case_id(kwargs))
         return tool_call_response(
             "all",
             {"initial": improved_initial, "error": improved_error},
             diagnosis="generation and repair use inconsistent constraints",
             evidence=["both stages have terminal failures"],
+            successful_experiment_ids=[successful_experiment_id(kwargs)],
         )
 
+    target = SymbolTarget("project", "pkg/a.py", "first", "train")
     adapter = CoverUpPromptAdapter(
-        runner=SimpleNamespace(),
+        runner=SuccessfulOptimizerExperimentRunner(),
         candidate_dir=tmp_path,
-        targets_by_split={},
+        targets_by_split={"train": [target]},
         baseline=baseline,
         reflection_lm=reflection_lm,
     )
     proposals = adapter.propose_new_texts(
         baseline.as_candidate(),
         {
-            "initial": [{"Feedback": "initial failed"}],
+            "initial": [runnable_reflection_record()],
             "error": [],
         },
         ["initial", "error"],
     )
 
-    assert proposals["initial"].startswith(improved_initial)
-    assert proposals["error"].startswith(improved_error)
-    assert STRATEGY_PLAYBOOK_BEGIN in proposals["initial"]
-    assert STRATEGY_PLAYBOOK_END in proposals["error"]
-    assert len(calls) == 1
+    assert proposals["initial"] == improved_initial
+    assert proposals["error"] == improved_error
+    assert len(calls) == 2
     decision = json.loads(
         (tmp_path / "reflection_decisions.jsonl").read_text(encoding="utf-8")
     )
-    assert decision["one_call"] is True
+    assert decision["experiment_first"] is True
+    assert decision["optimizer_calls"] == 2
     assert decision["selection"] == "all"
     assert decision["changed_components"] == ["initial", "error"]
     assert decision["status"] == "accepted"
-    assert decision["strategy_delta"]["added"]
-    strategy_record = json.loads(
-        (tmp_path / "strategy_playbooks.jsonl").read_text(encoding="utf-8")
+    assert decision["successful_experiment_ids"]
+    lesson = json.loads(
+        (tmp_path / "experiment_lessons.jsonl").read_text(encoding="utf-8")
     )
-    assert set(strategy_record["playbooks"]) == {"initial", "error"}
-    assert calls[0]["tools"][0]["function"]["name"] == "update_prompt_component"
-    assert calls[0]["tool_choice"]["function"]["name"] == "update_prompt_component"
+    assert lesson["successful_experiment_ids"] == decision["successful_experiment_ids"]
+    assert calls[0]["tools"][0]["function"]["name"] == "run_test_experiment"
+    assert calls[1]["tools"][0]["function"]["name"] == "update_prompt_component"
 
 
 def test_prompt_mutation_rejects_partial_all_update_atomically(tmp_path):
     baseline = baseline_bundle()
-    adapter = CoverUpPromptAdapter(
-        runner=SimpleNamespace(),
-        candidate_dir=tmp_path,
-        targets_by_split={},
-        baseline=baseline,
-        reflection_lm=lambda **kwargs: tool_call_response(
+    target = SymbolTarget("project", "pkg/a.py", "first", "train")
+
+    def reflection_lm(**kwargs):
+        if kwargs["tools"][0]["function"]["name"] == "run_test_experiment":
+            return experiment_tool_call_response(requested_case_id(kwargs))
+        return tool_call_response(
             "all",
             {"initial": baseline.initial},
             diagnosis="both stages failed",
             evidence=["both stages have failures"],
-        ),
+            successful_experiment_ids=[successful_experiment_id(kwargs)],
+        )
+
+    adapter = CoverUpPromptAdapter(
+        runner=SuccessfulOptimizerExperimentRunner(),
+        candidate_dir=tmp_path,
+        targets_by_split={"train": [target]},
+        baseline=baseline,
+        reflection_lm=reflection_lm,
     )
 
     proposals = adapter.propose_new_texts(
         baseline.as_candidate(),
         {
-            "initial": [{"Feedback": "initial failed"}],
-            "error": [{"Feedback": "repair failed"}],
+            "initial": [runnable_reflection_record()],
+            "error": [],
         },
         ["initial", "error"],
     )
@@ -1976,106 +2022,78 @@ def test_prompt_mutation_selects_and_updates_component_in_one_call(tmp_path):
 
     def reflection_lm(**kwargs):
         calls.append(kwargs)
+        if kwargs["tools"][0]["function"]["name"] == "run_test_experiment":
+            return experiment_tool_call_response(requested_case_id(kwargs))
         return tool_call_response(
             "initial",
             {"initial": improved},
             diagnosis="inspect branch preconditions while preserving formatting",
             evidence=["the generated test missed the guarded branch"],
+            successful_experiment_ids=[successful_experiment_id(kwargs)],
         )
 
+    target = SymbolTarget("project", "pkg/a.py", "first", "train")
     adapter = CoverUpPromptAdapter(
-        runner=SimpleNamespace(),
+        runner=SuccessfulOptimizerExperimentRunner(),
         candidate_dir=tmp_path,
-        targets_by_split={},
+        targets_by_split={"train": [target]},
         baseline=baseline,
         reflection_lm=reflection_lm,
     )
     proposals = adapter.propose_new_texts(
         baseline.as_candidate(),
-        {"initial": [{
-            "Inputs": {"target": "pkg/a.py::first"},
-            "Generated Outputs": {"execution_episodes": []},
-            "Feedback": "a guarded branch remains",
-        }]},
+        {"initial": [runnable_reflection_record()]},
         ["initial"],
     )
 
-    assert proposals["initial"].startswith(improved)
-    assert proposals["initial"].count(STRATEGY_PLAYBOOK_BEGIN) == 1
-    assert len(calls) == 1
-    assert "`all` is always allowed" in calls[0]["messages"][-1]["content"]
+    assert proposals["initial"] == improved
+    assert len(calls) == 2
+    assert "`all` is always allowed" in calls[1]["messages"][-1]["content"]
     assert calls[0]["tools"][0]["type"] == "function"
 
 
-def test_prompt_mutation_consolidates_inherited_strategy_without_duplicate_blocks(
-    tmp_path,
-):
+def test_prompt_remains_unchanged_when_optimizer_cannot_prove_a_better_test(tmp_path):
     baseline = baseline_bundle()
     calls = []
-    first_playbook = {
-        "initial": {
-            "observations": ["- First learned observation."],
-            "decision_steps": ["1. First step.", "2) Second step."],
-            "failure_modes": ["First failure mode."],
-            "regression_guards": ["First regression guard."],
-        },
-    }
-    second_playbook = {
-        "initial": {
-            "observations": [
-                "First learned observation.",
-                "Second contrastive observation.",
-            ],
-            "decision_steps": [
-                "First refined step.",
-                "Second refined step.",
-                "Verify the observable branch effect.",
-            ],
-            "failure_modes": ["Second failure mode."],
-            "regression_guards": ["Second regression guard."],
-        },
-    }
+
+    class FailedExperimentRunner:
+        def evaluate_optimizer_test(
+            self, target, test_module, *, experiment_id,
+        ):
+            return {
+                "experiment_id": experiment_id,
+                "target": target.__dict__,
+                "pytest_passed": False,
+                "pytest_exit_code": 1,
+                "score": 0.0,
+                "stdout": "AssertionError",
+            }
 
     def reflection_lm(**kwargs):
         calls.append(kwargs)
-        playbooks = first_playbook if len(calls) == 1 else second_playbook
-        return tool_call_response(
-            "initial",
-            {"initial": baseline.initial},
-            playbooks=playbooks,
-            strategy_delta={
-                "added": ["Add contrastive reasoning."],
-                "refined": [],
-                "preserved": ["Preserve supported strategy."],
-                "pruned": [],
-            },
-        )
+        return experiment_tool_call_response(requested_case_id(kwargs))
 
+    target = SymbolTarget("project", "pkg/a.py", "first", "train")
     adapter = CoverUpPromptAdapter(
-        runner=SimpleNamespace(),
+        runner=FailedExperimentRunner(),
         candidate_dir=tmp_path,
-        targets_by_split={},
+        targets_by_split={"train": [target]},
         baseline=baseline,
         reflection_lm=reflection_lm,
     )
-    first = adapter.propose_new_texts(
-        baseline.as_candidate(), {"initial": [{"Feedback": "first"}]}, ["initial"]
-    )
-    second = adapter.propose_new_texts(
-        first, {"initial": [{"Feedback": "second"}]}, ["initial"]
+    proposals = adapter.propose_new_texts(
+        baseline.as_candidate(),
+        {"initial": [runnable_reflection_record()]},
+        ["initial"],
     )
 
-    assert second["initial"].count(STRATEGY_PLAYBOOK_BEGIN) == 1
-    assert "1. 1." not in first["initial"]
-    assert "- - First" not in first["initial"]
-    assert "First learned observation." in second["initial"]
-    assert "Second contrastive observation." in second["initial"]
-    assert "First failure mode." not in second["initial"]
-    assert STRATEGY_PLAYBOOK_BEGIN in calls[1]["messages"][-1]["content"]
-    records = (tmp_path / "strategy_playbooks.jsonl").read_text(
-        encoding="utf-8"
-    ).splitlines()
-    assert len(records) == 2
+    assert proposals == {"initial": baseline.initial}
+    assert len(calls) == 3
+    decision = json.loads(
+        (tmp_path / "reflection_decisions.jsonl").read_text(encoding="utf-8")
+    )
+    assert decision["status"] == "no_successful_test_experiment"
+    assert not (tmp_path / "experiment_lessons.jsonl").exists()
 
 
 def test_local_smoke_real_gepa_uses_one_call_all_flow(tmp_path):
@@ -2147,13 +2165,32 @@ def test_local_smoke_real_gepa_uses_one_call_all_flow(tmp_path):
                 exit_code=0,
             )
 
+        def evaluate_optimizer_test(
+            self, target, test_module, *, experiment_id,
+        ):
+            return {
+                "experiment_id": experiment_id,
+                "target": target.__dict__,
+                "pytest_passed": True,
+                "pytest_exit_code": 0,
+                "score": 1.0,
+                "covered_statements": 10,
+                "num_statements": 10,
+                "covered_branches": 0,
+                "num_branches": 0,
+                "stdout": "1 passed",
+            }
+
     def reflection_lm(**kwargs):
         lm_calls.append(kwargs)
+        if kwargs["tools"][0]["function"]["name"] == "run_test_experiment":
+            return experiment_tool_call_response(requested_case_id(kwargs))
         return tool_call_response(
             "all",
             {"initial": improved_initial, "error": improved_error},
             diagnosis="generation and repair need a coordinated contract",
             evidence=["both attempts terminate without full coverage"],
+            successful_experiment_ids=[successful_experiment_id(kwargs)],
         )
 
     train = [SymbolTarget("project", "pkg/module.py", "target", "train")]
@@ -2171,15 +2208,13 @@ def test_local_smoke_real_gepa_uses_one_call_all_flow(tmp_path):
         max_metric_calls=3,
     )
 
-    assert len(lm_calls) == 1
-    assert result.best_bundle.initial.startswith(improved_initial)
-    assert result.best_bundle.error.startswith(improved_error)
-    assert STRATEGY_PLAYBOOK_BEGIN in result.best_bundle.initial
-    assert STRATEGY_PLAYBOOK_BEGIN in result.best_bundle.error
+    assert len(lm_calls) == 2
+    assert result.best_bundle.initial == improved_initial
+    assert result.best_bundle.error == improved_error
     decisions = (tmp_path / "artifacts" / "candidates" /
                  "reflection_decisions.jsonl").read_text(encoding="utf-8")
     decision = json.loads(decisions.splitlines()[-1])
-    assert decision["one_call"] is True
+    assert decision["experiment_first"] is True
     assert decision["selection"] == "all"
     assert decision["changed_components"] == ["initial", "error"]
     assert decision["status"] == "accepted"
