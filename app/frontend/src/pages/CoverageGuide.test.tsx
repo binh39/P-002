@@ -13,9 +13,9 @@ describe("coverage guide", () => {
     expect(screen.getByRole("heading", { name: "Branch coverage" })).toBeInTheDocument();
     expect(screen.getByText("50%", { selector: ".branch-ring strong" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Cả hai test" }));
+    await user.click(screen.getByRole("button", { name: "Both tests" }));
 
     expect(screen.getByText("100%", { selector: ".branch-ring strong" })).toBeInTheDocument();
-    expect(screen.getByText("2 / 2 branch")).toBeInTheDocument();
+    expect(screen.getByText("2 / 2 branches")).toBeInTheDocument();
   });
 });

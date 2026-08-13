@@ -27,23 +27,23 @@ const scenarios: Record<
   }
 > = {
   standard: {
-    label: "Đơn thường",
+    label: "Standard order",
     input: "assert shipping_fee(100) == 30",
     result: "30",
     trueCovered: false,
     falseCovered: true,
   },
   free: {
-    label: "Miễn phí",
+    label: "Free shipping",
     input: "assert shipping_fee(500) == 0",
     result: "0",
     trueCovered: true,
     falseCovered: false,
   },
   both: {
-    label: "Cả hai test",
+    label: "Both tests",
     input: "assert shipping_fee(100) == 30\nassert shipping_fee(500) == 0",
-    result: "30 và 0",
+    result: "30 and 0",
     trueCovered: true,
     falseCovered: true,
   },
@@ -59,7 +59,7 @@ function Formula({
   denominator: string;
 }) {
   return (
-    <div className="coverage-math" aria-label={`${symbol} bằng ${numerator} chia ${denominator}`}>
+    <div className="coverage-math" aria-label={`${symbol} equals ${numerator} divided by ${denominator}`}>
       <var>{symbol}</var>
       <span>=</span>
       <span className="math-fraction">
@@ -77,7 +77,7 @@ function CodeCoverage({ lines, label }: { lines: SourceLine[]; label: string }) 
       <div className="code-card-toolbar">
         <span>shipping.py</span>
         <span className="code-legend">
-          <i /> Dòng đã chạy
+          <i /> Executed line
         </span>
       </div>
       <pre aria-label={label}>
@@ -88,7 +88,7 @@ function CodeCoverage({ lines, label }: { lines: SourceLine[]; label: string }) 
           >
             <b>{line.number}</b>
             <code>{line.code}</code>
-            <em aria-label={line.covered ? "Đã chạy" : "Chưa chạy"}>{line.covered ? "✓" : "—"}</em>
+            <em aria-label={line.covered ? "Executed" : "Not executed"}>{line.covered ? "✓" : "—"}</em>
           </span>
         ))}
       </pre>
@@ -122,14 +122,14 @@ export default function CoverageGuide() {
       <header className="coverage-guide-hero">
         <div>
           <span className="coverage-guide-eyebrow">Coverage fundamentals</span>
-          <h1>Hai thước đo cốt lõi của test coverage</h1>
+          <h1>Two core test coverage metrics</h1>
           <p>
-            Statement coverage đo những câu lệnh đã chạy. Branch coverage đo những hướng xử lý
-            True/False đã được kiểm thử.
+            Statement coverage measures executed statements. Branch coverage measures whether
+            each True/False path has been tested.
           </p>
         </div>
-        <div className="coverage-score-preview" aria-label="Công thức điểm coverage">
-          <span>Điểm đánh giá của PromptOpt</span>
+        <div className="coverage-score-preview" aria-label="Coverage score formula">
+          <span>PromptOpt evaluation score</span>
           <strong>40% + 60%</strong>
           <div>
             <i className="statement-dot" /> Statement
@@ -138,26 +138,26 @@ export default function CoverageGuide() {
         </div>
       </header>
 
-      <section className="coverage-primary-grid" aria-label="Hai metric coverage chính">
+      <section className="coverage-primary-grid" aria-label="Two primary coverage metrics">
         <article className="coverage-primary-card statement-primary-card">
           <div className="coverage-primary-title">
             <span className="coverage-level">C0</span>
             <div>
-              <small>Metric thứ nhất</small>
+              <small>Metric one</small>
               <h2>Statement coverage</h2>
             </div>
           </div>
           <div className="metric-definition">
-            <span>Định nghĩa</span>
-            <p>Phần trăm câu lệnh thực thi được mà bộ test đã chạy qua ít nhất một lần.</p>
-            <strong>Trả lời: “Code nào đã thực sự được chạy?”</strong>
+            <span>Definition</span>
+            <p>The percentage of executable statements reached by the test suite at least once.</p>
+            <strong>Answers: “Which code actually ran?”</strong>
           </div>
           <div className="metric-formula-block">
-            <span>Công thức</span>
+            <span>Formula</span>
             <Formula
               symbol="SC"
-              numerator="Số statement đã chạy"
-              denominator="Tổng statement thực thi được"
+              numerator="Executed statements"
+              denominator="Total executable statements"
             />
           </div>
         </article>
@@ -166,24 +166,24 @@ export default function CoverageGuide() {
           <div className="coverage-primary-title">
             <span className="coverage-level">C1</span>
             <div>
-              <small>Metric thứ hai</small>
+              <small>Metric two</small>
               <h2>Branch coverage</h2>
             </div>
           </div>
           <div className="metric-definition">
-            <span>Định nghĩa</span>
+            <span>Definition</span>
             <p>
-              Phần trăm các hướng rẽ của quyết định như <code>if</code>/<code>else</code> đã được đi
-              qua.
+              The percentage of decision paths such as <code>if</code>/<code>else</code> that the
+              tests have taken.
             </p>
-            <strong>Trả lời: “Mọi kết quả True và False đã được thử chưa?”</strong>
+            <strong>Answers: “Have both True and False outcomes been tested?”</strong>
           </div>
           <div className="metric-formula-block">
-            <span>Công thức</span>
+            <span>Formula</span>
             <Formula
               symbol="BC"
-              numerator="Số branch đã đi qua"
-              denominator="Tổng branch có thể đi"
+              numerator="Executed branches"
+              denominator="Total possible branches"
             />
           </div>
         </article>
@@ -191,28 +191,28 @@ export default function CoverageGuide() {
 
       <section className="coverage-example-section statement-example-section">
         <div className="coverage-section-heading">
-          <span>01 · Ví dụ Statement coverage</span>
-          <h2>Mỗi dòng màu xanh là một statement đã chạy</h2>
+          <span>01 · Statement coverage example</span>
+          <h2>Every green line is an executed statement</h2>
           <p>
-            Test <code>shipping_fee(100)</code> chạy 4 trên 5 statement. Toàn bộ dòng đã chạy được
-            bôi xanh và đánh dấu ✓; dòng 4 chưa chạy được giữ màu tối để nhìn ra khoảng trống.
+            The test <code>shipping_fee(100)</code> executes 4 of 5 statements. Executed lines are
+            highlighted green with a ✓; line 4 stays dark to show the gap.
           </p>
         </div>
 
         <div className="coverage-example-flow">
           <article className="coverage-example-step test-step">
-            <StepLabel number="1">Chạy test case</StepLabel>
+            <StepLabel number="1">Run the test case</StepLabel>
             <pre className="example-test-code">assert shipping_fee(100) == 30</pre>
             <p>
-              Input 100 làm điều kiện <code>total &gt;= 500</code> nhận giá trị False.
+              Input 100 makes <code>total &gt;= 500</code> evaluate to False.
             </p>
           </article>
           <article className="coverage-example-step code-step">
-            <StepLabel number="2">Quan sát code được thực thi</StepLabel>
-            <CodeCoverage lines={statementLines} label="Ví dụ statement coverage" />
+            <StepLabel number="2">Inspect the executed code</StepLabel>
+            <CodeCoverage lines={statementLines} label="Statement coverage example" />
           </article>
           <article className="coverage-example-step result-step">
-            <StepLabel number="3">Áp dụng công thức</StepLabel>
+            <StepLabel number="3">Apply the formula</StepLabel>
             <div className="coverage-result-card">
               <span className="result-label">Statement coverage</span>
               <div
@@ -220,13 +220,13 @@ export default function CoverageGuide() {
                 style={{ "--coverage": "80%" } as CSSProperties}
               >
                 <strong>80%</strong>
-                <span>4 / 5 statement</span>
+                <span>4 / 5 statements</span>
               </div>
               <div className="compact-math">
                 <span>SC</span> = <b>4</b> / 5 × 100% = <strong>80%</strong>
               </div>
               <p>
-                Thêm test <code>shipping_fee(500)</code> để chạy dòng 4 và đạt 100% statement
+                Add <code>shipping_fee(500)</code> to execute line 4 and reach 100% statement
                 coverage.
               </p>
             </div>
@@ -236,15 +236,15 @@ export default function CoverageGuide() {
 
       <section className="coverage-example-section branch-example-section">
         <div className="coverage-section-heading">
-          <span>02 · Ví dụ Branch coverage</span>
-          <h2>Cùng một đoạn code, mỗi input có thể đi theo một nhánh khác</h2>
+          <span>02 · Branch coverage example</span>
+          <h2>The same code can take a different branch for each input</h2>
           <p>
-            Chọn test case. Code bên dưới sẽ tô xanh toàn bộ những dòng thực sự được chạy và cập
-            nhật tỷ lệ branch coverage tương ứng.
+            Select a test case. The code below highlights every executed line in green and updates
+            the corresponding branch coverage.
           </p>
         </div>
 
-        <div className="scenario-tabs" role="group" aria-label="Chọn test case">
+        <div className="scenario-tabs" role="group" aria-label="Choose a test case">
           {(
             Object.entries(scenarios) as [BranchScenario, (typeof scenarios)[BranchScenario]][]
           ).map(([id, item]) => (
@@ -262,18 +262,18 @@ export default function CoverageGuide() {
 
         <div className="coverage-example-flow">
           <article className="coverage-example-step test-step">
-            <StepLabel number="1">Chọn và chạy test case</StepLabel>
+            <StepLabel number="1">Choose and run a test case</StepLabel>
             <div className="branch-code-test">
               <pre>{active.input}</pre>
             </div>
-            <p>Mỗi lựa chọn tạo ra một đường thực thi khác nhau trong cùng đoạn code.</p>
+            <p>Each choice creates a different execution path through the same code.</p>
           </article>
           <article className="coverage-example-step code-step">
-            <StepLabel number="2">Theo dõi các dòng được thực thi</StepLabel>
-            <CodeCoverage lines={branchLines} label="Code coverage theo test case đã chọn" />
+            <StepLabel number="2">Track the executed lines</StepLabel>
+            <CodeCoverage lines={branchLines} label="Code coverage for the selected test case" />
           </article>
           <article className="coverage-example-step result-step">
-            <StepLabel number="3">Đếm số nhánh và tính kết quả</StepLabel>
+            <StepLabel number="3">Count branches and calculate</StepLabel>
             <div className="coverage-result-card branch-result-card">
               <span className="result-label">Branch coverage</span>
               <div
@@ -281,7 +281,7 @@ export default function CoverageGuide() {
                 style={{ "--coverage": `${coveredBranches * 50}%` } as CSSProperties}
               >
                 <strong>{coveredBranches * 50}%</strong>
-                <span>{coveredBranches} / 2 branch</span>
+                <span>{coveredBranches} / 2 branches</span>
               </div>
               <div className="compact-math">
                 <span>BC</span> = <b>{coveredBranches}</b> / 2 × 100% ={" "}
@@ -289,19 +289,19 @@ export default function CoverageGuide() {
               </div>
               <dl>
                 <div>
-                  <dt>Kết quả test</dt>
+                  <dt>Test result</dt>
                   <dd>{active.result}</dd>
                 </div>
                 <div>
-                  <dt>Nhánh True</dt>
+                  <dt>True branch</dt>
                   <dd className={active.trueCovered ? "metric-covered" : "metric-missing"}>
-                    {active.trueCovered ? "✓ Đã chạy" : "— Chưa chạy"}
+                    {active.trueCovered ? "✓ Executed" : "— Not executed"}
                   </dd>
                 </div>
                 <div>
-                  <dt>Nhánh False</dt>
+                  <dt>False branch</dt>
                   <dd className={active.falseCovered ? "metric-covered" : "metric-missing"}>
-                    {active.falseCovered ? "✓ Đã chạy" : "— Chưa chạy"}
+                    {active.falseCovered ? "✓ Executed" : "— Not executed"}
                   </dd>
                 </div>
               </dl>
@@ -312,17 +312,17 @@ export default function CoverageGuide() {
 
       <section className="coverage-takeaway">
         <div>
-          <span>Ghi nhớ</span>
-          <h2>100% statement coverage chưa chắc là 100% branch coverage.</h2>
+          <span>Remember</span>
+          <h2>100% statement coverage does not guarantee 100% branch coverage.</h2>
           <p>
-            Một test có thể chạy qua dòng <code>if</code> nhưng chỉ kiểm tra một kết quả. Test tốt
-            cần đi qua cả hành vi chính, trường hợp biên và đường lỗi.
+            A test can execute an <code>if</code> line while checking only one outcome. Good tests
+            cover the main behavior, edge cases, and error paths.
           </p>
         </div>
-        <div className="score-equation" aria-label="Công thức điểm đánh giá của dự án">
+        <div className="score-equation" aria-label="Project evaluation score formula">
           <span>Evaluation score</span>
           <strong>Score = 0.4 × SC + 0.6 × BC</strong>
-          <small>Branch được ưu tiên vì phản ánh độ đa dạng của các đường thực thi.</small>
+          <small>Branch coverage has more weight because it reflects execution-path diversity.</small>
         </div>
       </section>
     </div>
