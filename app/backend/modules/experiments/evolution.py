@@ -23,12 +23,8 @@ _MERGE_REJECTED = re.compile(
 )
 _MERGE_PAIR = re.compile(r"(?:Skipping merge of|Merge of)\s+(\d+)\s+and\s+(\d+)")
 _NEW_PROGRAM_SCORE = re.compile(r"Val aggregate for new program:\s*([-+\d.eE]+)")
-_NEW_PROGRAM_OBJECTIVES = re.compile(
-    r"Objective aggregate scores for new program:\s*(\{.*\})"
-)
-_BEST_PROGRAM = re.compile(
-    r"Best program as per aggregate score on valset:\s*(\d+)"
-)
+_NEW_PROGRAM_OBJECTIVES = re.compile(r"Objective aggregate scores for new program:\s*(\{.*\})")
+_BEST_PROGRAM = re.compile(r"Best program as per aggregate score on valset:\s*(\d+)")
 _BEST_SCORE = re.compile(r"Best score on valset:\s*([-+\d.eE]+)")
 _NEW_PROGRAM_INDEX = re.compile(r"New program candidate index:\s*(\d+)")
 
@@ -226,10 +222,7 @@ def parse_evolution_log(entries: Iterable[CloudLogLine]) -> EvolutionResponse:
         previous_best_program_index = last_best_program_index
         if current.best_program_index is not None:
             last_best_program_index = current.best_program_index
-        changed = (
-            last_best_program_index is not None
-            and last_best_program_index != previous_best_program_index
-        )
+        changed = last_best_program_index is not None and last_best_program_index != previous_best_program_index
 
         selected_metrics = candidate_metrics.get(last_best_program_index)
         if selected_metrics is not None:
@@ -277,10 +270,7 @@ def parse_evolution_log(entries: Iterable[CloudLogLine]) -> EvolutionResponse:
     return EvolutionResponse(
         available=True,
         source="cloud_run_stdout",
-        message=(
-            "Parsed aggregate-best candidate metrics from Cloud Run stdout; "
-            "target-level details are not available."
-        ),
+        message="Parsed aggregate-best candidate metrics from Cloud Run stdout; target-level details are not available.",
         iterations=iterations,
         metrics=metrics,
     )

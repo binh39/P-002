@@ -167,9 +167,7 @@ function IterationFlow({ iteration }: { iteration: EvolutionIteration }) {
         <div>
           <dt>Best validation candidate</dt>
           <dd>
-            <FlowValue>
-              {iteration.bestCandidateChanged ? "Updated" : "Unchanged"}
-            </FlowValue>
+            <FlowValue>{iteration.bestCandidateChanged ? "Updated" : "Unchanged"}</FlowValue>
             <small>
               Statement {metric(iteration.bestStatement)} · Branch {metric(iteration.bestBranch)} ·
               Score {metric(iteration.bestScore)}
@@ -193,9 +191,7 @@ function EvolutionPanel({ evolution }: { evolution: OptimizationEvolution }) {
       <div className="card-heading evolution-heading">
         <div>
           <h2>Live GEPA evolution</h2>
-          <p>
-            Iteration history and metrics for the aggregate-best validation candidate.
-          </p>
+          <p>Iteration history and metrics for the aggregate-best validation candidate.</p>
         </div>
         <StatusBadge tone={evolution.available ? "success" : "neutral"}>
           {evolution.available ? `${evolution.iterations.length} iterations` : "Waiting for logs"}
@@ -241,8 +237,8 @@ function EvolutionPanel({ evolution }: { evolution: OptimizationEvolution }) {
             <div className="evolution-chart-panel">
               <div className="evolution-panel-label">Best validation metrics</div>
               <p className="evolution-chart-description">
-                Score, statement and branch belong to the same aggregate-best candidate,
-                not separate Pareto-front maxima.
+                Score, statement and branch belong to the same aggregate-best candidate, not
+                separate Pareto-front maxima.
               </p>
               <div
                 className="evolution-chart"

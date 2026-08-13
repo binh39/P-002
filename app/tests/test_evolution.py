@@ -114,9 +114,7 @@ def test_full_validation_candidate_does_not_replace_metrics_when_not_best():
         "Iteration 1: New program candidate index: 1",
     ]
 
-    result = parse_evolution_log(
-        [CloudLogLine(timestamp=None, text=message) for message in messages]
-    )
+    result = parse_evolution_log([CloudLogLine(timestamp=None, text=message) for message in messages])
 
     candidate = result.iterations[1]
     assert candidate.decision == "Accepted"
