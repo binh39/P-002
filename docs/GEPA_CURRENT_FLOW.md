@@ -78,7 +78,7 @@ Environment
                 +-----------------------------------------+
                 | GEPA search                             |
                 | seed candidate = baseline               |
-                | Pareto + hybrid frontier                |
+                | 70% best / 30% Pareto + hybrid frontier|
                 | causal selector: initial or error       |
                 | reflection minibatch <= 8 examples      |
                 | merge enabled                           |
@@ -277,16 +277,19 @@ Test suite goc khong duoc copy vao generated workspace.
 Raw symbol score:
 
 ```text
-raw = 0.4 * statement_coverage + 0.6 * branch_coverage
+raw = 0.3 * statement_coverage + 0.7 * branch_coverage
 ```
+
+Neu toan bo target/split khong co executable branch, trong so duoc chuan hoa ve
+100% statement de khong tao 0.7 diem ao cho target khong cover duoc statement nao.
 
 GEPA khong nhan raw score truc tiep. Adapter scale moi example de trung binh score
 GEPA bang micro-average cua ca split:
 
 ```text
 weighted(example i) =
-    N * 0.4 * covered_statements_i / total_reference_statements
-  + N * 0.6 * covered_branches_i   / total_reference_branches
+    N * 0.3 * covered_statements_i / total_reference_statements
+  + N * 0.7 * covered_branches_i   / total_reference_branches
 
 mean_i(weighted(example i)) = micro-average coverage cua split
 ```
@@ -358,7 +361,7 @@ Cau hinh hien tai:
 
 ```text
 seed_candidate              = exact baseline bundle
-candidate_selection_strategy = pareto
+candidate_selection_strategy = 70% current aggregate best + 30% Pareto
 frontier_type               = hybrid
 module_selector             = causal(initial or exercised error)
 reflection_minibatch_size   = min(8, number_of_train_targets)

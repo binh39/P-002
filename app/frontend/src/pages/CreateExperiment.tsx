@@ -999,9 +999,14 @@ function SettingsStep({
         </div>
         <div className="protocol-grid">
           <div>
+            <span>Candidate selection</span>
+            <strong>70% best · 30% Pareto</strong>
+            <small>Exploit the aggregate best while preserving frontier diversity</small>
+          </div>
+          <div>
             <span>Target metric</span>
             <strong>Coverage score</strong>
-            <small>40% statement + 60% branch</small>
+            <small>30% statement + 70% branch</small>
           </div>
           <div>
             <span>Holdout</span>

@@ -13,6 +13,7 @@ from .schemas import EvolutionIteration, EvolutionMetricPoint, EvolutionResponse
 _ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 _ITERATION = re.compile(r"Iteration\s+(\d+):\s*(.*)", re.DOTALL)
 _BASELINE = re.compile(r"Base program full valset score:\s*([-+\d.eE]+)")
+_BASELINE_METRICS = re.compile(r"Baseline validation aggregate metrics:\s*(\{.*\})")
 _SELECTED = re.compile(r"Selected program\s+(\d+)\s+score:\s*([-+\d.eE]+)")
 _PROPOSAL = re.compile(r"Proposed new text for\s+([^:]+):\s*(.*)", re.DOTALL)
 _SUBSAMPLE_REJECTED = re.compile(r"New subsample score\s+([-+\d.eE]+)\s+is not better than old score\s+([-+\d.eE]+)")
@@ -21,8 +22,15 @@ _MERGE_REJECTED = re.compile(
     r"New program subsample score\s+([-+\d.eE]+)\s+is worse than both parents\s+(.+?),\s*skipping merge"
 )
 _MERGE_PAIR = re.compile(r"(?:Skipping merge of|Merge of)\s+(\d+)\s+and\s+(\d+)")
-_OBJECTIVES = re.compile(r"Objective pareto front scores:\s*(\{.*\})")
-_PARETO_SCORE = re.compile(r"Valset pareto front aggregate score:\s*([-+\d.eE]+)")
+_NEW_PROGRAM_SCORE = re.compile(r"Val aggregate for new program:\s*([-+\d.eE]+)")
+_NEW_PROGRAM_OBJECTIVES = re.compile(
+    r"Objective aggregate scores for new program:\s*(\{.*\})"
+)
+_BEST_PROGRAM = re.compile(
+    r"Best program as per aggregate score on valset:\s*(\d+)"
+)
+_BEST_SCORE = re.compile(r"Best score on valset:\s*([-+\d.eE]+)")
+_NEW_PROGRAM_INDEX = re.compile(r"New program candidate index:\s*(\d+)")
 
 
 @dataclass(frozen=True)
@@ -46,7 +54,11 @@ class _IterationState:
     best_statement: float | None = None
     best_branch: float | None = None
     best_score: float | None = None
-    pareto_changed: bool = False
+    best_program_index: int | None = None
+    new_program_index: int | None = None
+    new_program_statement: float | None = None
+    new_program_branch: float | None = None
+    new_program_score: float | None = None
 
 
 def _number(value: str) -> float | None:
@@ -93,14 +105,21 @@ def parse_evolution_log(entries: Iterable[CloudLogLine]) -> EvolutionResponse:
             current = state(index)
             proposal_iteration = None
 
+            if baseline_metrics := _BASELINE_METRICS.search(body):
+                values = _literal_mapping(baseline_metrics.group(1))
+                current.best_statement = _number(str(values.get("statement")))
+                current.best_branch = _number(str(values.get("branch")))
+                current.best_score = _number(str(values.get("score")))
+                current.best_program_index = 0
+                continue
             if baseline := _BASELINE.search(body):
                 current.strategy = "baseline"
                 current.parent_program = "Program 0"
                 current.parent_validation_score = _number(baseline.group(1))
                 current.best_score = current.parent_validation_score
+                current.best_program_index = 0
                 current.decision = "Baseline evaluated"
                 current.full_validation = True
-                current.pareto_changed = True
                 continue
             if selected := _SELECTED.search(body):
                 current.strategy = "reflective mutation"
@@ -146,18 +165,25 @@ def parse_evolution_log(entries: Iterable[CloudLogLine]) -> EvolutionResponse:
                 if "Skipping merge" in body:
                     current.decision = "Rejected"
                 continue
-            if objectives := _OBJECTIVES.search(body):
-                values = _literal_mapping(objectives.group(1))
-                current.best_statement = _number(str(values.get("statement")))
-                current.best_branch = _number(str(values.get("branch")))
-                current.pareto_changed = True
+            if new_score := _NEW_PROGRAM_SCORE.search(body):
+                current.new_program_score = _number(new_score.group(1))
                 continue
-            if aggregate := _PARETO_SCORE.search(body):
-                current.best_score = _number(aggregate.group(1))
-                current.pareto_changed = True
+            if objectives := _NEW_PROGRAM_OBJECTIVES.search(body):
+                values = _literal_mapping(objectives.group(1))
+                current.new_program_statement = _number(str(values.get("statement")))
+                current.new_program_branch = _number(str(values.get("branch")))
+                continue
+            if best_program := _BEST_PROGRAM.search(body):
+                current.best_program_index = int(best_program.group(1))
                 if current.decision == "Pending":
                     current.decision = "Accepted"
                     current.full_validation = True
+                continue
+            if best_score := _BEST_SCORE.search(body):
+                current.best_score = _number(best_score.group(1))
+                continue
+            if new_program := _NEW_PROGRAM_INDEX.search(body):
+                current.new_program_index = int(new_program.group(1))
                 continue
             continue
 
@@ -178,15 +204,42 @@ def parse_evolution_log(entries: Iterable[CloudLogLine]) -> EvolutionResponse:
     last_statement: float | None = None
     last_branch: float | None = None
     last_score: float | None = None
+    last_best_program_index: int | None = None
+    candidate_metrics: dict[int, tuple[float | None, float | None, float | None]] = {}
     iterations: list[EvolutionIteration] = []
     metrics: list[EvolutionMetricPoint] = []
     for index in sorted(states):
         current = states[index]
-        changed = current.pareto_changed
-        if current.best_statement is not None:
-            last_statement = current.best_statement
-        if current.best_branch is not None:
-            last_branch = current.best_branch
+        if current.strategy == "baseline":
+            candidate_metrics[0] = (
+                current.best_statement,
+                current.best_branch,
+                current.best_score,
+            )
+        if current.new_program_index is not None:
+            candidate_metrics[current.new_program_index] = (
+                current.new_program_statement,
+                current.new_program_branch,
+                current.new_program_score,
+            )
+
+        previous_best_program_index = last_best_program_index
+        if current.best_program_index is not None:
+            last_best_program_index = current.best_program_index
+        changed = (
+            last_best_program_index is not None
+            and last_best_program_index != previous_best_program_index
+        )
+
+        selected_metrics = candidate_metrics.get(last_best_program_index)
+        if selected_metrics is not None:
+            statement, branch, score = selected_metrics
+            if statement is not None:
+                last_statement = statement
+            if branch is not None:
+                last_branch = branch
+            if score is not None:
+                last_score = score
         if current.best_score is not None:
             last_score = current.best_score
         current.best_statement = last_statement
@@ -208,6 +261,7 @@ def parse_evolution_log(entries: Iterable[CloudLogLine]) -> EvolutionResponse:
                 best_statement=current.best_statement,
                 best_branch=current.best_branch,
                 best_score=current.best_score,
+                best_candidate_changed=changed,
                 pareto_changed=changed,
             )
         )
@@ -223,7 +277,10 @@ def parse_evolution_log(entries: Iterable[CloudLogLine]) -> EvolutionResponse:
     return EvolutionResponse(
         available=True,
         source="cloud_run_stdout",
-        message="Parsed from Cloud Run stdout; target-level details are not available.",
+        message=(
+            "Parsed aggregate-best candidate metrics from Cloud Run stdout; "
+            "target-level details are not available."
+        ),
         iterations=iterations,
         metrics=metrics,
     )

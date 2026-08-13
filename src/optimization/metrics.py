@@ -4,6 +4,9 @@ from dataclasses import asdict, dataclass
 
 from .coveragepy import SymbolCoverage
 
+STATEMENT_SCORE_WEIGHT = 0.3
+BRANCH_SCORE_WEIGHT = 0.7
+
 
 @dataclass(frozen=True)
 class CoverageScore:
@@ -34,7 +37,12 @@ def score_symbol(before: SymbolCoverage, after: SymbolCoverage) -> CoverageScore
     gained_branches = missing_branches.intersection(after.executed_branches)
     statement_gain = len(gained_lines) / len(missing_lines) if missing_lines else 1.0
     branch_gain = len(gained_branches) / len(missing_branches) if missing_branches else 1.0
-    score = statement_gain if not missing_branches else 0.4 * statement_gain + 0.6 * branch_gain
+    score = (
+        STATEMENT_SCORE_WEIGHT * statement_gain
+        + BRANCH_SCORE_WEIGHT * branch_gain
+        if missing_branches
+        else statement_gain
+    )
     return CoverageScore(
         score=score,
         statement_gain=statement_gain,
@@ -122,7 +130,12 @@ def aggregate_coverage_score(
     num_branches = sum(int(score["num_branches"]) for score in normalized)
     statement_coverage = covered_statements / num_statements if num_statements else 1.0
     branch_coverage = covered_branches / num_branches if num_branches else 1.0
-    score = 0.4 * statement_coverage + 0.6 * branch_coverage
+    score = (
+        STATEMENT_SCORE_WEIGHT * statement_coverage
+        + BRANCH_SCORE_WEIGHT * branch_coverage
+        if num_branches
+        else statement_coverage
+    )
     return {
         "score": score,
         "statement_coverage": statement_coverage,

@@ -235,6 +235,8 @@ class EvolutionIteration(StrictModel):
     best_statement: float | None = None
     best_branch: float | None = None
     best_score: float | None = None
+    best_candidate_changed: bool = False
+    # Retained so persisted evolution snapshots from earlier releases still validate.
     pareto_changed: bool = False
 
 

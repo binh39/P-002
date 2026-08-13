@@ -22,6 +22,7 @@ from src.optimization.coveragepy import (
     symbol_coverage,
 )
 from src.optimization.gepa import (
+    BestParetoCandidateSelector,
     CausalReflectionComponentSelector,
     CoverUpPromptAdapter,
     LLMReflectionComponentSelector,
@@ -954,6 +955,23 @@ def test_score_symbol_uses_statement_and_branch_gain():
     assert "Remaining branches" in build_feedback(result)
 
 
+def test_score_symbol_weights_branch_at_seventy_percent():
+    before = coverage(
+        missing_lines=(1, 2),
+        missing_branches=((1, 2), (1, 3)),
+    )
+    after = coverage(
+        executed_lines=(1,),
+        executed_branches=((1, 2), (1, 3)),
+    )
+
+    result = score_symbol(before, after)
+
+    assert result.statement_gain == 0.5
+    assert result.branch_gain == 1.0
+    assert result.score == pytest.approx(0.85)
+
+
 def test_aggregate_score_weights_total_statements_and_branches():
     results = [
         {"score": score_symbol(coverage(missing_lines=(1,), missing_branches=((1, 2),)),
@@ -969,6 +987,22 @@ def test_aggregate_score_weights_total_statements_and_branches():
     assert aggregate["statement_coverage"] == pytest.approx(1 / 11)
     assert aggregate["branch_coverage"] == pytest.approx(1 / 11)
     assert aggregate["score"] == pytest.approx(1 / 11)
+
+
+def test_aggregate_score_weights_branch_at_seventy_percent():
+    aggregate = aggregate_coverage_score([{
+        "coverage": {
+            "valid": True,
+            "covered_statements": 10,
+            "num_statements": 10,
+            "covered_branches": 0,
+            "num_branches": 10,
+        }
+    }])
+
+    assert aggregate["statement_coverage"] == 1.0
+    assert aggregate["branch_coverage"] == 0.0
+    assert aggregate["score"] == pytest.approx(0.3)
 
 
 def test_aggregate_score_penalizes_missing_coverage_using_reference():
@@ -1970,6 +2004,25 @@ def test_local_smoke_real_gepa_uses_one_call_all_flow(tmp_path):
     assert decision["status"] == "accepted"
 
 
+def test_best_pareto_selector_uses_seventy_thirty_probability_boundary():
+    class StubRandom:
+        def __init__(self):
+            self.values = iter((0.6999, 0.7))
+
+        def random(self):
+            return next(self.values)
+
+    selector = BestParetoCandidateSelector(
+        best_probability=0.7,
+        rng=StubRandom(),
+    )
+    selector.best_selector = SimpleNamespace(select_candidate_idx=lambda state: 11)
+    selector.pareto_selector = SimpleNamespace(select_candidate_idx=lambda state: 22)
+
+    assert selector.select_candidate_idx(object()) == 11
+    assert selector.select_candidate_idx(object()) == 22
+
+
 def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
     baseline = baseline_bundle()
     captured = {}
@@ -2001,6 +2054,11 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
                 }
                 for target in targets
             ],
+            "aggregate": {
+                "score": 0.75,
+                "statement_coverage": 0.75,
+                "branch_coverage": 1.0,
+            },
         },
     )
     train = [
@@ -2027,6 +2085,10 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
     assert captured["cache_evaluation"] is False
     assert captured["reflection_minibatch_size"] == 8
     assert isinstance(captured["module_selector"], LLMReflectionComponentSelector)
+    assert isinstance(
+        captured["candidate_selection_strategy"], BestParetoCandidateSelector
+    )
+    assert captured["candidate_selection_strategy"].best_probability == 0.7
     assert result.best_bundle == baseline
 
 

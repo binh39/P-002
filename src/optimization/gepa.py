@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import random
 import re
 import threading
 from collections.abc import Mapping, Sequence
@@ -12,8 +13,16 @@ from pathlib import Path
 from typing import Any
 
 import gepa as gepa_core
+from gepa.strategies.candidate_selector import (
+    CurrentBestCandidateSelector,
+    ParetoCandidateSelector,
+)
 
-from .metrics import aggregate_coverage_score
+from .metrics import (
+    BRANCH_SCORE_WEIGHT,
+    STATEMENT_SCORE_WEIGHT,
+    aggregate_coverage_score,
+)
 from .models import SymbolTarget
 from .prompts import PromptBundle
 from .runner import CoverUpExperimentRunner
@@ -69,6 +78,31 @@ REFLECTION_REQUEST_END = "PROMPTOPT_REFLECTION_REQUEST_END"
 
 _DIGEST_LOCKS: dict[str, threading.Lock] = {}
 _DIGEST_LOCKS_GUARD = threading.Lock()
+
+
+class BestParetoCandidateSelector:
+    """Select the aggregate best candidate 70% of the time, Pareto otherwise."""
+
+    def __init__(
+        self,
+        *,
+        best_probability: float = 0.7,
+        rng: random.Random | None = None,
+    ) -> None:
+        if not 0.0 <= best_probability <= 1.0:
+            raise ValueError("best_probability must be between 0 and 1")
+        self.best_probability = best_probability
+        self.rng = rng or random.Random(0)
+        self.best_selector = CurrentBestCandidateSelector()
+        self.pareto_selector = ParetoCandidateSelector(self.rng)
+
+    def select_candidate_idx(self, state: Any) -> int:
+        selector = (
+            self.best_selector
+            if self.rng.random() < self.best_probability
+            else self.pareto_selector
+        )
+        return selector.select_candidate_idx(state)
 
 
 def log_reflection_request(request: Mapping[str, Any]) -> None:
@@ -970,13 +1004,18 @@ class CoverUpPromptAdapter:
         covered_statements = int(coverage["covered_statements"]) if valid else 0
         covered_branches = int(coverage["covered_branches"]) if valid else 0
         count = len(identities)
+        if not total_branches:
+            return (
+                count * covered_statements / total_statements
+                if total_statements else 1.0
+            )
         statement = (
-            count * 0.4 * covered_statements / total_statements
-            if total_statements else 0.4
+            count * STATEMENT_SCORE_WEIGHT * covered_statements / total_statements
+            if total_statements else STATEMENT_SCORE_WEIGHT
         )
         branch = (
-            count * 0.6 * covered_branches / total_branches
-            if total_branches else 0.6
+            count * BRANCH_SCORE_WEIGHT * covered_branches / total_branches
+            if total_branches else 0.0
         )
         return statement + branch
 
@@ -1644,6 +1683,7 @@ def optimize(
         reflection_lm=reflection_lm,
         evaluation_replicates=evaluation_replicates,
     )
+    validation_baseline_aggregate: dict[str, Any] | None = None
     for preflight_split, preflight_targets in (
         ("train", train_targets),
         ("validation", validation_targets),
@@ -1663,6 +1703,22 @@ def optimize(
             expected_targets=preflight_targets,
         )
         adapter._remember_reference_units(baseline_preflight["results"])
+        if preflight_split == "validation":
+            validation_baseline_aggregate = baseline_preflight.get("aggregate") or (
+                aggregate_coverage_score(baseline_preflight["results"])
+            )
+    assert validation_baseline_aggregate is not None
+    baseline_metrics = {
+        "score": float(validation_baseline_aggregate.get("score", 0.0)),
+        "statement": float(
+            validation_baseline_aggregate.get("statement_coverage", 0.0)
+        ),
+        "branch": float(validation_baseline_aggregate.get("branch_coverage", 0.0)),
+    }
+    print(
+        f"Iteration 0: Baseline validation aggregate metrics: {baseline_metrics}",
+        flush=True,
+    )
     run_digest = _optimization_run_digest(
         runner, baseline, train_targets, validation_targets, evaluation_replicates
     )
@@ -1672,7 +1728,10 @@ def optimize(
         valset=validation_targets,
         adapter=adapter,
         reflection_lm=None,
-        candidate_selection_strategy="pareto",
+        candidate_selection_strategy=BestParetoCandidateSelector(
+            best_probability=0.7,
+            rng=random.Random(7),
+        ),
         frontier_type="hybrid",
         skip_perfect_score=False,
         reflection_minibatch_size=min(8, len(train_targets)),
