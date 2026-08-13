@@ -59,7 +59,10 @@ function Formula({
   denominator: string;
 }) {
   return (
-    <div className="coverage-math" aria-label={`${symbol} equals ${numerator} divided by ${denominator}`}>
+    <div
+      className="coverage-math"
+      aria-label={`${symbol} equals ${numerator} divided by ${denominator}`}
+    >
       <var>{symbol}</var>
       <span>=</span>
       <span className="math-fraction">
@@ -88,7 +91,9 @@ function CodeCoverage({ lines, label }: { lines: SourceLine[]; label: string }) 
           >
             <b>{line.number}</b>
             <code>{line.code}</code>
-            <em aria-label={line.covered ? "Executed" : "Not executed"}>{line.covered ? "✓" : "—"}</em>
+            <em aria-label={line.covered ? "Executed" : "Not executed"}>
+              {line.covered ? "✓" : "—"}
+            </em>
           </span>
         ))}
       </pre>
@@ -124,8 +129,8 @@ export default function CoverageGuide() {
           <span className="coverage-guide-eyebrow">Coverage fundamentals</span>
           <h1>Two core test coverage metrics</h1>
           <p>
-            Statement coverage measures executed statements. Branch coverage measures whether
-            each True/False path has been tested.
+            Statement coverage measures executed statements. Branch coverage measures whether each
+            True/False path has been tested.
           </p>
         </div>
         <div className="coverage-score-preview" aria-label="Coverage score formula">
@@ -322,7 +327,9 @@ export default function CoverageGuide() {
         <div className="score-equation" aria-label="Project evaluation score formula">
           <span>Evaluation score</span>
           <strong>Score = 0.4 × SC + 0.6 × BC</strong>
-          <small>Branch coverage has more weight because it reflects execution-path diversity.</small>
+          <small>
+            Branch coverage has more weight because it reflects execution-path diversity.
+          </small>
         </div>
       </section>
     </div>
