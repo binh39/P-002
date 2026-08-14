@@ -99,7 +99,7 @@ Xác minh:
 
 ### E10 — Oracle union coverage
 
-**Trạng thái:** cần bổ sung script/report phân tích artifacts; không thay optimizer.
+**Trạng thái:** hoàn thành script/report, coverage-unit oracle và combined-suite verification trên calibration 16 target.
 
 **Mục tiêu:** xác định các candidate đã từng tạo được bao nhiêu coverage hữu ích, kể cả khi không candidate đơn lẻ nào giữ được toàn bộ.
 
@@ -461,6 +461,8 @@ Những phương pháp này không còn là “chỉ tối ưu một global prom
 
 **Ưu tiên cao nếu oracle union lớn.**
 
+**Trạng thái:** đã triển khai greedy archive khóa theo split/evaluation digest. Calibration hiện tại chọn 14/26 test, pass `repeat_tests=5`, giữ score 86.75% và cao hơn single-best 5.77 điểm.
+
 - Giữ mọi generated test tạo thêm statement/branch mà không regression.
 - Không vứt test tốt chỉ vì aggregate candidate prompt không thắng.
 - Dùng greedy set-cover để chọn tập test nhỏ phủ nhiều uncovered units nhất.
@@ -613,8 +615,8 @@ Mỗi run cần ít nhất ba seed ở bước xác nhận cuối. Không cần 
 
 - [ ] E00: đo variance baseline.
 - [ ] E01: paired repeated comparison.
-- [ ] E02: audit denominator/metric.
-- [ ] E10: oracle union coverage.
+- [x] E02: audit denominator/metric.
+- [x] E10: oracle union coverage.
 - [ ] E11: failure-family/headroom report.
 - [ ] Tạo experiment manifest và bảng leaderboard chuẩn.
 
@@ -638,7 +640,7 @@ Mỗi run cần ít nhất ba seed ở bước xác nhận cuối. Không cần 
 ### P3 — Thay đổi kiến trúc để hướng tới gain lớn
 
 - [ ] E50–E53: modular prompt pipeline.
-- [ ] E60: candidate test archive.
+- [x] E60: candidate test archive.
 - [ ] E61: prompt portfolio/router.
 - [ ] E62: adaptive best-of-K.
 - [ ] E63–E66: property, constraint, fuzz và mutation assistance.

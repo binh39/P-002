@@ -75,5 +75,7 @@ coverup-log
 binh/phase0_combined_verification/
 binh/phase0_runs/followup5_after_target_discovery_fix/
 binh/phase0_runs/followup2_target_discovery_verified/
+binh/phase1_candidate_archive/
+binh/phase1_candidate_archive_r5/
 
 .claude

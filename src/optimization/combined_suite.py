@@ -102,6 +102,7 @@ def verify_combined_suite(
     output_dir: Path,
     sample_repos_dir: Path,
     pytest_args: str = "",
+    repeat_tests: int = 0,
 ) -> dict[str, Any]:
     """Run the real union suites; only passing projects contribute verified scores."""
     project_root = project_root.resolve()
@@ -110,9 +111,45 @@ def verify_combined_suite(
     tests_root, targets, copied_counts = prepare_combined_tests(
         artifacts_dir, output_dir
     )
+    report = verify_tests_workspace(
+        project_root=project_root,
+        tests_root=tests_root,
+        targets=targets,
+        output_dir=output_dir,
+        sample_repos_dir=sample_repos_dir,
+        copied_counts=copied_counts,
+        pytest_args=pytest_args,
+        repeat_tests=repeat_tests,
+    )
+    report["replicate_count"] = len(_load_records(artifacts_dir))
+    (output_dir / "combined_suite_verification.json").write_text(
+        json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    return report
+
+
+def verify_tests_workspace(
+    *,
+    project_root: Path,
+    tests_root: Path,
+    targets: list[SymbolTarget],
+    output_dir: Path,
+    sample_repos_dir: Path,
+    copied_counts: dict[str, int] | None = None,
+    pytest_args: str = "",
+    repeat_tests: int = 0,
+) -> dict[str, Any]:
+    """Run one project-partitioned generated-test workspace and measure targets."""
+    project_root = project_root.resolve()
+    tests_root = tests_root.resolve()
+    output_dir = output_dir.resolve()
     grouped: dict[str, list[SymbolTarget]] = {}
     for target in targets:
         grouped.setdefault(target.project, []).append(target)
+    copied_counts = copied_counts or {
+        project: len(list((tests_root / project).rglob("test_*.py")))
+        for project in grouped
+    }
     package_dirs = {
         project: (sample_repos_dir / project / project).resolve()
         for project in grouped
@@ -135,7 +172,7 @@ def verify_combined_suite(
             output=coverage_path,
             pytest_basetemp=output_dir / "pytest_tmp" / project,
             pytest_args=pytest_args,
-            repeat_tests=0,
+            repeat_tests=repeat_tests,
             env=environment,
         )
         project_report: dict[str, Any] = {
@@ -176,17 +213,14 @@ def verify_combined_suite(
             if verified
             else "At least one project suite failed; union coverage is not verified"
         ),
-        "replicate_count": len(_load_records(artifacts_dir)),
         "target_count": len(targets),
         "copied_tests": copied_counts,
+        "repeat_tests": repeat_tests,
         "projects": project_reports,
         "aggregate": (
             aggregate_coverage_score(verified_results) if verified else None
         ),
     }
-    (output_dir / "combined_suite_verification.json").write_text(
-        json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
     return report
 
 
@@ -201,6 +235,7 @@ def main(argv: list[str] | None = None) -> int:
         "--sample-repos-dir", type=Path, default=Path("src/sample_repo")
     )
     parser.add_argument("--pytest-args", default="")
+    parser.add_argument("--repeat-tests", type=int, default=0)
     args = parser.parse_args(argv)
     project_root = args.project_root.resolve()
     sample_repos = args.sample_repos_dir
@@ -212,6 +247,7 @@ def main(argv: list[str] | None = None) -> int:
         output_dir=args.output_dir,
         sample_repos_dir=sample_repos,
         pytest_args=args.pytest_args,
+        repeat_tests=args.repeat_tests,
     )
     print(json.dumps({
         "verified": report["verified"],

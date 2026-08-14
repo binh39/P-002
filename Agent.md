@@ -36,6 +36,7 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
 13. Provider có thể trả `finish_reason=stop` với `content=null`. CoverUp phải retry/bỏ riêng segment, tuyệt đối không để một response rỗng làm crash toàn batch.
 14. Exit code của tiến trình sinh test không được tự động xóa score của các test đã pass coverage.py. Coverage pass là nguồn xác nhận validity; lưu exit code riêng để chẩn đoán.
 15. Trước khi gọi GEPA, baseline preflight phải cung cấp coverage/denominator hợp lệ cho mọi train và validation target; final holdout reference cũng phải đầy đủ. Nếu không, dừng sớm và sửa dataset thay vì tối ưu trên signal 0 giả.
+16. Candidate test archive là artifact hệ thống riêng: chỉ gom các batch có cùng evaluation digest và cùng split, không được cộng archive coverage vào score của một prompt GEPA. Split `test` mặc định bị khóa; archive chỉ được chọn trên train/validation và phải chạy suite ghép với repeat verification trước khi báo cáo.
 
 ## Zero-test baseline preflight
 
@@ -104,6 +105,22 @@ python -m src.optimization.cli `
 ```
 
 Benchmark gọi Vertex/CoverUp thật, tốn thời gian và chi phí. Không tự chạy full benchmark nếu người dùng chưa yêu cầu hoặc chưa xác nhận phạm vi chi phí. Cần các biến môi trường như `COVERUP_MODEL`, `OPTIMIZE_MODEL` và Vertex ADC; xem `.env.example`, tuyệt đối không ghi secret vào log hay tài liệu.
+
+## Candidate test archive
+
+Sau khi đã có ít nhất hai cached evaluation cùng split/evaluation digest, có thể tạo archive mà không gọi LLM:
+
+```powershell
+python -m src.optimization.cli `
+  --artifacts-dir binh/phase0_runs/calibration16_gemini35_flash_lite_r2 `
+  --sample-repos-dir src/sample_repo `
+  --repeat-tests 5 `
+  archive `
+  --split validation `
+  --output-dir binh/phase1_candidate_archive_r5
+```
+
+Greedy set-cover dùng đúng trọng số metric 30% statement/70% branch, content-deduplicate test, rồi chạy pytest + coverage trên suite ghép. Không dùng kết quả archive để promote prompt; archive chỉ đo/exploit coverage tích lũy của hệ thống.
 
 ## Ý nghĩa artifact
 

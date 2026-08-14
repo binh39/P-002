@@ -10,6 +10,7 @@ from pathlib import Path
 import dspy
 from dotenv import load_dotenv
 
+from .archive import build_candidate_test_archive
 from .dataset import load_targets, validate_project_stratification
 from .gepa import (
     build_coverage_report,
@@ -112,6 +113,19 @@ def parser() -> argparse.ArgumentParser:
     )
     finalize.add_argument("--holdout-split", default="test")
     finalize.add_argument("--evaluation-replicates", type=int, default=1)
+
+    archive = commands.add_parser(
+        "archive",
+        help="Build a split-locked greedy archive from cached generated tests",
+    )
+    archive.add_argument("--output-dir", type=Path, required=True)
+    archive.add_argument("--split", choices=("train", "validation", "test"), default="validation")
+    archive.add_argument("--evaluation-digest")
+    archive.add_argument(
+        "--allow-holdout",
+        action="store_true",
+        help="Allow a final report on test; never use it to tune the archive",
+    )
     return result
 
 
@@ -128,6 +142,32 @@ def _model_from_env(name: str) -> str:
 
 def should_promote(*, optimized_mean: float, baseline_mean: float) -> bool:
     return optimized_mean > baseline_mean
+
+
+def build_archive(args: argparse.Namespace) -> None:
+    root = args.project_root.resolve()
+    report = build_candidate_test_archive(
+        project_root=root,
+        artifacts_dir=_resolve(root, args.artifacts_dir),
+        output_dir=_resolve(root, args.output_dir),
+        sample_repos_dir=_resolve(root, args.sample_repos_dir),
+        split=args.split,
+        evaluation_digest=args.evaluation_digest,
+        allow_holdout=args.allow_holdout,
+        pytest_args=args.pytest_args,
+        repeat_tests=args.repeat_tests,
+    )
+    verification = report["verification"]
+    print(json.dumps({
+        "split": report["split"],
+        "evaluation_digest": report["evaluation_digest"],
+        "candidate_test_count": report["candidate_test_count"],
+        "selected_test_count": report["selected_test_count"],
+        "verified": verification["verified"],
+        "repeat_tests": verification["repeat_tests"],
+        "archive_aggregate": verification["aggregate"],
+        "verified_gain_vs_best_single": report["verified_gain_vs_best_single"],
+    }, indent=2))
 
 
 def _print_coverage_report(report: dict) -> None:
@@ -696,6 +736,8 @@ def main() -> None:
         evaluate(args)
     elif args.command == "optimize":
         tune(args)
+    elif args.command == "archive":
+        build_archive(args)
     else:
         finalize(args)
 

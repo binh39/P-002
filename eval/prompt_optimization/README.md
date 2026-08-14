@@ -39,7 +39,10 @@ Các trách nhiệm được tách như sau:
 
 ```text
 src/optimization/
-├── cli.py          # CLI init, evaluate và optimize
+├── archive.py      # Greedy candidate test archive, khóa theo split/digest
+├── calibration.py  # Báo cáo repeated calibration và coverage-unit oracle
+├── cli.py          # CLI init, evaluate, optimize, finalize và archive
+├── combined_suite.py # Chạy lại suite ghép để xác minh coverage thật
 ├── coveragepy.py   # Chạy coverage.py và đọc coverage từng symbol
 ├── dataset.py      # Đọc dataset JSONL
 ├── gepa.py         # Direct PromptBundle adapter và GEPA core optimizer
@@ -541,6 +544,22 @@ ruff check src/optimization tests/test_coverage_optimization.py
 
 Không nên chạy `pytest` không chỉ định thư mục ở root hiện tại vì pytest sẽ thu thập
 cả test suite vendored trong `src/sample_repo/mlxtend`, gây trùng tên module test.
+
+## Candidate test archive không gọi LLM
+
+Archive chỉ đọc cached candidate evaluations có cùng `evaluation_digest` và cùng split. Nó content-deduplicate test, dùng greedy weighted set-cover, sau đó chạy lại toàn bộ suite với repeat verification:
+
+```powershell
+python -m src.optimization.cli `
+  --sample-repos-dir src/sample_repo `
+  --artifacts-dir binh/phase0_runs/calibration16_gemini35_flash_lite_r2 `
+  --repeat-tests 5 `
+  archive `
+  --split validation `
+  --output-dir binh/phase1_candidate_archive_r5
+```
+
+Không dùng archive score làm score của một prompt GEPA. `test` bị khóa mặc định; chỉ dùng `--allow-holdout` cho báo cáo cuối một lần, không dùng để chọn/tune archive.
 
 ## Lưu ý vận hành
 
