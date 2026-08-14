@@ -372,6 +372,25 @@ def test_optimization_cli_defaults_to_five_test_repetitions():
     assert args.repeat_tests == 5
 
 
+def test_optimization_cli_exposes_gepa_search_controls():
+    args = parser().parse_args([
+        "optimize",
+        "--dataset",
+        "dataset.jsonl",
+        "--prompt",
+        "prompt.json",
+        "--max-metric-calls",
+        "30",
+        "--gepa-seed",
+        "19",
+        "--reflection-minibatch-size",
+        "3",
+    ])
+
+    assert args.gepa_seed == 19
+    assert args.reflection_minibatch_size == 3
+
+
 def test_run_streamed_forwards_retains_and_unbuffers_output(capsys):
     completed = run_streamed(
         [
@@ -2330,18 +2349,26 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
         artifacts_dir=tmp_path,
         auto=None,
         max_metric_calls=2,
+        gepa_seed=19,
+        reflection_minibatch_size=3,
     )
 
     assert captured["seed_candidate"] == baseline.as_candidate()
     assert set(captured["seed_candidate"]) == {"initial", "error"}
     assert captured["cache_evaluation"] is False
-    assert captured["reflection_minibatch_size"] == 8
+    assert captured["reflection_minibatch_size"] == 3
+    assert captured["seed"] == 19
     assert isinstance(captured["module_selector"], LLMReflectionComponentSelector)
     assert isinstance(
         captured["candidate_selection_strategy"], BestParetoCandidateSelector
     )
     assert captured["candidate_selection_strategy"].best_probability == 0.7
     assert result.best_bundle == baseline
+    assert result.as_dict()["optimizer_config"] == {
+        "gepa_seed": 19,
+        "reflection_minibatch_size": 3,
+        "max_metric_calls": 2,
+    }
 
 
 def test_tune_preflights_baseline_but_skips_proposal_when_gepa_keeps_it(
@@ -2427,6 +2454,8 @@ def test_tune_preflights_baseline_but_skips_proposal_when_gepa_keeps_it(
         auto=None,
         max_metric_calls=1,
         evaluation_replicates=1,
+        gepa_seed=7,
+        reflection_minibatch_size=8,
         baseline_tests_dir=None,
         sample_repos_dir=Path("sample_repo"),
     )

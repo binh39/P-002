@@ -74,6 +74,8 @@ async def test_create_experiment_and_reject_unbundled_optimization(client):
                 "max_metric_calls": 41,
                 "evaluation_replicates": 2,
                 "reflection_temperature": 0.5,
+                "gepa_seed": 19,
+                "reflection_minibatch_size": 3,
             },
         },
     )
@@ -84,6 +86,8 @@ async def test_create_experiment_and_reject_unbundled_optimization(client):
     assert experiment["split_percentages"] == {"train": 34, "validation": 33, "test": 33}
     assert experiment["settings"]["coverup_model"] == "vertex_ai/gemini-2.5-flash-lite"
     assert experiment["settings"]["optimize_model"] == "vertex_ai/gemini-3.5-flash"
+    assert experiment["settings"]["gepa_seed"] == 19
+    assert experiment["settings"]["reflection_minibatch_size"] == 3
     assert experiment["baseline_prompt"] == custom_prompt
 
     listed = await client.get("/api/v1/experiments", headers=AUTH_HEADERS)

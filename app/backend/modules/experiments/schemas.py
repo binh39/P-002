@@ -70,6 +70,8 @@ class ExperimentSettings(StrictModel):
     max_metric_calls: int = Field(default=30, ge=3)
     evaluation_replicates: int = Field(default=1, ge=1, le=10)
     reflection_temperature: float = Field(default=0.7, ge=0, le=2)
+    gepa_seed: int = Field(default=7, ge=0)
+    reflection_minibatch_size: int = Field(default=8, ge=1, le=64)
 
     @model_validator(mode="after")
     def models_are_supported(self):

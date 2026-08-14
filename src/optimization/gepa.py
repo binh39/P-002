@@ -1053,6 +1053,9 @@ class PromptOptimizationResult:
     candidates: list[PromptBundle]
     validation_scores: list[float]
     total_metric_calls: int
+    gepa_seed: int
+    reflection_minibatch_size: int
+    max_metric_calls: int
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -1060,6 +1063,11 @@ class PromptOptimizationResult:
             "best_candidate": self.best_bundle.as_candidate(),
             "validation_scores": self.validation_scores,
             "total_metric_calls": self.total_metric_calls,
+            "optimizer_config": {
+                "gepa_seed": self.gepa_seed,
+                "reflection_minibatch_size": self.reflection_minibatch_size,
+                "max_metric_calls": self.max_metric_calls,
+            },
             "candidates": [candidate.as_candidate() for candidate in self.candidates],
         }
 
@@ -1794,13 +1802,19 @@ def _optimization_run_digest(
     train_targets: list[SymbolTarget],
     validation_targets: list[SymbolTarget],
     evaluation_replicates: int,
+    gepa_seed: int,
+    reflection_minibatch_size: int,
+    max_metric_calls: int,
 ) -> str:
     payload = {
-        "optimizer_schema": 13,
+        "optimizer_schema": 14,
         "baseline": baseline.as_candidate(),
         "train": [_target_identity(target) for target in train_targets],
         "validation": [_target_identity(target) for target in validation_targets],
         "evaluation_replicates": evaluation_replicates,
+        "gepa_seed": gepa_seed,
+        "reflection_minibatch_size": reflection_minibatch_size,
+        "max_metric_calls": max_metric_calls,
         "train_evaluation": _evaluation_digest(runner, train_targets),
         "validation_evaluation": _evaluation_digest(runner, validation_targets),
     }
@@ -1870,6 +1884,8 @@ def optimize(
     auto: str | None = "medium",
     max_metric_calls: int | None = None,
     evaluation_replicates: int = 1,
+    gepa_seed: int = 7,
+    reflection_minibatch_size: int = 8,
 ) -> PromptOptimizationResult:
     """Optimize the initial and error prompt components."""
     if error := validate_bundle(baseline):
@@ -1878,10 +1894,17 @@ def optimize(
         raise ValueError("GEPA requires at least one train and one validation target")
     if evaluation_replicates < 1:
         raise ValueError("evaluation_replicates must be at least 1")
+    if gepa_seed < 0:
+        raise ValueError("gepa_seed cannot be negative")
+    if reflection_minibatch_size < 1:
+        raise ValueError("reflection_minibatch_size must be at least 1")
     if auto is not None:
         max_metric_calls = AUTO_METRIC_BUDGETS[auto]
     if max_metric_calls is None or max_metric_calls < 1:
         raise ValueError("A positive GEPA metric budget is required")
+    effective_reflection_minibatch_size = min(
+        reflection_minibatch_size, len(train_targets)
+    )
 
     adapter = CoverUpPromptAdapter(
         runner=runner,
@@ -1928,7 +1951,14 @@ def optimize(
         flush=True,
     )
     run_digest = _optimization_run_digest(
-        runner, baseline, train_targets, validation_targets, evaluation_replicates
+        runner,
+        baseline,
+        train_targets,
+        validation_targets,
+        evaluation_replicates,
+        gepa_seed,
+        effective_reflection_minibatch_size,
+        max_metric_calls,
     )
     result = gepa_core.optimize(
         seed_candidate=baseline.as_candidate(),
@@ -1938,11 +1968,11 @@ def optimize(
         reflection_lm=None,
         candidate_selection_strategy=BestParetoCandidateSelector(
             best_probability=0.7,
-            rng=random.Random(7),
+            rng=random.Random(gepa_seed),
         ),
         frontier_type="hybrid",
         skip_perfect_score=False,
-        reflection_minibatch_size=min(8, len(train_targets)),
+        reflection_minibatch_size=effective_reflection_minibatch_size,
         module_selector=LLMReflectionComponentSelector(),
         use_merge=True,
         max_merge_invocations=5,
@@ -1954,7 +1984,7 @@ def optimize(
         cache_evaluation=False,
         track_best_outputs=True,
         display_progress_bar=True,
-        seed=7,
+        seed=gepa_seed,
     )
     best_bundle = PromptBundle.from_candidate(result.best_candidate)
     if error := validate_bundle(best_bundle):
@@ -1965,4 +1995,7 @@ def optimize(
         candidates=[PromptBundle.from_candidate(value) for value in result.candidates],
         validation_scores=[float(value) for value in result.val_aggregate_scores],
         total_metric_calls=int(result.total_metric_calls or 0),
+        gepa_seed=gepa_seed,
+        reflection_minibatch_size=effective_reflection_minibatch_size,
+        max_metric_calls=max_metric_calls,
     )

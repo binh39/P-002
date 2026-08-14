@@ -83,6 +83,18 @@ def parser() -> argparse.ArgumentParser:
     )
     tune.add_argument("--evaluation-replicates", type=int, default=1)
     tune.add_argument("--reflection-temperature", type=float, default=0.7)
+    tune.add_argument(
+        "--gepa-seed",
+        type=int,
+        default=7,
+        help="Seed for GEPA candidate selection and search (default: 7)",
+    )
+    tune.add_argument(
+        "--reflection-minibatch-size",
+        type=int,
+        default=8,
+        help="Maximum train examples reflected on per GEPA proposal (default: 8)",
+    )
     budget = tune.add_mutually_exclusive_group()
     budget.add_argument(
         "--auto",
@@ -416,6 +428,8 @@ def tune(args: argparse.Namespace) -> None:
         auto=args.auto or ("medium" if args.max_metric_calls is None else None),
         max_metric_calls=args.max_metric_calls,
         evaluation_replicates=args.evaluation_replicates,
+        gepa_seed=args.gepa_seed,
+        reflection_minibatch_size=args.reflection_minibatch_size,
     )
     artifacts.mkdir(parents=True, exist_ok=True)
     program_path = artifacts / "optimized_program.json"

@@ -32,6 +32,8 @@ interface ApiExperiment {
     max_metric_calls: number;
     evaluation_replicates: number;
     reflection_temperature: number;
+    gepa_seed: number;
+    reflection_minibatch_size: number;
   };
   baseline_prompt?: { initial: string; error: string } | null;
   optimization_eligible: boolean;
@@ -162,6 +164,8 @@ function mapExperiment(item: ApiExperiment): Experiment {
       maxMetricCalls: item.settings.max_metric_calls,
       evaluationReplicates: item.settings.evaluation_replicates,
       reflectionTemperature: item.settings.reflection_temperature,
+      gepaSeed: item.settings.gepa_seed,
+      reflectionMinibatchSize: item.settings.reflection_minibatch_size,
     },
     baselinePrompt: item.baseline_prompt ?? null,
     optimizationEligible: item.optimization_eligible,
@@ -301,6 +305,8 @@ export class HttpExperimentRepository implements ExperimentRepository {
             max_metric_calls: input.settings.maxMetricCalls,
             evaluation_replicates: input.settings.evaluationReplicates,
             reflection_temperature: input.settings.reflectionTemperature,
+            gepa_seed: input.settings.gepaSeed,
+            reflection_minibatch_size: input.settings.reflectionMinibatchSize,
           },
         }),
       }),

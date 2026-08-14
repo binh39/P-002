@@ -77,5 +77,10 @@ binh/phase0_runs/followup5_after_target_discovery_fix/
 binh/phase0_runs/followup2_target_discovery_verified/
 binh/phase1_candidate_archive/
 binh/phase1_candidate_archive_r5/
+binh/phase1_runs/**/runs/
+binh/phase1_runs/**/generated_tests/
+binh/phase1_runs/**/gepa_direct_logs/
+binh/phase1_runs/**/candidates/evaluations/
+binh/phase1_runs/**/candidates/reflection_traces.jsonl
 
 .claude

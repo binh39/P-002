@@ -1,0 +1,1317 @@
+{
+  "mean_score": 1.0,
+  "baseline_mean_score": 1.0,
+  "optimized_mean_score": 1.0,
+  "baseline_aggregate_coverage": {
+    "branch_coverage": 1.0,
+    "covered_branches": 32.0,
+    "covered_statements": 59.0,
+    "num_branches": 32.0,
+    "num_statements": 59.0,
+    "score": 1.0,
+    "statement_coverage": 1.0
+  },
+  "optimized_aggregate_coverage": {
+    "branch_coverage": 1.0,
+    "covered_branches": 32.0,
+    "covered_statements": 59.0,
+    "num_branches": 32.0,
+    "num_statements": 59.0,
+    "score": 1.0,
+    "statement_coverage": 1.0
+  },
+  "absolute_gain": 0.0,
+  "promoted": false,
+  "final_evaluation_skipped": false,
+  "skip_reason": null,
+  "final_split": "test",
+  "used_locked_holdout": true,
+  "evaluation_replicates": 1,
+  "prompt": "D:\\VinAI\\P-002\\binh\\phase1_runs\\e20_budget30_seed7_mb3\\prompts\\gepa_proposed.json",
+  "production_prompt": "D:\\VinAI\\P-002\\binh\\phase1_runs\\e20_budget30_seed7_mb3\\prompts\\gepa_optimized.json",
+  "baseline_prompt": "D:\\VinAI\\P-002\\eval\\prompt_optimization\\prompts\\gpt_v2_baseline.json",
+  "baseline_tests_workspaces": [
+    "D:\\VinAI\\P-002\\binh\\phase1_runs\\e20_budget30_seed7_mb3\\generated_tests\\test\\tests_base_line_d8123dc403839c22-f0c69185b52c"
+  ],
+  "baseline_run_ids": [
+    "multi-project-test-batch-14501b11"
+  ],
+  "run_ids": [
+    "multi-project-test-batch-c2c995a2"
+  ],
+  "tests_workspaces": [
+    "D:\\VinAI\\P-002\\binh\\phase1_runs\\e20_budget30_seed7_mb3\\generated_tests\\test\\tests_candidate_e1eda6e564ac91c8-f0c69185b52c"
+  ],
+  "baseline_results": [
+    {
+      "prompt_digest": "d8123dc403839c22",
+      "evaluation_digest": "f0c69185b52c",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/deprecated/finders.py",
+        "symbol": "KnownPatternFinder.__init__",
+        "split": "test"
+      },
+      "run_id": "multi-project-test-batch-14501b11",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 10.0,
+        "num_statements": 10.0,
+        "covered_branches": 4.0,
+        "num_branches": 4.0,
+        "gained_lines": [
+          77,
+          79,
+          80,
+          81,
+          82,
+          83,
+          86,
+          91,
+          92,
+          93
+        ],
+        "gained_branches": [
+          [
+            80,
+            -76
+          ],
+          [
+            80,
+            81
+          ],
+          [
+            91,
+            80
+          ],
+          [
+            91,
+            92
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 1.0000\nStatement gain: 10 newly covered; 0 remain.\nBranch gain: 4 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "attempt_traces": [
+        {
+          "source_file": "src\\sample_repo\\isort\\isort\\deprecated\\finders.py",
+          "symbol": "KnownPatternFinder.__init__",
+          "name": "__init__",
+          "segment": "src\\sample_repo\\isort\\isort\\deprecated\\finders.py:76-93",
+          "attempt": 1,
+          "component": "initial",
+          "prompt_input": "You are an expert Python test-driven developer.\nThe code below, extracted from isort\\deprecated\\finders.py, does not achieve full coverage:\nwhen tested, lines 76-93 do not execute.\nCreate new pytest test functions that execute all missing lines and branches. Each test must\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\nUse the get_info tool function as necessary. Always return an entire Python test module.\nDo not call pytest.main and do not execute tests at module import time.\nRespond only with Python code enclosed in a python markdown code block.\n\n```python\n            import re\n            from typing import List, Pattern, Tuple\n            from isort.settings import KNOWN_SECTION_MAPPING, Config\n            class KnownPatternFinder(BaseFinder):\n        76:     def __init__(self, config: Config) -> None:\n        77:         super().__init__(config)\n            \n        79:         self.known_patterns: List[Tuple[Pattern[str], str]] = []\n        80:         for placement in reversed(config.sections):\n        81:             known_placement = KNOWN_SECTION_MAPPING.get(placement, placement).lower()\n        82:             config_key = f\"known_{known_placement}\"\n        83:             known_patterns = list(\n        84:                 getattr(self.config, config_key, self.config.known_other.get(known_placement, []))\n                        )\n        86:             known_patterns = [\n        87:                 pattern\n        88:                 for known_pattern in known_patterns\n        89:                 for pattern in self._parse_known_pattern(known_pattern)\n                        ]\n        91:             for known_pattern in known_patterns:\n        92:                 regexp = \"^\" + known_pattern.replace(\"*\", \".*\").replace(\"?\", \".?\") + \"$\"\n        93:                 self.known_patterns.append((re.compile(regexp), placement))\n\n```",
+          "outcome": "coverage_gain_saved",
+          "generated_test": "from isort.deprecated.finders import KnownPatternFinder\nfrom isort.settings import Config\n\n\ndef test_known_pattern_finder_init() -> None:\n    config = Config(\n        sections=[\"STDLIB\", \"THIRDPARTY\", \"FIRSTPARTY\", \"LOCALFOLDER\"],\n        known_first_party=[\"my_project\", \"my_*_app\"],\n    )\n    finder = KnownPatternFinder(config)\n    \n    assert len(finder.known_patterns) > 0\n    # Test matching using the generated patterns\n    matched = finder.find(\"my_project\")\n    assert matched == \"FIRSTPARTY\"\n\n    matched_wildcard = finder.find(\"my_test_app\")\n    assert matched_wildcard == \"FIRSTPARTY\"\n",
+          "gained_lines": [
+            76,
+            77,
+            79,
+            80,
+            81,
+            82,
+            83,
+            84,
+            86,
+            87,
+            88,
+            89,
+            91,
+            92,
+            93
+          ],
+          "gained_branches": [
+            [
+              80,
+              0
+            ],
+            [
+              80,
+              81
+            ],
+            [
+              91,
+              80
+            ],
+            [
+              91,
+              92
+            ]
+          ],
+          "remaining_lines": [],
+          "remaining_branches": [],
+          "saved_test": "D:\\VinAI\\P-002\\binh\\phase1_runs\\e20_budget30_seed7_mb3\\generated_tests\\test\\tests_base_line_d8123dc403839c22-f0c69185b52c\\isort\\test_opt_bb9ae68663a9_0000_1.py"
+        }
+      ],
+      "replicate_scores": [
+        1.0
+      ]
+    },
+    {
+      "prompt_digest": "d8123dc403839c22",
+      "evaluation_digest": "f0c69185b52c",
+      "replicate": 0,
+      "target": {
+        "project": "mimesis",
+        "source_file": "mimesis/providers/person.py",
+        "symbol": "Person.username",
+        "split": "test"
+      },
+      "run_id": "multi-project-test-batch-14501b11",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 22.0,
+        "num_statements": 22.0,
+        "covered_branches": 18.0,
+        "num_branches": 18.0,
+        "gained_lines": [
+          228,
+          229,
+          231,
+          232,
+          234,
+          235,
+          237,
+          238,
+          242,
+          243,
+          244,
+          245,
+          246,
+          247,
+          248,
+          249,
+          250,
+          251,
+          252,
+          253,
+          254,
+          256
+        ],
+        "gained_branches": [
+          [
+            228,
+            229
+          ],
+          [
+            228,
+            231
+          ],
+          [
+            231,
+            232
+          ],
+          [
+            231,
+            234
+          ],
+          [
+            237,
+            238
+          ],
+          [
+            237,
+            242
+          ],
+          [
+            243,
+            244
+          ],
+          [
+            243,
+            256
+          ],
+          [
+            245,
+            246
+          ],
+          [
+            245,
+            247
+          ],
+          [
+            247,
+            248
+          ],
+          [
+            247,
+            249
+          ],
+          [
+            249,
+            250
+          ],
+          [
+            249,
+            251
+          ],
+          [
+            251,
+            252
+          ],
+          [
+            251,
+            253
+          ],
+          [
+            253,
+            243
+          ],
+          [
+            253,
+            254
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 1.0000\nStatement gain: 22 newly covered; 0 remain.\nBranch gain: 18 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "attempt_traces": [
+        {
+          "source_file": "src\\sample_repo\\mimesis\\mimesis\\providers\\person.py",
+          "symbol": "Person.username",
+          "name": "username",
+          "segment": "src\\sample_repo\\mimesis\\mimesis\\providers\\person.py:200-256",
+          "attempt": 1,
+          "component": "initial",
+          "prompt_input": "You are an expert Python test-driven developer.\nThe code below, extracted from mimesis\\providers\\person.py, does not achieve full coverage:\nwhen tested, lines 200-256 do not execute.\nCreate new pytest test functions that execute all missing lines and branches. Each test must\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\nUse the get_info tool function as necessary. Always return an entire Python test module.\nDo not call pytest.main and do not execute tests at module import time.\nRespond only with Python code enclosed in a python markdown code block.\n\n```python\n            import re\n            from mimesis.datasets import USERNAMES\n            class Person(BaseDataProvider):\n       200:     def username(\n       201:         self, mask: str | None = None, drange: tuple[int, int] = (1800, 2100)\n       202:     ) -> str:\n                    \"\"\"Generates a username using a mask.\n            \n                    Masks allow you to generate a variety of usernames.\n            \n                    - **C** stands for capitalized username.\n                    - **U** stands for uppercase username.\n                    - **l** stands for lowercase username.\n                    - **d** stands for digits in the username.\n            \n                    You can also use symbols to separate the different parts\n                    of the username: **.** **_** **-**\n            \n                    :param mask: Mask.\n                    :param drange: Digits range.\n                    :raises ValueError: If ``mask`` is not supported.\n                    :return: Username as string.\n            \n                    Example:\n                        >>> username(mask=\"C_C_d\")\n                        Cotte_Article_1923\n                        >>> username(mask=\"U.l.d\")\n                        ELKINS.wolverine.2013\n                        >>> username(mask=\"l_l_d\", drange=(1900, 2021))\n                        plasmic_blockader_1907\n                    \"\"\"\n       228:         if len(drange) != 2:\n       229:             raise ValueError(\"The drange parameter must contain only two integers.\")\n            \n       231:         if mask is None:\n       232:             mask = \"l_d\"\n            \n       234:         required_tags = \"CUl\"\n       235:         tags = re.findall(r\"[CUld.\\-_]\", mask)\n            \n       237:         if not any(tag in tags for tag in required_tags):\n       238:             raise ValueError(\n       239:                 \"Username mask must contain at least one of these: (C, U, l).\"\n                        )\n            \n       242:         final_username = \"\"\n       243:         for tag in tags:\n       244:             username = self.random.choice(USERNAMES)\n       245:             if tag == \"C\":\n       246:                 final_username += username.capitalize()\n       247:             if tag == \"U\":\n       248:                 final_username += username.upper()\n       249:             elif tag == \"l\":\n       250:                 final_username += username.lower()\n       251:             elif tag == \"d\":\n       252:                 final_username += str(self.random.randint(*drange))\n       253:             elif tag in \"-_.\":\n       254:                 final_username += tag\n            \n       256:         return final_username\n\n```",
+          "outcome": "coverage_gain_saved",
+          "generated_test": "import pytest\nfrom mimesis.providers.person import Person\n\n\ndef codecs_fixture():\n    pass\n\n\ndef test_username_invalid_drange():\n    person = Person()\n    with pytest.raises(ValueError, match=\"The drange parameter must contain only two integers.\"):\n        person.username(drange=(1800,))\n\n\ndef test_username_default_mask():\n    person = Person()\n    res = person.username(mask=None)\n    assert isinstance(res, str)\n    assert \"_\" in res\n\n\ndef test_username_invalid_mask_no_required_tags():\n    person = Person()\n    with pytest.raises(ValueError, match=r\"Username mask must contain at least one of these\"):\n        person.username(mask=\"1234\")\n\n\ndef test_username_all_tags_and_separators():\n    person = Person()\n    # Using C, U, l, d, and separators -, _, .\n    mask = \"C-U_l.d\"\n    res = person.username(mask=mask, drange=(2000, 2020))\n    assert isinstance(res, str)\n    assert \"-\" in res\n    assert \"_\" in res\n    assert \".\" in res\n",
+          "gained_lines": [
+            200,
+            201,
+            228,
+            229,
+            231,
+            232,
+            234,
+            235,
+            237,
+            238,
+            239,
+            242,
+            243,
+            244,
+            245,
+            246,
+            247,
+            248,
+            249,
+            250,
+            251,
+            252,
+            253,
+            254,
+            256
+          ],
+          "gained_branches": [
+            [
+              228,
+              229
+            ],
+            [
+              228,
+              231
+            ],
+            [
+              231,
+              232
+            ],
+            [
+              231,
+              234
+            ],
+            [
+              237,
+              238
+            ],
+            [
+              237,
+              242
+            ],
+            [
+              243,
+              244
+            ],
+            [
+              243,
+              256
+            ],
+            [
+              245,
+              246
+            ],
+            [
+              245,
+              247
+            ],
+            [
+              247,
+              248
+            ],
+            [
+              247,
+              249
+            ],
+            [
+              249,
+              250
+            ],
+            [
+              249,
+              251
+            ],
+            [
+              251,
+              252
+            ],
+            [
+              251,
+              253
+            ],
+            [
+              253,
+              243
+            ],
+            [
+              253,
+              254
+            ]
+          ],
+          "remaining_lines": [
+            202
+          ],
+          "remaining_branches": [],
+          "saved_test": "D:\\VinAI\\P-002\\binh\\phase1_runs\\e20_budget30_seed7_mb3\\generated_tests\\test\\tests_base_line_d8123dc403839c22-f0c69185b52c\\mimesis\\test_opt_8ad4b67bb57d_0001_1.py"
+        }
+      ],
+      "replicate_scores": [
+        1.0
+      ]
+    },
+    {
+      "prompt_digest": "d8123dc403839c22",
+      "evaluation_digest": "f0c69185b52c",
+      "replicate": 0,
+      "target": {
+        "project": "mlxtend",
+        "source_file": "mlxtend/frequent_patterns/apriori.py",
+        "symbol": "generate_new_combinations_low_memory",
+        "split": "test"
+      },
+      "run_id": "multi-project-test-batch-14501b11",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 19.0,
+        "num_statements": 19.0,
+        "covered_branches": 6.0,
+        "num_branches": 6.0,
+        "gained_lines": [
+          112,
+          113,
+          114,
+          115,
+          116,
+          117,
+          118,
+          119,
+          120,
+          121,
+          122,
+          123,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130,
+          131
+        ],
+        "gained_branches": [
+          [
+            115,
+            -55
+          ],
+          [
+            115,
+            116
+          ],
+          [
+            120,
+            121
+          ],
+          [
+            120,
+            125
+          ],
+          [
+            128,
+            115
+          ],
+          [
+            128,
+            129
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 1.0000\nStatement gain: 19 newly covered; 0 remain.\nBranch gain: 6 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "attempt_traces": [
+        {
+          "source_file": "src\\sample_repo\\mlxtend\\mlxtend\\frequent_patterns\\apriori.py",
+          "symbol": "generate_new_combinations_low_memory",
+          "name": "generate_new_combinations_low_memory",
+          "segment": "src\\sample_repo\\mlxtend\\mlxtend\\frequent_patterns\\apriori.py:55-131",
+          "attempt": 1,
+          "component": "initial",
+          "prompt_input": "You are an expert Python test-driven developer.\nThe code below, extracted from mlxtend\\frequent_patterns\\apriori.py, does not achieve full coverage:\nwhen tested, lines 55-131 do not execute.\nCreate new pytest test functions that execute all missing lines and branches. Each test must\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\nUse the get_info tool function as necessary. Always return an entire Python test module.\nDo not call pytest.main and do not execute tests at module import time.\nRespond only with Python code enclosed in a python markdown code block.\n\n```python\n            import numpy as np\n        55: def generate_new_combinations_low_memory(old_combinations, X, min_support, is_sparse):\n                \"\"\"\n                Generator of all combinations based on the last state of Apriori algorithm\n                Parameters\n                -----------\n                old_combinations: np.array\n                    All combinations with enough support in the last step\n                    Combinations are represented by a matrix.\n                    Number of columns is equal to the combination size\n                    of the previous step.\n                    Each row represents one combination\n                    and contains item type ids in the ascending order\n                    ```\n                           0        1\n                    0      15       20\n                    1      15       22\n                    2      17       19\n                    ```\n            \n                X: np.array or scipy sparse matrix\n                  The allowed values are either 0/1 or True/False.\n                  For example,\n            \n                ```\n                    0     True False  True  True False  True\n                    1     True False  True False False  True\n                    2     True False  True False False False\n                    3     True  True False False False False\n                    4    False False  True  True  True  True\n                    5    False False  True False  True  True\n                    6    False False  True False  True False\n                    7     True  True False False False False\n                ```\n            \n                min_support : float (default: 0.5)\n                  A float between 0 and 1 for minumum support of the itemsets returned.\n                  The support is computed as the fraction\n                  `transactions_where_item(s)_occur / total_transactions`.\n            \n                is_sparse : bool True if X is sparse\n            \n                Returns\n                -----------\n                Generator of all combinations from the last step x items\n                from the previous step. Every combination contains the\n                number of transactions where this item occurs, followed\n                by item type ids in the ascending order.\n                No combination other than generated\n                do not have a chance to get enough support\n            \n                Examples\n                -----------\n                For usage examples, please see\n                https://rasbt.github.io/mlxtend/user_guide/frequent_patterns/generate_new_combinations/\n            \n                \"\"\"\n            \n       112:     items_types_in_previous_step = np.unique(old_combinations.flatten())\n       113:     rows_count = X.shape[0]\n       114:     threshold = min_support * rows_count\n       115:     for old_combination in old_combinations:\n       116:         max_combination = old_combination[-1]\n       117:         mask = items_types_in_previous_step > max_combination\n       118:         valid_items = items_types_in_previous_step[mask]\n       119:         old_tuple = tuple(old_combination)\n       120:         if is_sparse:\n       121:             mask_rows = X[:, old_tuple].toarray().all(axis=1)\n       122:             X_cols = X[:, valid_items].toarray()\n       123:             supports = X_cols[mask_rows].sum(axis=0)\n                    else:\n       125:             mask_rows = X[:, old_tuple].all(axis=1)\n       126:             supports = X[mask_rows][:, valid_items].sum(axis=0)\n       127:         valid_indices = (supports >= threshold).nonzero()[0]\n       128:         for index in valid_indices:\n       129:             yield supports[index]\n       130:             yield from old_tuple\n       131:             yield valid_items[index]\n\n```",
+          "outcome": "coverage_gain_saved",
+          "generated_test": "import numpy as np\nimport scipy.sparse as sp\nfrom mlxtend.frequent_patterns.apriori import generate_new_combinations_low_memory\n\ndef test_generate_new_combinations_low_memory_dense():\n    # X matrix: 4 rows, 4 columns (items 0, 1, 2, 3)\n    X = np.array([\n        [1, 1, 1, 0],\n        [1, 1, 0, 1],\n        [1, 1, 1, 1],\n        [1, 0, 0, 0]\n    ], dtype=bool)\n\n    # old_combinations contains 1-item sets: [[0], [1]]\n    old_combinations = np.array([[0], [1]], dtype=int)\n    min_support = 0.5  # threshold = 0.5 * 4 = 2.0\n\n    results = list(generate_new_combinations_low_memory(old_combinations, X, min_support, is_sparse=False))\n    \n    # Verify results are generated properly and lines 112-119, 125-131 executed\n    assert len(results) > 0\n\ndef test_generate_new_combinations_low_memory_sparse():\n    # Sparse matrix version testing lines 120-123\n    X_dense = np.array([\n        [1, 1, 1, 0],\n        [1, 1, 0, 1],\n        [1, 1, 1, 1],\n        [1, 0, 0, 0]\n    ], dtype=bool)\n    X_sparse = sp.csr_matrix(X_dense)\n\n    old_combinations = np.array([[0], [1]], dtype=int)\n    min_support = 0.5\n\n    results = list(generate_new_combinations_low_memory(old_combinations, X_sparse, min_support, is_sparse=True))\n    \n    assert len(results) > 0\n",
+          "gained_lines": [
+            55,
+            112,
+            113,
+            114,
+            115,
+            116,
+            117,
+            118,
+            119,
+            120,
+            121,
+            122,
+            123,
+            125,
+            126,
+            127,
+            128,
+            129,
+            130,
+            131
+          ],
+          "gained_branches": [
+            [
+              115,
+              0
+            ],
+            [
+              115,
+              116
+            ],
+            [
+              120,
+              121
+            ],
+            [
+              120,
+              125
+            ],
+            [
+              128,
+              115
+            ],
+            [
+              128,
+              129
+            ]
+          ],
+          "remaining_lines": [],
+          "remaining_branches": [],
+          "saved_test": "D:\\VinAI\\P-002\\binh\\phase1_runs\\e20_budget30_seed7_mb3\\generated_tests\\test\\tests_base_line_d8123dc403839c22-f0c69185b52c\\mlxtend\\test_opt_e948f31d08fd_0002_1.py"
+        }
+      ],
+      "replicate_scores": [
+        1.0
+      ]
+    },
+    {
+      "prompt_digest": "d8123dc403839c22",
+      "evaluation_digest": "f0c69185b52c",
+      "replicate": 0,
+      "target": {
+        "project": "typesystem",
+        "source_file": "typesystem/json_schema.py",
+        "symbol": "type_from_json_schema",
+        "split": "test"
+      },
+      "run_id": "multi-project-test-batch-14501b11",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 8.0,
+        "num_statements": 8.0,
+        "covered_branches": 4.0,
+        "num_branches": 4.0,
+        "gained_lines": [
+          154,
+          156,
+          157,
+          163,
+          165,
+          166,
+          168,
+          169
+        ],
+        "gained_branches": [
+          [
+            156,
+            157
+          ],
+          [
+            156,
+            165
+          ],
+          [
+            165,
+            166
+          ],
+          [
+            165,
+            168
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 1.0000\nStatement gain: 8 newly covered; 0 remain.\nBranch gain: 4 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "attempt_traces": [
+        {
+          "source_file": "src\\sample_repo\\typesystem\\typesystem\\json_schema.py",
+          "symbol": "type_from_json_schema",
+          "name": "type_from_json_schema",
+          "segment": "src\\sample_repo\\typesystem\\typesystem\\json_schema.py:150-171",
+          "attempt": 1,
+          "component": "initial",
+          "prompt_input": "You are an expert Python test-driven developer.\nThe code below, extracted from typesystem\\json_schema.py, does not achieve full coverage:\nwhen tested, lines 150-170 do not execute.\nCreate new pytest test functions that execute all missing lines and branches. Each test must\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\nUse the get_info tool function as necessary. Always return an entire Python test module.\nDo not call pytest.main and do not execute tests at module import time.\nRespond only with Python code enclosed in a python markdown code block.\n\n```python\n            from typesystem.composites import NeverMatch\n            from typesystem.fields import Const, Field, Union\n            from typesystem.schemas import Definitions\n       150: def type_from_json_schema(data: dict, definitions: Definitions) -> Field:\n                \"\"\"\n                Build a typed field or union of typed fields from a JSON schema object.\n                \"\"\"\n       154:     type_strings, allow_null = get_valid_types(data)\n            \n       156:     if len(type_strings) > 1:\n       157:         items = [\n       158:             from_json_schema_type(\n       159:                 data, type_string=type_string, allow_null=False, definitions=definitions\n                        )\n       161:             for type_string in type_strings\n                    ]\n       163:         return Union(any_of=items, allow_null=allow_null)\n            \n       165:     if len(type_strings) == 0:\n       166:         return {True: Const(None), False: NeverMatch()}[allow_null]\n            \n       168:     type_string = type_strings.pop()\n       169:     return from_json_schema_type(\n       170:         data, type_string=type_string, allow_null=allow_null, definitions=definitions\n                )\n\n```",
+          "outcome": "coverage_gain_saved",
+          "generated_test": "import pytest\nfrom typesystem.json_schema import from_json_schema\nfrom typesystem.schemas import Definitions\nfrom typesystem.fields import Const, Union, Integer, String, Number\nfrom typesystem.composites import NeverMatch\n\ndef test_type_from_json_schema_multiple_types():\n    # Tests len(type_strings) > 1 branch in type_from_json_schema\n    schema = {\"type\": [\"string\", \"integer\"]}\n    field = from_json_schema(schema)\n    assert isinstance(field, Union)\n    assert len(field.any_of) == 2\n\ndef test_type_from_json_schema_zero_types_allow_null():\n    # Tests len(type_strings) == 0 with allow_null=True\n    schema = {\"type\": [\"null\"]}\n    field = from_json_schema(schema)\n    assert isinstance(field, Const)\n    assert field.const is None\n\ndef test_type_from_json_schema_zero_types_disallow_null():\n    # Tests len(type_strings) == 0 with allow_null=False (empty list type or similar where no type matches)\n    # Actually if type is [] or absent, get_valid_types defaults to all types including null.\n    # To get len(type_strings) == 0 and allow_null == False, we can check how get_valid_types behaves or pass a schema where type restricts nothing or we test directly via type_from_json_schema.\n    from typesystem.json_schema import type_from_json_schema\n    definitions = Definitions()\n    # If type is an empty list, get_valid_types returns all types, so allow_null=True.\n    # What if we mock or pass data such that type_strings is empty and allow_null is False?\n    # Let's call type_from_json_schema directly with a crafted dictionary if needed or test via valid paths.\n    # Wait, can we have type_strings be empty and allow_null=False?\n    # Let's check get_valid_types code: if not type_strings: type_strings = {'null', 'boolean', ...} and then 'null' in type_strings -> allow_null = True.\n    # So get_valid_types always sets allow_null=True if type_strings is empty.\n    # But type_from_json_schema unpacks what get_valid_types returns. We can test it directly:\n    field_true = type_from_json_schema({\"type\": [\"null\"]}, definitions)\n    # What if we call type_from_json_schema with custom mock or directly testing the branch with allow_null=False?\n    # Since type_from_json_schema calls get_valid_types(data), can we pass something or call type_from_json_schema with monkeypatched get_valid_types?\n    import typesystem.json_schema\n    orig_get_valid_types = typesystem.json_schema.get_valid_types\n    try:\n        typesystem.json_schema.get_valid_types = lambda d: (set(), False)\n        field_false = type_from_json_schema({}, definitions)\n        assert isinstance(field_false, NeverMatch)\n    finally:\n        typesystem.json_schema.get_valid_types = orig_get_valid_types\n\ndef test_type_from_json_schema_single_type():\n    # Tests len(type_strings) == 1 branch\n    schema = {\"type\": \"string\"}\n    field = from_json_schema(schema)\n    assert isinstance(field, String)\n",
+          "gained_lines": [
+            150,
+            154,
+            156,
+            157,
+            158,
+            159,
+            161,
+            163,
+            165,
+            166,
+            168,
+            169,
+            170
+          ],
+          "gained_branches": [
+            [
+              156,
+              157
+            ],
+            [
+              156,
+              165
+            ],
+            [
+              165,
+              166
+            ],
+            [
+              165,
+              168
+            ]
+          ],
+          "remaining_lines": [],
+          "remaining_branches": [],
+          "saved_test": "D:\\VinAI\\P-002\\binh\\phase1_runs\\e20_budget30_seed7_mb3\\generated_tests\\test\\tests_base_line_d8123dc403839c22-f0c69185b52c\\typesystem\\test_opt_de80c9c90dad_0003_1.py"
+        }
+      ],
+      "replicate_scores": [
+        1.0
+      ]
+    }
+  ],
+  "results": [
+    {
+      "prompt_digest": "e1eda6e564ac91c8",
+      "evaluation_digest": "f0c69185b52c",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/deprecated/finders.py",
+        "symbol": "KnownPatternFinder.__init__",
+        "split": "test"
+      },
+      "run_id": "multi-project-test-batch-c2c995a2",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 10.0,
+        "num_statements": 10.0,
+        "covered_branches": 4.0,
+        "num_branches": 4.0,
+        "gained_lines": [
+          77,
+          79,
+          80,
+          81,
+          82,
+          83,
+          86,
+          91,
+          92,
+          93
+        ],
+        "gained_branches": [
+          [
+            80,
+            -76
+          ],
+          [
+            80,
+            81
+          ],
+          [
+            91,
+            80
+          ],
+          [
+            91,
+            92
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 1.0000\nStatement gain: 10 newly covered; 0 remain.\nBranch gain: 4 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "attempt_traces": [
+        {
+          "source_file": "src\\sample_repo\\isort\\isort\\deprecated\\finders.py",
+          "symbol": "KnownPatternFinder.__init__",
+          "name": "__init__",
+          "segment": "src\\sample_repo\\isort\\isort\\deprecated\\finders.py:76-93",
+          "attempt": 1,
+          "component": "initial",
+          "prompt_input": "You are an expert Python test-driven developer.\\nThe code below, extracted from isort\\deprecated\\finders.py, does not achieve full coverage:\\nwhen tested, lines 76-93 do not execute.\\nCreate new pytest test functions that execute all missing lines and branches. Each test must\\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\\nUse the get_info tool function as necessary. Always return an entire Python test module.\\nDo not call pytest.main and do not execute tests at module import time.\\nRespond only with Python code enclosed in a python markdown code block.\\n\\n```python\\n            import re\n            from typing import List, Pattern, Tuple\n            from isort.settings import KNOWN_SECTION_MAPPING, Config\n            class KnownPatternFinder(BaseFinder):\n        76:     def __init__(self, config: Config) -> None:\n        77:         super().__init__(config)\n            \n        79:         self.known_patterns: List[Tuple[Pattern[str], str]] = []\n        80:         for placement in reversed(config.sections):\n        81:             known_placement = KNOWN_SECTION_MAPPING.get(placement, placement).lower()\n        82:             config_key = f\"known_{known_placement}\"\n        83:             known_patterns = list(\n        84:                 getattr(self.config, config_key, self.config.known_other.get(known_placement, []))\n                        )\n        86:             known_patterns = [\n        87:                 pattern\n        88:                 for known_pattern in known_patterns\n        89:                 for pattern in self._parse_known_pattern(known_pattern)\n                        ]\n        91:             for known_pattern in known_patterns:\n        92:                 regexp = \"^\" + known_pattern.replace(\"*\", \".*\").replace(\"?\", \".?\") + \"$\"\n        93:                 self.known_patterns.append((re.compile(regexp), placement))\n\\n```\n\nKey observations and learned lessons:\n- Providing clear instructions to target missing branches explicitly improves coverage gains.\n- Ensuring complete module generation prevents syntax or import errors during test discovery.\n\nDecision procedure:\n1. Examine the target function source excerpt, filename, and uncovered lines or branches carefully.\n2. Identify distinct input configurations required to trigger each missing line and branch.\n3. Design clean, deterministic pytest functions with meaningful assertions for each target branch.\n4. Ensure all modified state is cleaned up and no tests execute at module import time.\n5. Return the complete Python test module enclosed exclusively in a python markdown block.\n\nFailure modes to avoid:\n- Generating tests that miss complex branch conditions or nested conditional logic.\n- Failing to import required helper classes or configurations properly.\n- Including project-specific paths or hardcoded temporary file paths incorrectly.\n\nRegression guards:\n- Never invoke pytest.main or execute tests upon module import.\n- Ensure the returned code is strictly contained within a single python markdown code block.\n",
+          "outcome": "coverage_gain_saved",
+          "generated_test": "from isort.deprecated.finders import KnownPatternFinder\nfrom isort.settings import Config\n\n\ndef test_known_pattern_finder_init():\n    # Configure a config with custom sections and known patterns containing wildcards (*, ?)\n    config = Config(\n        sections=[\"FUTURE\", \"STANDARD_LIBRARY\", \"THIRDPARTY\", \"FIRSTPARTY\", \"LOCALFOLDER\"],\n        known_first_party=[\"foo_*\", \"bar_?baz\"],\n    )\n    finder = KnownPatternFinder(config)\n    \n    # Verify that known_patterns were populated correctly for the matching lines/branches\n    assert len(finder.known_patterns) >= 2\n    \n    matched_sections = [\n        section for pattern, section in finder.known_patterns if pattern.match(\"foo_abc\")\n    ]\n    assert \"FIRSTPARTY\" in matched_sections\n\n    matched_sections_wildcard = [\n        section for pattern, section in finder.known_patterns if pattern.match(\"bar_xbaz\")\n    ]\n    assert \"FIRSTPARTY\" in matched_sections_wildcard\n",
+          "gained_lines": [
+            76,
+            77,
+            79,
+            80,
+            81,
+            82,
+            83,
+            84,
+            86,
+            87,
+            88,
+            89,
+            91,
+            92,
+            93
+          ],
+          "gained_branches": [
+            [
+              80,
+              0
+            ],
+            [
+              80,
+              81
+            ],
+            [
+              91,
+              80
+            ],
+            [
+              91,
+              92
+            ]
+          ],
+          "remaining_lines": [],
+          "remaining_branches": [],
+          "saved_test": "D:\\VinAI\\P-002\\binh\\phase1_runs\\e20_budget30_seed7_mb3\\generated_tests\\test\\tests_candidate_e1eda6e564ac91c8-f0c69185b52c\\isort\\test_opt_bb9ae68663a9_0000_1.py"
+        }
+      ],
+      "replicate_scores": [
+        1.0
+      ]
+    },
+    {
+      "prompt_digest": "e1eda6e564ac91c8",
+      "evaluation_digest": "f0c69185b52c",
+      "replicate": 0,
+      "target": {
+        "project": "mimesis",
+        "source_file": "mimesis/providers/person.py",
+        "symbol": "Person.username",
+        "split": "test"
+      },
+      "run_id": "multi-project-test-batch-c2c995a2",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 22.0,
+        "num_statements": 22.0,
+        "covered_branches": 18.0,
+        "num_branches": 18.0,
+        "gained_lines": [
+          228,
+          229,
+          231,
+          232,
+          234,
+          235,
+          237,
+          238,
+          242,
+          243,
+          244,
+          245,
+          246,
+          247,
+          248,
+          249,
+          250,
+          251,
+          252,
+          253,
+          254,
+          256
+        ],
+        "gained_branches": [
+          [
+            228,
+            229
+          ],
+          [
+            228,
+            231
+          ],
+          [
+            231,
+            232
+          ],
+          [
+            231,
+            234
+          ],
+          [
+            237,
+            238
+          ],
+          [
+            237,
+            242
+          ],
+          [
+            243,
+            244
+          ],
+          [
+            243,
+            256
+          ],
+          [
+            245,
+            246
+          ],
+          [
+            245,
+            247
+          ],
+          [
+            247,
+            248
+          ],
+          [
+            247,
+            249
+          ],
+          [
+            249,
+            250
+          ],
+          [
+            249,
+            251
+          ],
+          [
+            251,
+            252
+          ],
+          [
+            251,
+            253
+          ],
+          [
+            253,
+            243
+          ],
+          [
+            253,
+            254
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 1.0000\nStatement gain: 22 newly covered; 0 remain.\nBranch gain: 18 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "attempt_traces": [
+        {
+          "source_file": "src\\sample_repo\\mimesis\\mimesis\\providers\\person.py",
+          "symbol": "Person.username",
+          "name": "username",
+          "segment": "src\\sample_repo\\mimesis\\mimesis\\providers\\person.py:200-256",
+          "attempt": 1,
+          "component": "initial",
+          "prompt_input": "You are an expert Python test-driven developer.\\nThe code below, extracted from mimesis\\providers\\person.py, does not achieve full coverage:\\nwhen tested, lines 200-256 do not execute.\\nCreate new pytest test functions that execute all missing lines and branches. Each test must\\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\\nUse the get_info tool function as necessary. Always return an entire Python test module.\\nDo not call pytest.main and do not execute tests at module import time.\\nRespond only with Python code enclosed in a python markdown code block.\\n\\n```python\\n            import re\n            from mimesis.datasets import USERNAMES\n            class Person(BaseDataProvider):\n       200:     def username(\n       201:         self, mask: str | None = None, drange: tuple[int, int] = (1800, 2100)\n       202:     ) -> str:\n                    \"\"\"Generates a username using a mask.\n            \n                    Masks allow you to generate a variety of usernames.\n            \n                    - **C** stands for capitalized username.\n                    - **U** stands for uppercase username.\n                    - **l** stands for lowercase username.\n                    - **d** stands for digits in the username.\n            \n                    You can also use symbols to separate the different parts\n                    of the username: **.** **_** **-**\n            \n                    :param mask: Mask.\n                    :param drange: Digits range.\n                    :raises ValueError: If ``mask`` is not supported.\n                    :return: Username as string.\n            \n                    Example:\n                        >>> username(mask=\"C_C_d\")\n                        Cotte_Article_1923\n                        >>> username(mask=\"U.l.d\")\n                        ELKINS.wolverine.2013\n                        >>> username(mask=\"l_l_d\", drange=(1900, 2021))\n                        plasmic_blockader_1907\n                    \"\"\"\n       228:         if len(drange) != 2:\n       229:             raise ValueError(\"The drange parameter must contain only two integers.\")\n            \n       231:         if mask is None:\n       232:             mask = \"l_d\"\n            \n       234:         required_tags = \"CUl\"\n       235:         tags = re.findall(r\"[CUld.\\-_]\", mask)\n            \n       237:         if not any(tag in tags for tag in required_tags):\n       238:             raise ValueError(\n       239:                 \"Username mask must contain at least one of these: (C, U, l).\"\n                        )\n            \n       242:         final_username = \"\"\n       243:         for tag in tags:\n       244:             username = self.random.choice(USERNAMES)\n       245:             if tag == \"C\":\n       246:                 final_username += username.capitalize()\n       247:             if tag == \"U\":\n       248:                 final_username += username.upper()\n       249:             elif tag == \"l\":\n       250:                 final_username += username.lower()\n       251:             elif tag == \"d\":\n       252:                 final_username += str(self.random.randint(*drange))\n       253:             elif tag in \"-_.\":\n       254:                 final_username += tag\n            \n       256:         return final_username\n\\n```\n\nKey observations and learned lessons:\n- Providing clear instructions to target missing branches explicitly improves coverage gains.\n- Ensuring complete module generation prevents syntax or import errors during test discovery.\n\nDecision procedure:\n1. Examine the target function source excerpt, filename, and uncovered lines or branches carefully.\n2. Identify distinct input configurations required to trigger each missing line and branch.\n3. Design clean, deterministic pytest functions with meaningful assertions for each target branch.\n4. Ensure all modified state is cleaned up and no tests execute at module import time.\n5. Return the complete Python test module enclosed exclusively in a python markdown block.\n\nFailure modes to avoid:\n- Generating tests that miss complex branch conditions or nested conditional logic.\n- Failing to import required helper classes or configurations properly.\n- Including project-specific paths or hardcoded temporary file paths incorrectly.\n\nRegression guards:\n- Never invoke pytest.main or execute tests upon module import.\n- Ensure the returned code is strictly contained within a single python markdown code block.\n",
+          "outcome": "coverage_gain_saved",
+          "generated_test": "import pytest\nfrom mimesis import Person\n\n\ndef subscript_person():\n    return Person()\n\n\ndef test_username_invalid_drange_length():\n    person = subscript_person()\n    with pytest.raises(ValueError, match=\"The drange parameter must contain only two integers.\"):\n        person.username(mask=\"l_d\", drange=(1800,))\n\n\ndef test_username_default_mask():\n    person = subscript_person()\n    res = person.username(mask=None)\n    assert isinstance(res, str)\n    assert \"_\" in res\n\n\ndef test_username_missing_required_tags():\n    person = subscript_person()\n    with pytest.raises(ValueError, match=\"Username mask must contain at least one of these\"):\n        person.username(mask=\"d-d\")\n\n\ndef test_username_all_tags_and_separators():\n    person = subscript_person()\n    # Covers 'C', 'U', 'l', 'd', and separators '-', '_', '.'\n    mask = \"C_U.l-d\"\n    res = person.username(mask=mask, drange=(2000, 2001))\n    assert isinstance(res, str)\n    assert len(res) > 0\n",
+          "gained_lines": [
+            200,
+            201,
+            228,
+            229,
+            231,
+            232,
+            234,
+            235,
+            237,
+            238,
+            239,
+            242,
+            243,
+            244,
+            245,
+            246,
+            247,
+            248,
+            249,
+            250,
+            251,
+            252,
+            253,
+            254,
+            256
+          ],
+          "gained_branches": [
+            [
+              228,
+              229
+            ],
+            [
+              228,
+              231
+            ],
+            [
+              231,
+              232
+            ],
+            [
+              231,
+              234
+            ],
+            [
+              237,
+              238
+            ],
+            [
+              237,
+              242
+            ],
+            [
+              243,
+              244
+            ],
+            [
+              243,
+              256
+            ],
+            [
+              245,
+              246
+            ],
+            [
+              245,
+              247
+            ],
+            [
+              247,
+              248
+            ],
+            [
+              247,
+              249
+            ],
+            [
+              249,
+              250
+            ],
+            [
+              249,
+              251
+            ],
+            [
+              251,
+              252
+            ],
+            [
+              251,
+              253
+            ],
+            [
+              253,
+              243
+            ],
+            [
+              253,
+              254
+            ]
+          ],
+          "remaining_lines": [
+            202
+          ],
+          "remaining_branches": [],
+          "saved_test": "D:\\VinAI\\P-002\\binh\\phase1_runs\\e20_budget30_seed7_mb3\\generated_tests\\test\\tests_candidate_e1eda6e564ac91c8-f0c69185b52c\\mimesis\\test_opt_8ad4b67bb57d_0001_1.py"
+        }
+      ],
+      "replicate_scores": [
+        1.0
+      ]
+    },
+    {
+      "prompt_digest": "e1eda6e564ac91c8",
+      "evaluation_digest": "f0c69185b52c",
+      "replicate": 0,
+      "target": {
+        "project": "mlxtend",
+        "source_file": "mlxtend/frequent_patterns/apriori.py",
+        "symbol": "generate_new_combinations_low_memory",
+        "split": "test"
+      },
+      "run_id": "multi-project-test-batch-c2c995a2",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 19.0,
+        "num_statements": 19.0,
+        "covered_branches": 6.0,
+        "num_branches": 6.0,
+        "gained_lines": [
+          112,
+          113,
+          114,
+          115,
+          116,
+          117,
+          118,
+          119,
+          120,
+          121,
+          122,
+          123,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130,
+          131
+        ],
+        "gained_branches": [
+          [
+            115,
+            -55
+          ],
+          [
+            115,
+            116
+          ],
+          [
+            120,
+            121
+          ],
+          [
+            120,
+            125
+          ],
+          [
+            128,
+            115
+          ],
+          [
+            128,
+            129
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 1.0000\nStatement gain: 19 newly covered; 0 remain.\nBranch gain: 6 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "attempt_traces": [
+        {
+          "source_file": "src\\sample_repo\\mlxtend\\mlxtend\\frequent_patterns\\apriori.py",
+          "symbol": "generate_new_combinations_low_memory",
+          "name": "generate_new_combinations_low_memory",
+          "segment": "src\\sample_repo\\mlxtend\\mlxtend\\frequent_patterns\\apriori.py:55-131",
+          "attempt": 1,
+          "component": "initial",
+          "prompt_input": "You are an expert Python test-driven developer.\\nThe code below, extracted from mlxtend\\frequent_patterns\\apriori.py, does not achieve full coverage:\\nwhen tested, lines 55-131 do not execute.\\nCreate new pytest test functions that execute all missing lines and branches. Each test must\\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\\nUse the get_info tool function as necessary. Always return an entire Python test module.\\nDo not call pytest.main and do not execute tests at module import time.\\nRespond only with Python code enclosed in a python markdown code block.\\n\\n```python\\n            import numpy as np\n        55: def generate_new_combinations_low_memory(old_combinations, X, min_support, is_sparse):\n                \"\"\"\n                Generator of all combinations based on the last state of Apriori algorithm\n                Parameters\n                -----------\n                old_combinations: np.array\n                    All combinations with enough support in the last step\n                    Combinations are represented by a matrix.\n                    Number of columns is equal to the combination size\n                    of the previous step.\n                    Each row represents one combination\n                    and contains item type ids in the ascending order\n                    ```\n                           0        1\n                    0      15       20\n                    1      15       22\n                    2      17       19\n                    ```\n            \n                X: np.array or scipy sparse matrix\n                  The allowed values are either 0/1 or True/False.\n                  For example,\n            \n                ```\n                    0     True False  True  True False  True\n                    1     True False  True False False  True\n                    2     True False  True False False False\n                    3     True  True False False False False\n                    4    False False  True  True  True  True\n                    5    False False  True False  True  True\n                    6    False False  True False  True False\n                    7     True  True False False False False\n                ```\n            \n                min_support : float (default: 0.5)\n                  A float between 0 and 1 for minumum support of the itemsets returned.\n                  The support is computed as the fraction\n                  `transactions_where_item(s)_occur / total_transactions`.\n            \n                is_sparse : bool True if X is sparse\n            \n                Returns\n                -----------\n                Generator of all combinations from the last step x items\n                from the previous step. Every combination contains the\n                number of transactions where this item occurs, followed\n                by item type ids in the ascending order.\n                No combination other than generated\n                do not have a chance to get enough support\n            \n                Examples\n                -----------\n                For usage examples, please see\n                https://rasbt.github.io/mlxtend/user_guide/frequent_patterns/generate_new_combinations/\n            \n                \"\"\"\n            \n       112:     items_types_in_previous_step = np.unique(old_combinations.flatten())\n       113:     rows_count = X.shape[0]\n       114:     threshold = min_support * rows_count\n       115:     for old_combination in old_combinations:\n       116:         max_combination = old_combination[-1]\n       117:         mask = items_types_in_previous_step > max_combination\n       118:         valid_items = items_types_in_previous_step[mask]\n       119:         old_tuple = tuple(old_combination)\n       120:         if is_sparse:\n       121:             mask_rows = X[:, old_tuple].toarray().all(axis=1)\n       122:             X_cols = X[:, valid_items].toarray()\n       123:             supports = X_cols[mask_rows].sum(axis=0)\n                    else:\n       125:             mask_rows = X[:, old_tuple].all(axis=1)\n       126:             supports = X[mask_rows][:, valid_items].sum(axis=0)\n       127:         valid_indices = (supports >= threshold).nonzero()[0]\n       128:         for index in valid_indices:\n       129:             yield supports[index]\n       130:             yield from old_tuple\n       131:             yield valid_items[index]\n\\n```\n\nKey observations and learned lessons:\n- Providing clear instructions to target missing branches explicitly improves coverage gains.\n- Ensuring complete module generation prevents syntax or import errors during test discovery.\n\nDecision procedure:\n1. Examine the target function source excerpt, filename, and uncovered lines or branches carefully.\n2. Identify distinct input configurations required to trigger each missing line and branch.\n3. Design clean, deterministic pytest functions with meaningful assertions for each target branch.\n4. Ensure all modified state is cleaned up and no tests execute at module import time.\n5. Return the complete Python test module enclosed exclusively in a python markdown block.\n\nFailure modes to avoid:\n- Generating tests that miss complex branch conditions or nested conditional logic.\n- Failing to import required helper classes or configurations properly.\n- Including project-specific paths or hardcoded temporary file paths incorrectly.\n\nRegression guards:\n- Never invoke pytest.main or execute tests upon module import.\n- Ensure the returned code is strictly contained within a single python markdown code block.\n",
+          "outcome": "test_error",
+          "generated_test": "import numpy as np\nimport scipy.sparse as sp\nfrom mlxtend.frequent_patterns.apriori import generate_new_combinations_low_memory\n\n\ndef test_generate_new_combinations_low_memory_dense():\n    # Dense array test (hits lines 125-126)\n    old_combinations = np.array([[0, 1]])\n    X = np.array([\n        [True, True, True],\n        [True, True, False],\n        [True, True, True],\n        [False, False, False]\n    ])\n    min_support = 0.5  # threshold = 2.0\n    \n    gen = generate_new_combinations_low_memory(old_combinations, X, min_support, is_sparse=False)\n    results = list(gen)\n    \n    # old_combination=(0, 1), max_combination=1, valid_items=[2]\n    # X[:, (0, 1)].all(axis=1) is true for rows 0, 1, 2\n    # supports for column 2 in rows 0, 1, 2 is sum([True, False, True]) = 2 >= 2.0\n    # Expected yield: support (2.0), old_tuple (0, 1), valid_item (2)\n    assert len(results) > 0\n    assert results[0] == 2.0\n    assert results[1:3] == [0, 1]\n    assert results[3] == 2\n\n\ndef test_generate_new_combinations_low_memory_sparse():\n    # Sparse matrix test (hits lines 120-123)\n    old_combinations = np.array([[0, 1]])\n    X_dense = np.array([\n        [True, True, True],\n        [True, True, False],\n        [True, True, True],\n        [False, False, False]\n    ])\n    X = sp.csr_matrix(X_dense)\n    min_support = 0.5  # threshold = 2.0\n    \n    gen = generate_new_combinations_low_memory(old_combinations, X, min_support, is_sparse=True)\n    results = list(gen)\n    \n    assert len(results) > 0\n    assert results[0] == 2.0\n    assert results[1:3] == [0, 1]\n    assert results[3] == 2\n",
+          "execution_error": "F\r\n================================== FAILURES ===================================\r\n____________ test_generate_new_combinations_low_memory_dense[1-2] _____________\r\n\r\n    def test_generate_new_combinations_low_memory_dense():\r\n        # Dense array test (hits lines 125-126)\r\n        old_combinations = np.array([[0, 1]])\r\n        X = np.array([\r\n            [True, True, True],\r\n            [True, True, False],\r\n            [True, True, True],\r\n            [False, False, False]\r\n        ])\r\n        min_support = 0.5  # threshold = 2.0\r\n    \r\n        gen = generate_new_combinations_low_memory(old_combinations, X, min_support, is_sparse=False)\r\n        results = list(gen)\r\n    \r\n        # old_combination=(0, 1), max_combination=1, valid_items=[2]\r\n        # X[:, (0, 1)].all(axis=1) is true for rows 0, 1, 2\r\n        # supports for column 2 in rows 0, 1, 2 is sum([True, False, True]) = 2 >= 2.0\r\n        # Expected yield: support (2.0), old_tuple (0, 1), valid_item (2)\r\n>       assert len(results) > 0\r\nE       assert 0 > 0\r\nE        +  where 0 = len([])\r\n\r\nbinh\\phase1_runs\\e20_budget30_seed7_mb3\\runs\\e1eda6e564ac91c8-f0c69185b52c\\test\\multi-project-test-batch-c2c995a2\\target_workspaces\\e948f31d08fd_0002\\tmp_test_o_vqrc0e.py:24: AssertionError\r\n",
+          "next_component": "error"
+        },
+        {
+          "source_file": "src\\sample_repo\\mlxtend\\mlxtend\\frequent_patterns\\apriori.py",
+          "symbol": "generate_new_combinations_low_memory",
+          "name": "generate_new_combinations_low_memory",
+          "segment": "src\\sample_repo\\mlxtend\\mlxtend\\frequent_patterns\\apriori.py:55-131",
+          "attempt": 2,
+          "component": "error",
+          "prompt_input": "Executing the test yields an error, shown below.\\nModify or rewrite the test to correct it. Return the complete Python test module, not a patch.\\nPreserve useful assertions from the previous test and use get_info when more source context is needed.\\nRespond only with Python code enclosed in a python markdown code block.\\n\\nF\r\n================================== FAILURES ===================================\r\n____________ test_generate_new_combinations_low_memory_dense[1-2] _____________\r\n\r\n    def test_generate_new_combinations_low_memory_dense():\r\n        # Dense array test (hits lines 125-126)\r\n        old_combinations = np.array([[0, 1]])\r\n        X = np.array([\r\n            [True, True, True],\r\n            [True, True, False],\r\n            [True, True, True],\r\n            [False, False, False]\r\n        ])\r\n        min_support = 0.5  # threshold = 2.0\r\n    \r\n        gen = generate_new_combinations_low_memory(old_combinations, X, min_support, is_sparse=False)\r\n        results = list(gen)\r\n    \r\n        # old_combination=(0, 1), max_combination=1, valid_items=[2]\r\n        # X[:, (0, 1)].all(axis=1) is true for rows 0, 1, 2\r\n        # supports for column 2 in rows 0, 1, 2 is sum([True, False, True]) = 2 >= 2.0\r\n        # Expected yield: support (2.0), old_tuple (0, 1), valid_item (2)\r\n>       assert len(results) > 0\r\nE       assert 0 > 0\r\nE        +  where 0 = len([])\r\n\r\nbinh\\phase1_runs\\e20_budget30_seed7_mb3\\runs\\e1eda6e564ac91c8-f0c69185b52c\\test\\multi-project-test-batch-c2c995a2\\target_workspaces\\e948f31d08fd_0002\\tmp_test_o_vqrc0e.py:24: AssertionError\r\n\n\nKey observations and learned lessons:\n- Error repair prompts successfully guide the model to fix test bugs when the traceback is clear and the entire module is requested.\n- Preserving valid assertions from previous iterations prevents regression during repairs.\n\nDecision procedure:\n1. Analyze the test execution or collection error message and traceback carefully.\n2. Inspect the failing test code and identify the exact assertion or setup that caused the failure.\n3. Review the target source code excerpt or use get_info to understand expected behaviors and edge cases.\n4. Modify or rewrite the test to correct incorrect expectations, missing imports, or incorrect data types while preserving useful passing assertions.\n5. Return the complete updated test module in a single python markdown block without calling pytest.main.\n\nFailure modes to avoid:\n- Failing to address the exact traceback error message, resulting in repeated test failures.\n- Removing passing assertions instead of isolating and fixing the specific failing test case.\n- Adding target-specific or hardcoded environment paths into the repaired test module.\n\nRegression guards:\n- Always verify that the returned test module is complete and syntactically valid.\n- Ensure no debugging code, print statements, or pytest.main calls are included in the repaired test module.\n",
+          "outcome": "test_error",
+          "generated_test": "import numpy as np\nimport scipy.sparse as sp\nfrom mlxtend.frequent_patterns.apriori import generate_new_combinations_low_memory\n\n\ndef test_generate_new_combinations_low_memory_dense():\n    # Dense array test (hits lines 125-126)\n    # items_types_in_previous_step will be [0, 1, 2]\n    # old_combination = [0, 2], max_combination = 2 -> valid_items will be empty? Wait.\n    # Let's make old_combination = [0, 1], items = [0, 1, 2]. max_combination = 1.\n    # valid_items = [2].\n    # X[:, (0, 1)].all(axis=1) must match enough rows.\n    old_combinations = np.array([[0, 1]])\n    X = np.array([\n        [True, True, True],\n        [True, True, True],\n        [True, True, True],\n        [True, True, True]\n    ])\n    min_support = 0.5  # threshold = 2.0\n    \n    gen = generate_new_combinations_low_memory(old_combinations, X, min_support, is_sparse=False)\n    results = list(gen)\n    \n    assert len(results) > 0\n    assert results[0] == 4.0\n    assert results[1:3] == [0, 1]\n    assert results[3] == 2\n\n\ndef test_generate_new_combinations_low_memory_sparse():\n    # Sparse matrix test (hits lines 120-123)\n    old_combinations = np.array([[0, 1]])\n    X_dense = np.array([\n        [True, True, True],\n        [True, True, True],\n        [True, True, True],\n        [True, True, True]\n    ])\n    X = sp.csr_matrix(X_dense)\n    min_support = 0.5  # threshold = 2.0\n    \n    gen = generate_new_combinations_low_memory(old_combinations, X, min_support, is_sparse=True)\n    results = list(gen)\n    \n    assert len(results) > 0\n    assert results[0] == 4.0\n    assert results[1:3] == [0, 1]\n    assert results[3] == 2\n",
+          "execution_error": "F\r\n================================== FAILURES ===================================\r\n____________ test_generate_new_combinations_low_memory_dense[1-2] _____________\r\n\r\n    def test_generate_new_combinations_low_memory_dense():\r\n        # Dense array test (hits lines 125-126)\r\n        # items_types_in_previous_step will be [0, 1, 2]\r\n        # old_combination = [0, 2], max_combination = 2 -> valid_items will be empty? Wait.\r\n        # Let's make old_combination = [0, 1], items = [0, 1, 2]. max_combination = 1.\r\n        # valid_items = [2].\r\n        # X[:, (0, 1)].all(axis=1) must match enough rows.\r\n        old_combinations = np.array([[0, 1]])\r\n        X = np.array([\r\n            [True, True, True],\r\n            [True, True, True],\r\n            [True, True, True],\r\n            [True, True, True]\r\n        ])\r\n        min_support = 0.5  # threshold = 2.0\r\n    \r\n        gen = generate_new_combinations_low_memory(old_combinations, X, min_support, is_sparse=False)\r\n        results = list(gen)\r\n    \r\n>       assert len(results) > 0\r\nE       assert 0 > 0\r\nE        +  where 0 = len([])\r\n\r\nbinh\\phase1_runs\\e20_budget30_seed7_mb3\\runs\\e1eda6e564ac91c8-f0c69185b52c\\test\\multi-project-test-batch-c2c995a2\\target_workspaces\\e948f31d08fd_0002\\tmp_test_26b3i6hb.py:25: AssertionError\r\n",
+          "next_component": "error"
+        },
+        {
+          "source_file": "src\\sample_repo\\mlxtend\\mlxtend\\frequent_patterns\\apriori.py",
+          "symbol": "generate_new_combinations_low_memory",
+          "name": "generate_new_combinations_low_memory",
+          "segment": "src\\sample_repo\\mlxtend\\mlxtend\\frequent_patterns\\apriori.py:55-131",
+          "attempt": 3,
+          "component": "error",
+          "prompt_input": "Executing the test yields an error, shown below.\\nModify or rewrite the test to correct it. Return the complete Python test module, not a patch.\\nPreserve useful assertions from the previous test and use get_info when more source context is needed.\\nRespond only with Python code enclosed in a python markdown code block.\\n\\nF\r\n================================== FAILURES ===================================\r\n____________ test_generate_new_combinations_low_memory_dense[1-2] _____________\r\n\r\n    def test_generate_new_combinations_low_memory_dense():\r\n        # Dense array test (hits lines 125-126)\r\n        # items_types_in_previous_step will be [0, 1, 2]\r\n        # old_combination = [0, 2], max_combination = 2 -> valid_items will be empty? Wait.\r\n        # Let's make old_combination = [0, 1], items = [0, 1, 2]. max_combination = 1.\r\n        # valid_items = [2].\r\n        # X[:, (0, 1)].all(axis=1) must match enough rows.\r\n        old_combinations = np.array([[0, 1]])\r\n        X = np.array([\r\n            [True, True, True],\r\n            [True, True, True],\r\n            [True, True, True],\r\n            [True, True, True]\r\n        ])\r\n        min_support = 0.5  # threshold = 2.0\r\n    \r\n        gen = generate_new_combinations_low_memory(old_combinations, X, min_support, is_sparse=False)\r\n        results = list(gen)\r\n    \r\n>       assert len(results) > 0\r\nE       assert 0 > 0\r\nE        +  where 0 = len([])\r\n\r\nbinh\\phase1_runs\\e20_budget30_seed7_mb3\\runs\\e1eda6e564ac91c8-f0c69185b52c\\test\\multi-project-test-batch-c2c995a2\\target_workspaces\\e948f31d08fd_0002\\tmp_test_26b3i6hb.py:25: AssertionError\r\n\n\nKey observations and learned lessons:\n- Error repair prompts successfully guide the model to fix test bugs when the traceback is clear and the entire module is requested.\n- Preserving valid assertions from previous iterations prevents regression during repairs.\n\nDecision procedure:\n1. Analyze the test execution or collection error message and traceback carefully.\n2. Inspect the failing test code and identify the exact assertion or setup that caused the failure.\n3. Review the target source code excerpt or use get_info to understand expected behaviors and edge cases.\n4. Modify or rewrite the test to correct incorrect expectations, missing imports, or incorrect data types while preserving useful passing assertions.\n5. Return the complete updated test module in a single python markdown block without calling pytest.main.\n\nFailure modes to avoid:\n- Failing to address the exact traceback error message, resulting in repeated test failures.\n- Removing passing assertions instead of isolating and fixing the specific failing test case.\n- Adding target-specific or hardcoded environment paths into the repaired test module.\n\nRegression guards:\n- Always verify that the returned test module is complete and syntactically valid.\n- Ensure no debugging code, print statements, or pytest.main calls are included in the repaired test module.\n",
+          "outcome": "coverage_gain_saved",
+          "generated_test": "import numpy as np\nimport scipy.sparse as sp\nfrom mlxtend.frequent_patterns.apriori import generate_new_combinations_low_memory\n\n\ndef test_generate_new_combinations_low_memory_dense():\n    # If old_combinations = [[0, 1]], items_types_in_previous_step = [0, 1].\n    # max_combination = 1. mask = items_types_in_previous_step > 1 -> [] (empty!).\n    # So to have valid items greater than max_combination, old_combinations items must be smaller,\n    # and there must be other items in X or in old_combinations that provide higher item indices.\n    # Wait, items_types_in_previous_step = np.unique(old_combinations.flatten()).\n    # So valid_items are strictly items already present in old_combinations that are > max_combination,\n    # which is impossible since max_combination is the *maximum* element of old_combination!\n    # Therefore, to have valid_items > max_combination, old_combinations must contain multiple rows\n    # or items such that different rows combine, OR items_types_in_previous_step comes from flattening.\n    # Wait! Let's check how Apriori generates combinations:\n    # old_combinations has items like [0, 1], [0, 2].\n    # Then unique items in previous step are [0, 1, 2].\n    # For combination [0, 1], max_combination is 1. Items > 1 is [2].\n    # So old_combinations needs to be e.g. np.array([[0, 1], [0, 2]])!\n    \n    old_combinations = np.array([[0, 1], [0, 2]])\n    X = np.array([\n        [True, True, True],\n        [True, True, True],\n        [True, True, True],\n        [True, True, True]\n    ])\n    min_support = 0.5  # threshold = 2.0\n    \n    gen = generate_new_combinations_low_memory(old_combinations, X, min_support, is_sparse=False)\n    results = list(gen)\n    \n    assert len(results) > 0\n\n\ndef test_generate_new_combinations_low_memory_sparse():\n    old_combinations = np.array([[0, 1], [0, 2]])\n    X_dense = np.array([\n        [True, True, True],\n        [True, True, True],\n        [True, True, True],\n        [True, True, True]\n    ])\n    X = sp.csr_matrix(X_dense)\n    min_support = 0.5  # threshold = 2.0\n    \n    gen = generate_new_combinations_low_memory(old_combinations, X, min_support, is_sparse=True)\n    results = list(gen)\n    \n    assert len(results) > 0\n",
+          "gained_lines": [
+            55,
+            112,
+            113,
+            114,
+            115,
+            116,
+            117,
+            118,
+            119,
+            120,
+            121,
+            122,
+            123,
+            125,
+            126,
+            127,
+            128,
+            129,
+            130,
+            131
+          ],
+          "gained_branches": [
+            [
+              115,
+              0
+            ],
+            [
+              115,
+              116
+            ],
+            [
+              120,
+              121
+            ],
+            [
+              120,
+              125
+            ],
+            [
+              128,
+              115
+            ],
+            [
+              128,
+              129
+            ]
+          ],
+          "remaining_lines": [],
+          "remaining_branches": [],
+          "saved_test": "D:\\VinAI\\P-002\\binh\\phase1_runs\\e20_budget30_seed7_mb3\\generated_tests\\test\\tests_candidate_e1eda6e564ac91c8-f0c69185b52c\\mlxtend\\test_opt_e948f31d08fd_0002_1.py"
+        }
+      ],
+      "replicate_scores": [
+        1.0
+      ]
+    },
+    {
+      "prompt_digest": "e1eda6e564ac91c8",
+      "evaluation_digest": "f0c69185b52c",
+      "replicate": 0,
+      "target": {
+        "project": "typesystem",
+        "source_file": "typesystem/json_schema.py",
+        "symbol": "type_from_json_schema",
+        "split": "test"
+      },
+      "run_id": "multi-project-test-batch-c2c995a2",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 8.0,
+        "num_statements": 8.0,
+        "covered_branches": 4.0,
+        "num_branches": 4.0,
+        "gained_lines": [
+          154,
+          156,
+          157,
+          163,
+          165,
+          166,
+          168,
+          169
+        ],
+        "gained_branches": [
+          [
+            156,
+            157
+          ],
+          [
+            156,
+            165
+          ],
+          [
+            165,
+            166
+          ],
+          [
+            165,
+            168
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 1.0000\nStatement gain: 8 newly covered; 0 remain.\nBranch gain: 4 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "attempt_traces": [
+        {
+          "source_file": "src\\sample_repo\\typesystem\\typesystem\\json_schema.py",
+          "symbol": "type_from_json_schema",
+          "name": "type_from_json_schema",
+          "segment": "src\\sample_repo\\typesystem\\typesystem\\json_schema.py:150-171",
+          "attempt": 1,
+          "component": "initial",
+          "prompt_input": "You are an expert Python test-driven developer.\\nThe code below, extracted from typesystem\\json_schema.py, does not achieve full coverage:\\nwhen tested, lines 150-170 do not execute.\\nCreate new pytest test functions that execute all missing lines and branches. Each test must\\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\\nUse the get_info tool function as necessary. Always return an entire Python test module.\\nDo not call pytest.main and do not execute tests at module import time.\\nRespond only with Python code enclosed in a python markdown code block.\\n\\n```python\\n            from typesystem.composites import NeverMatch\n            from typesystem.fields import Const, Field, Union\n            from typesystem.schemas import Definitions\n       150: def type_from_json_schema(data: dict, definitions: Definitions) -> Field:\n                \"\"\"\n                Build a typed field or union of typed fields from a JSON schema object.\n                \"\"\"\n       154:     type_strings, allow_null = get_valid_types(data)\n            \n       156:     if len(type_strings) > 1:\n       157:         items = [\n       158:             from_json_schema_type(\n       159:                 data, type_string=type_string, allow_null=False, definitions=definitions\n                        )\n       161:             for type_string in type_strings\n                    ]\n       163:         return Union(any_of=items, allow_null=allow_null)\n            \n       165:     if len(type_strings) == 0:\n       166:         return {True: Const(None), False: NeverMatch()}[allow_null]\n            \n       168:     type_string = type_strings.pop()\n       169:     return from_json_schema_type(\n       170:         data, type_string=type_string, allow_null=allow_null, definitions=definitions\n                )\n\\n```\n\nKey observations and learned lessons:\n- Providing clear instructions to target missing branches explicitly improves coverage gains.\n- Ensuring complete module generation prevents syntax or import errors during test discovery.\n\nDecision procedure:\n1. Examine the target function source excerpt, filename, and uncovered lines or branches carefully.\n2. Identify distinct input configurations required to trigger each missing line and branch.\n3. Design clean, deterministic pytest functions with meaningful assertions for each target branch.\n4. Ensure all modified state is cleaned up and no tests execute at module import time.\n5. Return the complete Python test module enclosed exclusively in a python markdown block.\n\nFailure modes to avoid:\n- Generating tests that miss complex branch conditions or nested conditional logic.\n- Failing to import required helper classes or configurations properly.\n- Including project-specific paths or hardcoded temporary file paths incorrectly.\n\nRegression guards:\n- Never invoke pytest.main or execute tests upon module import.\n- Ensure the returned code is strictly contained within a single python markdown code block.\n",
+          "outcome": "test_error",
+          "generated_test": "import pytest\nfrom typesystem.json_schema import type_from_json_schema\nfrom typesystem.schemas import Definitions\nfrom typesystem.fields import Union, Const\nfrom typesystem.composites import NeverMatch\n\ndef test_type_from_json_schema_multiple_types():\n    definitions = Definitions()\n    # A JSON schema with multiple types, e.g., type: [\"string\", \"integer\"]\n    data = {\"type\": [\"string\", \"integer\"]}\n    field = type_from_json_schema(data, definitions)\n    assert isinstance(field, Union)\n\ndef test_type_from_json_schema_zero_types_allow_null():\n    definitions = Definitions()\n    # A JSON schema with no explicit type, but nullable (null allowed)\n    data = {\"type\": \"null\"}\n    field = type_from_json_schema(data, definitions)\n    assert isinstance(field, Const)\n    assert field.const is None\n\ndef test_type_from_json_schema_zero_types_disallow_null():\n    definitions = Definitions()\n    # A JSON schema with empty type list and no null allowed\n    data = {\"type\": []}\n    field = type_from_json_schema(data, definitions)\n    assert isinstance(field, NeverMatch)\n\ndef test_type_from_json_schema_single_type():\n    definitions = Definitions()\n    # A JSON schema with a single type\n    data = {\"type\": \"string\"}\n    field = type_from_json_schema(data, definitions)\n    assert not isinstance(field, Union)\n",
+          "execution_error": "....F\r\n================================== FAILURES ===================================\r\n__________ test_type_from_json_schema_zero_types_disallow_null[1-2] ___________\r\n\r\n    def test_type_from_json_schema_zero_types_disallow_null():\r\n        definitions = Definitions()\r\n        # A JSON schema with empty type list and no null allowed\r\n        data = {\"type\": []}\r\n        field = type_from_json_schema(data, definitions)\r\n>       assert isinstance(field, NeverMatch)\r\nE       assert False\r\nE        +  where False = isinstance(<typesystem.fields.Union object at 0x000002B03C8AD640>, NeverMatch)\r\n\r\nbinh\\phase1_runs\\e20_budget30_seed7_mb3\\runs\\e1eda6e564ac91c8-f0c69185b52c\\test\\multi-project-test-batch-c2c995a2\\target_workspaces\\de80c9c90dad_0003\\tmp_test_s_ynnxes.py:27: AssertionError\r\n",
+          "next_component": "error"
+        },
+        {
+          "source_file": "src\\sample_repo\\typesystem\\typesystem\\json_schema.py",
+          "symbol": "type_from_json_schema",
+          "name": "type_from_json_schema",
+          "segment": "src\\sample_repo\\typesystem\\typesystem\\json_schema.py:150-171",
+          "attempt": 2,
+          "component": "error",
+          "prompt_input": "Executing the test yields an error, shown below.\\nModify or rewrite the test to correct it. Return the complete Python test module, not a patch.\\nPreserve useful assertions from the previous test and use get_info when more source context is needed.\\nRespond only with Python code enclosed in a python markdown code block.\\n\\n....F\r\n================================== FAILURES ===================================\r\n__________ test_type_from_json_schema_zero_types_disallow_null[1-2] ___________\r\n\r\n    def test_type_from_json_schema_zero_types_disallow_null():\r\n        definitions = Definitions()\r\n        # A JSON schema with empty type list and no null allowed\r\n        data = {\"type\": []}\r\n        field = type_from_json_schema(data, definitions)\r\n>       assert isinstance(field, NeverMatch)\r\nE       assert False\r\nE        +  where False = isinstance(<typesystem.fields.Union object at 0x000002B03C8AD640>, NeverMatch)\r\n\r\nbinh\\phase1_runs\\e20_budget30_seed7_mb3\\runs\\e1eda6e564ac91c8-f0c69185b52c\\test\\multi-project-test-batch-c2c995a2\\target_workspaces\\de80c9c90dad_0003\\tmp_test_s_ynnxes.py:27: AssertionError\r\n\n\nKey observations and learned lessons:\n- Error repair prompts successfully guide the model to fix test bugs when the traceback is clear and the entire module is requested.\n- Preserving valid assertions from previous iterations prevents regression during repairs.\n\nDecision procedure:\n1. Analyze the test execution or collection error message and traceback carefully.\n2. Inspect the failing test code and identify the exact assertion or setup that caused the failure.\n3. Review the target source code excerpt or use get_info to understand expected behaviors and edge cases.\n4. Modify or rewrite the test to correct incorrect expectations, missing imports, or incorrect data types while preserving useful passing assertions.\n5. Return the complete updated test module in a single python markdown block without calling pytest.main.\n\nFailure modes to avoid:\n- Failing to address the exact traceback error message, resulting in repeated test failures.\n- Removing passing assertions instead of isolating and fixing the specific failing test case.\n- Adding target-specific or hardcoded environment paths into the repaired test module.\n\nRegression guards:\n- Always verify that the returned test module is complete and syntactically valid.\n- Ensure no debugging code, print statements, or pytest.main calls are included in the repaired test module.\n",
+          "outcome": "coverage_gain_saved",
+          "generated_test": "import pytest\nfrom typesystem.json_schema import type_from_json_schema\nfrom typesystem.schemas import Definitions\nfrom typesystem.fields import Union, Const, Field\nfrom typesystem.composites import NeverMatch\n\ndef test_type_from_json_schema_multiple_types():\n    definitions = Definitions()\n    data = {\"type\": [\"string\", \"integer\"]}\n    field = type_from_json_schema(data, definitions)\n    assert isinstance(field, Union)\n\ndef test_type_from_json_schema_zero_types_allow_null():\n    definitions = Definitions()\n    data = {\"type\": \"null\"}\n    field = type_from_json_schema(data, definitions)\n    assert isinstance(field, Const)\n    assert field.const is None\n\ndef test_type_from_json_schema_zero_types_disallow_null():\n    definitions = Definitions()\n    # When {\"type\": []}, get_valid_types populates all types ('null' etc.) \n    # and sets allow_null = True because 'null' is present.\n    # To hit len(type_strings) == 0 with allow_null = False, we can pass something \n    # where get_valid_types returns empty type_strings and allow_null = False, \n    # but wait, get_valid_types defaults to all types if empty.\n    # Let's inspect how to trigger len(type_strings) == 0 and allow_null == False directly by calling type_from_json_schema \n    # or mocking/passing data that results in empty type_strings and allow_null=False.\n    # Since get_valid_types fills empty with all types, can we provide a custom data or test the internal condition?\n    # Actually, if we pass a schema where type_strings becomes empty and allow_null is False:\n    # Wait, get_valid_types always defaults to all types if type is empty or missing. \n    # But what if we mock get_valid_types or pass data that results in (set(), False)?\n    # Since we cannot easily make get_valid_types return (set(), False) with normal dict inputs due to its fallback,\n    # let's use monkeypatch to test that specific branch directly.\n    import typesystem.json_schema\n    monkeypatch = pytest.MonkeyPatch()\n    monkeypatch.setattr(typesystem.json_schema, \"get_valid_types\", lambda d: (set(), False))\n    try:\n        field = type_from_json_schema({}, definitions)\n        assert isinstance(field, NeverMatch)\n    finally:\n        monkeypatch.undo()\n\ndef test_type_from_json_schema_single_type():\n    definitions = Definitions()\n    data = {\"type\": \"string\"}\n    field = type_from_json_schema(data, definitions)\n    assert not isinstance(field, Union)\n",
+          "gained_lines": [
+            150,
+            154,
+            156,
+            157,
+            158,
+            159,
+            161,
+            163,
+            165,
+            166,
+            168,
+            169,
+            170
+          ],
+          "gained_branches": [
+            [
+              156,
+              157
+            ],
+            [
+              156,
+              165
+            ],
+            [
+              165,
+              166
+            ],
+            [
+              165,
+              168
+            ]
+          ],
+          "remaining_lines": [],
+          "remaining_branches": [],
+          "saved_test": "D:\\VinAI\\P-002\\binh\\phase1_runs\\e20_budget30_seed7_mb3\\generated_tests\\test\\tests_candidate_e1eda6e564ac91c8-f0c69185b52c\\typesystem\\test_opt_de80c9c90dad_0003_1.py"
+        }
+      ],
+      "replicate_scores": [
+        1.0
+      ]
+    }
+  ],
+  "existing_baseline_reference": null
+}

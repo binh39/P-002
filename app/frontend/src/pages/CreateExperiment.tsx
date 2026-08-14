@@ -154,6 +154,11 @@ export default function CreateExperiment() {
     settings.maxMetricCalls >= 3 &&
     (hasFullAccess || settings.maxMetricCalls <= 2200) &&
     settings.evaluationReplicates >= 1 &&
+    Number.isInteger(settings.gepaSeed) &&
+    settings.gepaSeed >= 0 &&
+    Number.isInteger(settings.reflectionMinibatchSize) &&
+    settings.reflectionMinibatchSize >= 1 &&
+    settings.reflectionMinibatchSize <= 64 &&
     settings.reflectionTemperature >= 0 &&
     settings.reflectionTemperature <= 2 &&
     (baselineMode === "preset" ||
@@ -977,6 +982,19 @@ function SettingsStep({
             max={10}
             onChange={(value) => update("evaluationReplicates", value)}
           />
+          <NumberField
+            label="GEPA seed"
+            value={settings.gepaSeed}
+            min={0}
+            onChange={(value) => update("gepaSeed", value)}
+          />
+          <NumberField
+            label="Reflection minibatch"
+            value={settings.reflectionMinibatchSize}
+            min={1}
+            max={64}
+            onChange={(value) => update("reflectionMinibatchSize", value)}
+          />
           <Field label="Reflection temperature" hint="0.7 is recommended for proposal diversity.">
             <input
               type="number"
@@ -1114,6 +1132,8 @@ function ReviewStep({
             ["CoverUp", settings.coverupModel],
             ["Optimizer", settings.optimizeModel],
             ["Evaluation replicates", String(settings.evaluationReplicates)],
+            ["GEPA seed", String(settings.gepaSeed)],
+            ["Reflection minibatch", String(settings.reflectionMinibatchSize)],
           ]}
         />
         <ReviewCard

@@ -128,6 +128,8 @@ async def test_cloud_gepa_optimizer_uses_isolated_web_prefix_and_maps_result():
             coverup_model="vertex_ai/gemini-3.5-flash-lite",
             optimize_model="vertex_ai/gemini-3.1-pro-preview",
             max_metric_calls=30,
+            gepa_seed=19,
+            reflection_minibatch_size=3,
         ),
     )
 
@@ -140,6 +142,8 @@ async def test_cloud_gepa_optimizer_uses_isolated_web_prefix_and_maps_result():
     assert job_args[job_args.index("--metric-calls") + 1] == "30"
     assert job_args[job_args.index("--repeat-tests") + 1] == "5"
     assert job_args[job_args.index("--evaluation-replicates") + 1] == "1"
+    assert job_args[job_args.index("--gepa-seed") + 1] == "19"
+    assert job_args[job_args.index("--reflection-minibatch-size") + 1] == "3"
     environment = {item["name"]: item["value"] for item in client.request["overrides"]["container_overrides"][0]["env"]}
     assert environment == {
         "COVERUP_MODEL": "vertex_ai/gemini-3.5-flash-lite",

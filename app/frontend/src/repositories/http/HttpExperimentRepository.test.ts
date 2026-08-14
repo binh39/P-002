@@ -34,6 +34,8 @@ describe("HttpExperimentRepository", () => {
           max_metric_calls: 30,
           evaluation_replicates: 1,
           reflection_temperature: 0.7,
+          gepa_seed: 7,
+          reflection_minibatch_size: 8,
         },
         optimization_eligible: false,
         status: "draft",
@@ -77,6 +79,8 @@ describe("HttpExperimentRepository", () => {
         maxMetricCalls: 30,
         evaluationReplicates: 1,
         reflectionTemperature: 0.7,
+        gepaSeed: 7,
+        reflectionMinibatchSize: 8,
       },
     });
     expect(experiment.projectId).toBe("project-1");
@@ -105,6 +109,8 @@ describe("HttpExperimentRepository", () => {
             max_metric_calls: 30,
             evaluation_replicates: 1,
             reflection_temperature: 0.7,
+            gepa_seed: 7,
+            reflection_minibatch_size: 8,
           },
         }),
       }),

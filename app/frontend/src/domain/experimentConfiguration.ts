@@ -26,6 +26,8 @@ export interface CloudExperimentSettings {
   maxMetricCalls: number;
   evaluationReplicates: number;
   reflectionTemperature: number;
+  gepaSeed: number;
+  reflectionMinibatchSize: number;
 }
 
 export const defaultDatasetPercentages: DatasetPercentages = {
@@ -46,6 +48,8 @@ export const defaultCloudSettings: CloudExperimentSettings = {
   maxMetricCalls: 30,
   evaluationReplicates: 1,
   reflectionTemperature: 0.7,
+  gepaSeed: 7,
+  reflectionMinibatchSize: 8,
 };
 
 function hashSeed(value: string) {

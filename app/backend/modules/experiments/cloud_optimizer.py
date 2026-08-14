@@ -123,6 +123,10 @@ class CloudRunJobGepaOptimizer:
             str(settings.max_attempts),
             "--reflection-temperature",
             str(settings.reflection_temperature),
+            "--gepa-seed",
+            str(settings.gepa_seed),
+            "--reflection-minibatch-size",
+            str(settings.reflection_minibatch_size),
         ]
         if settings.rate_limit:
             args.extend(["--rate-limit", str(settings.rate_limit)])

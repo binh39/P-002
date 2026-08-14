@@ -59,6 +59,8 @@ def main() -> int:
     parser.add_argument("--rate-limit", type=int)
     parser.add_argument("--pytest-args", default="")
     parser.add_argument("--reflection-temperature", type=float, default=0.7)
+    parser.add_argument("--gepa-seed", type=int, default=7)
+    parser.add_argument("--reflection-minibatch-size", type=int, default=8)
     parser.add_argument("cli_args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     cli_args = list(args.cli_args)
@@ -122,6 +124,10 @@ def main() -> int:
                     str(args.evaluation_replicates),
                     "--reflection-temperature",
                     str(args.reflection_temperature),
+                    "--gepa-seed",
+                    str(args.gepa_seed),
+                    "--reflection-minibatch-size",
+                    str(args.reflection_minibatch_size),
                 ]
             )
 
