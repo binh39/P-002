@@ -341,7 +341,7 @@ Run the test in an isolated teacher experiment workspace
           |
           +-- pytest fails: record result and try another experiment
           +-- target score does not improve: record result and try another experiment
-          +-- at most 3 experiments without success: keep prompt unchanged
+          +-- at most 5 experiments without success: keep prompt unchanged
           |
           v
 Keep only experiments whose test passes and target score beats baseline

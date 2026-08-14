@@ -23,6 +23,8 @@ from src.optimization.coveragepy import (
     symbol_coverage,
 )
 from src.optimization.gepa import (
+    MAX_OPTIMIZER_TEST_EXPERIMENTS,
+    REFLECTION_MINIBATCH_SIZE,
     BestParetoCandidateSelector,
     CausalReflectionComponentSelector,
     CoverUpPromptAdapter,
@@ -430,6 +432,10 @@ def test_reflection_request_log_contains_exact_model_payload(capsys):
         "PROMPTOPT_REFLECTION_REQUEST_BEGIN\n"
     ).removesuffix("PROMPTOPT_REFLECTION_REQUEST_END\n")
     assert json.loads(payload) == request
+
+
+def test_optimizer_experiment_budget_matches_reflection_minibatch_cap():
+    assert MAX_OPTIMIZER_TEST_EXPERIMENTS == REFLECTION_MINIBATCH_SIZE == 5
 
 
 def test_coverup_chatter_returns_get_info_calls_with_results(monkeypatch):
@@ -2210,7 +2216,7 @@ def test_prompt_remains_unchanged_when_optimizer_cannot_prove_a_better_test(tmp_
     )
 
     assert proposals == {"initial": baseline.initial}
-    assert len(calls) == 3
+    assert len(calls) == 5
     decision = json.loads(
         (tmp_path / "reflection_decisions.jsonl").read_text(encoding="utf-8")
     )
