@@ -21,6 +21,7 @@ from src.optimization.coveragepy import (
     run_coverage,
     symbol_coverage,
 )
+from src.optimization.failures import classify_attempt_failure
 from src.optimization.gepa import (
     STRATEGY_PLAYBOOK_BEGIN,
     STRATEGY_PLAYBOOK_END,
@@ -1721,7 +1722,7 @@ def test_reflection_compares_candidate_with_parent_and_balances_exemplars(tmp_pa
     ] == ["regression", "positive"]
     trace_path = tmp_path / "candidates" / "reflection_traces.jsonl"
     trace = json.loads(trace_path.read_text(encoding="utf-8").splitlines()[-1])
-    assert trace["schema_version"] == 2
+    assert trace["schema_version"] == 3
     assert trace["candidate_digest"] == bundle_digest(
         PromptBundle.from_candidate(candidate)
     )
@@ -1837,10 +1838,87 @@ def test_reflection_reconstructs_initial_error_repair_episode(tmp_path):
     assert first["error"] == "NameError: broken"
     assert first["repaired_test"].startswith("def test_repair_one")
     assert first["execution_error_after"] == "NameError: still_broken"
+    assert first["failure_before"] == {
+        "failure_stage": "execution",
+        "failure_type": "name_error",
+        "error_type": "NameError",
+        "error_message": "broken",
+    }
+    assert first["failure_after"] == {
+        "failure_stage": "execution",
+        "failure_type": "name_error",
+        "error_type": "NameError",
+        "error_message": "still_broken",
+    }
     assert second["failing_test"].startswith("def test_repair_one")
     assert second["error"] == "NameError: still_broken"
     assert second["repaired_test"].startswith("def test_repair_two")
     assert second["outcome"] == "coverage_gain_saved"
+    assert episode["terminal_failure"] == {}
+
+
+def test_failure_taxonomy_extracts_assertion_and_generated_test_frame():
+    failure = classify_attempt_failure({
+        "outcome": "test_error",
+        "execution_error": (
+            "FAILED tests/test_generated.py::test_value - AssertionError\n"
+            "tests/test_generated.py:42: in test_value\n"
+            "E   assert 'raw' == 'normalized'\n"
+            "E   AssertionError: expected normalized value"
+        ),
+    })
+
+    assert failure == {
+        "failure_stage": "assertion",
+        "failure_type": "assertion_error",
+        "error_type": "AssertionError",
+        "error_message": "expected normalized value",
+        "actual": "'raw'",
+        "expected": "'normalized'",
+        "comparison": "==",
+        "actionable_frame": {
+            "path": "tests/test_generated.py",
+            "line": 42,
+            "function": "test_value",
+        },
+    }
+
+
+def test_failure_taxonomy_distinguishes_import_coverage_and_exhausted_repair():
+    import_failure = classify_attempt_failure({
+        "outcome": "test_error",
+        "execution_error": (
+            "tmp_test_generated.py:7: in <module>\n"
+            "E   ModuleNotFoundError: No module named 'optional_dep'"
+        ),
+    })
+    partial = classify_attempt_failure({
+        "outcome": "coverage_gain_saved",
+        "remaining_lines": [10],
+        "remaining_branches": [[10, 12]],
+    })
+    exhausted = classify_attempt_failure(
+        {"outcome": "max_attempts_exhausted"},
+        {
+            "outcome": "test_error",
+            "execution_error": "E   TypeError: unexpected keyword argument 'mode'",
+        },
+    )
+
+    assert import_failure["failure_stage"] == "collection"
+    assert import_failure["failure_type"] == "import_error"
+    assert partial == {
+        "failure_stage": "coverage",
+        "failure_type": "partial_coverage",
+    }
+    assert exhausted == {
+        "failure_stage": "repair",
+        "failure_type": "max_attempts_exhausted",
+        "root_failure_stage": "execution",
+        "root_failure_type": "type_error",
+        "error_type": "TypeError",
+        "error_message": "unexpected keyword argument 'mode'",
+    }
 
 
 def test_causal_component_selector_prefers_terminal_error_failures():

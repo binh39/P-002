@@ -18,6 +18,7 @@ from gepa.strategies.candidate_selector import (
     ParetoCandidateSelector,
 )
 
+from .failures import classify_attempt_failure
 from .metrics import (
     BRANCH_SCORE_WEIGHT,
     STATEMENT_SCORE_WEIGHT,
@@ -516,7 +517,10 @@ def _clip_text(value: Any, limit: int, *, keep_tail: bool = False) -> str:
     return marker + text[-available:] if keep_tail else text[:available] + marker
 
 
-def _compact_attempt(attempt: Mapping[str, Any]) -> dict[str, Any]:
+def _compact_attempt(
+    attempt: Mapping[str, Any],
+    previous_attempt: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """Keep one observable CoverUp action/result without raw transcript noise."""
     row = {
         key: attempt[key]
@@ -541,6 +545,7 @@ def _compact_attempt(attempt: Mapping[str, Any]) -> dict[str, Any]:
         row["assistant_response"] = _clip_text(
             attempt["assistant_response"], 3_000
         )
+    row.update(classify_attempt_failure(attempt, previous_attempt))
     return row
 
 
@@ -565,10 +570,11 @@ def _build_execution_episodes(
         repair_transitions: list[dict[str, Any]] = []
         previous_test_attempt: Mapping[str, Any] | None = None
 
+        previous_attempt: Mapping[str, Any] | None = None
         for attempt in values:
             component = attempt.get("component")
             if component == "initial":
-                initial_attempts.append(_compact_attempt(attempt))
+                initial_attempts.append(_compact_attempt(attempt, previous_attempt))
             elif component == "error":
                 transition = {
                     "attempt": attempt.get("attempt"),
@@ -590,6 +596,16 @@ def _build_execution_episodes(
                     ),
                     "outcome": attempt.get("outcome", "unknown"),
                 }
+                failure_before = classify_attempt_failure(
+                    previous_test_attempt or {}
+                )
+                failure_after = classify_attempt_failure(
+                    attempt, previous_test_attempt
+                )
+                if failure_before:
+                    transition["failure_before"] = failure_before
+                if failure_after:
+                    transition["failure_after"] = failure_after
                 for key in (
                     "execution_error", "finish_reason", "missing_imports",
                     "gained_lines", "gained_branches", "remaining_lines",
@@ -611,14 +627,28 @@ def _build_execution_episodes(
 
             if attempt.get("generated_test"):
                 previous_test_attempt = attempt
+            previous_attempt = attempt
 
-        terminal = _compact_attempt(values[-1]) if values else {}
+        terminal = (
+            _compact_attempt(values[-1], values[-2] if len(values) > 1 else None)
+            if values
+            else {}
+        )
         episodes.append({
             "replicate": replicate,
             "initial_attempts": initial_attempts,
             "repair_transitions": repair_transitions,
             "terminal_outcome": terminal.get("outcome", "unknown"),
             "terminal_component": terminal.get("component", "unknown"),
+            "terminal_failure": {
+                key: terminal[key]
+                for key in (
+                    "failure_stage", "failure_type", "root_failure_stage",
+                    "root_failure_type", "error_type", "error_message",
+                    "actionable_frame", "terminal_reason",
+                )
+                if key in terminal
+            },
         })
     return episodes
 
@@ -1480,7 +1510,7 @@ class CoverUpPromptAdapter:
             ]
         trace_path = self.candidate_dir / "reflection_traces.jsonl"
         trace_payload = {
-            "schema_version": 2,
+            "schema_version": 3,
             "candidate_digest": bundle_digest(PromptBundle.from_candidate(candidate)),
             "components_to_update": list(components_to_update),
             "records": result,
@@ -1650,6 +1680,8 @@ Labelled end-to-end execution evidence by component:
 In one decision, choose `initial`, `error`, or `all`, then call `update_prompt_component` exactly once with every complete revised template selected. `all` is always allowed, even when direct evidence exists for only one stage. When selecting `all`, provide both `initial` and `error` replacements and change both; the update is rejected atomically otherwise. For a single component, provide only that component's replacement.
 
 Use the full initial -> failing test -> error -> repaired test -> outcome episodes for causal attribution. Induce a reusable strategy playbook rather than making a narrow textual patch. For every selected component, return a FULL consolidated playbook containing key observations, a concrete multi-step decision procedure, failure modes, and regression guards. Preserve inherited strategies supported by positive or tied evidence; refine or prune one only when contrastive evidence justifies it. Describe the changes in strategy_delta.
+
+Start diagnosis from the structured `failure_stage`, `failure_type`, `actionable_frame`, and inherited root failure on exhausted repairs. Use the clipped raw traceback only as supporting detail. Distinguish generation, collection, execution, assertion, repair, and coverage failures instead of treating every zero score as the same problem.
 
 The replacement is the complete operational template excluding the managed playbook block; the optimizer will compile the returned playbook into it. Preserve useful instructions and required literal placeholders. Do not add target-specific file names, symbols, line numbers, repository facts, or literal values. Keep every compiled replacement within its component's maximum length. Include a reusable diagnosis and at least one evidence observation. Do not answer with JSON or prose outside the function call.
 """

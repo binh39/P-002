@@ -9,6 +9,7 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
 ## Các file chính
 
 - `src/optimization/gepa.py`: adapter GEPA, proposer, đánh giá lặp, cache và tối ưu.
+- `src/optimization/failures.py`: taxonomy cho generation/collection/execution/assertion/repair/coverage failure dùng trong reflection schema 3.
 - `src/optimization/metrics.py`: tổng hợp coverage và phạt kết quả thiếu/không hợp lệ.
 - `src/optimization/cli.py`: CLI, chia dữ liệu, holdout và promotion gate.
 - `src/optimization/prompts.py`: `PromptBundle` và chuyển đổi candidate.
@@ -21,7 +22,7 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
 1. Candidate GEPA phải là prompt thật dưới dạng dict chỉ gồm `initial` và `error`; không tối ưu một meta-prompt rồi rewrite toàn bộ bundle ngoài vòng lặp.
 2. `seed_candidate` phải đúng bằng baseline đầu vào. Baseline luôn nằm trong search space và là phương án fallback.
 3. Feedback theo example phải là score riêng của symbol đó. Không trả cùng một aggregate score cho mọi example. Trung bình các score theo symbol phải khớp final micro-average coverage.
-4. Reflection record phải có target path/symbol, source context được đánh số dòng, lỗi/coverage feedback và score của từng replicate. Nếu thiếu target context, proposer gần như chỉ đoán mò.
+4. Reflection record phải có target path/symbol, source context được đánh số dòng, lỗi/coverage feedback và score của từng replicate. Failure evidence phải ưu tiên taxonomy có cấu trúc (`failure_stage`, `failure_type`, actionable frame và root cause khi repair exhausted), còn raw traceback là bằng chứng hỗ trợ. Nếu thiếu target context, proposer gần như chỉ đoán mò.
 5. Mỗi proposal có thể thay đổi `initial`, `error`, hoặc cả hai khi reflection chọn `all`; `all` luôn là lựa chọn hợp lệ dù direct failure evidence chỉ có ở một stage. Update `all` phải hợp lệ nguyên tử cho cả hai component. Không cho prompt phình vô hạn hoặc hard-code tên file, symbol hay số dòng từ tập train.
 6. Giữ chính xác các placeholder bắt buộc:
    - `initial`: `{filename}`, `{coverage_targets}`, `{source_excerpt}`
