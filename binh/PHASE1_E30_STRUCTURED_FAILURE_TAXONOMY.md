@@ -2,7 +2,7 @@
 
 ## Trạng thái
 
-Phần code của E30 đã được triển khai. Chưa chạy live ablation mới; thay đổi này không gọi Gemini và không đụng tới `prompt_optimization_v3`.
+Phần code và live control của E30 đã được triển khai. Integration schema 3 thành công nhưng candidate không thắng validation và không được promote. Xem `binh/PHASE1_E30_LIVE_CONTROL_RESULT.md`. Không đụng tới `prompt_optimization_v3`.
 
 ## Thay đổi
 
@@ -45,9 +45,9 @@ Taxonomy đã được áp dụng lên trace E01 có sẵn của `mlxtend::valid
 - root type `type_error`;
 - actionable frame trỏ vào dòng generated test gây lỗi.
 
-## Tiêu chí cho live control tiếp theo
+## Tiêu chí đã dùng cho live control
 
-Chạy cùng dataset/model/seed/budget với E21 và chỉ thay reflection evidence schema. So sánh:
+Đã chạy cùng dataset/model/seed/budget với E21 và chỉ thay reflection evidence schema. Các chỉ số được so sánh:
 
 - tỷ lệ target-replicate `max_attempts_exhausted`;
 - số `test_error` episode trước một `coverage_gain_saved`;
@@ -55,4 +55,4 @@ Chạy cùng dataset/model/seed/budget với E21 và chỉ thay reflection evide
 - coverage gain và regression theo target;
 - input token của reflection để kiểm tra taxonomy có thực sự giảm phụ thuộc vào raw log hay không.
 
-Chỉ coi E30 thắng khi giảm repair exhaustion hoặc tăng repeated validation mà không tăng regression. Một candidate thắng một replicate vẫn không đủ để promote.
+E30 không đạt tiêu chí thắng: best candidate có 2/4 target exhausted, 8 test-error event và validation 38,20%, thấp hơn baseline 26,54 điểm. Không chạy candidate holdout.

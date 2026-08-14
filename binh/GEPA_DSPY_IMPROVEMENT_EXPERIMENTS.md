@@ -264,7 +264,7 @@ Kiểm tra xem prompt dài hơn có thật sự tăng coverage hay chỉ làm mo
 
 ### E30 — Failure taxonomy có cấu trúc
 
-**Trạng thái:** đã triển khai taxonomy và reflection schema 3; live control ablation chưa chạy. Xem `binh/PHASE1_E30_STRUCTURED_FAILURE_TAXONOMY.md`.
+**Trạng thái:** đã triển khai schema 3 và chạy live control. Integration thành công nhưng best candidate không giảm repair exhaustion và thua baseline validation 26,54 điểm. Xem `binh/PHASE1_E30_LIVE_CONTROL_RESULT.md`.
 
 Thay vì chỉ gửi log dài, tạo record có trường rõ ràng:
 
@@ -627,7 +627,7 @@ Mỗi run cần ít nhất ba seed ở bước xác nhận cuối. Không cần 
 - [ ] E22: expose GEPA seed và chạy multi-seed. Đã expose seed; multi-seed chưa chạy.
 - [ ] E23: strong reflection model.
 - [ ] E26: top-K repeated reranking.
-- [ ] E30: taxonomy/reflection schema 3 đã implement và test; còn live control ablation trên locked calibration.
+- [x] E30: taxonomy/schema 3 và live control hoàn tất; không có gain, chuyển sang E41/E43 để bổ sung API/test context.
 - [ ] E40: exact branch/path context.
 
 ### P2 — Nâng chất lượng context và reflection

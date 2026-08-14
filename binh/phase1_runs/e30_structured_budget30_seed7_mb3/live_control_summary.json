@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-14",
+  "experiment": "E30 structured failure taxonomy live control",
+  "dataset": "binh/phase1_ablation_16_v2.jsonl",
+  "coverup_model": "vertex_ai/gemini-3.5-flash-lite",
+  "optimize_model": "vertex_ai/gemini-3.5-flash-lite",
+  "gepa_seed": 7,
+  "reflection_minibatch_size": 3,
+  "max_metric_calls": 30,
+  "actual_metric_calls": 30,
+  "evaluation_replicates": 1,
+  "reflection_schema_version": 3,
+  "reflection_trace_lines": 3,
+  "structured_failure_events": {
+    "unique_events": 12,
+    "with_actionable_frame": 6,
+    "by_stage": {
+      "coverage": 6,
+      "execution": 3,
+      "assertion": 2,
+      "repair": 1
+    },
+    "by_type": {
+      "partial_coverage": 6,
+      "test_error": 2,
+      "assertion_error": 2,
+      "max_attempts_exhausted": 1,
+      "type_error": 1
+    }
+  },
+  "search": {
+    "candidate_count": 3,
+    "best_index": 0,
+    "validation_scores": [
+      0.6473684210526315,
+      0.12631578947368421,
+      0.3819548872180451
+    ],
+    "baseline_digest": "d8123dc403839c22",
+    "best_nonbaseline_digest": "88da8067be884eff"
+  },
+  "validation": {
+    "baseline": {
+      "score": 0.6473684210526315,
+      "statement_coverage": 0.5864661654135338,
+      "branch_coverage": 0.673469387755102,
+      "test_error_events": 5,
+      "max_attempts_exhausted_targets": 1
+    },
+    "best_nonbaseline": {
+      "score": 0.3819548872180451,
+      "statement_coverage": 0.3684210526315789,
+      "branch_coverage": 0.3877551020408163,
+      "test_error_events": 8,
+      "max_attempts_exhausted_targets": 2
+    },
+    "score_delta": -0.2654135338345864
+  },
+  "comparison_with_e21_best_candidate": {
+    "e21_validation_score": 0.3845864661654135,
+    "e21_test_error_events": 7,
+    "e21_max_attempts_exhausted_targets": 2,
+    "e30_validation_score": 0.3819548872180451,
+    "e30_test_error_events": 8,
+    "e30_max_attempts_exhausted_targets": 2
+  },
+  "locked_test": {
+    "baseline_score": 0.5683988474994854,
+    "baseline_statement_coverage": 0.6194690265486725,
+    "baseline_branch_coverage": 0.5465116279069767,
+    "candidate_evaluation_skipped": true
+  },
+  "promoted": false,
+  "decision": "keep_baseline",
+  "conclusion": "Schema 3 was exercised end to end, but the best structured-evidence candidate did not improve validation score or repair exhaustion in this one-seed control."
+}
