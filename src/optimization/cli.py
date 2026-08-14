@@ -62,6 +62,18 @@ def parser() -> argparse.ArgumentParser:
         "--rate-limit", type=int,
         help="Optional CoverUp token-per-minute limit",
     )
+    result.add_argument(
+        "--target-context",
+        default=True,
+        action=argparse.BooleanOptionalAction,
+        help="Include exact target contracts and relevant repository tests",
+    )
+    result.add_argument(
+        "--target-context-max-chars",
+        type=int,
+        default=6_000,
+        help="Maximum repository-local context characters per target",
+    )
     result.add_argument("--pytest-args", default="")
     commands = result.add_subparsers(dest="command", required=True)
 
@@ -246,8 +258,8 @@ def _resolve_project_layouts(
     """Resolve bundled source packages for every dataset project.
 
     CoverUp evaluates each target in a generated-test workspace under the
-    artifacts directory.  A bundled upstream ``tests`` directory is therefore
-    metadata only and must not be required for prompt optimization.
+    artifacts directory. A bundled upstream ``tests`` directory is optional,
+    read-only context and must not be required for prompt optimization.
     """
     projects = sorted({target.project for target in targets})
     repos = _resolve(root, sample_repos_dir)
@@ -279,6 +291,8 @@ def make_runner(
         raise ValueError("--max-concurrency must be at least 1")
     if args.rate_limit is not None and args.rate_limit < 1:
         raise ValueError("--rate-limit must be at least 1")
+    if args.target_context_max_chars < 0:
+        raise ValueError("--target-context-max-chars cannot be negative")
     root = args.project_root.resolve()
     config = ExperimentConfig(
         project_root=root,
@@ -292,6 +306,8 @@ def make_runner(
         rate_limit=args.rate_limit,
         pytest_args=args.pytest_args,
         projects=projects,
+        target_context=args.target_context,
+        target_context_max_chars=args.target_context_max_chars,
     )
     # ``package_dir`` is only the single-project fallback. Dynamic and
     # multi-project runs have already validated every entry in ``projects``.

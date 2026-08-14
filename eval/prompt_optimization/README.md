@@ -436,7 +436,7 @@ Trong mỗi vòng reflection:
 
 Kết quả metric được cache theo `prompt hash + split` tại
 `candidates/evaluations/<candidate-id>/<evaluation-digest>/<split>/batch.json`.
-`evaluation-digest` bao gồm model/config, target set và source hashes nên cache cũ không
+`evaluation-digest` bao gồm model/config, target set, source hashes và hash cây test Python nên cache cũ không
 thể âm thầm được dùng sau khi code hoặc protocol thay đổi. Các replicate bổ sung dùng
 `batch_r1.json`, `batch_r2.json`, ... và workspace riêng theo batch. CoverUp sinh cả batch
 trong một process; sau đó pipeline dùng `trace.saved_test` để chạy pytest/coverage chỉ trên
@@ -444,7 +444,9 @@ test file của từng `source_file + qualname`, nên GEPA vẫn nhận đúng s
 symbol. Cache per-example nội bộ của GEPA được tắt để ID integer của train
 không thể va chạm với validation; cache artifact phía adapter vẫn được giữ nguyên.
 
-Batch generation, per-target test-file scoring và deterministic Python hash ordering hiện dùng cache schema 13. Artifact từ schema cũ không được tái sử
+Target-specific generation hiện bổ sung exact API contract cùng các existing test/fixture liên quan trong ngân sách 6.000 ký tự. Test context được đọc từ repository gốc qua `--context-tests-dir`; generated test vẫn được ghi và chạy trong workspace cô lập qua `--tests-dir`, vì vậy context không làm nhiễm suite đánh giá.
+
+Batch generation, per-target test-file scoring, deterministic Python hash ordering và target/repository context hiện dùng cache schema 16. Artifact từ schema cũ không được tái sử
 dụng; với benchmark quyết định vẫn nên chọn một `--artifacts-dir` mới.
 
 Sau khi compile xong, pipeline lưu:

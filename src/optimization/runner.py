@@ -393,11 +393,18 @@ class CoverUpExperimentRunner:
                 "--prefix", "opt",
                 "--log-file", str(coverup_log),
                 "--trace-file", str(target_trace),
+                "--target-context-max-chars", str(self.config.target_context_max_chars),
                 "--no-checkpoint",
                 # Target-specific coverage below is authoritative. Avoid CoverUp's
                 # redundant final suite pass, especially expensive with repeats.
                 "--no-final-coverage",
             ]
+            if not self.config.target_context:
+                command.append("--no-target-context")
+            else:
+                context_tests_dir = self.config.tests_dir_for(target.project).resolve()
+                if context_tests_dir.is_dir():
+                    command.extend(["--context-tests-dir", str(context_tests_dir)])
             if self.config.repeat_tests:
                 command.extend(["--repeat-tests", str(self.config.repeat_tests)])
             else:

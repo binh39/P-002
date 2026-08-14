@@ -29,6 +29,7 @@ from src.optimization.gepa import (
     CausalReflectionComponentSelector,
     CoverUpPromptAdapter,
     LLMReflectionComponentSelector,
+    _evaluation_digest,
     build_coverage_report,
     bundle_digest,
     evaluate_bundle_batch_cached,
@@ -145,6 +146,176 @@ def test_coverup_runtime_hides_playbook_markers_and_does_not_expand_its_fields_t
     assert STRATEGY_PLAYBOOK_END not in error
     assert error.count("UNIQUE_TRACEBACK") == 1
     assert "{error}" in error
+
+
+def test_target_context_includes_exact_contract_relevant_test_and_fixture(
+    tmp_path,
+    monkeypatch,
+):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    code_segment = importlib.import_module("coverup.segment").CodeSegment
+    build_target_context = importlib.import_module(
+        "coverup.target_context"
+    ).build_target_context
+    source_path = tmp_path / "pkg" / "service.py"
+    tests_dir = tmp_path / "tests"
+    source_path.parent.mkdir()
+    tests_dir.mkdir()
+    source_path.write_text(
+        """class Base:
+    pass
+
+class Service(Base):
+    @classmethod
+    def parse(cls, value: str, *, strict: bool = False) -> int:
+        \"\"\"Parse one value.\"\"\"
+        return int(value) if strict else 0
+""",
+        encoding="utf-8",
+    )
+    (tests_dir / "test_service.py").write_text(
+        """from pkg.service import Service
+
+def test_parse(sample_value):
+    assert Service.parse(sample_value, strict=True) == 3
+""",
+        encoding="utf-8",
+    )
+    (tests_dir / "conftest.py").write_text(
+        """import pytest
+
+@pytest.fixture
+def sample_value():
+    return \"3\"
+""",
+        encoding="utf-8",
+    )
+    segment = code_segment(
+        source_path,
+        "parse",
+        5,
+        9,
+        "Service.parse",
+        {8},
+        {8},
+        set(),
+        set(),
+        [(4, 5)],
+        [],
+    )
+
+    context = build_target_context(segment, tests_dir, max_chars=6_000)
+
+    assert "[TARGET CONTRACT]" in context
+    assert "def Service.parse(cls, value: str, *, strict: bool=False) -> int" in context
+    assert "Decorators: @classmethod" in context
+    assert "Enclosing classes: Service(Base)" in context
+    assert "test from test_service.py" in context
+    assert "fixture from conftest.py" in context
+    assert "def sample_value" in context
+
+
+def test_target_context_respects_hard_character_budget(tmp_path, monkeypatch):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    code_segment = importlib.import_module("coverup.segment").CodeSegment
+    build_target_context = importlib.import_module(
+        "coverup.target_context"
+    ).build_target_context
+    source_path = tmp_path / "module.py"
+    source_path.write_text(
+        "def target(value: str) -> str:\n    return value\n",
+        encoding="utf-8",
+    )
+    segment = code_segment(
+        source_path, "target", 1, 3, "target", {2}, {2}, set(), set(), [], []
+    )
+
+    context = build_target_context(segment, max_chars=100)
+
+    assert len(context) <= 100
+    assert context.endswith("[END TARGET CONTEXT]")
+
+
+def test_gpt_v2_appends_context_without_changing_prompt_template_contract(
+    tmp_path,
+    monkeypatch,
+):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    code_segment = importlib.import_module("coverup.segment").CodeSegment
+    prompter_class = importlib.import_module("coverup.prompt.gpt_v2").GptV2Prompter
+    source_path = tmp_path / "pkg" / "module.py"
+    tests_dir = tmp_path / "tests"
+    source_path.parent.mkdir()
+    tests_dir.mkdir()
+    source_path.write_text(
+        "def target(value: int) -> int:\n    return value + 1\n",
+        encoding="utf-8",
+    )
+    (tests_dir / "test_module.py").write_text(
+        "def test_target():\n    assert target(1) == 2\n",
+        encoding="utf-8",
+    )
+    template = tmp_path / "prompt.json"
+    template.write_text(
+        json.dumps({
+            "initial": "File={filename}\nMissing={coverage_targets}\n{source_excerpt}",
+            "error": "{error}",
+        }),
+        encoding="utf-8",
+    )
+    prompter = prompter_class(SimpleNamespace(
+        prompt_template_file=template,
+        src_base_dir=tmp_path,
+        target_context=True,
+        target_context_max_chars=6_000,
+        context_tests_dir=tests_dir,
+    ))
+    segment = code_segment(
+        source_path, "target", 1, 3, "target", {2}, {2}, set(), set(), [], []
+    )
+
+    prompt = prompter.initial_prompt(segment)[0]["content"]
+
+    assert prompt.count(f"File={Path('pkg/module.py')}") == 1
+    assert "Signature: def target(value: int) -> int" in prompt
+    assert "test from test_module.py" in prompt
+    assert "[END TARGET CONTEXT]" in prompt
+
+
+def test_evaluation_digest_changes_when_repository_test_context_changes(tmp_path):
+    package_dir = tmp_path / "repo" / "pkg"
+    tests_dir = tmp_path / "repo" / "tests"
+    package_dir.mkdir(parents=True)
+    tests_dir.mkdir()
+    (package_dir / "module.py").write_text(
+        "def target():\n    return 1\n",
+        encoding="utf-8",
+    )
+    repository_test = tests_dir / "test_module.py"
+    repository_test.write_text("def test_target():\n    pass\n", encoding="utf-8")
+    runner = CoverUpExperimentRunner(ExperimentConfig(
+        project_root=tmp_path,
+        package_dir=package_dir,
+        tests_dir=tests_dir,
+        artifacts_dir=tmp_path / "artifacts",
+        coverup_model="fake-model",
+    ))
+    targets = [SymbolTarget("project", "pkg/module.py", "target", "train")]
+
+    before = _evaluation_digest(runner, targets)
+    repository_test.write_text(
+        "def test_target():\n    assert True\n",
+        encoding="utf-8",
+    )
+    after = _evaluation_digest(runner, targets)
+
+    assert before != after
 
 
 def coverage(*, executed_lines=(), missing_lines=(), executed_branches=(), missing_branches=()):
@@ -371,6 +542,24 @@ def test_optimization_cli_defaults_to_five_test_repetitions():
     ])
 
     assert args.repeat_tests == 5
+    assert args.target_context is True
+    assert args.target_context_max_chars == 6_000
+
+
+def test_optimization_cli_can_disable_and_bound_target_context():
+    args = parser().parse_args([
+        "--no-target-context",
+        "--target-context-max-chars",
+        "2500",
+        "evaluate",
+        "--dataset",
+        "dataset.jsonl",
+        "--prompt",
+        "prompt.json",
+    ])
+
+    assert args.target_context is False
+    assert args.target_context_max_chars == 2_500
 
 
 def test_optimization_cli_exposes_gepa_search_controls():
@@ -714,6 +903,15 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
         for command in commands
     )
     assert all("--trace-file" in command for command in commands)
+    assert all(
+        Path(command[command.index("--context-tests-dir") + 1])
+        == tests_dir.resolve()
+        for command in commands
+    )
+    assert all(
+        command[command.index("--target-context-max-chars") + 1] == "6000"
+        for command in commands
+    )
     assert all("--no-final-coverage" in command for command in commands)
     assert Path(record.tests_workspace) == stale_empty_workspace.resolve()
     assert Path(baseline_record.tests_workspace) == (

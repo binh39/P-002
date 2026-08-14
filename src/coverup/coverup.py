@@ -64,6 +64,14 @@ def parse_args(args=None):
     ap.add_argument('--tests-dir', type=Path_dir, default='tests',
                     help='directory where tests reside')
 
+    ap.add_argument('--context-tests-dir', type=Path_dir,
+                    help='read-only repository tests used as target-specific prompt context')
+    ap.add_argument('--target-context', default=True,
+                    action=argparse.BooleanOptionalAction,
+                    help='include the target API contract and relevant repository tests in prompts')
+    ap.add_argument('--target-context-max-chars', type=int, default=6000,
+                    help='maximum target-specific context characters per initial prompt')
+
     g = ap.add_mutually_exclusive_group(required=False)
     g.add_argument('--package-dir', type=Path_dir,
                     help='directory with the package sources (e.g., src/flask)')

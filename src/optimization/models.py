@@ -40,6 +40,8 @@ class ExperimentConfig:
     rate_limit: int | None = None
     pytest_args: str = ""
     projects: dict[str, ProjectLayout] | None = None
+    target_context: bool = True
+    target_context_max_chars: int = 6_000
 
     def package_dir_for(self, project: str) -> Path:
         """Resolve the package directory for ``project``.

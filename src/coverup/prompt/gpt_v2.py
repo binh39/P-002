@@ -5,6 +5,7 @@ from collections.abc import Callable
 import coverup.codeinfo as codeinfo
 
 from ..segment import CodeSegment
+from ..target_context import build_target_context
 from .prompter import Prompter, mk_message
 
 _STRATEGY_PLAYBOOK = re.compile(
@@ -41,19 +42,28 @@ class GptV2Prompter(Prompter):
         template = _runtime_template(self.templates.get(name, default))
         return template.format(**values)
 
+    def _with_target_context(self, prompt: str, segment: CodeSegment) -> str:
+        if not getattr(self.args, "target_context", True):
+            return prompt
+        context = build_target_context(
+            segment,
+            tests_dir=getattr(self.args, "context_tests_dir", None),
+            max_chars=getattr(self.args, "target_context_max_chars", 6_000),
+        )
+        return f"{prompt.rstrip()}\n\n{context}" if context else prompt
 
     def initial_prompt(self, segment: CodeSegment) -> list[dict]:
         filename = segment.path.relative_to(self.args.src_base_dir)
         if "initial" in self.templates:
-            return [mk_message(self._render(
+            prompt = self._render(
                 "initial", self.templates["initial"],
                 filename=filename,
                 coverage_targets=segment.lines_branches_missing_do(),
                 source_excerpt=segment.get_excerpt(),
-            ))]
+            )
+            return [mk_message(self._with_target_context(prompt, segment))]
 
-        return [
-            mk_message(f"""
+        prompt = f"""
 You are an expert Python test-driven developer.
 The code below, extracted from {filename}, does not achieve full coverage:
 when tested, {segment.lines_branches_missing_do()} not execute.
@@ -71,8 +81,8 @@ Respond ONLY with the Python code enclosed in backticks, without any explanation
 ```python
 {segment.get_excerpt()}
 ```
-""")
-        ]
+"""
+        return [mk_message(self._with_target_context(prompt, segment))]
 
 
     def error_prompt(self, segment: CodeSegment, error: str) -> list[dict] | None:

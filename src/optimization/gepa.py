@@ -296,10 +296,12 @@ def _evaluation_digest(
         name: str(getattr(config, name, ""))
         for name in (
             "coverup_model", "max_attempts", "repeat_tests", "pytest_args",
-            "max_concurrency", "rate_limit",
+            "max_concurrency", "rate_limit", "target_context",
+            "target_context_max_chars",
         )
     }
     source_hashes = {}
+    test_tree_hashes = {}
     if config is not None:
         project_root = Path(getattr(config, "project_root", ".")).resolve()
         resolve_package = getattr(config, "package_dir_for", None)
@@ -319,6 +321,19 @@ def _evaluation_digest(
                 source_hashes[target.source_file] = hashlib.sha256(
                     path.read_bytes()
                 ).hexdigest()
+            resolve_tests = getattr(config, "tests_dir_for", None)
+            if resolve_tests is not None and target.project not in test_tree_hashes:
+                tests_dir = Path(resolve_tests(target.project)).resolve()
+                digest = hashlib.sha256()
+                if tests_dir.is_dir():
+                    for test_path in sorted(tests_dir.rglob("*.py")):
+                        if not test_path.is_file():
+                            continue
+                        digest.update(test_path.relative_to(tests_dir).as_posix().encode("utf-8"))
+                        digest.update(b"\0")
+                        digest.update(test_path.read_bytes())
+                        digest.update(b"\0")
+                test_tree_hashes[target.project] = digest.hexdigest()
     payload = {
         # Schema 10 fixed PYTHONHASHSEED across CoverUp and coverage subprocesses.
         # Schema 11 makes repeat_tests effective during generation and final
@@ -329,10 +344,13 @@ def _evaluation_digest(
         # pool, consolidates traced tests, and skips redundant final-suite coverage.
         # Schema 15 strips optimizer-only playbook delimiters at runtime and
         # prevents placeholders mentioned inside the playbook from expanding.
-        "cache_schema": 15,
+        # Schema 16 includes the exact target contract and repository-local test
+        # patterns, with the test tree and context controls in the fingerprint.
+        "cache_schema": 16,
         "config": config_values,
         "targets": [_target_identity(target) for target in targets],
         "sources": source_hashes,
+        "test_trees": test_tree_hashes,
     }
     serialized = json.dumps(payload, sort_keys=True, ensure_ascii=True)
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:12]
