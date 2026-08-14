@@ -613,11 +613,11 @@ Mỗi run cần ít nhất ba seed ở bước xác nhận cuối. Không cần 
 
 ### P0 — Bắt buộc trước khi tối ưu tiếp
 
-- [ ] E00: đo variance baseline.
-- [ ] E01: paired repeated comparison.
+- [x] E00: đã đo 6 baseline validation độc lập; mean 56,57%, sample SD 21,78 điểm, range 53,50 điểm.
+- [x] E01: đã paired baseline/candidate trên 3 replicate; candidate thua mean 16,49 điểm và bị reject trước holdout lặp.
 - [x] E02: audit denominator/metric.
 - [x] E10: oracle union coverage.
-- [ ] E11: failure-family/headroom report.
+- [x] E11: đã có failure-family/headroom report cho repeated validation; 10/24 target-replicate hết attempts, ưu tiên E30 repair taxonomy.
 - [ ] Tạo experiment manifest và bảng leaderboard chuẩn.
 
 ### P1 — Ít thay đổi kiến trúc, khả năng có gain sớm

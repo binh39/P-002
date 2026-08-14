@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-14",
+  "dataset": "binh/phase1_ablation_16_v2.jsonl",
+  "split": "validation",
+  "coverup_model": "vertex_ai/gemini-3.5-flash-lite",
+  "optimize_model": "vertex_ai/gemini-3.5-flash-lite",
+  "baseline_prompt_digest": "d8123dc403839c22",
+  "candidate_prompt_digest": "9b5fe39795a80b1f",
+  "baseline_distribution": {
+    "independent_scores": [
+      0.6973684210526315,
+      0.37744360902255636,
+      0.6281954887218045,
+      0.9101503759398495,
+      0.40601503759398494,
+      0.375187969924812
+    ],
+    "count": 6,
+    "mean": 0.5657268170426065,
+    "median": 0.5171052631578947,
+    "sample_standard_deviation": 0.2177718558258083,
+    "minimum": 0.375187969924812,
+    "maximum": 0.9101503759398495,
+    "range": 0.5349624060150375
+  },
+  "paired_validation": {
+    "replicates": 3,
+    "baseline_scores": [
+      0.9101503759398495,
+      0.40601503759398494,
+      0.375187969924812
+    ],
+    "candidate_scores": [
+      0.3845864661654135,
+      0.40601503759398494,
+      0.40601503759398494
+    ],
+    "paired_deltas": [
+      -0.525563909774436,
+      0.0,
+      0.030827067669172925
+    ],
+    "baseline": {
+      "mean": 0.5637844611528822,
+      "median": 0.40601503759398494,
+      "sample_standard_deviation": 0.3003574324366379
+    },
+    "candidate": {
+      "mean": 0.39887218045112777,
+      "median": 0.40601503759398494,
+      "sample_standard_deviation": 0.012371791482634857
+    },
+    "delta": {
+      "mean": -0.16491228070175437,
+      "median": 0.0,
+      "sample_standard_deviation": 0.3127135673261624
+    },
+    "target_comparisons": {
+      "wins": 2,
+      "ties": 8,
+      "losses": 2,
+      "total": 12
+    }
+  },
+  "failure_headroom": {
+    "target_replicates": 24,
+    "coverage_gain_saved": 14,
+    "max_attempts_exhausted": 10,
+    "test_error_trace_events": 42,
+    "exhausted_weighted_remaining_statements": 407,
+    "exhausted_weighted_remaining_branches": 282,
+    "partial_success_weighted_remaining_statements": 10,
+    "partial_success_weighted_remaining_branches": 22,
+    "exhausted_by_target_family": {
+      "isort::sort_file": 4,
+      "mlxtend::valid_input_check": 5,
+      "typesystem::String.validate": 1,
+      "mimesis::Payment.credit_card_number": 0
+    }
+  },
+  "decision": "reject_candidate",
+  "holdout_repeated": false,
+  "holdout_skip_reason": "Candidate lost repeated validation, so no additional locked holdout calls were authorized by the evaluation protocol."
+}

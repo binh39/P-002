@@ -65,8 +65,8 @@ Các hàng thuộc split khác nhau không được so trực tiếp như cùng 
 
 ## Bước tiếp theo
 
-Ưu tiên E00/E01 trên dataset v2: chạy lại baseline và top candidate theo paired protocol 3–5 replicate, báo cáo mean, median, độ lệch chuẩn và target win/tie/loss. Sau đó mới:
+E00/E01 đã được chạy tiếp trên dataset v2. Candidate thua repeated validation trung bình 16,49 điểm và baseline có độ lệch chuẩn 21,78 điểm qua sáu lần độc lập. Xem `binh/PHASE1_REPEATED_EVALUATION_RESULT.md`. Vì vậy:
 
-- chạy E22 với seed 7/17/37 nếu gain lặp lại được;
-- hoặc chuyển sang E30/E40 nếu lỗi tập trung ở no-gain/branch-path context;
+- chưa chạy E22 với seed 7/17/37 vì gain không lặp lại được;
+- chuyển sang E30 trước E40 vì 10/24 target-replicate hết attempts do test error;
 - chỉ tăng budget E20 khi validation có headroom ổn định và candidate thắng qua repeated evaluation.
