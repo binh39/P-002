@@ -1,0 +1,16 @@
+{"project":"isort","source_file":"isort/wrap.py","symbol":"line","split":"validation"}
+{"project":"isort","source_file":"isort/main.py","symbol":"sort_imports","split":"validation"}
+{"project":"isort","source_file":"isort/deprecated/finders.py","symbol":"KnownPatternFinder.__init__","split":"validation"}
+{"project":"isort","source_file":"isort/wrap_modes.py","symbol":"_wrap_mode","split":"validation"}
+{"project":"mimesis","source_file":"mimesis/providers/person.py","symbol":"Person.username","split":"validation"}
+{"project":"mimesis","source_file":"mimesis/providers/person.py","symbol":"Person._validate_birth_year_params","split":"validation"}
+{"project":"mimesis","source_file":"mimesis/providers/internet.py","symbol":"Internet.url","split":"validation"}
+{"project":"mimesis","source_file":"mimesis/providers/internet.py","symbol":"Internet.cloud_region","split":"validation"}
+{"project":"mlxtend","source_file":"mlxtend/frequent_patterns/apriori.py","symbol":"apriori","split":"validation"}
+{"project":"mlxtend","source_file":"mlxtend/frequent_patterns/apriori.py","symbol":"generate_new_combinations_low_memory","split":"validation"}
+{"project":"mlxtend","source_file":"mlxtend/classifier/ensemble_vote.py","symbol":"EnsembleVoteClassifier.predict","split":"validation"}
+{"project":"mlxtend","source_file":"mlxtend/data/wine.py","symbol":"wine_data","split":"validation"}
+{"project":"typesystem","source_file":"typesystem/fields.py","symbol":"Array.validate","split":"validation"}
+{"project":"typesystem","source_file":"typesystem/fields.py","symbol":"Boolean.validate","split":"validation"}
+{"project":"typesystem","source_file":"typesystem/json_schema.py","symbol":"type_from_json_schema","split":"validation"}
+{"project":"typesystem","source_file":"typesystem/tokenize/tokens.py","symbol":"Token._get_position","split":"validation"}
