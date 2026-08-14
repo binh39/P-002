@@ -544,6 +544,7 @@ def test_optimization_cli_defaults_to_five_test_repetitions():
     assert args.repeat_tests == 5
     assert args.target_context is True
     assert args.target_context_max_chars == 6_000
+    assert args.repository_test_context is False
 
 
 def test_optimization_cli_can_disable_and_bound_target_context():
@@ -551,6 +552,7 @@ def test_optimization_cli_can_disable_and_bound_target_context():
         "--no-target-context",
         "--target-context-max-chars",
         "2500",
+        "--no-repository-test-context",
         "evaluate",
         "--dataset",
         "dataset.jsonl",
@@ -560,6 +562,7 @@ def test_optimization_cli_can_disable_and_bound_target_context():
 
     assert args.target_context is False
     assert args.target_context_max_chars == 2_500
+    assert args.repository_test_context is False
 
 
 def test_optimization_cli_exposes_gepa_search_controls():
@@ -864,6 +867,8 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
         tests_dir=tests_dir,
         artifacts_dir=artifacts_dir,
         coverup_model="fake-model",
+        target_context=True,
+        repository_test_context=True,
     ))
     targets = [
         SymbolTarget("project", "pkg/a.py", "first", "train"),
@@ -903,6 +908,7 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
         for command in commands
     )
     assert all("--trace-file" in command for command in commands)
+    assert all("--target-context" in command for command in commands)
     assert all(
         Path(command[command.index("--context-tests-dir") + 1])
         == tests_dir.resolve()

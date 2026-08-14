@@ -347,10 +347,10 @@ Bổ sung có chọn lọc:
 
 Không dump toàn bộ file nếu phần lớn không liên quan.
 
-**Trạng thái 2026-08-14:** đã implement retrieval động theo target cho exact signature,
-type/default/return annotation, decorator, docstring rút gọn và inheritance. Context không được
-bake vào global prompt và bị chặn bởi budget ký tự. Chưa có live paired result; cần chạy ablation
-cùng dataset/seed/model trước khi kết luận gain.
+**Trạng thái 2026-08-14:** đã implement và promote contract-only retrieval động theo target cho
+exact signature, type/default/return annotation, decorator, docstring rút gọn và inheritance.
+Validation 3 replicate tăng 3,92 điểm; locked holdout 3 replicate tăng 13,98 điểm so với control.
+Context không được bake vào global prompt và bị chặn bởi budget ký tự.
 
 ### E42 — Relevant callers/callees
 
@@ -375,10 +375,10 @@ Bổ sung:
 
 Mục tiêu chính là giảm collection/import/runtime failure và làm test phù hợp convention của project.
 
-**Trạng thái 2026-08-14:** đã implement retrieval tĩnh có giới hạn cho test function tham chiếu
-target/module và fixture được các test đó sử dụng. Runner truyền test repo gốc chỉ để đọc context,
-không trộn chúng vào generated-test workspace. Evaluation cache schema 16 hash cây test để tránh
-tái dùng kết quả cũ sai context. Chưa có live paired result.
+**Trạng thái 2026-08-14:** retrieval tĩnh có giới hạn đã implement nhưng bị reject và mặc định tắt.
+Contract + existing tests/fixtures giảm 1,96 điểm validation, tăng test-error từ 3 lên 11 và có một
+target hết repair attempts. Runner vẫn hỗ trợ ablation explicit; cache schema 17 tách policy này
+khỏi contract-only và hash cây test để tránh tái dùng kết quả sai context.
 
 ### E44 — Project setup manifest
 
@@ -643,9 +643,9 @@ Mỗi run cần ít nhất ba seed ở bước xác nhận cuối. Không cần 
 ### P2 — Nâng chất lượng context và reflection
 
 - [ ] E31–E33: contrastive/clustered reflection.
-- [x] E41: exact signature/type/default/docstring/decorator/inheritance context đã implement; chờ live ablation.
+- [x] E41: exact signature/type/default/docstring/decorator/inheritance context đã thắng validation và locked holdout; promote thành mặc định.
 - [ ] E42: callers/callees context.
-- [x] E43: relevant existing tests và referenced fixtures đã implement; chờ live ablation.
+- [x] E43: relevant existing tests/fixtures đã implement nhưng live ablation thua; reject và giữ mặc định tắt.
 - [ ] E44–E46: project setup, failure-triggered và runtime retrieval.
 - [ ] E25: Pareto exploration ablation.
 - [ ] E28: kiểm soát prompt bloat.

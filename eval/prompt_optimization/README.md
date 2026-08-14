@@ -444,9 +444,9 @@ test file của từng `source_file + qualname`, nên GEPA vẫn nhận đúng s
 symbol. Cache per-example nội bộ của GEPA được tắt để ID integer của train
 không thể va chạm với validation; cache artifact phía adapter vẫn được giữ nguyên.
 
-Target-specific generation hiện bổ sung exact API contract cùng các existing test/fixture liên quan trong ngân sách 6.000 ký tự. Test context được đọc từ repository gốc qua `--context-tests-dir`; generated test vẫn được ghi và chạy trong workspace cô lập qua `--tests-dir`, vì vậy context không làm nhiễm suite đánh giá.
+Target-specific generation mặc định bổ sung exact API contract trong ngân sách 6.000 ký tự. Có thể tắt bằng `--no-target-context`. Existing test/fixture retrieval là ablation riêng và mặc định tắt; chỉ bật bằng `--repository-test-context`. Khi bật, test context được đọc từ repository gốc qua `--context-tests-dir`; generated test vẫn được ghi và chạy trong workspace cô lập qua `--tests-dir`, vì vậy context không làm nhiễm suite đánh giá.
 
-Batch generation, per-target test-file scoring, deterministic Python hash ordering và target/repository context hiện dùng cache schema 16. Artifact từ schema cũ không được tái sử
+Batch generation, per-target test-file scoring, deterministic Python hash ordering và target/repository context hiện dùng cache schema 17. Artifact từ schema cũ không được tái sử
 dụng; với benchmark quyết định vẫn nên chọn một `--artifacts-dir` mới.
 
 Sau khi compile xong, pipeline lưu:

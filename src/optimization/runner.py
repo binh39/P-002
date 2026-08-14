@@ -402,9 +402,11 @@ class CoverUpExperimentRunner:
             if not self.config.target_context:
                 command.append("--no-target-context")
             else:
-                context_tests_dir = self.config.tests_dir_for(target.project).resolve()
-                if context_tests_dir.is_dir():
-                    command.extend(["--context-tests-dir", str(context_tests_dir)])
+                command.append("--target-context")
+                if self.config.repository_test_context:
+                    context_tests_dir = self.config.tests_dir_for(target.project).resolve()
+                    if context_tests_dir.is_dir():
+                        command.extend(["--context-tests-dir", str(context_tests_dir)])
             if self.config.repeat_tests:
                 command.extend(["--repeat-tests", str(self.config.repeat_tests)])
             else:

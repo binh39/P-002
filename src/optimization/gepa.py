@@ -297,7 +297,7 @@ def _evaluation_digest(
         for name in (
             "coverup_model", "max_attempts", "repeat_tests", "pytest_args",
             "max_concurrency", "rate_limit", "target_context",
-            "target_context_max_chars",
+            "target_context_max_chars", "repository_test_context",
         )
     }
     source_hashes = {}
@@ -346,7 +346,9 @@ def _evaluation_digest(
         # prevents placeholders mentioned inside the playbook from expanding.
         # Schema 16 includes the exact target contract and repository-local test
         # patterns, with the test tree and context controls in the fingerprint.
-        "cache_schema": 16,
+        # Schema 17 forwards target context explicitly end-to-end and separates
+        # exact-contract context from repository test/fixture retrieval.
+        "cache_schema": 17,
         "config": config_values,
         "targets": [_target_identity(target) for target in targets],
         "sources": source_hashes,

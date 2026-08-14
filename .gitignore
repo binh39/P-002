@@ -84,5 +84,6 @@ binh/phase1_runs/**/generated_tests/
 binh/phase1_runs/**/gepa_direct_logs/
 binh/phase1_runs/**/candidates/evaluations/
 binh/phase1_runs/**/candidates/reflection_traces.jsonl
+binh/phase1_runs/e41*/candidates/*.json
 
 .claude

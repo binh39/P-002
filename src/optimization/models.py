@@ -42,6 +42,7 @@ class ExperimentConfig:
     projects: dict[str, ProjectLayout] | None = None
     target_context: bool = True
     target_context_max_chars: int = 6_000
+    repository_test_context: bool = False
 
     def package_dir_for(self, project: str) -> Path:
         """Resolve the package directory for ``project``.

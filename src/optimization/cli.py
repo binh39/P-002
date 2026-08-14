@@ -66,7 +66,13 @@ def parser() -> argparse.ArgumentParser:
         "--target-context",
         default=True,
         action=argparse.BooleanOptionalAction,
-        help="Include exact target contracts and relevant repository tests",
+        help="Include exact target contract context",
+    )
+    result.add_argument(
+        "--repository-test-context",
+        default=False,
+        action=argparse.BooleanOptionalAction,
+        help="Include relevant existing tests/fixtures when target context is enabled",
     )
     result.add_argument(
         "--target-context-max-chars",
@@ -308,6 +314,7 @@ def make_runner(
         projects=projects,
         target_context=args.target_context,
         target_context_max_chars=args.target_context_max_chars,
+        repository_test_context=args.repository_test_context,
     )
     # ``package_dir`` is only the single-project fallback. Dynamic and
     # multi-project runs have already validated every entry in ``projects``.
