@@ -17,6 +17,7 @@ from .gepa import (
     bundle_digest,
     evaluate_bundle_repeated,
     optimize,
+    rerank_prompt_candidates,
     validate_bundle,
     validate_reference_evaluation,
 )
@@ -100,6 +101,21 @@ def parser() -> argparse.ArgumentParser:
         help="Locked split used only for final promotion (falls back to validation if absent)",
     )
     tune.add_argument("--evaluation-replicates", type=int, default=1)
+    tune.add_argument(
+        "--rerank-top-k",
+        type=int,
+        default=0,
+        help=(
+            "Rerank this many finalists (including the mandatory baseline) on "
+            "validation before opening holdout; 0 disables reranking"
+        ),
+    )
+    tune.add_argument(
+        "--rerank-replicates",
+        type=int,
+        default=3,
+        help="Independent validation generations per rerank finalist (default: 3)",
+    )
     tune.add_argument("--reflection-temperature", type=float, default=0.7)
     tune.add_argument(
         "--gepa-seed",
@@ -143,6 +159,18 @@ def parser() -> argparse.ArgumentParser:
     )
     finalize.add_argument("--holdout-split", default="test")
     finalize.add_argument("--evaluation-replicates", type=int, default=1)
+
+    rerank = commands.add_parser(
+        "rerank",
+        help="Rerank candidates from a saved GEPA program on validation only",
+    )
+    rerank.add_argument("--dataset", type=Path, required=True)
+    rerank.add_argument("--prompt", type=Path, required=True)
+    rerank.add_argument("--optimized-program", type=Path, required=True)
+    rerank.add_argument("--split", choices=("validation",), default="validation")
+    rerank.add_argument("--top-k", type=int, default=5)
+    rerank.add_argument("--replicates", type=int, default=3)
+    rerank.add_argument("--output-prompt", type=Path)
 
     archive = commands.add_parser(
         "archive",
@@ -366,6 +394,59 @@ def evaluate(args: argparse.Namespace) -> None:
     }, indent=2))
 
 
+def rerank_saved_program(args: argparse.Namespace) -> None:
+    """Select a stable validation winner without rerunning GEPA search."""
+    root = args.project_root.resolve()
+    load_dotenv(root / ".env")
+    baseline = PromptBundle.load(_resolve(root, args.prompt).resolve())
+    program_path = _resolve(root, args.optimized_program).resolve()
+    program = json.loads(program_path.read_text(encoding="utf-8"))
+    candidate_values = program.get("candidates")
+    validation_scores = program.get("validation_scores")
+    if not isinstance(candidate_values, list) or not isinstance(
+        validation_scores, list
+    ):
+        raise ValueError(
+            "optimized_program must contain candidate and validation score lists"
+        )
+    candidates = [PromptBundle.from_candidate(value) for value in candidate_values]
+    targets = load_targets(_resolve(root, args.dataset).resolve(), args.split)
+    if not targets:
+        raise ValueError(f"No targets found for split {args.split!r}")
+    projects = _resolve_project_layouts(root, targets, _sample_repos_dir(args))
+    runner = make_runner(args, projects=projects)
+    artifacts = runner.config.artifacts_dir.resolve()
+    result = rerank_prompt_candidates(
+        runner=runner,
+        validation_targets=targets,
+        baseline=baseline,
+        candidates=candidates,
+        validation_scores=[float(value) for value in validation_scores],
+        candidate_dir=artifacts / "candidates",
+        top_k=args.top_k,
+        replicates=args.replicates,
+        split=args.split,
+    )
+    artifacts.mkdir(parents=True, exist_ok=True)
+    report_path = artifacts / "candidate_rerank.json"
+    report_path.write_text(
+        json.dumps(result.as_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    output_prompt = (
+        _resolve(root, args.output_prompt).resolve()
+        if args.output_prompt is not None
+        else artifacts / "prompts" / "gepa_reranked.json"
+    )
+    result.selected_bundle.save(output_prompt)
+    print(f"Saved candidate rerank report to {report_path}")
+    print(f"Selected validation winner at {output_prompt}")
+    for row in result.leaderboard:
+        print(
+            f"  #{row['rank']} {row['digest']} mean={row['mean_score']:.4f} "
+            f"std={row['score_stddev']:.4f} failures={row['failure_rate']:.2%}"
+        )
+
+
 def tune(args: argparse.Namespace) -> None:
     load_dotenv(args.project_root.resolve() / ".env")
     baseline = PromptBundle.load(args.prompt.resolve())
@@ -459,7 +540,38 @@ def tune(args: argparse.Namespace) -> None:
     program_path.write_text(
         json.dumps(optimized.as_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
     )
+    rerank_top_k = int(getattr(args, "rerank_top_k", 0))
+    rerank_replicates = int(getattr(args, "rerank_replicates", 3))
+    if rerank_top_k < 0:
+        raise ValueError("--rerank-top-k cannot be negative")
+    candidate_rerank = None
     proposed_prompt = optimized.best_bundle
+    if rerank_top_k:
+        reranked = rerank_prompt_candidates(
+            runner=runner,
+            validation_targets=validation,
+            baseline=baseline,
+            candidates=optimized.candidates,
+            validation_scores=optimized.validation_scores,
+            candidate_dir=artifacts / "candidates",
+            top_k=rerank_top_k,
+            replicates=rerank_replicates,
+            split="validation",
+        )
+        candidate_rerank = reranked.as_dict()
+        (artifacts / "candidate_rerank.json").write_text(
+            json.dumps(candidate_rerank, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        reranked.selected_bundle.save(
+            artifacts / "prompts" / "gepa_reranked.json"
+        )
+        proposed_prompt = reranked.selected_bundle
+        print(
+            "Reranked "
+            f"{reranked.top_k} finalists over {reranked.replicates} validation "
+            f"replicates; selected {bundle_digest(proposed_prompt)}."
+        )
     if error := validate_bundle(proposed_prompt):
         raise ValueError(f"GEPA produced an invalid final prompt bundle: {error}")
     proposed_path = artifacts / "prompts" / "gepa_proposed.json"
@@ -494,6 +606,7 @@ def tune(args: argparse.Namespace) -> None:
             "baseline_results": baseline_results,
             "results": [],
             "existing_baseline_reference": existing_baseline_reference,
+            "candidate_rerank": candidate_rerank,
         }
         report_path = artifacts / "final_validation.json"
         report_path.write_text(
@@ -550,6 +663,7 @@ def tune(args: argparse.Namespace) -> None:
         "baseline_results": baseline_results,
         "results": validation_results,
         "existing_baseline_reference": existing_baseline_reference,
+        "candidate_rerank": candidate_rerank,
     }
     report_path = artifacts / "final_validation.json"
     report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -822,10 +936,14 @@ def main() -> None:
         evaluate(args)
     elif args.command == "optimize":
         tune(args)
+    elif args.command == "rerank":
+        rerank_saved_program(args)
     elif args.command == "archive":
         build_archive(args)
-    else:
+    elif args.command == "finalize":
         finalize(args)
+    else:  # pragma: no cover - argparse requires a known command
+        raise ValueError(f"Unsupported command: {args.command}")
 
 
 if __name__ == "__main__":

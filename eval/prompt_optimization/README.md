@@ -41,7 +41,7 @@ Các trách nhiệm được tách như sau:
 src/optimization/
 ├── archive.py      # Greedy candidate test archive, khóa theo split/digest
 ├── calibration.py  # Báo cáo repeated calibration và coverage-unit oracle
-├── cli.py          # CLI init, evaluate, optimize, finalize và archive
+├── cli.py          # CLI init, evaluate, optimize, rerank, finalize và archive
 ├── combined_suite.py # Chạy lại suite ghép để xác minh coverage thật
 ├── coveragepy.py   # Chạy coverage.py và đọc coverage từng symbol
 ├── dataset.py      # Đọc dataset JSONL
@@ -453,7 +453,9 @@ Sau khi compile xong, pipeline lưu:
 
 ```text
 eval/prompt_optimization/optimized_program.json
+eval/prompt_optimization/candidate_rerank.json
 eval/prompt_optimization/prompts/gepa_proposed.json
+eval/prompt_optimization/prompts/gepa_reranked.json
 eval/prompt_optimization/prompts/gepa_optimized.json
 eval/prompt_optimization/final_validation.json
 ```
@@ -464,6 +466,43 @@ có prompt mới để so sánh; `final_validation.json` ghi `final_evaluation_s
 proposal khác baseline, baseline và proposal được so sánh trên locked test; nếu không có
 test thì fallback về validation. Proposal chỉ được promote khi cải thiện nghiêm ngặt, nên
 một proposal hòa hoặc kém không thể thay thế baseline.
+
+Để giảm việc chọn nhầm một lucky validation sample, có thể bật E26 ngay trong `optimize`:
+
+```powershell
+python -m src.optimization.cli `
+  --sample-repos-dir src/sample_repo `
+  --artifacts-dir <run-dir> `
+  optimize `
+  --dataset <dataset.jsonl> `
+  --prompt <baseline.json> `
+  --max-metric-calls 30 `
+  --rerank-top-k 5 `
+  --rerank-replicates 3
+```
+
+Top-K tính cả baseline bắt buộc. Reranker chỉ dùng validation, chọn theo mean coverage,
+failure rate, variance và cuối cùng là độ dài prompt; chỉ winner mới đi tiếp tới final
+holdout. Mặc định `--rerank-top-k 0` để các workflow hiện tại không tự tăng chi phí.
+
+Nếu GEPA search đã chạy xong, có thể rerank trực tiếp `optimized_program.json` mà không
+chạy lại search:
+
+```powershell
+python -m src.optimization.cli `
+  --sample-repos-dir src/sample_repo `
+  --artifacts-dir <run-dir> `
+  rerank `
+  --dataset <dataset.jsonl> `
+  --prompt <baseline.json> `
+  --optimized-program <run-dir>/optimized_program.json `
+  --top-k 5 `
+  --replicates 3
+```
+
+Lệnh này ghi `candidate_rerank.json` và `prompts/gepa_reranked.json`; cache r0 được tái
+sử dụng, chỉ các replicate còn thiếu mới gọi model. Sau đó dùng prompt đã chọn làm
+`--proposed-prompt` cho `finalize`.
 
 `finalize --evaluation-replicates N` lặp cả baseline lẫn proposal với cùng `N`; r0 hợp lệ được
 tái sử dụng từ cache và chỉ sinh các replicate còn thiếu. Kết quả final là mean-to-mean paired theo

@@ -5,6 +5,7 @@ import hashlib
 import json
 import random
 import re
+import statistics
 import threading
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -1120,6 +1121,165 @@ class PromptOptimizationResult:
             },
             "candidates": [candidate.as_candidate() for candidate in self.candidates],
         }
+
+
+@dataclass
+class PromptRerankResult:
+    selected_bundle: PromptBundle
+    leaderboard: list[dict[str, Any]]
+    top_k: int
+    replicates: int
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "selected_digest": bundle_digest(self.selected_bundle),
+            "selected_candidate": self.selected_bundle.as_candidate(),
+            "top_k": self.top_k,
+            "replicates": self.replicates,
+            "leaderboard": self.leaderboard,
+        }
+
+
+def rerank_prompt_candidates(
+    *,
+    runner: CoverUpExperimentRunner,
+    validation_targets: list[SymbolTarget],
+    baseline: PromptBundle,
+    candidates: Sequence[PromptBundle],
+    validation_scores: Sequence[float],
+    candidate_dir: Path,
+    top_k: int = 5,
+    replicates: int = 3,
+    split: str = "validation",
+) -> PromptRerankResult:
+    """Rerank noisy GEPA finalists without consulting the locked holdout."""
+    if split != "validation":
+        raise ValueError("Candidate reranking may only use the validation split")
+    if not validation_targets:
+        raise ValueError("Candidate reranking requires validation targets")
+    if top_k < 1:
+        raise ValueError("top_k must be at least 1")
+    if replicates < 2:
+        raise ValueError("Candidate reranking requires at least 2 replicates")
+    if len(candidates) != len(validation_scores):
+        raise ValueError("Candidate and validation score counts must match")
+    if error := validate_bundle(baseline):
+        raise ValueError(f"Invalid rerank baseline: {error}")
+
+    baseline_digest = bundle_digest(baseline)
+    unique: dict[str, tuple[PromptBundle, float]] = {}
+    for candidate, search_score_value in zip(
+        candidates, validation_scores, strict=True,
+    ):
+        if error := validate_bundle(candidate):
+            raise ValueError(f"Invalid rerank candidate: {error}")
+        digest = bundle_digest(candidate)
+        search_score = float(search_score_value)
+        previous = unique.get(digest)
+        if previous is None or search_score > previous[1]:
+            unique[digest] = (candidate, search_score)
+
+    baseline_search_score = (
+        unique[baseline_digest][1] if baseline_digest in unique else None
+    )
+    proposals = sorted(
+        (
+            (digest, bundle, score)
+            for digest, (bundle, score) in unique.items()
+            if digest != baseline_digest
+        ),
+        key=lambda item: (
+            -item[2],
+            len(item[1].initial) + len(item[1].error),
+            item[0],
+        ),
+    )[: max(0, top_k - 1)]
+    pool: list[tuple[str, PromptBundle, float | None]] = [
+        (baseline_digest, baseline, baseline_search_score),
+        *proposals,
+    ]
+
+    baseline_evaluation = evaluate_bundle_repeated(
+        runner,
+        validation_targets,
+        baseline,
+        candidate_dir,
+        split=split,
+        workspace_kind="baseline",
+        replicates=replicates,
+    )
+    validate_reference_evaluation(
+        baseline_evaluation["results"],
+        split=split,
+        expected_targets=validation_targets,
+    )
+    reference_results = baseline_evaluation["results"]
+
+    bundles_by_digest = {digest: bundle for digest, bundle, _ in pool}
+    leaderboard: list[dict[str, Any]] = []
+    for digest, bundle, search_score in pool:
+        evaluation = (
+            baseline_evaluation
+            if digest == baseline_digest
+            else evaluate_bundle_repeated(
+                runner,
+                validation_targets,
+                bundle,
+                candidate_dir,
+                split=split,
+                workspace_kind="candidate",
+                replicates=replicates,
+                reference_results=reference_results,
+            )
+        )
+        replicate_scores = [
+            float(
+                aggregate_coverage_score(
+                    batch["results"],
+                    reference_results=(
+                        None if digest == baseline_digest else reference_results
+                    ),
+                )["score"]
+            )
+            for batch in evaluation["batches"]
+        ]
+        raw_rows = [
+            row for batch in evaluation["batches"] for row in batch["results"]
+        ]
+        failures = sum(
+            row.get("coverage") is None
+            or row.get("coverage", {}).get("valid") is False
+            for row in raw_rows
+        )
+        leaderboard.append({
+            "digest": digest,
+            "is_baseline": digest == baseline_digest,
+            "search_validation_score": search_score,
+            "mean_score": statistics.fmean(replicate_scores),
+            "score_stddev": statistics.pstdev(replicate_scores),
+            "failure_rate": failures / len(raw_rows) if raw_rows else 1.0,
+            "prompt_chars": len(bundle.initial) + len(bundle.error),
+            "replicate_scores": replicate_scores,
+            "run_ids": evaluation["run_ids"],
+            "tests_workspaces": evaluation["tests_workspaces"],
+        })
+
+    leaderboard.sort(key=lambda row: (
+        -round(row["mean_score"], 12),
+        round(row["failure_rate"], 12),
+        round(row["score_stddev"], 12),
+        row["prompt_chars"],
+        row["digest"],
+    ))
+    for rank, row in enumerate(leaderboard, start=1):
+        row["rank"] = rank
+    selected = bundles_by_digest[leaderboard[0]["digest"]]
+    return PromptRerankResult(
+        selected_bundle=selected,
+        leaderboard=leaderboard,
+        top_k=len(pool),
+        replicates=replicates,
+    )
 
 
 class CoverUpPromptAdapter:

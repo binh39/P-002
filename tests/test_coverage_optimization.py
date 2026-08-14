@@ -37,6 +37,7 @@ from src.optimization.gepa import (
     evaluate_bundle_cached,
     log_reflection_request,
     optimize,
+    rerank_prompt_candidates,
     validate_bundle,
     validate_reference_evaluation,
     validate_template,
@@ -579,10 +580,16 @@ def test_optimization_cli_exposes_gepa_search_controls():
         "19",
         "--reflection-minibatch-size",
         "3",
+        "--rerank-top-k",
+        "5",
+        "--rerank-replicates",
+        "3",
     ])
 
     assert args.gepa_seed == 19
     assert args.reflection_minibatch_size == 3
+    assert args.rerank_top_k == 5
+    assert args.rerank_replicates == 3
 
 
 def test_repeated_final_gate_evaluates_baseline_with_same_replicate_count(
@@ -634,6 +641,116 @@ def test_repeated_final_gate_evaluates_baseline_with_same_replicate_count(
         "replicates": 3,
         "reference_results": reference_rows,
     }
+
+
+def test_rerank_selects_stable_candidate_and_keeps_baseline_in_top_k(
+    tmp_path,
+    monkeypatch,
+):
+    baseline = baseline_bundle()
+    noisy = PromptBundle(
+        initial=baseline.initial + " Noisy strategy.", error=baseline.error,
+    )
+    stable = PromptBundle(
+        initial=baseline.initial + " Stable strategy.", error=baseline.error,
+    )
+    excluded = PromptBundle(
+        initial=baseline.initial + " Low ranked strategy.", error=baseline.error,
+    )
+    target = SymbolTarget("project", "pkg/module.py", "target", "validation")
+    scores = {
+        bundle_digest(baseline): [0.65, 0.65, 0.65],
+        bundle_digest(noisy): [0.90, 0.50, 0.70],
+        bundle_digest(stable): [0.70, 0.70, 0.70],
+        bundle_digest(excluded): [1.0, 1.0, 1.0],
+    }
+    calls = []
+
+    def fake_repeated(
+        runner,
+        targets,
+        bundle,
+        candidate_dir,
+        *,
+        split,
+        workspace_kind,
+        replicates,
+        reference_results=None,
+    ):
+        del runner, candidate_dir, reference_results
+        digest = bundle_digest(bundle)
+        calls.append((digest, split, workspace_kind, replicates))
+        batches = []
+        for index, value in enumerate(scores[digest]):
+            coverage = {
+                "valid": True,
+                "covered_statements": int(value * 100),
+                "num_statements": 100,
+                "covered_branches": 0,
+                "num_branches": 0,
+            }
+            batches.append({
+                "results": [{
+                    "target": targets[0].__dict__,
+                    "score": value,
+                    "coverage": coverage,
+                    "feedback": "ok",
+                }],
+                "run_ids": [f"{digest}-r{index}"],
+                "tests_workspaces": [f"{digest}-w{index}"],
+            })
+        return {
+            "results": batches[0]["results"],
+            "aggregate": aggregate_coverage_score(batches[0]["results"]),
+            "batches": batches,
+            "run_ids": [value for batch in batches for value in batch["run_ids"]],
+            "tests_workspaces": [
+                value for batch in batches for value in batch["tests_workspaces"]
+            ],
+        }
+
+    monkeypatch.setattr(
+        "src.optimization.gepa.evaluate_bundle_repeated", fake_repeated,
+    )
+    result = rerank_prompt_candidates(
+        runner=None,
+        validation_targets=[target],
+        baseline=baseline,
+        candidates=[baseline, noisy, stable, excluded],
+        validation_scores=[0.10, 0.95, 0.90, 0.20],
+        candidate_dir=tmp_path / "candidates",
+        top_k=3,
+        replicates=3,
+    )
+
+    assert result.selected_bundle == stable
+    assert result.top_k == 3
+    assert [row["digest"] for row in result.leaderboard] == [
+        bundle_digest(stable),
+        bundle_digest(noisy),
+        bundle_digest(baseline),
+    ]
+    assert result.leaderboard[0]["replicate_scores"] == [0.70, 0.70, 0.70]
+    assert result.leaderboard[0]["score_stddev"] == 0.0
+    assert bundle_digest(excluded) not in {call[0] for call in calls}
+
+
+def test_rerank_rejects_locked_test_split():
+    baseline = baseline_bundle()
+    target = SymbolTarget("project", "pkg/module.py", "target", "test")
+
+    with pytest.raises(ValueError, match="only use the validation split"):
+        rerank_prompt_candidates(
+            runner=None,
+            validation_targets=[target],
+            baseline=baseline,
+            candidates=[baseline],
+            validation_scores=[0.5],
+            candidate_dir=Path("candidates"),
+            top_k=1,
+            replicates=3,
+            split="test",
+        )
 
 
 def test_run_streamed_forwards_retains_and_unbuffers_output(capsys):
@@ -2742,12 +2859,32 @@ def test_tune_preflights_baseline_but_skips_proposal_when_gepa_keeps_it(
             events.append("optimize")
             or SimpleNamespace(
                 best_bundle=baseline,
+                candidates=[baseline],
+                validation_scores=[0.5],
                 as_dict=lambda: {
                     "best_index": 0,
                     "best_candidate": baseline.as_candidate(),
                     "validation_scores": [0.5],
                     "total_metric_calls": 1,
                     "candidates": [baseline.as_candidate()],
+                },
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        cli,
+        "rerank_prompt_candidates",
+        lambda **kwargs: (
+            events.append("rerank")
+            or SimpleNamespace(
+                selected_bundle=baseline,
+                top_k=1,
+                replicates=3,
+                as_dict=lambda: {
+                    "selected_digest": bundle_digest(baseline),
+                    "top_k": 1,
+                    "replicates": 3,
+                    "leaderboard": [],
                 },
             )
         ),
@@ -2790,6 +2927,8 @@ def test_tune_preflights_baseline_but_skips_proposal_when_gepa_keeps_it(
         evaluation_replicates=1,
         gepa_seed=7,
         reflection_minibatch_size=8,
+        rerank_top_k=1,
+        rerank_replicates=3,
         baseline_tests_dir=None,
         sample_repos_dir=Path("sample_repo"),
     )
@@ -2805,7 +2944,8 @@ def test_tune_preflights_baseline_but_skips_proposal_when_gepa_keeps_it(
     assert report["run_ids"] == []
     assert report["baseline_run_ids"] == ["baseline-preflight"]
     assert len(report["baseline_results"]) == 1
-    assert events == ["final baseline preflight", "optimize"]
+    assert report["candidate_rerank"]["selected_digest"] == bundle_digest(baseline)
+    assert events == ["final baseline preflight", "optimize", "rerank"]
     assert baseline_bundle().as_candidate() == json.loads(
         (artifacts / "prompts" / "gepa_optimized.json").read_text(encoding="utf-8")
     )

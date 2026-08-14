@@ -229,7 +229,9 @@ Khoảng cách Pareto lớn nhưng single-best thấp là tín hiệu nên merge
 
 ### E26 — Top-K reranking
 
-**Trạng thái:** cần report/evaluation bổ sung, không cần đổi CoverUp.
+**Trạng thái:** đã triển khai và chạy live trên run E41 budget 30. Search chỉ có baseline + một
+proposal nên top-5 hiệu dụng là 2. Rerank 3 replicate vẫn chọn proposal (+6,30 điểm validation),
+nhưng proposal thua holdout 9,99 điểm và bị reject. Xem `binh/PHASE1_E26_TOPK_RERANK_RESULT.md`.
 
 - Không lấy ngay `result.best_candidate` sau một noisy evaluation.
 - Lấy top 5 candidate theo validation.
@@ -636,7 +638,7 @@ Mỗi run cần ít nhất ba seed ở bước xác nhận cuối. Không cần 
 - [x] E21: đã chạy minibatch 3 so với 8 trên calibration 16 target. Chưa có cấu hình thắng: batch 3 overfit holdout, batch 8 giữ baseline; cần repeated paired evaluation vì variance lớn. Xem `binh/PHASE1_MINIBATCH_ABLATION_RESULT.md`.
 - [ ] E22: expose GEPA seed và chạy multi-seed. Đã expose seed; multi-seed chưa chạy.
 - [ ] E23: strong reflection model.
-- [ ] E26: top-K repeated reranking. Finalize đã sửa để lặp cả baseline/proposal; bước còn lại là rerank top-K trên validation trước khi mở holdout.
+- [x] E26: top-K repeated reranking đã triển khai và chạy live. Candidate pool chỉ có 2 nên winner không đổi; validation +6,30 điểm nhưng paired holdout -9,99 điểm, reject.
 - [x] E30: taxonomy/schema 3 và live control hoàn tất; không có gain, chuyển sang E41/E43 để bổ sung API/test context.
 - [ ] E40: exact branch/path context.
 
