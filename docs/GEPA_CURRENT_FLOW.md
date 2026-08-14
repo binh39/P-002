@@ -80,7 +80,7 @@ Environment
                 | seed candidate = baseline               |
                 | 70% best / 30% Pareto + hybrid frontier|
                 | causal selector: initial or error       |
-                | reflection minibatch <= 8 examples      |
+                | reflection minibatch <= 5 examples      |
                 | merge enabled                           |
                 +-------------------+---------------------+
                                     |
@@ -142,7 +142,7 @@ adapter.evaluate(batch=[example A, example B, ...], candidate=C)
 
 `batch` co the la:
 
-- reflection minibatch nho, toi da 8 example theo cau hinh hien tai;
+- reflection minibatch nho, toi da 5 example theo cau hinh hien tai;
 - mot tap example train/validation ma GEPA can cham;
 - khong nhat thiet la toan bo split.
 
@@ -381,7 +381,7 @@ seed_candidate              = exact baseline bundle
 candidate_selection_strategy = 70% current aggregate best + 30% Pareto
 frontier_type               = hybrid
 module_selector             = causal(initial or exercised error)
-reflection_minibatch_size   = min(8, number_of_train_targets)
+reflection_minibatch_size   = min(5, number_of_train_targets)
 use_merge                   = true
 max_merge_invocations       = 5
 skip_perfect_score          = false
@@ -501,5 +501,5 @@ Promotion                : false
 ```
 
 Day la artifact cu voi dataset 25/20/20. Run moi se dung dataset 50/30/30,
-reflection minibatch 8, causal selection `initial/error`, va neu `best_index=0` thi dung
+reflection minibatch 5, causal selection `initial/error`, va neu `best_index=0` thi dung
 ngay sau GEPA search ma khong tao run test.

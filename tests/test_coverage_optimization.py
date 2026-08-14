@@ -432,6 +432,93 @@ def test_reflection_request_log_contains_exact_model_payload(capsys):
     assert json.loads(payload) == request
 
 
+def test_coverup_chatter_returns_get_info_calls_with_results(monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / "src"))
+    import coverup.llm as llm_module
+
+    chatter = object.__new__(llm_module.Chatter)
+    chatter._model = "fake-model"
+    chatter._model_temperature = None
+    chatter._default_max_tokens = 100
+    chatter._extra_request_pars = None
+    chatter._max_func_calls_per_chat = 3
+    chatter.token_rate_limit = None
+    chatter._add_cost = lambda cost: None
+    chatter._log_msg = lambda ctx, message: None
+    chatter._log_json = lambda ctx, payload: None
+    chatter._signal_retry = lambda: None
+    chatter._functions = {
+        "get_info": {
+            "function": lambda ctx, name: f"source:{ctx}:{name}",
+            "schema": {
+                "name": "get_info",
+                "parameters": {"type": "object"},
+            },
+        }
+    }
+
+    tool_call = SimpleNamespace(
+        id="call-1",
+        function=SimpleNamespace(
+            name="get_info", arguments=json.dumps({"name": "Helper"})
+        ),
+    )
+
+    class FakeMessage:
+        def __init__(self, content, tool_calls):
+            self.content = content
+            self.tool_calls = tool_calls
+
+        def model_dump(self, warnings=False):
+            del warnings
+            return {
+                "role": "assistant",
+                "content": self.content,
+                "tool_calls": [{
+                    "id": call.id,
+                    "function": {
+                        "name": call.function.name,
+                        "arguments": call.function.arguments,
+                    },
+                } for call in self.tool_calls],
+            }
+
+    class FakeResponse:
+        def __init__(self, finish_reason, message):
+            self.choices = [SimpleNamespace(
+                finish_reason=finish_reason, message=message
+            )]
+
+        def model_dump(self, warnings=False):
+            del warnings
+            return {"choices": [{
+                "finish_reason": self.choices[0].finish_reason,
+                "message": self.choices[0].message.model_dump(),
+            }]}
+
+    responses = iter((
+        FakeResponse("tool_calls", FakeMessage(None, [tool_call])),
+        FakeResponse("stop", FakeMessage("```python\nassert True\n```", [])),
+    ))
+
+    async def fake_send_request(request, ctx):
+        del request, ctx
+        return next(responses)
+
+    chatter._send_request = fake_send_request
+    monkeypatch.setattr(llm_module.litellm, "completion_cost", lambda response: 0)
+
+    response = asyncio.run(chatter.chat(
+        [{"role": "user", "content": "write a test"}], ctx="target"
+    ))
+
+    assert response["_coverup_tool_calls"] == [{
+        "name": "get_info",
+        "arguments": {"name": "Helper"},
+        "result": "source:target:Helper",
+    }]
+
+
 def test_full_reflection_event_prints_only_when_enabled(monkeypatch, capsys):
     from src.optimization.gepa import log_full_reflection_event
 
@@ -1764,6 +1851,11 @@ def test_reflection_reconstructs_initial_error_repair_episode(tmp_path):
                 "generated_test": "def test_initial(): assert broken",
                 "execution_error": "NameError: broken",
                 "next_component": "error",
+                "get_info_calls": [{
+                    "name": "get_info",
+                    "arguments": {"name": "helper"},
+                    "result": "def helper(): return 1",
+                }],
             },
             {
                 "attempt": 2,
@@ -1774,6 +1866,11 @@ def test_reflection_reconstructs_initial_error_repair_episode(tmp_path):
                 "generated_test": "def test_repair_one(): assert still_broken",
                 "execution_error": "NameError: still_broken",
                 "next_component": "error",
+                "get_info_calls": [{
+                    "name": "get_info",
+                    "arguments": {"name": "factory"},
+                    "result": "def factory(): return helper()",
+                }],
             },
             {
                 "attempt": 3,
@@ -1800,12 +1897,16 @@ def test_reflection_reconstructs_initial_error_repair_episode(tmp_path):
     assert episode["initial_attempts"][0]["generated_test"].startswith(
         "def test_initial"
     )
+    assert episode["initial_attempts"][0]["get_info_calls"][0]["arguments"] == {
+        "name": "helper"
+    }
     assert len(episode["repair_transitions"]) == 2
     first, second = episode["repair_transitions"]
     assert first["failing_test"].startswith("def test_initial")
     assert first["error"] == "NameError: broken"
     assert first["repaired_test"].startswith("def test_repair_one")
     assert first["execution_error_after"] == "NameError: still_broken"
+    assert first["get_info_calls"][0]["result"].startswith("def factory")
     assert second["failing_test"].startswith("def test_repair_one")
     assert second["error"] == "NameError: still_broken"
     assert second["repaired_test"].startswith("def test_repair_two")
@@ -2323,7 +2424,7 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
     assert captured["seed_candidate"] == baseline.as_candidate()
     assert set(captured["seed_candidate"]) == {"initial", "error"}
     assert captured["cache_evaluation"] is False
-    assert captured["reflection_minibatch_size"] == 8
+    assert captured["reflection_minibatch_size"] == 5
     assert isinstance(captured["module_selector"], LLMReflectionComponentSelector)
     assert isinstance(
         captured["candidate_selection_strategy"], BestParetoCandidateSelector
@@ -2644,6 +2745,11 @@ def test_coverup_trace_preserves_component_level_attempt_history(tmp_path, monke
             self.calls += 1
             code = "assert False" if self.calls == 1 else "assert True"
             return {
+                "_coverup_tool_calls": [{
+                    "name": "get_info",
+                    "arguments": {"name": f"dependency_{self.calls}"},
+                    "result": f"source for dependency {self.calls}",
+                }],
                 "choices": [{
                     "finish_reason": "stop",
                     "message": {
@@ -2699,6 +2805,12 @@ def test_coverup_trace_preserves_component_level_attempt_history(tmp_path, monke
     ]
     assert traces[0]["execution_error"] == "AssertionError: wrong result"
     assert traces[1]["generated_test"].strip() == "assert True"
+    assert traces[0]["get_info_calls"] == [{
+        "name": "get_info",
+        "arguments": {"name": "dependency_1"},
+        "result": "source for dependency 1",
+    }]
+    assert traces[1]["get_info_calls"][0]["arguments"]["name"] == "dependency_2"
     assert seen_pytest_args == ["--count 2", "--count 2"]
 
 

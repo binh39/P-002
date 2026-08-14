@@ -119,6 +119,7 @@ REFLECTION_REQUEST_END = "PROMPTOPT_REFLECTION_REQUEST_END"
 FULL_LOG_BEGIN = "PROMPTOPT_DEV_FULL_LOG_BEGIN"
 FULL_LOG_END = "PROMPTOPT_DEV_FULL_LOG_END"
 MAX_OPTIMIZER_TEST_EXPERIMENTS = 3
+REFLECTION_MINIBATCH_SIZE = 5
 
 _DIGEST_LOCKS: dict[str, threading.Lock] = {}
 _DIGEST_LOCKS_GUARD = threading.Lock()
@@ -496,6 +497,19 @@ def _compact_attempt(attempt: Mapping[str, Any]) -> dict[str, Any]:
         row["assistant_response"] = _clip_text(
             attempt["assistant_response"], 3_000
         )
+    get_info_calls = attempt.get("get_info_calls", [])
+    if isinstance(get_info_calls, Sequence) and not isinstance(
+        get_info_calls, (str, bytes)
+    ):
+        row["get_info_calls"] = [
+            {
+                "name": str(call.get("name", "get_info")),
+                "arguments": call.get("arguments", {}),
+                "result": _clip_text(call.get("result", ""), 6_000),
+            }
+            for call in get_info_calls
+            if isinstance(call, Mapping)
+        ]
     return row
 
 
@@ -544,6 +558,9 @@ def _build_execution_episodes(
                         attempt.get("generated_test", ""), 10_000
                     ),
                     "outcome": attempt.get("outcome", "unknown"),
+                    "get_info_calls": _compact_attempt(attempt).get(
+                        "get_info_calls", []
+                    ),
                 }
                 for key in (
                     "execution_error", "finish_reason", "missing_imports",
@@ -1586,7 +1603,7 @@ class CoverUpPromptAdapter:
         case_targets: Mapping[str, SymbolTarget],
     ) -> list[dict[str, Any]]:
         history: list[dict[str, Any]] = []
-        visible_cases = cases[:8]
+        visible_cases = cases[:REFLECTION_MINIBATCH_SIZE]
         for attempt in range(1, MAX_OPTIMIZER_TEST_EXPERIMENTS + 1):
             prompt = f"""
 You are the diagnostic teacher for a reusable pytest-generation prompt. Do not rewrite the prompt yet. First prove a concrete strategy by repairing one failed case with an executable test.
@@ -2139,7 +2156,9 @@ def optimize(
         ),
         frontier_type="hybrid",
         skip_perfect_score=False,
-        reflection_minibatch_size=min(8, len(train_targets)),
+        reflection_minibatch_size=min(
+            REFLECTION_MINIBATCH_SIZE, len(train_targets)
+        ),
         module_selector=LLMReflectionComponentSelector(),
         use_merge=True,
         max_merge_invocations=5,

@@ -653,6 +653,11 @@ async def improve_coverage(
             })
             break
 
+        get_info_calls = [
+            call for call in response.pop("_coverup_tool_calls", [])
+            if call.get("name") == "get_info"
+        ]
+
         try:
             choice = response["choices"][0]
             response_message = dict(choice["message"])
@@ -664,6 +669,7 @@ async def improve_coverage(
                 "component": component,
                 "prompt_input": prompt_input,
                 "outcome": "malformed_response",
+                "get_info_calls": get_info_calls,
             })
             continue
 
@@ -686,6 +692,7 @@ async def improve_coverage(
                 "prompt_input": prompt_input,
                 "outcome": "empty_response",
                 "finish_reason": finish_reason,
+                "get_info_calls": get_info_calls,
             })
             messages.append({
                 "role": "user",
@@ -707,6 +714,7 @@ async def improve_coverage(
                 "prompt_input": prompt_input,
                 "outcome": "missing_python_block",
                 "assistant_response": content,
+                "get_info_calls": get_info_calls,
             })
             messages.append({
                 "role": "user",
@@ -727,6 +735,7 @@ async def improve_coverage(
                     "outcome": "missing_imports",
                     "generated_test": last_test,
                     "missing_imports": missing,
+                    "get_info_calls": get_info_calls,
                 })
                 return False # not finished: needs a missing module
 
@@ -752,6 +761,7 @@ async def improve_coverage(
                 "prompt_input": prompt_input,
                 "outcome": "coverage_timeout",
                 "generated_test": last_test,
+                "get_info_calls": get_info_calls,
             })
             # FIXME is the built-in timeout reasonable? Do we prompt for a faster test?
             # We don't want slow tests, but there may not be any way around it.
@@ -769,6 +779,7 @@ async def improve_coverage(
                     "outcome": "test_error_unrepairable",
                     "generated_test": last_test,
                     "execution_error": error,
+                    "get_info_calls": get_info_calls,
                 })
                 break
 
@@ -780,6 +791,7 @@ async def improve_coverage(
                 "generated_test": last_test,
                 "execution_error": error,
                 "next_component": "error",
+                "get_info_calls": get_info_calls,
             })
             messages.extend(prompts)
             component = "error"
@@ -813,6 +825,7 @@ async def improve_coverage(
                 "gained_branches": [],
                 "remaining_lines": sorted(seg.missing_lines),
                 "remaining_branches": sorted(seg.missing_branches),
+                "get_info_calls": get_info_calls,
             })
             break
 
@@ -836,6 +849,7 @@ async def improve_coverage(
             "remaining_lines": sorted(seg.missing_lines - gained_lines),
             "remaining_branches": sorted(seg.missing_branches - gained_branches),
             "saved_test": str(new_test),
+            "get_info_calls": get_info_calls,
         })
 
         log_write(args, seg, f"Saved as {new_test}\n")
