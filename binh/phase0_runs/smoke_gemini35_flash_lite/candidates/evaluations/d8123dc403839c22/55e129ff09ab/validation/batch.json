@@ -1,0 +1,39 @@
+{
+  "prompt_digest": "d8123dc403839c22",
+  "evaluation_digest": "55e129ff09ab",
+  "replicate": 0,
+  "split": "validation",
+  "workspace_kind": "candidate",
+  "run_ids": [
+    "isort-validation-batch-debe6f08"
+  ],
+  "generator_exit_codes": [
+    0
+  ],
+  "tests_workspaces": [
+    "D:\\VinAI\\P-002\\binh\\phase0_runs\\smoke_gemini35_flash_lite\\generated_tests\\validation\\tests_candidate_d8123dc403839c22-55e129ff09ab"
+  ],
+  "results": [
+    {
+      "prompt_digest": "d8123dc403839c22",
+      "evaluation_digest": "55e129ff09ab",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/wrap_modes.py",
+        "symbol": "_wrap_mode",
+        "split": "validation"
+      },
+      "run_id": "isort-validation-batch-debe6f08",
+      "score": 0.0,
+      "coverage": null,
+      "feedback": "Score: 0. The generated tests for this target failed under coverage.py:\nERROR: usage: python -m pytest [options] [file_or_dir] [file_or_dir] [...]\r\npython -m pytest: error: unrecognized arguments: --count\r\n  inifile: D:\\VinAI\\P-002\\pyproject.toml\r\n  rootdir: D:\\VinAI\\P-002\r\n\r\nD:\\VinAI\\P-002\\.venv\\Lib\\site-packages\\coverage\\control.py:955: CoverageWarning: No data was collected. (no-data-collected); see https://coverage.readthedocs.io/en/7.15.2/messages.html#warning-no-data-collected\r\n  self._warn(\"No data was collected.\", slug=\"no-data-collected\")\r\n",
+      "attempt_traces": []
+    }
+  ],
+  "aggregate": {
+    "score": 0.0,
+    "statement_coverage": 0.0,
+    "branch_coverage": 0.0
+  }
+}

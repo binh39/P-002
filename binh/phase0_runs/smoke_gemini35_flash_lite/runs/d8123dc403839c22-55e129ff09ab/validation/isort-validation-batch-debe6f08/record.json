@@ -1,0 +1,69 @@
+{
+  "run_id": "isort-validation-batch-debe6f08",
+  "split": "validation",
+  "targets": [
+    {
+      "project": "isort",
+      "source_file": "isort/wrap_modes.py",
+      "symbol": "_wrap_mode",
+      "split": "validation"
+    }
+  ],
+  "command": [
+    "D:\\VinAI\\P-002\\.venv\\Scripts\\python.exe",
+    "-u",
+    "-m",
+    "coverup",
+    "--package-dir",
+    "D:\\VinAI\\P-002\\src\\sample_repo\\isort\\isort",
+    "--tests-dir",
+    "D:\\VinAI\\P-002\\binh\\phase0_runs\\smoke_gemini35_flash_lite\\runs\\d8123dc403839c22-55e129ff09ab\\validation\\isort-validation-batch-debe6f08\\target_workspaces\\62081b83e573_0000",
+    "--target-symbols",
+    "_wrap_mode",
+    "--target-spec-file",
+    "D:\\VinAI\\P-002\\binh\\phase0_runs\\smoke_gemini35_flash_lite\\runs\\d8123dc403839c22-55e129ff09ab\\validation\\isort-validation-batch-debe6f08\\target_spec_62081b83e573_0000.json",
+    "--prompt",
+    "gpt-v2",
+    "--prompt-template-file",
+    "D:\\VinAI\\P-002\\binh\\phase0_runs\\smoke_gemini35_flash_lite\\runs\\d8123dc403839c22-55e129ff09ab\\validation\\isort-validation-batch-debe6f08\\prompt.json",
+    "--model",
+    "vertex_ai/gemini-3.5-flash-lite",
+    "--max-attempts",
+    "3",
+    "--prefix",
+    "opt",
+    "--log-file",
+    "D:\\VinAI\\P-002\\binh\\phase0_runs\\smoke_gemini35_flash_lite\\runs\\d8123dc403839c22-55e129ff09ab\\validation\\isort-validation-batch-debe6f08\\coverup_62081b83e573_0000.log",
+    "--trace-file",
+    "D:\\VinAI\\P-002\\binh\\phase0_runs\\smoke_gemini35_flash_lite\\runs\\d8123dc403839c22-55e129ff09ab\\validation\\isort-validation-batch-debe6f08\\attempt_trace_62081b83e573_0000.jsonl",
+    "--no-checkpoint",
+    "--no-final-coverage",
+    "--repeat-tests",
+    "2",
+    "--max-concurrency",
+    "1"
+  ],
+  "started_at": "2026-08-14T11:25:41+00:00",
+  "finished_at": "2026-08-14T11:26:01+00:00",
+  "exit_code": 0,
+  "elapsed_seconds": 19.10999999998603,
+  "results": [
+    {
+      "target": {
+        "project": "isort",
+        "source_file": "isort/wrap_modes.py",
+        "symbol": "_wrap_mode",
+        "split": "validation"
+      },
+      "score": null,
+      "feedback": "Score: 0. The generated tests for this target failed under coverage.py:\nERROR: usage: python -m pytest [options] [file_or_dir] [file_or_dir] [...]\r\npython -m pytest: error: unrecognized arguments: --count\r\n  inifile: D:\\VinAI\\P-002\\pyproject.toml\r\n  rootdir: D:\\VinAI\\P-002\r\n\r\nD:\\VinAI\\P-002\\.venv\\Lib\\site-packages\\coverage\\control.py:955: CoverageWarning: No data was collected. (no-data-collected); see https://coverage.readthedocs.io/en/7.15.2/messages.html#warning-no-data-collected\r\n  self._warn(\"No data was collected.\", slug=\"no-data-collected\")\r\n",
+      "attempt_traces": []
+    }
+  ],
+  "generated_tests": [],
+  "tests_workspace": "D:\\VinAI\\P-002\\binh\\phase0_runs\\smoke_gemini35_flash_lite\\generated_tests\\validation\\tests_candidate_d8123dc403839c22-55e129ff09ab",
+  "coverage_after": "coverage_after_62081b83e573_0000.json",
+  "stdout_file": "coverup.stdout.log",
+  "coverup_log_file": "coverup.log",
+  "attempt_trace_file": "attempt_trace.jsonl"
+}

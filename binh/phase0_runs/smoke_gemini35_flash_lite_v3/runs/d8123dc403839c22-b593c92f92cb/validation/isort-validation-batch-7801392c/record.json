@@ -1,0 +1,101 @@
+{
+  "run_id": "isort-validation-batch-7801392c",
+  "split": "validation",
+  "targets": [
+    {
+      "project": "isort",
+      "source_file": "isort/wrap_modes.py",
+      "symbol": "_wrap_mode",
+      "split": "validation"
+    }
+  ],
+  "command": [
+    "D:\\VinAI\\P-002\\.venv\\Scripts\\python.exe",
+    "-u",
+    "-m",
+    "coverup",
+    "--package-dir",
+    "D:\\VinAI\\P-002\\src\\sample_repo\\isort\\isort",
+    "--tests-dir",
+    "D:\\VinAI\\P-002\\binh\\phase0_runs\\smoke_gemini35_flash_lite_v3\\runs\\d8123dc403839c22-b593c92f92cb\\validation\\isort-validation-batch-7801392c\\target_workspaces\\62081b83e573_0000",
+    "--target-symbols",
+    "_wrap_mode",
+    "--target-spec-file",
+    "D:\\VinAI\\P-002\\binh\\phase0_runs\\smoke_gemini35_flash_lite_v3\\runs\\d8123dc403839c22-b593c92f92cb\\validation\\isort-validation-batch-7801392c\\target_spec_62081b83e573_0000.json",
+    "--prompt",
+    "gpt-v2",
+    "--prompt-template-file",
+    "D:\\VinAI\\P-002\\binh\\phase0_runs\\smoke_gemini35_flash_lite_v3\\runs\\d8123dc403839c22-b593c92f92cb\\validation\\isort-validation-batch-7801392c\\prompt.json",
+    "--model",
+    "vertex_ai/gemini-3.5-flash-lite",
+    "--max-attempts",
+    "3",
+    "--prefix",
+    "opt",
+    "--log-file",
+    "D:\\VinAI\\P-002\\binh\\phase0_runs\\smoke_gemini35_flash_lite_v3\\runs\\d8123dc403839c22-b593c92f92cb\\validation\\isort-validation-batch-7801392c\\coverup_62081b83e573_0000.log",
+    "--trace-file",
+    "D:\\VinAI\\P-002\\binh\\phase0_runs\\smoke_gemini35_flash_lite_v3\\runs\\d8123dc403839c22-b593c92f92cb\\validation\\isort-validation-batch-7801392c\\attempt_trace_62081b83e573_0000.jsonl",
+    "--no-checkpoint",
+    "--no-final-coverage",
+    "--repeat-tests",
+    "1",
+    "--max-concurrency",
+    "1"
+  ],
+  "started_at": "2026-08-14T11:27:53+00:00",
+  "finished_at": "2026-08-14T11:28:14+00:00",
+  "exit_code": 0,
+  "elapsed_seconds": 21.109000000025844,
+  "results": [
+    {
+      "target": {
+        "project": "isort",
+        "source_file": "isort/wrap_modes.py",
+        "symbol": "_wrap_mode",
+        "split": "validation"
+      },
+      "score": {
+        "score": 0.0,
+        "statement_gain": 0.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 0,
+        "num_statements": 4,
+        "covered_branches": 0,
+        "num_branches": 0,
+        "gained_lines": [],
+        "gained_branches": [],
+        "remaining_lines": [
+          45,
+          46,
+          47,
+          48
+        ],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Score: 0.0000\nStatement gain: 0 newly covered; 4 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: [45, 46, 47, 48]\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "attempt_traces": [
+        {
+          "source_file": "src\\sample_repo\\isort\\isort\\wrap_modes.py",
+          "symbol": "_wrap_mode",
+          "name": "_wrap_mode",
+          "segment": "src\\sample_repo\\isort\\isort\\wrap_modes.py:41-48",
+          "attempt": 1,
+          "component": "initial",
+          "prompt_input": "You are an expert Python test-driven developer.\nThe code below, extracted from isort\\wrap_modes.py, does not achieve full coverage:\nwhen tested, lines 41-48 do not execute.\nCreate new pytest test functions that execute all missing lines and branches. Each test must\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\nUse the get_info tool function as necessary. Always return an entire Python test module.\nDo not call pytest.main and do not execute tests at module import time.\nRespond only with Python code enclosed in a python markdown code block.\n\n```python\n            from inspect import signature\n            from typing import Callable\n        41: def _wrap_mode(function: Callable[..., str]) -> Callable[..., str]:\n                \"\"\"Registers an individual wrap mode. Function name and order are significant and used for\n                creating enum.\n                \"\"\"\n        45:     _wrap_modes[function.__name__.upper()] = function\n        46:     function.__signature__ = signature(_wrap_mode_interface)  # type: ignore\n        47:     function.__annotations__ = _wrap_mode_interface.__annotations__\n        48:     return function\n\n```",
+          "outcome": "model_request_failed"
+        }
+      ]
+    }
+  ],
+  "generated_tests": [],
+  "tests_workspace": "D:\\VinAI\\P-002\\binh\\phase0_runs\\smoke_gemini35_flash_lite_v3\\generated_tests\\validation\\tests_candidate_d8123dc403839c22-b593c92f92cb",
+  "coverage_after": "coverage_after_62081b83e573_0000.json",
+  "stdout_file": "coverup.stdout.log",
+  "coverup_log_file": "coverup.log",
+  "attempt_trace_file": "attempt_trace.jsonl"
+}
