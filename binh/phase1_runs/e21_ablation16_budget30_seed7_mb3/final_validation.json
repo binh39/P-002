@@ -1,0 +1,874 @@
+{
+  "mean_score": null,
+  "baseline_mean_score": 0.6970540098199672,
+  "optimized_mean_score": null,
+  "baseline_aggregate_coverage": {
+    "branch_coverage": 0.6538461538461539,
+    "covered_branches": 34.0,
+    "covered_statements": 75.0,
+    "num_branches": 52.0,
+    "num_statements": 94.0,
+    "score": 0.6970540098199672,
+    "statement_coverage": 0.7978723404255319
+  },
+  "optimized_aggregate_coverage": null,
+  "absolute_gain": null,
+  "promoted": false,
+  "final_evaluation_skipped": true,
+  "skip_reason": "GEPA selected the unchanged baseline; there is no new prompt to compare on the final split.",
+  "final_split": "test",
+  "used_locked_holdout": true,
+  "evaluation_replicates": 1,
+  "prompt": "D:\\VinAI\\P-002\\binh\\phase1_runs\\e21_ablation16_budget30_seed7_mb3\\prompts\\gepa_proposed.json",
+  "production_prompt": "D:\\VinAI\\P-002\\binh\\phase1_runs\\e21_ablation16_budget30_seed7_mb3\\prompts\\gepa_optimized.json",
+  "baseline_prompt": "D:\\VinAI\\P-002\\eval\\prompt_optimization\\prompts\\gpt_v2_baseline.json",
+  "baseline_tests_workspaces": [
+    "D:\\VinAI\\P-002\\binh\\phase1_runs\\e21_ablation16_budget30_seed7_mb3\\generated_tests\\test\\tests_base_line_d8123dc403839c22-2aa052f1b98d"
+  ],
+  "baseline_run_ids": [
+    "multi-project-test-batch-1b18c3c5"
+  ],
+  "run_ids": [],
+  "tests_workspaces": [],
+  "baseline_results": [
+    {
+      "prompt_digest": "d8123dc403839c22",
+      "evaluation_digest": "2aa052f1b98d",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/deprecated/finders.py",
+        "symbol": "PathFinder.find",
+        "split": "test"
+      },
+      "run_id": "multi-project-test-batch-1b18c3c5",
+      "score": 0.0,
+      "coverage": {
+        "score": 0.0,
+        "statement_gain": 0.0,
+        "branch_gain": 0.0,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "covered_statements": 0.0,
+        "num_statements": 18.0,
+        "covered_branches": 0.0,
+        "num_branches": 14.0,
+        "gained_lines": [],
+        "gained_branches": [],
+        "remaining_lines": [
+          167,
+          168,
+          169,
+          170,
+          178,
+          179,
+          180,
+          185,
+          186,
+          187,
+          188,
+          189,
+          190,
+          191,
+          192,
+          194,
+          197,
+          198
+        ],
+        "remaining_branches": [
+          [
+            167,
+            168
+          ],
+          [
+            167,
+            198
+          ],
+          [
+            179,
+            167
+          ],
+          [
+            179,
+            180
+          ],
+          [
+            180,
+            185
+          ],
+          [
+            180,
+            186
+          ],
+          [
+            186,
+            187
+          ],
+          [
+            186,
+            188
+          ],
+          [
+            188,
+            189
+          ],
+          [
+            188,
+            190
+          ],
+          [
+            190,
+            191
+          ],
+          [
+            190,
+            194
+          ],
+          [
+            191,
+            190
+          ],
+          [
+            191,
+            192
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 0.0000\nStatement gain: 0 newly covered; 18 remain.\nBranch gain: 0 newly covered; 14 remain.\nRemaining lines: [167, 168, 169, 170, 178, 179, 180, 185, 186, 187, 188, 189, 190, 191, 192, 194, 197, 198]\nRemaining branches: [(167, 168), (167, 198), (179, 167), (179, 180), (180, 185), (180, 186), (186, 187), (186, 188), (188, 189), (188, 190), (190, 191), (190, 194), (191, 190), (191, 192)]\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "attempt_traces": [
+        {
+          "source_file": "src\\sample_repo\\isort\\isort\\deprecated\\finders.py",
+          "symbol": "PathFinder.find",
+          "name": "find",
+          "segment": "src\\sample_repo\\isort\\isort\\deprecated\\finders.py:166-198",
+          "attempt": 1,
+          "component": "initial",
+          "prompt_input": "You are an expert Python test-driven developer.\nThe code below, extracted from isort\\deprecated\\finders.py, does not achieve full coverage:\nwhen tested, lines 166-198 do not execute.\nCreate new pytest test functions that execute all missing lines and branches. Each test must\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\nUse the get_info tool function as necessary. Always return an entire Python test module.\nDo not call pytest.main and do not execute tests at module import time.\nRespond only with Python code enclosed in a python markdown code block.\n\n```python\n            import importlib.machinery\n            import os\n            from pathlib import Path\n            from typing import Optional\n            from isort import sections\n            from isort.utils import exists_case_sensitive\n            class PathFinder(BaseFinder):\n       166:     def find(self, module_name: str) -> Optional[str]:\n       167:         for prefix in self.paths:\n       168:             package_path = \"/\".join((prefix, module_name.split(\".\")[0]))\n       169:             path_obj = Path(package_path).resolve()\n       170:             is_module = (\n       171:                 exists_case_sensitive(package_path + \".py\")\n       172:                 or any(\n       173:                     exists_case_sensitive(package_path + ext_suffix)\n       174:                     for ext_suffix in importlib.machinery.EXTENSION_SUFFIXES\n                            )\n       176:                 or exists_case_sensitive(package_path + \"/__init__.py\")\n                        )\n       178:             is_package = exists_case_sensitive(package_path) and os.path.isdir(package_path)\n       179:             if is_module or is_package:\n       180:                 if (\n       181:                     \"site-packages\" in prefix\n       182:                     or \"dist-packages\" in prefix\n       183:                     or (self.virtual_env and self.virtual_env_src in prefix)\n                            ):\n       185:                     return sections.THIRDPARTY\n       186:                 if os.path.normcase(prefix) == self.stdlib_lib_prefix:\n       187:                     return sections.STDLIB\n       188:                 if self.conda_env and self.conda_env in prefix:\n       189:                     return sections.THIRDPARTY\n       190:                 for src_path in self.config.src_paths:\n       191:                     if src_path in path_obj.parents and not self.config.is_skipped(path_obj):\n       192:                         return sections.FIRSTPARTY\n            \n       194:                 if os.path.normcase(prefix).startswith(self.stdlib_lib_prefix):\n       195:                     return sections.STDLIB  # pragma: no cover - edge case for one OS. Hard to test.\n            \n       197:                 return self.config.default_section\n       198:         return None\n\n```",
+          "outcome": "test_error",
+          "generated_test": "import importlib.machinery\nimport os\nimport sys\nimport sysconfig\nfrom pathlib import Path\n\nfrom isort import sections\nfrom isort.deprecated.finders import PathFinder\nfrom isort.settings import Config\n\n\ndef test_path_finder_find_branches(tmp_path):\n    # Setup directories and files to trigger different branches in PathFinder.find\n    # 1. site-packages -> THIRDPARTY\n    site_pkg_dir = tmp_path / \"site-packages\"\n    site_pkg_dir.mkdir()\n    mod_site = site_pkg_dir / \"mod_site.py\"\n    mod_site.write_text(\"\")\n\n    # 2. dist-packages -> THIRDPARTY\n    dist_pkg_dir = tmp_path / \"dist-packages\"\n    dist_pkg_dir.mkdir()\n    mod_dist = dist_pkg_dir / \"mod_dist.py\"\n    mod_dist.write_text(\"\")\n\n    # 3. virtual_env and virtual_env_src -> THIRDPARTY\n    venv_dir = tmp_path / \"venv\"\n    venv_dir.mkdir()\n    venv_src = venv_dir / \"src\" / \"my_venv_pkg\"\n    venv_src.mkdir(parents=True)\n    mod_venv = venv_src / \"mod_venv.py\"\n    mod_venv.write_text(\"\")\n\n    # 4. stdlib_lib_prefix -> STDLIB (exact match and startswith)\n    stdlib_dir = Path(sysconfig.get_paths()[\"stdlib\"])\n    # We can create a dummy file or use an existing stdlib structure if writable, \n    # but PathFinder checks exists_case_sensitive on prefix + module_name.\n    # Alternatively, we can inject/override self.stdlib_lib_prefix or mock paths.\n\n    # 5. conda_env -> THIRDPARTY\n    conda_dir = tmp_path / \"conda\"\n    conda_dir.mkdir()\n    mod_conda = conda_dir / \"mod_conda.py\"\n    mod_conda.write_text(\"\")\n\n    # 6. config.src_paths -> FIRSTPARTY\n    src_root = tmp_path / \"project\"\n    src_root.mkdir()\n    sub_src = src_root / \"src\" / \"app\"\n    sub_src.mkdir(parents=True)\n    mod_first = sub_src / \"mod_first.py\"\n    mod_first.write_text(\"\")\n\n    # 7. default_section\n    default_dir = tmp_path / \"other\"\n    default_dir.mkdir()\n    mod_default = default_dir / \"mod_default.py\"\n    mod_default.write_text(\"\")\n\n    # 8. Not found -> None\n    \n    config = Config(src_paths=[str(src_root / \"src\")])\n    finder = PathFinder(config, path=str(tmp_path))\n\n    # Manually populate or inject paths to test specific conditional branches safely\n    finder.paths = [\n        str(site_pkg_dir),\n        str(dist_pkg_dir),\n        str(venv_src),\n        str(stdlib_dir),\n        str(conda_dir),\n        str(src_root / \"src\"),\n        str(default_dir),\n    ]\n    finder.virtual_env = str(venv_dir)\n    finder.virtual_env_src = str(venv_dir / \"src\") + \"/\"\n    finder.conda_env = str(conda_dir)\n    finder.stdlib_lib_prefix = os.path.normcase(str(stdlib_dir))\n\n    # Test site-packages -> THIRDPARTY\n    assert finder.find(\"mod_site\") == sections.THIRDPARTY\n\n    # Test dist-packages -> THIRDPARTY\n    assert finder.find(\"mod_dist\") == sections.THIRDPARTY\n\n    # Test virtual_env / virtual_env_src -> THIRDPARTY\n    assert finder.find(\"mod_venv\") == sections.THIRDPARTY\n\n    # Test stdlib exact match -> STDLIB\n    # We need a file inside stdlib_dir to satisfy exists_case_sensitive\n    stdlib_mod = stdlib_dir / \"mod_stdlib.py\"\n    try:\n        stdlib_mod.write_text(\"\")\n        finder.paths = [str(stdlib_dir)]\n        assert finder.find(\"mod_stdlib\") == sections.STDLIB\n\n        # Test stdlib startswith prefix -> STDLIB (line 194-195)\n        # Create a path inside a subdirectory of stdlib_dir\n        sub_stdlib = stdlib_dir / \"subdir\"\n        sub_stdlib.mkdir(exist_ok=True)\n        sub_mod = sub_stdlib / \"mod_sub_stdlib.py\"\n        sub_mod.write_text(\"\")\n        finder.paths = [str(sub_stdlib)]\n        assert finder.find(\"mod_sub_stdlib\") == sections.STDLIB\n    finally:\n        if stdlib_mod.exists():\n            stdlib_mod.unlink()\n        sub_mod_path = stdlib_dir / \"subdir\" / \"mod_sub_stdlib.py\"\n        if sub_mod_path.exists():\n            sub_mod_path.unlink()\n\n    # Test conda_env -> THIRDPARTY\n    finder.paths = [str(conda_dir)]\n    assert finder.find(\"mod_conda\") == sections.THIRDPARTY\n\n    # Test config.src_paths -> FIRSTPARTY\n    finder.paths = [str(src_root / \"src\")]\n    assert finder.find(\"mod_first\") == sections.FIRSTPARTY\n\n    # Test default_section -> default section (e.g. \"DEFAULT\" or custom)\n    finder.paths = [str(default_dir)]\n    assert finder.find(\"mod_default\") == config.default_section\n\n    # Test not found -> None\n    finder.paths = [str(default_dir)]\n    assert finder.find(\"nonexistent_module\") is None\n",
+          "execution_error": "F\r\n================================== FAILURES ===================================\r\n_____________________ test_path_finder_find_branches[1-2] _____________________\r\n\r\ntmp_path = WindowsPath('C:/Users/ADMIN/AppData/Local/Temp/pytest-of-ADMIN/pytest-193/test_path_finder_find_branches0')\r\n\r\n    def test_path_finder_find_branches(tmp_path):\r\n        # Setup directories and files to trigger different branches in PathFinder.find\r\n        # 1. site-packages -> THIRDPARTY\r\n        site_pkg_dir = tmp_path / \"site-packages\"\r\n        site_pkg_dir.mkdir()\r\n        mod_site = site_pkg_dir / \"mod_site.py\"\r\n        mod_site.write_text(\"\")\r\n    \r\n        # 2. dist-packages -> THIRDPARTY\r\n        dist_pkg_dir = tmp_path / \"dist-packages\"\r\n        dist_pkg_dir.mkdir()\r\n        mod_dist = dist_pkg_dir / \"mod_dist.py\"\r\n        mod_dist.write_text(\"\")\r\n    \r\n        # 3. virtual_env and virtual_env_src -> THIRDPARTY\r\n        venv_dir = tmp_path / \"venv\"\r\n        venv_dir.mkdir()\r\n        venv_src = venv_dir / \"src\" / \"my_venv_pkg\"\r\n        venv_src.mkdir(parents=True)\r\n        mod_venv = venv_src / \"mod_venv.py\"\r\n        mod_venv.write_text(\"\")\r\n    \r\n        # 4. stdlib_lib_prefix -> STDLIB (exact match and startswith)\r\n        stdlib_dir = Path(sysconfig.get_paths()[\"stdlib\"])\r\n        # We can create a dummy file or use an existing stdlib structure if writable,\r\n        # but PathFinder checks exists_case_sensitive on prefix + module_name.\r\n        # Alternatively, we can inject/override self.stdlib_lib_prefix or mock paths.\r\n    \r\n        # 5. conda_env -> THIRDPARTY\r\n        conda_dir = tmp_path / \"conda\"\r\n        conda_dir.mkdir()\r\n        mod_conda = conda_dir / \"mod_conda.py\"\r\n        mod_conda.write_text(\"\")\r\n    \r\n        # 6. config.src_paths -> FIRSTPARTY\r\n        src_root = tmp_path / \"project\"\r\n        src_root.mkdir()\r\n        sub_src = src_root / \"src\" / \"app\"\r\n        sub_src.mkdir(parents=True)\r\n        mod_first = sub_src / \"mod_first.py\"\r\n        mod_first.write_text(\"\")\r\n    \r\n        # 7. default_section\r\n        default_dir = tmp_path / \"other\"\r\n        default_dir.mkdir()\r\n        mod_default = default_dir / \"mod_default.py\"\r\n        mod_default.write_text(\"\")\r\n    \r\n        # 8. Not found -> None\r\n    \r\n        config = Config(src_paths=[str(src_root / \"src\")])\r\n        finder = PathFinder(config, path=str(tmp_path))\r\n    \r\n        # Manually populate or inject paths to test specific conditional branches safely\r\n        finder.paths = [\r\n            str(site_pkg_dir),\r\n            str(dist_pkg_dir),\r\n            str(venv_src),\r\n            str(stdlib_dir),\r\n            str(conda_dir),\r\n            str(src_root / \"src\"),\r\n            str(default_dir),\r\n        ]\r\n        finder.virtual_env = str(venv_dir)\r\n        finder.virtual_env_src = str(venv_dir / \"src\") + \"/\"\r\n        finder.conda_env = str(conda_dir)\r\n        finder.stdlib_lib_prefix = os.path.normcase(str(stdlib_dir))\r\n    \r\n        # Test site-packages -> THIRDPARTY\r\n        assert finder.find(\"mod_site\") == sections.THIRDPARTY\r\n    \r\n        # Test dist-packages -> THIRDPARTY\r\n        assert finder.find(\"mod_dist\") == sections.THIRDPARTY\r\n    \r\n        # Test virtual_env / virtual_env_src -> THIRDPARTY\r\n        assert finder.find(\"mod_venv\") == sections.THIRDPARTY\r\n    \r\n        # Test stdlib exact match -> STDLIB\r\n        # We need a file inside stdlib_dir to satisfy exists_case_sensitive\r\n        stdlib_mod = stdlib_dir / \"mod_stdlib.py\"\r\n        try:\r\n            stdlib_mod.write_text(\"\")\r\n            finder.paths = [str(stdlib_dir)]\r\n            assert finder.find(\"mod_stdlib\") == sections.STDLIB\r\n    \r\n            # Test stdlib startswith prefix -> STDLIB (line 194-195)\r\n            # Create a path inside a subdirectory of stdlib_dir\r\n            sub_stdlib = stdlib_dir / \"subdir\"\r\n            sub_stdlib.mkdir(exist_ok=True)\r\n            sub_mod = sub_stdlib / \"mod_sub_stdlib.py\"\r\n            sub_mod.write_text(\"\")\r\n            finder.paths = [str(sub_stdlib)]\r\n            assert finder.find(\"mod_sub_stdlib\") == sections.STDLIB\r\n        finally:\r\n            if stdlib_mod.exists():\r\n                stdlib_mod.unlink()\r\n            sub_mod_path = stdlib_dir / \"subdir\" / \"mod_sub_stdlib.py\"\r\n            if sub_mod_path.exists():\r\n                sub_mod_path.unlink()\r\n    \r\n        # Test conda_env -> THIRDPARTY\r\n        finder.paths = [str(conda_dir)]\r\n        assert finder.find(\"mod_conda\") == sections.THIRDPARTY\r\n    \r\n        # Test config.src_paths -> FIRSTPARTY\r\n        finder.paths = [str(src_root / \"src\")]\r\n>       assert finder.find(\"mod_first\") == sections.FIRSTPARTY\r\nE       AssertionError: assert None == 'FIRSTPARTY'\r\nE        +  where None = find('mod_first')\r\nE        +    where find = <isort.deprecated.finders.PathFinder object at 0x000001E6F272C5C0>.find\r\nE        +  and   'FIRSTPARTY' = sections.FIRSTPARTY\r\n\r\nbinh\\phase1_runs\\e21_ablation16_budget30_seed7_mb3\\runs\\d8123dc403839c22-2aa052f1b98d\\test\\multi-project-test-batch-1b18c3c5\\target_workspaces\\b7530b324c61_0000\\tmp_test_zwicp9iu.py:118: AssertionError\r\n",
+          "next_component": "error"
+        },
+        {
+          "source_file": "src\\sample_repo\\isort\\isort\\deprecated\\finders.py",
+          "symbol": "PathFinder.find",
+          "name": "find",
+          "segment": "src\\sample_repo\\isort\\isort\\deprecated\\finders.py:166-198",
+          "attempt": 2,
+          "component": "error",
+          "prompt_input": "Executing the test yields an error, shown below.\nModify or rewrite the test to correct it. Return the complete Python test module, not a patch.\nPreserve useful assertions from the previous test and use get_info when more source context is needed.\nRespond only with Python code enclosed in a python markdown code block.\n\nF\r\n================================== FAILURES ===================================\r\n_____________________ test_path_finder_find_branches[1-2] _____________________\r\n\r\ntmp_path = WindowsPath('C:/Users/ADMIN/AppData/Local/Temp/pytest-of-ADMIN/pytest-193/test_path_finder_find_branches0')\r\n\r\n    def test_path_finder_find_branches(tmp_path):\r\n        # Setup directories and files to trigger different branches in PathFinder.find\r\n        # 1. site-packages -> THIRDPARTY\r\n        site_pkg_dir = tmp_path / \"site-packages\"\r\n        site_pkg_dir.mkdir()\r\n        mod_site = site_pkg_dir / \"mod_site.py\"\r\n        mod_site.write_text(\"\")\r\n    \r\n        # 2. dist-packages -> THIRDPARTY\r\n        dist_pkg_dir = tmp_path / \"dist-packages\"\r\n        dist_pkg_dir.mkdir()\r\n        mod_dist = dist_pkg_dir / \"mod_dist.py\"\r\n        mod_dist.write_text(\"\")\r\n    \r\n        # 3. virtual_env and virtual_env_src -> THIRDPARTY\r\n        venv_dir = tmp_path / \"venv\"\r\n        venv_dir.mkdir()\r\n        venv_src = venv_dir / \"src\" / \"my_venv_pkg\"\r\n        venv_src.mkdir(parents=True)\r\n        mod_venv = venv_src / \"mod_venv.py\"\r\n        mod_venv.write_text(\"\")\r\n    \r\n        # 4. stdlib_lib_prefix -> STDLIB (exact match and startswith)\r\n        stdlib_dir = Path(sysconfig.get_paths()[\"stdlib\"])\r\n        # We can create a dummy file or use an existing stdlib structure if writable,\r\n        # but PathFinder checks exists_case_sensitive on prefix + module_name.\r\n        # Alternatively, we can inject/override self.stdlib_lib_prefix or mock paths.\r\n    \r\n        # 5. conda_env -> THIRDPARTY\r\n        conda_dir = tmp_path / \"conda\"\r\n        conda_dir.mkdir()\r\n        mod_conda = conda_dir / \"mod_conda.py\"\r\n        mod_conda.write_text(\"\")\r\n    \r\n        # 6. config.src_paths -> FIRSTPARTY\r\n        src_root = tmp_path / \"project\"\r\n        src_root.mkdir()\r\n        sub_src = src_root / \"src\" / \"app\"\r\n        sub_src.mkdir(parents=True)\r\n        mod_first = sub_src / \"mod_first.py\"\r\n        mod_first.write_text(\"\")\r\n    \r\n        # 7. default_section\r\n        default_dir = tmp_path / \"other\"\r\n        default_dir.mkdir()\r\n        mod_default = default_dir / \"mod_default.py\"\r\n        mod_default.write_text(\"\")\r\n    \r\n        # 8. Not found -> None\r\n    \r\n        config = Config(src_paths=[str(src_root / \"src\")])\r\n        finder = PathFinder(config, path=str(tmp_path))\r\n    \r\n        # Manually populate or inject paths to test specific conditional branches safely\r\n        finder.paths = [\r\n            str(site_pkg_dir),\r\n            str(dist_pkg_dir),\r\n            str(venv_src),\r\n            str(stdlib_dir),\r\n            str(conda_dir),\r\n            str(src_root / \"src\"),\r\n            str(default_dir),\r\n        ]\r\n        finder.virtual_env = str(venv_dir)\r\n        finder.virtual_env_src = str(venv_dir / \"src\") + \"/\"\r\n        finder.conda_env = str(conda_dir)\r\n        finder.stdlib_lib_prefix = os.path.normcase(str(stdlib_dir))\r\n    \r\n        # Test site-packages -> THIRDPARTY\r\n        assert finder.find(\"mod_site\") == sections.THIRDPARTY\r\n    \r\n        # Test dist-packages -> THIRDPARTY\r\n        assert finder.find(\"mod_dist\") == sections.THIRDPARTY\r\n    \r\n        # Test virtual_env / virtual_env_src -> THIRDPARTY\r\n        assert finder.find(\"mod_venv\") == sections.THIRDPARTY\r\n    \r\n        # Test stdlib exact match -> STDLIB\r\n        # We need a file inside stdlib_dir to satisfy exists_case_sensitive\r\n        stdlib_mod = stdlib_dir / \"mod_stdlib.py\"\r\n        try:\r\n            stdlib_mod.write_text(\"\")\r\n            finder.paths = [str(stdlib_dir)]\r\n            assert finder.find(\"mod_stdlib\") == sections.STDLIB\r\n    \r\n            # Test stdlib startswith prefix -> STDLIB (line 194-195)\r\n            # Create a path inside a subdirectory of stdlib_dir\r\n            sub_stdlib = stdlib_dir / \"subdir\"\r\n            sub_stdlib.mkdir(exist_ok=True)\r\n            sub_mod = sub_stdlib / \"mod_sub_stdlib.py\"\r\n            sub_mod.write_text(\"\")\r\n            finder.paths = [str(sub_stdlib)]\r\n            assert finder.find(\"mod_sub_stdlib\") == sections.STDLIB\r\n        finally:\r\n            if stdlib_mod.exists():\r\n                stdlib_mod.unlink()\r\n            sub_mod_path = stdlib_dir / \"subdir\" / \"mod_sub_stdlib.py\"\r\n            if sub_mod_path.exists():\r\n                sub_mod_path.unlink()\r\n    \r\n        # Test conda_env -> THIRDPARTY\r\n        finder.paths = [str(conda_dir)]\r\n        assert finder.find(\"mod_conda\") == sections.THIRDPARTY\r\n    \r\n        # Test config.src_paths -> FIRSTPARTY\r\n        finder.paths = [str(src_root / \"src\")]\r\n>       assert finder.find(\"mod_first\") == sections.FIRSTPARTY\r\nE       AssertionError: assert None == 'FIRSTPARTY'\r\nE        +  where None = find('mod_first')\r\nE        +    where find = <isort.deprecated.finders.PathFinder object at 0x000001E6F272C5C0>.find\r\nE        +  and   'FIRSTPARTY' = sections.FIRSTPARTY\r\n\r\nbinh\\phase1_runs\\e21_ablation16_budget30_seed7_mb3\\runs\\d8123dc403839c22-2aa052f1b98d\\test\\multi-project-test-batch-1b18c3c5\\target_workspaces\\b7530b324c61_0000\\tmp_test_zwicp9iu.py:118: AssertionError\r\n",
+          "outcome": "test_error",
+          "generated_test": "import importlib.machinery\nimport os\nimport sys\nimport sysconfig\nfrom pathlib import Path\n\nfrom isort import sections\nfrom isort.deprecated.finders import PathFinder\nfrom isort.settings import Config\n\n\ndef test_path_finder_find_branches(tmp_path):\n    # Setup directories and files to trigger different branches in PathFinder.find\n    # 1. site-packages -> THIRDPARTY\n    site_pkg_dir = tmp_path / \"site-packages\"\n    site_pkg_dir.mkdir()\n    mod_site = site_pkg_dir / \"mod_site.py\"\n    mod_site.write_text(\"\")\n\n    # 2. dist-packages -> THIRDPARTY\n    dist_pkg_dir = tmp_path / \"dist-packages\"\n    dist_pkg_dir.mkdir()\n    mod_dist = dist_pkg_dir / \"mod_dist.py\"\n    mod_dist.write_text(\"\")\n\n    # 3. virtual_env and virtual_env_src -> THIRDPARTY\n    venv_dir = tmp_path / \"venv\"\n    venv_dir.mkdir()\n    venv_src = venv_dir / \"src\" / \"my_venv_pkg\"\n    venv_src.mkdir(parents=True)\n    mod_venv = venv_src / \"mod_venv.py\"\n    mod_venv.write_text(\"\")\n\n    # 4. stdlib_lib_prefix -> STDLIB (exact match and startswith)\n    stdlib_dir = Path(sysconfig.get_paths()[\"stdlib\"])\n\n    # 5. conda_env -> THIRDPARTY\n    conda_dir = tmp_path / \"conda\"\n    conda_dir.mkdir()\n    mod_conda = conda_dir / \"mod_conda.py\"\n    mod_conda.write_text(\"\")\n\n    # 6. config.src_paths -> FIRSTPARTY\n    src_root = tmp_path / \"project\"\n    sub_src = src_root / \"src\" / \"app\"\n    sub_src.mkdir(parents=True)\n    mod_first = sub_src / \"mod_first.py\"\n    mod_first.write_text(\"\")\n\n    # 7. default_section\n    default_dir = tmp_path / \"other\"\n    default_dir.mkdir()\n    mod_default = default_dir / \"mod_default.py\"\n    mod_default.write_text(\"\")\n\n    config = Config(src_paths=[str(Path(src_root / \"src\").resolve())])\n    finder = PathFinder(config, path=str(tmp_path))\n\n    # Manually populate or inject paths to test specific conditional branches safely\n    finder.virtual_env = str(venv_dir)\n    finder.virtual_env_src = str(venv_dir / \"src\") + \"/\"\n    finder.conda_env = str(conda_dir)\n    finder.stdlib_lib_prefix = os.path.normcase(str(stdlib_dir))\n\n    # Test site-packages -> THIRDPARTY\n    finder.paths = [str(site_pkg_dir)]\n    assert finder.find(\"mod_site\") == sections.THIRDPARTY\n\n    # Test dist-packages -> THIRDPARTY\n    finder.paths = [str(dist_pkg_dir)]\n    assert finder.find(\"mod_dist\") == sections.THIRDPARTY\n\n    # Test virtual_env / virtual_env_src -> THIRDPARTY\n    finder.paths = [str(venv_src)]\n    assert finder.find(\"mod_venv\") == sections.THIRDPARTY\n\n    # Test stdlib exact match -> STDLIB\n    stdlib_mod = stdlib_dir / \"mod_stdlib.py\"\n    try:\n        stdlib_mod.write_text(\"\")\n        finder.paths = [str(stdlib_dir)]\n        assert finder.find(\"mod_stdlib\") == sections.STDLIB\n\n        # Test stdlib startswith prefix -> STDLIB (line 194-195)\n        sub_stdlib = stdlib_dir / \"subdir\"\n        sub_stdlib.mkdir(exist_ok=True)\n        sub_mod = sub_stdlib / \"mod_sub_stdlib.py\"\n        sub_mod.write_text(\"\")\n        finder.paths = [str(sub_stdlib)]\n        assert finder.find(\"mod_sub_stdlib\") == sections.STDLIB\n    finally:\n        if stdlib_mod.exists():\n            stdlib_mod.unlink()\n        sub_mod_path = stdlib_dir / \"subdir\" / \"mod_sub_stdlib.py\"\n        if sub_mod_path.exists():\n            sub_mod_path.unlink()\n\n    # Test conda_env -> THIRDPARTY\n    finder.paths = [str(conda_dir)]\n    assert finder.find(\"mod_conda\") == sections.THIRDPARTY\n\n    # Test config.src_paths -> FIRSTPARTY\n    finder.paths = [str(src_root)]\n    assert finder.find(\"mod_first\") == sections.FIRSTPARTY\n\n    # Test default_section -> default section\n    finder.paths = [str(default_dir)]\n    assert finder.find(\"mod_default\") == config.default_section\n\n    # Test not found -> None\n    finder.paths = [str(default_dir)]\n    assert finder.find(\"nonexistent_module\") is None\n",
+          "execution_error": "F\r\n================================== FAILURES ===================================\r\n_____________________ test_path_finder_find_branches[1-2] _____________________\r\n\r\ntmp_path = WindowsPath('C:/Users/ADMIN/AppData/Local/Temp/pytest-of-ADMIN/pytest-194/test_path_finder_find_branches0')\r\n\r\n    def test_path_finder_find_branches(tmp_path):\r\n        # Setup directories and files to trigger different branches in PathFinder.find\r\n        # 1. site-packages -> THIRDPARTY\r\n        site_pkg_dir = tmp_path / \"site-packages\"\r\n        site_pkg_dir.mkdir()\r\n        mod_site = site_pkg_dir / \"mod_site.py\"\r\n        mod_site.write_text(\"\")\r\n    \r\n        # 2. dist-packages -> THIRDPARTY\r\n        dist_pkg_dir = tmp_path / \"dist-packages\"\r\n        dist_pkg_dir.mkdir()\r\n        mod_dist = dist_pkg_dir / \"mod_dist.py\"\r\n        mod_dist.write_text(\"\")\r\n    \r\n        # 3. virtual_env and virtual_env_src -> THIRDPARTY\r\n        venv_dir = tmp_path / \"venv\"\r\n        venv_dir.mkdir()\r\n        venv_src = venv_dir / \"src\" / \"my_venv_pkg\"\r\n        venv_src.mkdir(parents=True)\r\n        mod_venv = venv_src / \"mod_venv.py\"\r\n        mod_venv.write_text(\"\")\r\n    \r\n        # 4. stdlib_lib_prefix -> STDLIB (exact match and startswith)\r\n        stdlib_dir = Path(sysconfig.get_paths()[\"stdlib\"])\r\n    \r\n        # 5. conda_env -> THIRDPARTY\r\n        conda_dir = tmp_path / \"conda\"\r\n        conda_dir.mkdir()\r\n        mod_conda = conda_dir / \"mod_conda.py\"\r\n        mod_conda.write_text(\"\")\r\n    \r\n        # 6. config.src_paths -> FIRSTPARTY\r\n        src_root = tmp_path / \"project\"\r\n        sub_src = src_root / \"src\" / \"app\"\r\n        sub_src.mkdir(parents=True)\r\n        mod_first = sub_src / \"mod_first.py\"\r\n        mod_first.write_text(\"\")\r\n    \r\n        # 7. default_section\r\n        default_dir = tmp_path / \"other\"\r\n        default_dir.mkdir()\r\n        mod_default = default_dir / \"mod_default.py\"\r\n        mod_default.write_text(\"\")\r\n    \r\n        config = Config(src_paths=[str(Path(src_root / \"src\").resolve())])\r\n        finder = PathFinder(config, path=str(tmp_path))\r\n    \r\n        # Manually populate or inject paths to test specific conditional branches safely\r\n        finder.virtual_env = str(venv_dir)\r\n        finder.virtual_env_src = str(venv_dir / \"src\") + \"/\"\r\n        finder.conda_env = str(conda_dir)\r\n        finder.stdlib_lib_prefix = os.path.normcase(str(stdlib_dir))\r\n    \r\n        # Test site-packages -> THIRDPARTY\r\n        finder.paths = [str(site_pkg_dir)]\r\n        assert finder.find(\"mod_site\") == sections.THIRDPARTY\r\n    \r\n        # Test dist-packages -> THIRDPARTY\r\n        finder.paths = [str(dist_pkg_dir)]\r\n        assert finder.find(\"mod_dist\") == sections.THIRDPARTY\r\n    \r\n        # Test virtual_env / virtual_env_src -> THIRDPARTY\r\n        finder.paths = [str(venv_src)]\r\n        assert finder.find(\"mod_venv\") == sections.THIRDPARTY\r\n    \r\n        # Test stdlib exact match -> STDLIB\r\n        stdlib_mod = stdlib_dir / \"mod_stdlib.py\"\r\n        try:\r\n            stdlib_mod.write_text(\"\")\r\n            finder.paths = [str(stdlib_dir)]\r\n            assert finder.find(\"mod_stdlib\") == sections.STDLIB\r\n    \r\n            # Test stdlib startswith prefix -> STDLIB (line 194-195)\r\n            sub_stdlib = stdlib_dir / \"subdir\"\r\n            sub_stdlib.mkdir(exist_ok=True)\r\n            sub_mod = sub_stdlib / \"mod_sub_stdlib.py\"\r\n            sub_mod.write_text(\"\")\r\n            finder.paths = [str(sub_stdlib)]\r\n            assert finder.find(\"mod_sub_stdlib\") == sections.STDLIB\r\n        finally:\r\n            if stdlib_mod.exists():\r\n                stdlib_mod.unlink()\r\n            sub_mod_path = stdlib_dir / \"subdir\" / \"mod_sub_stdlib.py\"\r\n            if sub_mod_path.exists():\r\n                sub_mod_path.unlink()\r\n    \r\n        # Test conda_env -> THIRDPARTY\r\n        finder.paths = [str(conda_dir)]\r\n        assert finder.find(\"mod_conda\") == sections.THIRDPARTY\r\n    \r\n        # Test config.src_paths -> FIRSTPARTY\r\n        finder.paths = [str(src_root)]\r\n>       assert finder.find(\"mod_first\") == sections.FIRSTPARTY\r\nE       AssertionError: assert None == 'FIRSTPARTY'\r\nE        +  where None = find('mod_first')\r\nE        +    where find = <isort.deprecated.finders.PathFinder object at 0x00000208BB0782C0>.find\r\nE        +  and   'FIRSTPARTY' = sections.FIRSTPARTY\r\n\r\nbinh\\phase1_runs\\e21_ablation16_budget30_seed7_mb3\\runs\\d8123dc403839c22-2aa052f1b98d\\test\\multi-project-test-batch-1b18c3c5\\target_workspaces\\b7530b324c61_0000\\tmp_test_qocg_h06.py:104: AssertionError\r\n",
+          "next_component": "error"
+        },
+        {
+          "source_file": "src\\sample_repo\\isort\\isort\\deprecated\\finders.py",
+          "symbol": "PathFinder.find",
+          "name": "find",
+          "segment": "src\\sample_repo\\isort\\isort\\deprecated\\finders.py:166-198",
+          "attempt": 3,
+          "component": "error",
+          "prompt_input": "Executing the test yields an error, shown below.\nModify or rewrite the test to correct it. Return the complete Python test module, not a patch.\nPreserve useful assertions from the previous test and use get_info when more source context is needed.\nRespond only with Python code enclosed in a python markdown code block.\n\nF\r\n================================== FAILURES ===================================\r\n_____________________ test_path_finder_find_branches[1-2] _____________________\r\n\r\ntmp_path = WindowsPath('C:/Users/ADMIN/AppData/Local/Temp/pytest-of-ADMIN/pytest-194/test_path_finder_find_branches0')\r\n\r\n    def test_path_finder_find_branches(tmp_path):\r\n        # Setup directories and files to trigger different branches in PathFinder.find\r\n        # 1. site-packages -> THIRDPARTY\r\n        site_pkg_dir = tmp_path / \"site-packages\"\r\n        site_pkg_dir.mkdir()\r\n        mod_site = site_pkg_dir / \"mod_site.py\"\r\n        mod_site.write_text(\"\")\r\n    \r\n        # 2. dist-packages -> THIRDPARTY\r\n        dist_pkg_dir = tmp_path / \"dist-packages\"\r\n        dist_pkg_dir.mkdir()\r\n        mod_dist = dist_pkg_dir / \"mod_dist.py\"\r\n        mod_dist.write_text(\"\")\r\n    \r\n        # 3. virtual_env and virtual_env_src -> THIRDPARTY\r\n        venv_dir = tmp_path / \"venv\"\r\n        venv_dir.mkdir()\r\n        venv_src = venv_dir / \"src\" / \"my_venv_pkg\"\r\n        venv_src.mkdir(parents=True)\r\n        mod_venv = venv_src / \"mod_venv.py\"\r\n        mod_venv.write_text(\"\")\r\n    \r\n        # 4. stdlib_lib_prefix -> STDLIB (exact match and startswith)\r\n        stdlib_dir = Path(sysconfig.get_paths()[\"stdlib\"])\r\n    \r\n        # 5. conda_env -> THIRDPARTY\r\n        conda_dir = tmp_path / \"conda\"\r\n        conda_dir.mkdir()\r\n        mod_conda = conda_dir / \"mod_conda.py\"\r\n        mod_conda.write_text(\"\")\r\n    \r\n        # 6. config.src_paths -> FIRSTPARTY\r\n        src_root = tmp_path / \"project\"\r\n        sub_src = src_root / \"src\" / \"app\"\r\n        sub_src.mkdir(parents=True)\r\n        mod_first = sub_src / \"mod_first.py\"\r\n        mod_first.write_text(\"\")\r\n    \r\n        # 7. default_section\r\n        default_dir = tmp_path / \"other\"\r\n        default_dir.mkdir()\r\n        mod_default = default_dir / \"mod_default.py\"\r\n        mod_default.write_text(\"\")\r\n    \r\n        config = Config(src_paths=[str(Path(src_root / \"src\").resolve())])\r\n        finder = PathFinder(config, path=str(tmp_path))\r\n    \r\n        # Manually populate or inject paths to test specific conditional branches safely\r\n        finder.virtual_env = str(venv_dir)\r\n        finder.virtual_env_src = str(venv_dir / \"src\") + \"/\"\r\n        finder.conda_env = str(conda_dir)\r\n        finder.stdlib_lib_prefix = os.path.normcase(str(stdlib_dir))\r\n    \r\n        # Test site-packages -> THIRDPARTY\r\n        finder.paths = [str(site_pkg_dir)]\r\n        assert finder.find(\"mod_site\") == sections.THIRDPARTY\r\n    \r\n        # Test dist-packages -> THIRDPARTY\r\n        finder.paths = [str(dist_pkg_dir)]\r\n        assert finder.find(\"mod_dist\") == sections.THIRDPARTY\r\n    \r\n        # Test virtual_env / virtual_env_src -> THIRDPARTY\r\n        finder.paths = [str(venv_src)]\r\n        assert finder.find(\"mod_venv\") == sections.THIRDPARTY\r\n    \r\n        # Test stdlib exact match -> STDLIB\r\n        stdlib_mod = stdlib_dir / \"mod_stdlib.py\"\r\n        try:\r\n            stdlib_mod.write_text(\"\")\r\n            finder.paths = [str(stdlib_dir)]\r\n            assert finder.find(\"mod_stdlib\") == sections.STDLIB\r\n    \r\n            # Test stdlib startswith prefix -> STDLIB (line 194-195)\r\n            sub_stdlib = stdlib_dir / \"subdir\"\r\n            sub_stdlib.mkdir(exist_ok=True)\r\n            sub_mod = sub_stdlib / \"mod_sub_stdlib.py\"\r\n            sub_mod.write_text(\"\")\r\n            finder.paths = [str(sub_stdlib)]\r\n            assert finder.find(\"mod_sub_stdlib\") == sections.STDLIB\r\n        finally:\r\n            if stdlib_mod.exists():\r\n                stdlib_mod.unlink()\r\n            sub_mod_path = stdlib_dir / \"subdir\" / \"mod_sub_stdlib.py\"\r\n            if sub_mod_path.exists():\r\n                sub_mod_path.unlink()\r\n    \r\n        # Test conda_env -> THIRDPARTY\r\n        finder.paths = [str(conda_dir)]\r\n        assert finder.find(\"mod_conda\") == sections.THIRDPARTY\r\n    \r\n        # Test config.src_paths -> FIRSTPARTY\r\n        finder.paths = [str(src_root)]\r\n>       assert finder.find(\"mod_first\") == sections.FIRSTPARTY\r\nE       AssertionError: assert None == 'FIRSTPARTY'\r\nE        +  where None = find('mod_first')\r\nE        +    where find = <isort.deprecated.finders.PathFinder object at 0x00000208BB0782C0>.find\r\nE        +  and   'FIRSTPARTY' = sections.FIRSTPARTY\r\n\r\nbinh\\phase1_runs\\e21_ablation16_budget30_seed7_mb3\\runs\\d8123dc403839c22-2aa052f1b98d\\test\\multi-project-test-batch-1b18c3c5\\target_workspaces\\b7530b324c61_0000\\tmp_test_qocg_h06.py:104: AssertionError\r\n",
+          "outcome": "test_error",
+          "generated_test": "import importlib.machinery\nimport os\nimport sys\nimport sysconfig\nfrom pathlib import Path\n\nfrom isort import sections\nfrom isort.deprecated.finders import PathFinder\nfrom isort.settings import Config\n\n\ndef test_path_finder_find_branches(tmp_path):\n    # Setup directories and files to trigger different branches in PathFinder.find\n    # 1. site-packages -> THIRDPARTY\n    site_pkg_dir = tmp_path / \"site-packages\"\n    site_pkg_dir.mkdir()\n    mod_site = site_pkg_dir / \"mod_site.py\"\n    mod_site.write_text(\"\")\n\n    # 2. dist-packages -> THIRDPARTY\n    dist_pkg_dir = tmp_path / \"dist-packages\"\n    dist_pkg_dir.mkdir()\n    mod_dist = dist_pkg_dir / \"mod_dist.py\"\n    mod_dist.write_text(\"\")\n\n    # 3. virtual_env and virtual_env_src -> THIRDPARTY\n    venv_dir = tmp_path / \"venv\"\n    venv_dir.mkdir()\n    venv_src = venv_dir / \"src\" / \"my_venv_pkg\"\n    venv_src.mkdir(parents=True)\n    mod_venv = venv_src / \"mod_venv.py\"\n    mod_venv.write_text(\"\")\n\n    # 4. stdlib_lib_prefix -> STDLIB (exact match and startswith)\n    stdlib_dir = Path(sysconfig.get_paths()[\"stdlib\"])\n\n    # 5. conda_env -> THIRDPARTY\n    conda_dir = tmp_path / \"conda\"\n    conda_dir.mkdir()\n    mod_conda = conda_dir / \"mod_conda.py\"\n    mod_conda.write_text(\"\")\n\n    # 6. config.src_paths -> FIRSTPARTY\n    src_root = tmp_path / \"project\"\n    sub_src = src_root / \"src\" / \"app\"\n    sub_src.mkdir(parents=True)\n    mod_first = sub_src / \"mod_first.py\"\n    mod_first.write_text(\"\")\n\n    # 7. default_section\n    default_dir = tmp_path / \"other\"\n    default_dir.mkdir()\n    mod_default = default_dir / \"mod_default.py\"\n    mod_default.write_text(\"\")\n\n    # Resolve src_paths so path_obj.parents matching works precisely\n    resolved_sub_src = sub_src.resolve()\n    config = Config(src_paths=[str(resolved_sub_src)])\n    finder = PathFinder(config, path=str(tmp_path))\n\n    # Manually populate or inject paths to test specific conditional branches safely\n    finder.virtual_env = str(venv_dir)\n    finder.virtual_env_src = str(venv_dir / \"src\") + \"/\"\n    finder.conda_env = str(conda_dir)\n    finder.stdlib_lib_prefix = os.path.normcase(str(stdlib_dir))\n\n    # Test site-packages -> THIRDPARTY\n    finder.paths = [str(site_pkg_dir)]\n    assert finder.find(\"mod_site\") == sections.THIRDPARTY\n\n    # Test dist-packages -> THIRDPARTY\n    finder.paths = [str(dist_pkg_dir)]\n    assert finder.find(\"mod_dist\") == sections.THIRDPARTY\n\n    # Test virtual_env / virtual_env_src -> THIRDPARTY\n    finder.paths = [str(venv_src)]\n    assert finder.find(\"mod_venv\") == sections.THIRDPARTY\n\n    # Test stdlib exact match -> STDLIB\n    stdlib_mod = stdlib_dir / \"mod_stdlib.py\"\n    try:\n        stdlib_mod.write_text(\"\")\n        finder.paths = [str(stdlib_dir)]\n        assert finder.find(\"mod_stdlib\") == sections.STDLIB\n\n        # Test stdlib startswith prefix -> STDLIB (line 194-195)\n        sub_stdlib = stdlib_dir / \"subdir\"\n        sub_stdlib.mkdir(exist_ok=True)\n        sub_mod = sub_stdlib / \"mod_sub_stdlib.py\"\n        sub_mod.write_text(\"\")\n        finder.paths = [str(sub_stdlib)]\n        assert finder.find(\"mod_sub_stdlib\") == sections.STDLIB\n    finally:\n        if stdlib_mod.exists():\n            stdlib_mod.unlink()\n        sub_mod_path = stdlib_dir / \"subdir\" / \"mod_sub_stdlib.py\"\n        if sub_mod_path.exists():\n            sub_mod_path.unlink()\n\n    # Test conda_env -> THIRDPARTY\n    finder.paths = [str(conda_dir)]\n    assert finder.find(\"mod_conda\") == sections.THIRDPARTY\n\n    # Test config.src_paths -> FIRSTPARTY\n    finder.paths = [str(src_root)]\n    assert finder.find(\"mod_first\") == sections.FIRSTPARTY\n\n    # Test default_section -> default section\n    finder.paths = [str(default_dir)]\n    assert finder.find(\"mod_default\") == config.default_section\n\n    # Test not found -> None\n    finder.paths = [str(default_dir)]\n    assert finder.find(\"nonexistent_module\") is None\n",
+          "execution_error": "F\r\n================================== FAILURES ===================================\r\n_____________________ test_path_finder_find_branches[1-2] _____________________\r\n\r\ntmp_path = WindowsPath('C:/Users/ADMIN/AppData/Local/Temp/pytest-of-ADMIN/pytest-195/test_path_finder_find_branches0')\r\n\r\n    def test_path_finder_find_branches(tmp_path):\r\n        # Setup directories and files to trigger different branches in PathFinder.find\r\n        # 1. site-packages -> THIRDPARTY\r\n        site_pkg_dir = tmp_path / \"site-packages\"\r\n        site_pkg_dir.mkdir()\r\n        mod_site = site_pkg_dir / \"mod_site.py\"\r\n        mod_site.write_text(\"\")\r\n    \r\n        # 2. dist-packages -> THIRDPARTY\r\n        dist_pkg_dir = tmp_path / \"dist-packages\"\r\n        dist_pkg_dir.mkdir()\r\n        mod_dist = dist_pkg_dir / \"mod_dist.py\"\r\n        mod_dist.write_text(\"\")\r\n    \r\n        # 3. virtual_env and virtual_env_src -> THIRDPARTY\r\n        venv_dir = tmp_path / \"venv\"\r\n        venv_dir.mkdir()\r\n        venv_src = venv_dir / \"src\" / \"my_venv_pkg\"\r\n        venv_src.mkdir(parents=True)\r\n        mod_venv = venv_src / \"mod_venv.py\"\r\n        mod_venv.write_text(\"\")\r\n    \r\n        # 4. stdlib_lib_prefix -> STDLIB (exact match and startswith)\r\n        stdlib_dir = Path(sysconfig.get_paths()[\"stdlib\"])\r\n    \r\n        # 5. conda_env -> THIRDPARTY\r\n        conda_dir = tmp_path / \"conda\"\r\n        conda_dir.mkdir()\r\n        mod_conda = conda_dir / \"mod_conda.py\"\r\n        mod_conda.write_text(\"\")\r\n    \r\n        # 6. config.src_paths -> FIRSTPARTY\r\n        src_root = tmp_path / \"project\"\r\n        sub_src = src_root / \"src\" / \"app\"\r\n        sub_src.mkdir(parents=True)\r\n        mod_first = sub_src / \"mod_first.py\"\r\n        mod_first.write_text(\"\")\r\n    \r\n        # 7. default_section\r\n        default_dir = tmp_path / \"other\"\r\n        default_dir.mkdir()\r\n        mod_default = default_dir / \"mod_default.py\"\r\n        mod_default.write_text(\"\")\r\n    \r\n        # Resolve src_paths so path_obj.parents matching works precisely\r\n        resolved_sub_src = sub_src.resolve()\r\n        config = Config(src_paths=[str(resolved_sub_src)])\r\n        finder = PathFinder(config, path=str(tmp_path))\r\n    \r\n        # Manually populate or inject paths to test specific conditional branches safely\r\n        finder.virtual_env = str(venv_dir)\r\n        finder.virtual_env_src = str(venv_dir / \"src\") + \"/\"\r\n        finder.conda_env = str(conda_dir)\r\n        finder.stdlib_lib_prefix = os.path.normcase(str(stdlib_dir))\r\n    \r\n        # Test site-packages -> THIRDPARTY\r\n        finder.paths = [str(site_pkg_dir)]\r\n        assert finder.find(\"mod_site\") == sections.THIRDPARTY\r\n    \r\n        # Test dist-packages -> THIRDPARTY\r\n        finder.paths = [str(dist_pkg_dir)]\r\n        assert finder.find(\"mod_dist\") == sections.THIRDPARTY\r\n    \r\n        # Test virtual_env / virtual_env_src -> THIRDPARTY\r\n        finder.paths = [str(venv_src)]\r\n        assert finder.find(\"mod_venv\") == sections.THIRDPARTY\r\n    \r\n        # Test stdlib exact match -> STDLIB\r\n        stdlib_mod = stdlib_dir / \"mod_stdlib.py\"\r\n        try:\r\n            stdlib_mod.write_text(\"\")\r\n            finder.paths = [str(stdlib_dir)]\r\n            assert finder.find(\"mod_stdlib\") == sections.STDLIB\r\n    \r\n            # Test stdlib startswith prefix -> STDLIB (line 194-195)\r\n            sub_stdlib = stdlib_dir / \"subdir\"\r\n            sub_stdlib.mkdir(exist_ok=True)\r\n            sub_mod = sub_stdlib / \"mod_sub_stdlib.py\"\r\n            sub_mod.write_text(\"\")\r\n            finder.paths = [str(sub_stdlib)]\r\n            assert finder.find(\"mod_sub_stdlib\") == sections.STDLIB\r\n        finally:\r\n            if stdlib_mod.exists():\r\n                stdlib_mod.unlink()\r\n            sub_mod_path = stdlib_dir / \"subdir\" / \"mod_sub_stdlib.py\"\r\n            if sub_mod_path.exists():\r\n                sub_mod_path.unlink()\r\n    \r\n        # Test conda_env -> THIRDPARTY\r\n        finder.paths = [str(conda_dir)]\r\n        assert finder.find(\"mod_conda\") == sections.THIRDPARTY\r\n    \r\n        # Test config.src_paths -> FIRSTPARTY\r\n        finder.paths = [str(src_root)]\r\n>       assert finder.find(\"mod_first\") == sections.FIRSTPARTY\r\nE       AssertionError: assert None == 'FIRSTPARTY'\r\nE        +  where None = find('mod_first')\r\nE        +    where find = <isort.deprecated.finders.PathFinder object at 0x000001F0246840B0>.find\r\nE        +  and   'FIRSTPARTY' = sections.FIRSTPARTY\r\n\r\nbinh\\phase1_runs\\e21_ablation16_budget30_seed7_mb3\\runs\\d8123dc403839c22-2aa052f1b98d\\test\\multi-project-test-batch-1b18c3c5\\target_workspaces\\b7530b324c61_0000\\tmp_test_xgl9i9dc.py:106: AssertionError\r\n",
+          "next_component": "error"
+        },
+        {
+          "source_file": "src\\sample_repo\\isort\\isort\\deprecated\\finders.py",
+          "symbol": "PathFinder.find",
+          "name": "find",
+          "segment": "src\\sample_repo\\isort\\isort\\deprecated\\finders.py:166-198",
+          "attempt": 3,
+          "component": "error",
+          "outcome": "max_attempts_exhausted"
+        }
+      ],
+      "replicate_scores": [
+        0.0
+      ]
+    },
+    {
+      "prompt_digest": "d8123dc403839c22",
+      "evaluation_digest": "2aa052f1b98d",
+      "replicate": 0,
+      "target": {
+        "project": "mimesis",
+        "source_file": "mimesis/schema.py",
+        "symbol": "BaseField.perform",
+        "split": "test"
+      },
+      "run_id": "multi-project-test-batch-1b18c3c5",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 13.0,
+        "num_statements": 13.0,
+        "covered_branches": 6.0,
+        "num_branches": 6.0,
+        "gained_lines": [
+          197,
+          199,
+          200,
+          202,
+          205,
+          206,
+          208,
+          210,
+          211,
+          214,
+          215,
+          216,
+          218
+        ],
+        "gained_branches": [
+          [
+            199,
+            200
+          ],
+          [
+            199,
+            202
+          ],
+          [
+            205,
+            206
+          ],
+          [
+            205,
+            208
+          ],
+          [
+            210,
+            211
+          ],
+          [
+            210,
+            218
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 1.0000\nStatement gain: 13 newly covered; 0 remain.\nBranch gain: 6 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "attempt_traces": [
+        {
+          "source_file": "src\\sample_repo\\mimesis\\mimesis\\schema.py",
+          "symbol": "BaseField.perform",
+          "name": "perform",
+          "segment": "src\\sample_repo\\mimesis\\mimesis\\schema.py:154-218",
+          "attempt": 1,
+          "component": "initial",
+          "prompt_input": "You are an expert Python test-driven developer.\nThe code below, extracted from mimesis\\schema.py, does not achieve full coverage:\nwhen tested, lines 154-218 do not execute.\nCreate new pytest test functions that execute all missing lines and branches. Each test must\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\nUse the get_info tool function as necessary. Always return an entire Python test module.\nDo not call pytest.main and do not execute tests at module import time.\nRespond only with Python code enclosed in a python markdown code block.\n\n```python\n            from typing import Any\n            from mimesis.exceptions import FieldError\n            from mimesis.types import Key\n            class BaseField:\n       154:     def perform(\n                    self,\n       156:         name: str | None = None,\n       157:         key: Key = None,\n       158:         **kwargs: Any,\n       159:     ) -> Any:\n                    \"\"\"Returns the value of the field by its name.\n            \n                    It takes any string that represents the name of any method of\n                    any supported data provider and the ``**kwargs`` of this method.\n            \n                    .. note:: Some data providers have methods with the same names,\n                        and in such cases, you can explicitly define that the method\n                        belongs to data-provider ``field(name='provider.name')`` otherwise\n                        it will return the data from the first provider which\n                        has a method ``name``.\n            \n                        Allowed delimiters: ``.``, ``:``, ``/`` and space:\n            \n                        - ``provider.name``\n                        - ``provider:name``\n                        - ``provider/name``\n                        - ``provider name``\n            \n                    You can apply a *key function* to the result returned by\n                    the method, by passing a parameter **key** with a callable\n                    object which returns the final result.\n            \n                    The key function has the option to accept two parameters: **result**\n                    and **random**. In case you require access to a random instance within\n                    the key function, you must modify the function to accept both of them,\n                    where the first corresponds to the method result and the second\n                    corresponds to the instance of random.\n            \n                    :param name: Name of the method.\n                    :param key: A key function (any callable object)\n                        which will be applied to the result.\n                    :param kwargs: Keyword arguments of the method.\n                    :return: The result of the method.\n                    :raises FieldError: If the field is missing or invalid.\n                    :raises AliasesTypeError: If ``aliases`` is not a flat dictionary.\n                    \"\"\"\n                    # Validate aliases before lookup\n       197:         self._validate_aliases()\n            \n       199:         if name is None:\n       200:             raise FieldError\n            \n       202:         random = self.get_random_instance()\n            \n                    # First, try to find a custom field handler.\n       205:         if name in self._handlers:\n       206:             result = self._handlers[name](random, **kwargs)\n                    else:\n       208:             result = self._lookup_method(name)(**kwargs)\n            \n       210:         if key and callable(key):\n       211:             try:\n                            # If a key function accepts two parameters\n                            # then pass random instance to it.\n       214:                 return key(result, random)  # type: ignore[call-arg]\n       215:             except TypeError:\n       216:                 return key(result)  # type: ignore[call-arg]\n            \n       218:         return result\n\n```",
+          "outcome": "test_error",
+          "generated_test": "import pytest\nfrom mimesis.schema import BaseField\nfrom mimesis.exceptions import FieldError\n\n\ndef test_base_field_perform_missing_name():\n    field = BaseField()\n    with pytest.raises(FieldError):\n        field.perform(name=None)\n\n\ndef test_base_field_perform_lookup_method():\n    field = BaseField()\n    # 'text.word' or standard provider method lookup\n    result = field.perform(name='text.word')\n    assert isinstance(result, str)\n    assert len(result) > 0\n\n\ndef test_base_field_perform_with_custom_handler():\n    field = BaseField()\n    field.register_handler('custom_field', lambda r, **kw: 'custom_value')\n    \n    # Without key\n    res1 = field.perform(name='custom_field')\n    assert res1 == 'custom_value'\n\n    # With key taking 1 parameter\n    res2 = field.perform(name='custom_field', key=lambda x: x.upper())\n    assert res2 == 'CUSTOM_VALUE'\n\n    # With key taking 2 parameters (result and random)\n    res3 = field.perform(name='custom_field', key=lambda x, rnd: x + '-' + rnd.generate_string())\n    assert isinstance(res3, str)\n    assert res3.startswith('custom_value-')\n\n    field.unregister_handler('custom_field')\n\n\ndef test_base_field_perform_standard_method_with_key():\n    field = BaseField()\n    # Test standard lookup with 1-arg key\n    res = field.perform(name='text.word', key=lambda x: len(x))\n    assert isinstance(res, int)\n\n    # Test standard lookup with 2-arg key\n    res2 = field.perform(name='text.word', key=lambda x, rnd: (x, rnd.__class__.__name__))\n    assert isinstance(res2, tuple)\n    assert isinstance(res2[0], str)\n",
+          "execution_error": "....F\r\n================================== FAILURES ===================================\r\n______________ test_base_field_perform_with_custom_handler[1-2] _______________\r\n\r\n    def test_base_field_perform_with_custom_handler():\r\n        field = BaseField()\r\n        field.register_handler('custom_field', lambda r, **kw: 'custom_value')\r\n    \r\n        # Without key\r\n        res1 = field.perform(name='custom_field')\r\n        assert res1 == 'custom_value'\r\n    \r\n        # With key taking 1 parameter\r\n        res2 = field.perform(name='custom_field', key=lambda x: x.upper())\r\n        assert res2 == 'CUSTOM_VALUE'\r\n    \r\n        # With key taking 2 parameters (result and random)\r\n>       res3 = field.perform(name='custom_field', key=lambda x, rnd: x + '-' + rnd.generate_string())\r\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n\r\nbinh\\phase1_runs\\e21_ablation16_budget30_seed7_mb3\\runs\\d8123dc403839c22-2aa052f1b98d\\test\\multi-project-test-batch-1b18c3c5\\target_workspaces\\f4f0144f2c59_0001\\tmp_test_gcelek04.py:33: \r\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\r\nsrc\\sample_repo\\mimesis\\mimesis\\schema.py:214: in perform\r\n    return key(result, random)  # type: ignore[call-arg]\r\n           ^^^^^^^^^^^^^^^^^^^\r\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\r\n\r\nx = 'custom_value', rnd = <mimesis.random.Random object at 0x000001BC16B36CC0>\r\n\r\n>   res3 = field.perform(name='custom_field', key=lambda x, rnd: x + '-' + rnd.generate_string())\r\n                                                                           ^^^^^^^^^^^^^^^^^^^\r\nE   AttributeError: 'Random' object has no attribute 'generate_string'. Did you mean: '_generate_string'?\r\n\r\nbinh\\phase1_runs\\e21_ablation16_budget30_seed7_mb3\\runs\\d8123dc403839c22-2aa052f1b98d\\test\\multi-project-test-batch-1b18c3c5\\target_workspaces\\f4f0144f2c59_0001\\tmp_test_gcelek04.py:33: AttributeError\r\n",
+          "next_component": "error"
+        },
+        {
+          "source_file": "src\\sample_repo\\mimesis\\mimesis\\schema.py",
+          "symbol": "BaseField.perform",
+          "name": "perform",
+          "segment": "src\\sample_repo\\mimesis\\mimesis\\schema.py:154-218",
+          "attempt": 2,
+          "component": "error",
+          "prompt_input": "Executing the test yields an error, shown below.\nModify or rewrite the test to correct it. Return the complete Python test module, not a patch.\nPreserve useful assertions from the previous test and use get_info when more source context is needed.\nRespond only with Python code enclosed in a python markdown code block.\n\n....F\r\n================================== FAILURES ===================================\r\n______________ test_base_field_perform_with_custom_handler[1-2] _______________\r\n\r\n    def test_base_field_perform_with_custom_handler():\r\n        field = BaseField()\r\n        field.register_handler('custom_field', lambda r, **kw: 'custom_value')\r\n    \r\n        # Without key\r\n        res1 = field.perform(name='custom_field')\r\n        assert res1 == 'custom_value'\r\n    \r\n        # With key taking 1 parameter\r\n        res2 = field.perform(name='custom_field', key=lambda x: x.upper())\r\n        assert res2 == 'CUSTOM_VALUE'\r\n    \r\n        # With key taking 2 parameters (result and random)\r\n>       res3 = field.perform(name='custom_field', key=lambda x, rnd: x + '-' + rnd.generate_string())\r\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n\r\nbinh\\phase1_runs\\e21_ablation16_budget30_seed7_mb3\\runs\\d8123dc403839c22-2aa052f1b98d\\test\\multi-project-test-batch-1b18c3c5\\target_workspaces\\f4f0144f2c59_0001\\tmp_test_gcelek04.py:33: \r\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\r\nsrc\\sample_repo\\mimesis\\mimesis\\schema.py:214: in perform\r\n    return key(result, random)  # type: ignore[call-arg]\r\n           ^^^^^^^^^^^^^^^^^^^\r\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\r\n\r\nx = 'custom_value', rnd = <mimesis.random.Random object at 0x000001BC16B36CC0>\r\n\r\n>   res3 = field.perform(name='custom_field', key=lambda x, rnd: x + '-' + rnd.generate_string())\r\n                                                                           ^^^^^^^^^^^^^^^^^^^\r\nE   AttributeError: 'Random' object has no attribute 'generate_string'. Did you mean: '_generate_string'?\r\n\r\nbinh\\phase1_runs\\e21_ablation16_budget30_seed7_mb3\\runs\\d8123dc403839c22-2aa052f1b98d\\test\\multi-project-test-batch-1b18c3c5\\target_workspaces\\f4f0144f2c59_0001\\tmp_test_gcelek04.py:33: AttributeError\r\n",
+          "outcome": "coverage_gain_saved",
+          "generated_test": "import pytest\nfrom mimesis.schema import BaseField\nfrom mimesis.exceptions import FieldError\n\n\ndef test_base_field_perform_missing_name():\n    field = BaseField()\n    with pytest.raises(FieldError):\n        field.perform(name=None)\n\n\ndef test_base_field_perform_lookup_method():\n    field = BaseField()\n    # 'text.word' or standard provider method lookup\n    result = field.perform(name='text.word')\n    assert isinstance(result, str)\n    assert len(result) > 0\n\n\ndef test_base_field_perform_with_custom_handler():\n    field = BaseField()\n    field.register_handler('custom_field', lambda r, **kw: 'custom_value')\n    \n    # Without key\n    res1 = field.perform(name='custom_field')\n    assert res1 == 'custom_value'\n\n    # With key taking 1 parameter\n    res2 = field.perform(name='custom_field', key=lambda x: x.upper())\n    assert res2 == 'CUSTOM_VALUE'\n\n    # With key taking 2 parameters (result and random)\n    res3 = field.perform(name='custom_field', key=lambda x, rnd: x + '-' + str(rnd.randint(1, 10)))\n    assert isinstance(res3, str)\n    assert res3.startswith('custom_value-')\n\n    field.unregister_handler('custom_field')\n\n\ndef test_base_field_perform_standard_method_with_key():\n    field = BaseField()\n    # Test standard lookup with 1-arg key\n    res = field.perform(name='text.word', key=lambda x: len(x))\n    assert isinstance(res, int)\n\n    # Test standard lookup with 2-arg key\n    res2 = field.perform(name='text.word', key=lambda x, rnd: (x, rnd.__class__.__name__))\n    assert isinstance(res2, tuple)\n    assert isinstance(res2[0], str)\n",
+          "gained_lines": [
+            154,
+            156,
+            157,
+            197,
+            199,
+            200,
+            202,
+            205,
+            206,
+            208,
+            210,
+            211,
+            214,
+            215,
+            216,
+            218
+          ],
+          "gained_branches": [
+            [
+              199,
+              200
+            ],
+            [
+              199,
+              202
+            ],
+            [
+              205,
+              206
+            ],
+            [
+              205,
+              208
+            ],
+            [
+              210,
+              211
+            ],
+            [
+              210,
+              218
+            ]
+          ],
+          "remaining_lines": [
+            158,
+            159
+          ],
+          "remaining_branches": [],
+          "saved_test": "D:\\VinAI\\P-002\\binh\\phase1_runs\\e21_ablation16_budget30_seed7_mb3\\generated_tests\\test\\tests_base_line_d8123dc403839c22-2aa052f1b98d\\mimesis\\test_opt_f4f0144f2c59_0001_1.py"
+        }
+      ],
+      "replicate_scores": [
+        1.0
+      ]
+    },
+    {
+      "prompt_digest": "d8123dc403839c22",
+      "evaluation_digest": "2aa052f1b98d",
+      "replicate": 0,
+      "target": {
+        "project": "mlxtend",
+        "source_file": "mlxtend/classifier/stacking_classification.py",
+        "symbol": "StackingClassifier.fit",
+        "split": "test"
+      },
+      "run_id": "multi-project-test-batch-1b18c3c5",
+      "score": 0.8991666666666667,
+      "coverage": {
+        "score": 0.8991666666666667,
+        "statement_gain": 0.975,
+        "branch_gain": 0.8666666666666667,
+        "statement_coverage": 0.975,
+        "branch_coverage": 0.8666666666666667,
+        "covered_statements": 39.0,
+        "num_statements": 40.0,
+        "covered_branches": 26.0,
+        "num_branches": 30.0,
+        "gained_lines": [
+          169,
+          170,
+          173,
+          175,
+          176,
+          177,
+          179,
+          180,
+          182,
+          183,
+          184,
+          186,
+          187,
+          189,
+          190,
+          191,
+          193,
+          194,
+          195,
+          196,
+          201,
+          202,
+          205,
+          206,
+          207,
+          208,
+          210,
+          212,
+          214,
+          215,
+          217,
+          218,
+          219,
+          220,
+          222,
+          224,
+          225,
+          227,
+          229
+        ],
+        "gained_branches": [
+          [
+            169,
+            170
+          ],
+          [
+            169,
+            175
+          ],
+          [
+            175,
+            176
+          ],
+          [
+            175,
+            179
+          ],
+          [
+            182,
+            183
+          ],
+          [
+            182,
+            186
+          ],
+          [
+            189,
+            190
+          ],
+          [
+            189,
+            212
+          ],
+          [
+            190,
+            191
+          ],
+          [
+            193,
+            194
+          ],
+          [
+            193,
+            212
+          ],
+          [
+            194,
+            195
+          ],
+          [
+            201,
+            202
+          ],
+          [
+            201,
+            205
+          ],
+          [
+            202,
+            205
+          ],
+          [
+            205,
+            206
+          ],
+          [
+            207,
+            208
+          ],
+          [
+            207,
+            210
+          ],
+          [
+            214,
+            215
+          ],
+          [
+            214,
+            217
+          ],
+          [
+            217,
+            218
+          ],
+          [
+            217,
+            219
+          ],
+          [
+            219,
+            220
+          ],
+          [
+            219,
+            222
+          ],
+          [
+            224,
+            225
+          ],
+          [
+            224,
+            227
+          ]
+        ],
+        "remaining_lines": [
+          203
+        ],
+        "remaining_branches": [
+          [
+            190,
+            193
+          ],
+          [
+            194,
+            201
+          ],
+          [
+            202,
+            203
+          ],
+          [
+            205,
+            207
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 0.8992\nStatement gain: 39 newly covered; 1 remain.\nBranch gain: 26 newly covered; 4 remain.\nRemaining lines: [203]\nRemaining branches: [(190, 193), (194, 201), (202, 203), (205, 207)]\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "attempt_traces": [
+        {
+          "source_file": "src\\sample_repo\\mlxtend\\mlxtend\\classifier\\stacking_classification.py",
+          "symbol": "StackingClassifier.fit",
+          "name": "fit",
+          "segment": "src\\sample_repo\\mlxtend\\mlxtend\\classifier\\stacking_classification.py:148-229",
+          "attempt": 1,
+          "component": "initial",
+          "prompt_input": "You are an expert Python test-driven developer.\nThe code below, extracted from mlxtend\\classifier\\stacking_classification.py, does not achieve full coverage:\nwhen tested, lines 148-229 do not execute.\nCreate new pytest test functions that execute all missing lines and branches. Each test must\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\nUse the get_info tool function as necessary. Always return an entire Python test module.\nDo not call pytest.main and do not execute tests at module import time.\nRespond only with Python code enclosed in a python markdown code block.\n\n```python\n            import warnings\n            import numpy as np\n            from scipy import sparse\n            from sklearn.base import clone\n            from sklearn.preprocessing import LabelEncoder\n            from mlxtend.externals.name_estimators import _name_estimators\n            class StackingClassifier(_BaseXComposition, _BaseStackingClassifier, TransformerMixin):\n       148:     def fit(self, X, y, sample_weight=None):\n                    \"\"\"Fit ensemble classifers and the meta-classifier.\n            \n                    Parameters\n                    ----------\n                    X : {array-like, sparse matrix}, shape = [n_samples, n_features]\n                        Training vectors, where n_samples is the number of samples and\n                        n_features is the number of features.\n                    y : array-like, shape = [n_samples] or [n_samples, n_outputs]\n                        Target values.\n                    sample_weight : array-like, shape = [n_samples], optional\n                        Sample weights passed as sample_weights to each regressor\n                        in the regressors list as well as the meta_regressor.\n                        Raises error if some regressor does not support\n                        sample_weight in the fit() method.\n            \n                    Returns\n                    -------\n                    self : object\n            \n                    \"\"\"\n       169:         if not self.fit_base_estimators:\n       170:             warnings.warn(\n       171:                 \"fit_base_estimators=False \" \"enforces use_clones to be `False`\"\n                        )\n       173:             self.use_clones = False\n            \n       175:         if self.use_clones:\n       176:             self.clfs_ = clone(self.classifiers)\n       177:             self.meta_clf_ = clone(self.meta_classifier)\n                    else:\n       179:             self.clfs_ = self.classifiers\n       180:             self.meta_clf_ = self.meta_classifier\n            \n       182:         if y.ndim > 1:\n       183:             self._label_encoder = [LabelEncoder().fit(yk) for yk in y.T]\n       184:             self.classes_ = [le.classes_ for le in self._label_encoder]\n                    else:\n       186:             self._label_encoder = LabelEncoder().fit(y)\n       187:             self.classes_ = self._label_encoder.classes_\n            \n       189:         if self.fit_base_estimators:\n       190:             if self.verbose > 0:\n       191:                 print(\"Fitting %d classifiers...\" % (len(self.classifiers)))\n            \n       193:             for clf in self.clfs_:\n       194:                 if self.verbose > 0:\n       195:                     i = self.clfs_.index(clf) + 1\n       196:                     print(\n       197:                         \"Fitting classifier%d: %s (%d/%d)\"\n       198:                         % (i, _name_estimators((clf,))[0][0], i, len(self.clfs_))\n                                )\n            \n       201:                 if self.verbose > 2:\n       202:                     if hasattr(clf, \"verbose\"):\n       203:                         clf.set_params(verbose=self.verbose - 2)\n            \n       205:                 if self.verbose > 1:\n       206:                     print(_name_estimators((clf,))[0][1])\n       207:                 if sample_weight is None:\n       208:                     clf.fit(X, y)\n                            else:\n       210:                     clf.fit(X, y, sample_weight=sample_weight)\n            \n       212:         meta_features = self.predict_meta_features(X)\n            \n       214:         if self.store_train_meta_features:\n       215:             self.train_meta_features_ = meta_features\n            \n       217:         if not self.use_features_in_secondary:\n       218:             pass\n       219:         elif sparse.issparse(X):\n       220:             meta_features = sparse.hstack((X, meta_features))\n                    else:\n       222:             meta_features = np.hstack((X, meta_features))\n            \n       224:         if sample_weight is None:\n       225:             self.meta_clf_.fit(meta_features, y)\n                    else:\n       227:             self.meta_clf_.fit(meta_features, y, sample_weight=sample_weight)\n            \n       229:         return self\n\n```",
+          "outcome": "test_error",
+          "generated_test": "import numpy as np\nimport pytest\nfrom sklearn.linear_model import LogisticRegression\nfrom sklearn.tree import DecisionTreeClassifier\nfrom scipy import sparse\nfrom mlxtend.classifier import StackingClassifier\n\n\ndef test_stacking_classifier_fit_coverage_variations():\n    X = np.array([[1, 2], [3, 4], [5, 6], [7, 8]])\n    y = np.array([0, 0, 1, 1])\n\n    # 1. fit_base_estimators=False (triggers warnings & use_clones = False)\n    clf1 = DecisionTreeClassifier(random_state=42)\n    clf1.fit(X, y)\n    meta1 = LogisticRegression(random_state=42)\n    sclf1 = StackingClassifier(\n        classifiers=[clf1],\n        meta_classifier=meta1,\n        fit_base_estimators=False,\n        store_train_meta_features=True,\n        use_features_in_secondary=True,\n    )\n    sclf1.fit(X, y)\n    assert sclf1.use_clones is False\n    assert hasattr(sclf1, \"train_meta_features_\")\n\n    # 2. verbose levels (verbose=3, verbose=1, sparse X, sample_weight)\n    clf2 = DecisionTreeClassifier(random_state=42)\n    meta2 = LogisticRegression(random_state=42)\n    sclf2 = StackingClassifier(\n        classifiers=[clf2],\n        meta_classifier=meta2,\n        verbose=3,\n        use_features_in_secondary=True,\n    )\n    X_sparse = sparse.csr_matrix(X)\n    sample_weight = np.array([1.0, 1.0, 1.0, 1.0])\n    sclf2.fit(X_sparse, y, sample_weight=sample_weight)\n\n    # 3. y.ndim > 1 (multilabel case) and verbose=1/2\n    y_multi = np.array([[0, 1], [0, 1], [1, 0], [1, 0]])\n    clf3_1 = DecisionTreeClassifier(random_state=42)\n    clf3_2 = DecisionTreeClassifier(random_state=42)\n    meta3 = LogisticRegression(random_state=42)\n    sclf3 = StackingClassifier(\n        classifiers=[clf3_1, clf3_2],\n        meta_classifier=meta3,\n        verbose=2,\n        use_features_in_secondary=False,\n    )\n    sclf3.fit(X, y_multi)\n    assert isinstance(sclf3._label_encoder, list)\n    assert isinstance(sclf3.classes_, list)\n",
+          "execution_error": "F\r\n================================== FAILURES ===================================\r\n____________ test_stacking_classifier_fit_coverage_variations[1-2] ____________\r\n\r\n    def test_stacking_classifier_fit_coverage_variations():\r\n        X = np.array([[1, 2], [3, 4], [5, 6], [7, 8]])\r\n        y = np.array([0, 0, 1, 1])\r\n    \r\n        # 1. fit_base_estimators=False (triggers warnings & use_clones = False)\r\n        clf1 = DecisionTreeClassifier(random_state=42)\r\n        clf1.fit(X, y)\r\n        meta1 = LogisticRegression(random_state=42)\r\n        sclf1 = StackingClassifier(\r\n            classifiers=[clf1],\r\n            meta_classifier=meta1,\r\n            fit_base_estimators=False,\r\n            store_train_meta_features=True,\r\n            use_features_in_secondary=True,\r\n        )\r\n        sclf1.fit(X, y)\r\n        assert sclf1.use_clones is False\r\n        assert hasattr(sclf1, \"train_meta_features_\")\r\n    \r\n        # 2. verbose levels (verbose=3, verbose=1, sparse X, sample_weight)\r\n        clf2 = DecisionTreeClassifier(random_state=42)\r\n        meta2 = LogisticRegression(random_state=42)\r\n        sclf2 = StackingClassifier(\r\n            classifiers=[clf2],\r\n            meta_classifier=meta2,\r\n            verbose=3,\r\n            use_features_in_secondary=True,\r\n        )\r\n        X_sparse = sparse.csr_matrix(X)\r\n        sample_weight = np.array([1.0, 1.0, 1.0, 1.0])\r\n        sclf2.fit(X_sparse, y, sample_weight=sample_weight)\r\n    \r\n        # 3. y.ndim > 1 (multilabel case) and verbose=1/2\r\n        y_multi = np.array([[0, 1], [0, 1], [1, 0], [1, 0]])\r\n        clf3_1 = DecisionTreeClassifier(random_state=42)\r\n        clf3_2 = DecisionTreeClassifier(random_state=42)\r\n        meta3 = LogisticRegression(random_state=42)\r\n        sclf3 = StackingClassifier(\r\n            classifiers=[clf3_1, clf3_2],\r\n            meta_classifier=meta3,\r\n            verbose=2,\r\n            use_features_in_secondary=False,\r\n        )\r\n>       sclf3.fit(X, y_multi)\r\n\r\nbinh\\phase1_runs\\e21_ablation16_budget30_seed7_mb3\\runs\\d8123dc403839c22-2aa052f1b98d\\test\\multi-project-test-batch-1b18c3c5\\target_workspaces\\1d9a41fa0432_0002\\tmp_test_953v753b.py:52: \r\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\r\nsrc\\sample_repo\\mlxtend\\mlxtend\\classifier\\stacking_classification.py:225: in fit\r\n    self.meta_clf_.fit(meta_features, y)\r\n.venv\\Lib\\site-packages\\sklearn\\base.py:1403: in wrapper\r\n    return fit_method(estimator, *args, **kwargs)\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n.venv\\Lib\\site-packages\\sklearn\\linear_model\\_logistic.py:1459: in fit\r\n    X, y = validate_data(\r\n.venv\\Lib\\site-packages\\sklearn\\utils\\validation.py:3055: in validate_data\r\n    X, y = check_X_y(X, y, **check_params)\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n.venv\\Lib\\site-packages\\sklearn\\utils\\validation.py:1344: in check_X_y\r\n    y = _check_y(y, multi_output=multi_output, y_numeric=y_numeric, estimator=estimator)\r\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n.venv\\Lib\\site-packages\\sklearn\\utils\\validation.py:1365: in _check_y\r\n    y = column_or_1d(y, warn=True)\r\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\r\n\r\ny = array([[0, 1],\r\n       [0, 1],\r\n       [1, 0],\r\n       [1, 0]]), dtype = None\r\ninput_name = 'y', warn = True, device = None\r\n\r\n    def column_or_1d(y, *, dtype=None, input_name=\"y\", warn=False, device=None):\r\n        \"\"\"Ravel column or 1d numpy array, else raises an error.\r\n    \r\n        Parameters\r\n        ----------\r\n        y : array-like\r\n           Input data.\r\n    \r\n        dtype : data-type, default=None\r\n            Data type for `y`.\r\n    \r\n            .. versionadded:: 1.2\r\n    \r\n        input_name : str, default=\"y\"\r\n            The data name used to construct the error message.\r\n    \r\n            .. versionadded:: 1.8\r\n    \r\n        warn : bool, default=False\r\n           To control display of warnings.\r\n    \r\n        device : device, default=None\r\n            `device` object.\r\n            See the :ref:`Array API User Guide <array_api>` for more details.\r\n    \r\n            .. versionadded:: 1.6\r\n    \r\n        Returns\r\n        -------\r\n        y : ndarray\r\n           Output data.\r\n    \r\n        Raises\r\n        ------\r\n        ValueError\r\n            If `y` is not a 1D array or a 2D array with a single row or column.\r\n    \r\n        Examples\r\n        --------\r\n        >>> from sklearn.utils.validation import column_or_1d\r\n        >>> column_or_1d([1, 1])\r\n        array([1, 1])\r\n        \"\"\"\r\n        xp, _ = get_namespace(y)\r\n        y = check_array(\r\n            y,\r\n            ensure_2d=False,\r\n            dtype=dtype,\r\n            input_name=input_name,\r\n            ensure_all_finite=False,\r\n            ensure_min_samples=0,\r\n        )\r\n    \r\n        shape = y.shape\r\n        if len(shape) == 1:\r\n            return _asarray_with_order(\r\n                xp.reshape(y, (-1,)), order=\"C\", xp=xp, device=device\r\n            )\r\n        if len(shape) == 2 and shape[1] == 1:\r\n            if warn:\r\n                warnings.warn(\r\n                    (\r\n                        \"A column-vector y was passed when a 1d array was\"\r\n                        \" expected. Please change the shape of y to \"\r\n                        \"(n_samples, ), for example using ravel().\"\r\n                    ),\r\n                    DataConversionWarning,\r\n                    stacklevel=2,\r\n                )\r\n            return _asarray_with_order(\r\n                xp.reshape(y, (-1,)), order=\"C\", xp=xp, device=device\r\n            )\r\n    \r\n>       raise ValueError(\r\n            \"y should be a 1d array, got an array of shape {} instead.\".format(shape)\r\n        )\r\nE       ValueError: y should be a 1d array, got an array of shape (4, 2) instead.\r\n\r\n.venv\\Lib\\site-packages\\sklearn\\utils\\validation.py:1447: ValueError\r\n---------------------------- Captured stdout call -----------------------------\r\nFitting 1 classifiers...\r\nFitting classifier1: decisiontreeclassifier (1/1)\r\nDecisionTreeClassifier(random_state=42)\r\nFitting 2 classifiers...\r\nFitting classifier1: decisiontreeclassifier (1/2)\r\nDecisionTreeClassifier(random_state=42)\r\nFitting classifier2: decisiontreeclassifier (2/2)\r\nDecisionTreeClassifier(random_state=42)\r\n",
+          "next_component": "error"
+        },
+        {
+          "source_file": "src\\sample_repo\\mlxtend\\mlxtend\\classifier\\stacking_classification.py",
+          "symbol": "StackingClassifier.fit",
+          "name": "fit",
+          "segment": "src\\sample_repo\\mlxtend\\mlxtend\\classifier\\stacking_classification.py:148-229",
+          "attempt": 2,
+          "component": "error",
+          "prompt_input": "Executing the test yields an error, shown below.\nModify or rewrite the test to correct it. Return the complete Python test module, not a patch.\nPreserve useful assertions from the previous test and use get_info when more source context is needed.\nRespond only with Python code enclosed in a python markdown code block.\n\nF\r\n================================== FAILURES ===================================\r\n____________ test_stacking_classifier_fit_coverage_variations[1-2] ____________\r\n\r\n    def test_stacking_classifier_fit_coverage_variations():\r\n        X = np.array([[1, 2], [3, 4], [5, 6], [7, 8]])\r\n        y = np.array([0, 0, 1, 1])\r\n    \r\n        # 1. fit_base_estimators=False (triggers warnings & use_clones = False)\r\n        clf1 = DecisionTreeClassifier(random_state=42)\r\n        clf1.fit(X, y)\r\n        meta1 = LogisticRegression(random_state=42)\r\n        sclf1 = StackingClassifier(\r\n            classifiers=[clf1],\r\n            meta_classifier=meta1,\r\n            fit_base_estimators=False,\r\n            store_train_meta_features=True,\r\n            use_features_in_secondary=True,\r\n        )\r\n        sclf1.fit(X, y)\r\n        assert sclf1.use_clones is False\r\n        assert hasattr(sclf1, \"train_meta_features_\")\r\n    \r\n        # 2. verbose levels (verbose=3, verbose=1, sparse X, sample_weight)\r\n        clf2 = DecisionTreeClassifier(random_state=42)\r\n        meta2 = LogisticRegression(random_state=42)\r\n        sclf2 = StackingClassifier(\r\n            classifiers=[clf2],\r\n            meta_classifier=meta2,\r\n            verbose=3,\r\n            use_features_in_secondary=True,\r\n        )\r\n        X_sparse = sparse.csr_matrix(X)\r\n        sample_weight = np.array([1.0, 1.0, 1.0, 1.0])\r\n        sclf2.fit(X_sparse, y, sample_weight=sample_weight)\r\n    \r\n        # 3. y.ndim > 1 (multilabel case) and verbose=1/2\r\n        y_multi = np.array([[0, 1], [0, 1], [1, 0], [1, 0]])\r\n        clf3_1 = DecisionTreeClassifier(random_state=42)\r\n        clf3_2 = DecisionTreeClassifier(random_state=42)\r\n        meta3 = LogisticRegression(random_state=42)\r\n        sclf3 = StackingClassifier(\r\n            classifiers=[clf3_1, clf3_2],\r\n            meta_classifier=meta3,\r\n            verbose=2,\r\n            use_features_in_secondary=False,\r\n        )\r\n>       sclf3.fit(X, y_multi)\r\n\r\nbinh\\phase1_runs\\e21_ablation16_budget30_seed7_mb3\\runs\\d8123dc403839c22-2aa052f1b98d\\test\\multi-project-test-batch-1b18c3c5\\target_workspaces\\1d9a41fa0432_0002\\tmp_test_953v753b.py:52: \r\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\r\nsrc\\sample_repo\\mlxtend\\mlxtend\\classifier\\stacking_classification.py:225: in fit\r\n    self.meta_clf_.fit(meta_features, y)\r\n.venv\\Lib\\site-packages\\sklearn\\base.py:1403: in wrapper\r\n    return fit_method(estimator, *args, **kwargs)\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n.venv\\Lib\\site-packages\\sklearn\\linear_model\\_logistic.py:1459: in fit\r\n    X, y = validate_data(\r\n.venv\\Lib\\site-packages\\sklearn\\utils\\validation.py:3055: in validate_data\r\n    X, y = check_X_y(X, y, **check_params)\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n.venv\\Lib\\site-packages\\sklearn\\utils\\validation.py:1344: in check_X_y\r\n    y = _check_y(y, multi_output=multi_output, y_numeric=y_numeric, estimator=estimator)\r\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n.venv\\Lib\\site-packages\\sklearn\\utils\\validation.py:1365: in _check_y\r\n    y = column_or_1d(y, warn=True)\r\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\r\n\r\ny = array([[0, 1],\r\n       [0, 1],\r\n       [1, 0],\r\n       [1, 0]]), dtype = None\r\ninput_name = 'y', warn = True, device = None\r\n\r\n    def column_or_1d(y, *, dtype=None, input_name=\"y\", warn=False, device=None):\r\n        \"\"\"Ravel column or 1d numpy array, else raises an error.\r\n    \r\n        Parameters\r\n        ----------\r\n        y : array-like\r\n           Input data.\r\n    \r\n        dtype : data-type, default=None\r\n            Data type for `y`.\r\n    \r\n            .. versionadded:: 1.2\r\n    \r\n        input_name : str, default=\"y\"\r\n            The data name used to construct the error message.\r\n    \r\n            .. versionadded:: 1.8\r\n    \r\n        warn : bool, default=False\r\n           To control display of warnings.\r\n    \r\n        device : device, default=None\r\n            `device` object.\r\n            See the :ref:`Array API User Guide <array_api>` for more details.\r\n    \r\n            .. versionadded:: 1.6\r\n    \r\n        Returns\r\n        -------\r\n        y : ndarray\r\n           Output data.\r\n    \r\n        Raises\r\n        ------\r\n        ValueError\r\n            If `y` is not a 1D array or a 2D array with a single row or column.\r\n    \r\n        Examples\r\n        --------\r\n        >>> from sklearn.utils.validation import column_or_1d\r\n        >>> column_or_1d([1, 1])\r\n        array([1, 1])\r\n        \"\"\"\r\n        xp, _ = get_namespace(y)\r\n        y = check_array(\r\n            y,\r\n            ensure_2d=False,\r\n            dtype=dtype,\r\n            input_name=input_name,\r\n            ensure_all_finite=False,\r\n            ensure_min_samples=0,\r\n        )\r\n    \r\n        shape = y.shape\r\n        if len(shape) == 1:\r\n            return _asarray_with_order(\r\n                xp.reshape(y, (-1,)), order=\"C\", xp=xp, device=device\r\n            )\r\n        if len(shape) == 2 and shape[1] == 1:\r\n            if warn:\r\n                warnings.warn(\r\n                    (\r\n                        \"A column-vector y was passed when a 1d array was\"\r\n                        \" expected. Please change the shape of y to \"\r\n                        \"(n_samples, ), for example using ravel().\"\r\n                    ),\r\n                    DataConversionWarning,\r\n                    stacklevel=2,\r\n                )\r\n            return _asarray_with_order(\r\n                xp.reshape(y, (-1,)), order=\"C\", xp=xp, device=device\r\n            )\r\n    \r\n>       raise ValueError(\r\n            \"y should be a 1d array, got an array of shape {} instead.\".format(shape)\r\n        )\r\nE       ValueError: y should be a 1d array, got an array of shape (4, 2) instead.\r\n\r\n.venv\\Lib\\site-packages\\sklearn\\utils\\validation.py:1447: ValueError\r\n---------------------------- Captured stdout call -----------------------------\r\nFitting 1 classifiers...\r\nFitting classifier1: decisiontreeclassifier (1/1)\r\nDecisionTreeClassifier(random_state=42)\r\nFitting 2 classifiers...\r\nFitting classifier1: decisiontreeclassifier (1/2)\r\nDecisionTreeClassifier(random_state=42)\r\nFitting classifier2: decisiontreeclassifier (2/2)\r\nDecisionTreeClassifier(random_state=42)\r\n",
+          "outcome": "coverage_gain_saved",
+          "generated_test": "import numpy as np\nimport pytest\nfrom sklearn.linear_model import LogisticRegression\nfrom sklearn.tree import DecisionTreeClassifier\nfrom sklearn.multioutput import MultiOutputClassifier\nfrom scipy import sparse\nfrom mlxtend.classifier import StackingClassifier\n\n\ndef test_stacking_classifier_fit_coverage_variations():\n    X = np.array([[1, 2], [3, 4], [5, 6], [7, 8]])\n    y = np.array([0, 0, 1, 1])\n\n    # 1. fit_base_estimators=False (triggers warnings & use_clones = False)\n    clf1 = DecisionTreeClassifier(random_state=42)\n    clf1.fit(X, y)\n    meta1 = LogisticRegression(random_state=42)\n    sclf1 = StackingClassifier(\n        classifiers=[clf1],\n        meta_classifier=meta1,\n        fit_base_estimators=False,\n        store_train_meta_features=True,\n        use_features_in_secondary=True,\n    )\n    sclf1.fit(X, y)\n    assert sclf1.use_clones is False\n    assert hasattr(sclf1, \"train_meta_features_\")\n\n    # 2. verbose levels (verbose=3, verbose=1, sparse X, sample_weight)\n    clf2 = DecisionTreeClassifier(random_state=42)\n    meta2 = LogisticRegression(random_state=42)\n    sclf2 = StackingClassifier(\n        classifiers=[clf2],\n        meta_classifier=meta2,\n        verbose=3,\n        use_features_in_secondary=True,\n    )\n    X_sparse = sparse.csr_matrix(X)\n    sample_weight = np.array([1.0, 1.0, 1.0, 1.0])\n    sclf2.fit(X_sparse, y, sample_weight=sample_weight)\n\n    # 3. y.ndim > 1 (multilabel case) with MultiOutputClassifier meta-classifier and verbose=1/2\n    y_multi = np.array([[0, 1], [0, 1], [1, 0], [1, 0]])\n    clf3_1 = DecisionTreeClassifier(random_state=42)\n    clf3_2 = DecisionTreeClassifier(random_state=42)\n    meta3 = MultiOutputClassifier(LogisticRegression(random_state=42))\n    sclf3 = StackingClassifier(\n        classifiers=[clf3_1, clf3_2],\n        meta_classifier=meta3,\n        verbose=2,\n        use_features_in_secondary=False,\n    )\n    sclf3.fit(X, y_multi)\n    assert isinstance(sclf3._label_encoder, list)\n    assert isinstance(sclf3.classes_, list)\n",
+          "gained_lines": [
+            148,
+            169,
+            170,
+            171,
+            173,
+            175,
+            176,
+            177,
+            179,
+            180,
+            182,
+            183,
+            184,
+            186,
+            187,
+            189,
+            190,
+            191,
+            193,
+            194,
+            195,
+            196,
+            197,
+            198,
+            201,
+            202,
+            205,
+            206,
+            207,
+            208,
+            210,
+            212,
+            214,
+            215,
+            217,
+            218,
+            219,
+            220,
+            222,
+            224,
+            225,
+            227,
+            229
+          ],
+          "gained_branches": [
+            [
+              169,
+              170
+            ],
+            [
+              169,
+              175
+            ],
+            [
+              175,
+              176
+            ],
+            [
+              175,
+              179
+            ],
+            [
+              182,
+              183
+            ],
+            [
+              182,
+              186
+            ],
+            [
+              189,
+              190
+            ],
+            [
+              189,
+              212
+            ],
+            [
+              190,
+              191
+            ],
+            [
+              193,
+              194
+            ],
+            [
+              193,
+              212
+            ],
+            [
+              194,
+              195
+            ],
+            [
+              201,
+              202
+            ],
+            [
+              201,
+              205
+            ],
+            [
+              202,
+              205
+            ],
+            [
+              205,
+              206
+            ],
+            [
+              207,
+              208
+            ],
+            [
+              207,
+              210
+            ],
+            [
+              214,
+              215
+            ],
+            [
+              214,
+              217
+            ],
+            [
+              217,
+              218
+            ],
+            [
+              217,
+              219
+            ],
+            [
+              219,
+              220
+            ],
+            [
+              219,
+              222
+            ],
+            [
+              224,
+              225
+            ],
+            [
+              224,
+              227
+            ]
+          ],
+          "remaining_lines": [
+            203
+          ],
+          "remaining_branches": [
+            [
+              190,
+              193
+            ],
+            [
+              194,
+              201
+            ],
+            [
+              202,
+              203
+            ],
+            [
+              205,
+              207
+            ]
+          ],
+          "saved_test": "D:\\VinAI\\P-002\\binh\\phase1_runs\\e21_ablation16_budget30_seed7_mb3\\generated_tests\\test\\tests_base_line_d8123dc403839c22-2aa052f1b98d\\mlxtend\\test_opt_1d9a41fa0432_0002_1.py"
+        }
+      ],
+      "replicate_scores": [
+        0.8991666666666667
+      ]
+    },
+    {
+      "prompt_digest": "d8123dc403839c22",
+      "evaluation_digest": "2aa052f1b98d",
+      "replicate": 0,
+      "target": {
+        "project": "typesystem",
+        "source_file": "typesystem/fields.py",
+        "symbol": "Object.__init__",
+        "split": "test"
+      },
+      "run_id": "multi-project-test-batch-1b18c3c5",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 23.0,
+        "num_statements": 23.0,
+        "covered_branches": 2.0,
+        "num_branches": 2.0,
+        "gained_lines": [
+          421,
+          423,
+          424,
+          425,
+          427,
+          428,
+          431,
+          432,
+          434,
+          435,
+          436,
+          437,
+          438,
+          441,
+          442,
+          443,
+          445,
+          446,
+          447,
+          448,
+          449,
+          450,
+          451
+        ],
+        "gained_branches": [
+          [
+            423,
+            424
+          ],
+          [
+            423,
+            427
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 1.0000\nStatement gain: 23 newly covered; 0 remain.\nBranch gain: 2 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "attempt_traces": [
+        {
+          "source_file": "src\\sample_repo\\typesystem\\typesystem\\fields.py",
+          "symbol": "Object.__init__",
+          "name": "__init__",
+          "segment": "src\\sample_repo\\typesystem\\typesystem\\fields.py:409-451",
+          "attempt": 1,
+          "component": "initial",
+          "prompt_input": "You are an expert Python test-driven developer.\nThe code below, extracted from typesystem\\fields.py, does not achieve full coverage:\nwhen tested, lines 409-451 do not execute.\nCreate new pytest test functions that execute all missing lines and branches. Each test must\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\nUse the get_info tool function as necessary. Always return an entire Python test module.\nDo not call pytest.main and do not execute tests at module import time.\nRespond only with Python code enclosed in a python markdown code block.\n\n```python\n            import typing\n            class Object(Field):\n       409:     def __init__(\n                    self,\n                    *,\n       412:         properties: typing.Dict[str, Field] = None,\n       413:         pattern_properties: typing.Dict[str, Field] = None,\n       414:         additional_properties: typing.Union[bool, None, Field] = True,\n       415:         property_names: Field = None,\n       416:         min_properties: int = None,\n       417:         max_properties: int = None,\n       418:         required: typing.Sequence[str] = None,\n       419:         **kwargs: typing.Any,\n       420:     ) -> None:\n       421:         super().__init__(**kwargs)\n            \n       423:         if isinstance(properties, Field):\n       424:             additional_properties = properties\n       425:             properties = None\n            \n       427:         properties = {} if (properties is None) else dict(properties)\n       428:         pattern_properties = (\n       429:             {} if (pattern_properties is None) else dict(pattern_properties)\n                    )\n       431:         required = list(required) if isinstance(required, (list, tuple)) else required\n       432:         required = [] if (required is None) else required\n            \n       434:         assert all(isinstance(k, str) for k in properties.keys())\n       435:         assert all(isinstance(v, Field) for v in properties.values())\n       436:         assert all(isinstance(k, str) for k in pattern_properties.keys())\n       437:         assert all(isinstance(v, Field) for v in pattern_properties.values())\n       438:         assert additional_properties in (None, True, False) or isinstance(\n       439:             additional_properties, Field\n                    )\n       441:         assert min_properties is None or isinstance(min_properties, int)\n       442:         assert max_properties is None or isinstance(max_properties, int)\n       443:         assert all(isinstance(i, str) for i in required)\n            \n       445:         self.properties = properties\n       446:         self.pattern_properties = pattern_properties\n       447:         self.additional_properties = additional_properties\n       448:         self.property_names = property_names\n       449:         self.min_properties = min_properties\n       450:         self.max_properties = max_properties\n       451:         self.required = required\n\n```",
+          "outcome": "coverage_gain_saved",
+          "generated_test": "import pytest\nfrom typesystem.fields import Object, Field, String\n\ndef test_object_field_init_branches():\n    # 1. properties passed as a Field (instead of dict)\n    field_instance = String()\n    obj1 = Object(properties=field_instance)\n    assert obj1.properties == {}\n    assert obj1.additional_properties is field_instance\n\n    # 2. properties, pattern_properties, required provided as dict/tuple/list\n    obj2 = Object(\n        properties={\"name\": String()},\n        pattern_properties={\"^S\": String()},\n        required=(\"name\",),\n        min_properties=1,\n        max_properties=5,\n        additional_properties=False,\n    )\n    assert \"name\" in obj2.properties\n    assert \"^S\" in obj2.pattern_properties\n    assert obj2.required == [\"name\"]\n    assert obj2.min_properties == 1\n    assert obj2.max_properties == 5\n    assert obj2.additional_properties is False\n\n    # 3. additional_properties as None or Field\n    obj3 = Object(additional_properties=None)\n    assert obj3.additional_properties is None\n\n    obj4 = Object(additional_properties=String())\n    assert isinstance(obj4.additional_properties, Field)\n",
+          "gained_lines": [
+            409,
+            412,
+            413,
+            414,
+            415,
+            416,
+            417,
+            418,
+            420,
+            421,
+            423,
+            424,
+            425,
+            427,
+            428,
+            429,
+            431,
+            432,
+            434,
+            435,
+            436,
+            437,
+            438,
+            439,
+            441,
+            442,
+            443,
+            445,
+            446,
+            447,
+            448,
+            449,
+            450,
+            451
+          ],
+          "gained_branches": [
+            [
+              423,
+              424
+            ],
+            [
+              423,
+              427
+            ]
+          ],
+          "remaining_lines": [
+            419
+          ],
+          "remaining_branches": [],
+          "saved_test": "D:\\VinAI\\P-002\\binh\\phase1_runs\\e21_ablation16_budget30_seed7_mb3\\generated_tests\\test\\tests_base_line_d8123dc403839c22-2aa052f1b98d\\typesystem\\test_opt_b38c7ae99b96_0003_1.py"
+        }
+      ],
+      "replicate_scores": [
+        1.0
+      ]
+    }
+  ],
+  "results": [],
+  "existing_baseline_reference": null
+}

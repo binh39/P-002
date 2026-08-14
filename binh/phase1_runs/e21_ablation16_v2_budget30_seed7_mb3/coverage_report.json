@@ -1,0 +1,74 @@
+{
+  "generated_at": "2026-08-14T13:54:54+00:00",
+  "baseline_digest": "d8123dc403839c22",
+  "optimized_digest": "9b5fe39795a80b1f",
+  "evaluation_replicates": 1,
+  "splits": {
+    "train": {
+      "baseline": {
+        "num_targets": 8,
+        "score": 0.6794305413687436,
+        "statement_coverage": 0.7310606060606061,
+        "branch_coverage": 0.6573033707865169,
+        "covered_statements": 193,
+        "num_statements": 264,
+        "covered_branches": 117,
+        "num_branches": 178
+      },
+      "optimized": {
+        "num_targets": 8,
+        "score": 0.8473186925434116,
+        "statement_coverage": 0.8712121212121212,
+        "branch_coverage": 0.8370786516853933,
+        "covered_statements": 230,
+        "num_statements": 264,
+        "covered_branches": 149,
+        "num_branches": 178
+      }
+    },
+    "validation": {
+      "baseline": {
+        "num_targets": 4,
+        "score": 0.37744360902255636,
+        "statement_coverage": 0.3533834586466165,
+        "branch_coverage": 0.3877551020408163,
+        "covered_statements": 47,
+        "num_statements": 133,
+        "covered_branches": 38,
+        "num_branches": 98
+      },
+      "optimized": {
+        "num_targets": 4,
+        "score": 0.3845864661654135,
+        "statement_coverage": 0.49624060150375937,
+        "branch_coverage": 0.336734693877551,
+        "covered_statements": 66,
+        "num_statements": 133,
+        "covered_branches": 33,
+        "num_branches": 98
+      }
+    },
+    "test": {
+      "baseline": {
+        "num_targets": 4,
+        "score": 0.7922514920765589,
+        "statement_coverage": 0.8230088495575221,
+        "branch_coverage": 0.7790697674418605,
+        "covered_statements": 93,
+        "num_statements": 113,
+        "covered_branches": 67,
+        "num_branches": 86
+      },
+      "optimized": {
+        "num_targets": 4,
+        "score": 0.5657439802428482,
+        "statement_coverage": 0.6106194690265486,
+        "branch_coverage": 0.5465116279069767,
+        "covered_statements": 69,
+        "num_statements": 113,
+        "covered_branches": 47,
+        "num_branches": 86
+      }
+    }
+  }
+}
