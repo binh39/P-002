@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
-  ArrowUpRight,
   Braces,
   ChartNoAxesCombined,
   FlaskConical,
@@ -26,7 +25,6 @@ import type { ExperimentStatus, Kpi } from "@/domain/dashboard";
 type Page =
   | "dashboard"
   | "experiments"
-  | "playground"
   | "optimization"
   | "comparison"
   | "review"
@@ -227,8 +225,8 @@ export default function Dashboard({ onNavigate }: Props) {
               </div>
             ))}
           </div>
-          <button className="text-button" onClick={() => onNavigate("playground")}>
-            Open playground <ArrowUpRight size={15} />
+          <button className="text-button" onClick={() => onNavigate("experiments")}>
+            View experiments <ArrowRight size={15} />
           </button>
         </section>
       </div>

@@ -14,10 +14,8 @@ const Comparison = lazy(() => import("@/pages/Comparison"));
 const CoverageGuide = lazy(() => import("@/pages/CoverageGuide"));
 const CreateExperiment = lazy(() => import("@/pages/CreateExperiment"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
-const Datasets = lazy(() => import("@/pages/Datasets"));
 const Experiments = lazy(() => import("@/pages/Experiments"));
 const OptimizationRun = lazy(() => import("@/pages/OptimizationRun"));
-const Playground = lazy(() => import("@/pages/Playground"));
 const Registry = lazy(() => import("@/pages/Registry"));
 const ReviewApproval = lazy(() => import("@/pages/ReviewApproval"));
 const ProjectDetail = lazy(() => import("@/pages/ProjectDetail"));
@@ -27,7 +25,6 @@ const Settings = lazy(() => import("@/pages/Settings"));
 const legacyPagePaths = {
   dashboard: "/dashboard",
   experiments: "/experiments/new",
-  playground: "/playground",
   optimization: "/experiments",
   comparison: "/experiments",
   review: "/review",
@@ -114,14 +111,8 @@ function RoutedApplication() {
           <Route path="/experiments/new">
             <CreateExperimentRoute />
           </Route>
-          <Route path="/datasets">
-            <Datasets />
-          </Route>
           <Route path="/docs/coverage">
             <CoverageGuide />
-          </Route>
-          <Route path="/playground">
-            <Playground />
           </Route>
           <Route path="/comparison-runs/:runId">
             <Comparison />
