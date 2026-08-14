@@ -1,0 +1,2 @@
+{"project":"isort","source_file":"isort/deprecated/finders.py","symbol":"KnownPatternFinder.__init__","split":"validation"}
+{"project":"typesystem","source_file":"typesystem/fields.py","symbol":"Boolean.validate","split":"validation"}

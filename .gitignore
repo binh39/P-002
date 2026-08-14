@@ -72,5 +72,8 @@ out/
 src/sample_repo
 coverup-log
 /eval/prompt_optimization*/
+binh/phase0_combined_verification/
+binh/phase0_runs/followup5_after_target_discovery_fix/
+binh/phase0_runs/followup2_target_discovery_verified/
 
 .claude

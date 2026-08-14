@@ -70,7 +70,11 @@ class CodeSegment:
         return len(self.missing_lines)+len(self.missing_branches)
 
 
-def get_missing_coverage(coverage, line_limit: int = 100) -> T.List[CodeSegment]:
+def get_missing_coverage(
+    coverage,
+    line_limit: int = 100,
+    target_qualnames: T.Set[str] | None = None,
+) -> T.List[CodeSegment]:
     """Processes a JSON SlipCover output and generates a list of Python code segments,
     such as functions or classes, which have less than 100% coverage.
     """
@@ -121,6 +125,44 @@ def get_missing_coverage(coverage, line_limit: int = 100) -> T.List[CodeSegment]
 
         lines_of_interest = missing_lines.union(set(sum(missing_branches,[])))
         lines_of_interest.discard(0)  # may result from N->0 branches
+
+        if target_qualnames:
+            # Exact-target mode must not let an earlier class-level statement
+            # claim the whole class before a requested method is visited. Build
+            # the requested AST nodes directly and leave broad grouping to the
+            # normal (untargeted) path below.
+            for node in ast.walk(tree):
+                if not isinstance(
+                    node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+                ) or not hasattr(node, "lineno"):
+                    continue
+                qualname = get_qualname(node)
+                if qualname not in target_qualnames and node.name not in target_qualnames:
+                    continue
+                begin = find_first_line(node)
+                end = node.end_lineno + 1
+                line_range_set = {*range(begin, end)}
+                if not lines_of_interest.intersection(line_range_set):
+                    continue
+                context = []
+                parent = getattr(node, "parent", None)
+                while parent is not None:
+                    if isinstance(parent, ast.ClassDef):
+                        context.insert(0, (find_first_line(parent), parent.lineno + 1))
+                    parent = getattr(parent, "parent", None)
+                code_segs.append(CodeSegment(
+                    fname, node.name, begin, end, qualname,
+                    lines_of_interest=lines_of_interest.intersection(line_range_set),
+                    missing_lines=missing_lines.intersection(line_range_set),
+                    executed_lines=executed_lines.intersection(line_range_set),
+                    missing_branches={
+                        tuple(branch) for branch in missing_branches
+                        if branch[0] in line_range_set
+                    },
+                    context=context,
+                    imports=[ast.unparse(item) for item in get_global_imports(tree, node)],
+                ))
+            continue
 
         # TODO remove from missing lines with load-time statements?
         #   - directly under ModuleDef, ClassDef

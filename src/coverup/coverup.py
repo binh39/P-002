@@ -336,23 +336,29 @@ def log_write(args: argparse.Namespace, seg: CodeSegment, m: str) -> None:
     log_file.write(f"---- {datetime.now().isoformat(timespec='seconds')} {seg} ----\n{m}\n")
 
 
-def trace_write(args: argparse.Namespace, seg: CodeSegment, event: dict) -> None:
-    """Append one self-contained attempt event without changing async scheduling."""
+def trace_record_write(args: argparse.Namespace, record: dict) -> None:
+    """Append one self-contained trace record without changing scheduling."""
     trace_file = getattr(args, "trace_file", None)
     if not trace_file:
         return
-    record = {
-        "source_file": str(seg.filename),
-        "symbol": seg.qualname,
-        "name": seg.name,
-        "segment": seg.identify(),
-        **event,
-    }
     trace_file.parent.mkdir(parents=True, exist_ok=True)
     serialized = json.dumps(record, ensure_ascii=False, default=str)
     with trace_lock:
         with trace_file.open("a", encoding="utf-8") as file:
             file.write(serialized + "\n")
+
+
+def trace_write(args: argparse.Namespace, seg: CodeSegment, event: dict) -> None:
+    """Append one self-contained attempt event without changing async scheduling."""
+    if not getattr(args, "trace_file", None):
+        return
+    trace_record_write(args, {
+        "source_file": str(seg.filename),
+        "symbol": seg.qualname,
+        "name": seg.name,
+        "segment": seg.identify(),
+        **event,
+    })
 
 
 def check_whole_suite(args: argparse.Namespace) -> None:
@@ -973,7 +979,16 @@ def main():
 
         chatter.set_add_cost(state.add_cost)
 
-        segments = sorted(get_missing_coverage(state.get_initial_coverage(), line_limit=args.line_limit),
+        target_qualnames = (
+            {symbol for _, symbol in args.target_specs}
+            if args.target_specs
+            else set(args.target_symbols)
+        )
+        segments = sorted(get_missing_coverage(
+                              state.get_initial_coverage(),
+                              line_limit=args.line_limit,
+                              target_qualnames=target_qualnames or None,
+                          ),
                           key=lambda seg: seg.missing_count(), reverse=True)
 
         # save initial coverage so we don't have to redo it next time
@@ -1014,6 +1029,18 @@ def main():
 
         progress = Progress(total=len(worklist)+seg_done_count, initial=seg_done_count)
         state.set_progress_bar(progress)
+
+        if args.target_specs and not worklist and not seg_done_count:
+            for source_file, symbol in sorted(args.target_specs):
+                trace_record_write(args, {
+                    "source_file": source_file,
+                    "symbol": symbol,
+                    "name": symbol.rsplit(".", 1)[-1],
+                    "outcome": "target_discovery_failed",
+                    "reason": (
+                        "No missing coverage segment matched the exact target."
+                    ),
+                })
 
         async def run_it():
             if args.max_concurrency:

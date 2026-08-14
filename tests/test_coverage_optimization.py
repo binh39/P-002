@@ -530,6 +530,77 @@ def test_runner_keeps_denominators_but_scores_failing_suite_as_zero(
     assert "2 failed, 23 passed" in record.results[0].feedback
 
 
+def test_runner_rejects_explicit_target_discovery_failure(tmp_path, monkeypatch):
+    package_dir = tmp_path / "sample_repo" / "pkg"
+    tests_dir = tmp_path / "sample_repo" / "tests"
+    artifacts_dir = tmp_path / "artifacts"
+    package_dir.mkdir(parents=True)
+    tests_dir.mkdir(parents=True)
+    prompt_path = tmp_path / "prompt.json"
+    baseline_bundle().save(prompt_path)
+
+    def fake_subprocess_run(command, **kwargs):
+        spec = json.loads(
+            Path(command[command.index("--target-spec-file") + 1]).read_text(
+                encoding="utf-8"
+            )
+        )[0]
+        Path(command[command.index("--trace-file") + 1]).write_text(
+            json.dumps({
+                "source_file": spec["source_file"],
+                "symbol": spec["symbol"],
+                "name": "target",
+                "outcome": "target_discovery_failed",
+            }) + "\n",
+            encoding="utf-8",
+        )
+        return SimpleNamespace(returncode=0, stdout="no matching segment")
+
+    def fake_run_coverage(**kwargs):
+        kwargs["output"].write_text(json.dumps({
+            "files": {
+                "pkg/module.py": {
+                    "functions": {
+                        "Small.target": {
+                            "executed_lines": [],
+                            "missing_lines": [3],
+                            "executed_branches": [],
+                            "missing_branches": [],
+                            "summary": {
+                                "covered_lines": 0,
+                                "num_statements": 1,
+                                "covered_branches": 0,
+                                "num_branches": 0,
+                            },
+                        }
+                    }
+                }
+            }
+        }), encoding="utf-8")
+        return SimpleNamespace(returncode=0, stdout="coverage ok")
+
+    monkeypatch.setattr("src.optimization.runner.run_streamed", fake_subprocess_run)
+    monkeypatch.setattr("src.optimization.runner.run_coverage", fake_run_coverage)
+    runner = CoverUpExperimentRunner(ExperimentConfig(
+        project_root=tmp_path,
+        package_dir=package_dir,
+        tests_dir=tests_dir,
+        artifacts_dir=artifacts_dir,
+        coverup_model="fake-model",
+    ))
+
+    result = runner.evaluate_batch(
+        [SymbolTarget("project", "pkg/module.py", "Small.target", "train")],
+        prompt_path,
+        candidate_id="discovery-failure",
+        split="train",
+    ).results[0]
+
+    assert result.score["valid"] is False
+    assert result.attempt_traces[0]["outcome"] == "target_discovery_failed"
+    assert "Target discovery failed" in result.feedback
+
+
 @pytest.mark.parametrize(
     ("optimized", "baseline", "expected"),
     [(0.6, 0.5, True), (0.5, 0.5, False), (0.4, 0.5, False)],
@@ -2403,6 +2474,44 @@ def test_exact_target_spec_does_not_match_same_name_in_another_file(monkeypatch)
             name="find",
         ),
     )
+
+
+def test_targeted_segmentation_selects_method_inside_small_class(tmp_path, monkeypatch):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    segment_module = importlib.import_module("coverup.segment")
+    source = tmp_path / "small.py"
+    source.write_text(
+        "class Small:\n"
+        "    def first(self):\n"
+        "        return 1\n"
+        "\n"
+        "    def target(self, value):\n"
+        "        if value:\n"
+        "            return True\n"
+        "        return False\n",
+        encoding="utf-8",
+    )
+    coverage = {
+        "files": {
+            str(source): {
+                # A missing class-level statement appears before the target
+                # method, reproducing the ordering that used to swallow it.
+                "missing_lines": [1, 6, 7, 8],
+                "executed_lines": [2, 3, 5],
+                "missing_branches": [[6, 7], [6, 8]],
+            }
+        }
+    }
+
+    default_segments = segment_module.get_missing_coverage(coverage)
+    targeted_segments = segment_module.get_missing_coverage(
+        coverage, target_qualnames={"Small.target"}
+    )
+
+    assert [segment.qualname for segment in default_segments] == ["Small"]
+    assert [segment.qualname for segment in targeted_segments] == ["Small.target"]
 
 
 def test_coverup_no_final_coverage_still_runs_generation_setup(tmp_path, monkeypatch):

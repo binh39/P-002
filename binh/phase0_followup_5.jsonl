@@ -1,0 +1,5 @@
+{"project":"isort","source_file":"isort/main.py","symbol":"sort_imports","split":"validation"}
+{"project":"isort","source_file":"isort/wrap.py","symbol":"line","split":"validation"}
+{"project":"isort","source_file":"isort/deprecated/finders.py","symbol":"KnownPatternFinder.__init__","split":"validation"}
+{"project":"mlxtend","source_file":"mlxtend/frequent_patterns/apriori.py","symbol":"apriori","split":"validation"}
+{"project":"typesystem","source_file":"typesystem/fields.py","symbol":"Boolean.validate","split":"validation"}

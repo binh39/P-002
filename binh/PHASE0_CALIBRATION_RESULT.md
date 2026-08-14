@@ -76,7 +76,7 @@ Cả hai target có denominator hợp lệ nhưng không có attempt trace trong
 
 Số `test_error` lớn cho thấy component `error` và context dùng cho repair là nguồn cải thiện quan trọng. Có ít nhất 51 generation/repair attempts trong trace; provider request thực tế có thể cao hơn nếu model gọi `get_info`.
 
-## Oracle union sơ bộ
+## Oracle union đã kiểm chứng
 
 Oracle được tính bằng hợp các executed statement và branch arc của hai replicate trên từng target, với denominator cố định:
 
@@ -91,7 +91,7 @@ Khoảng cách:
 - Oracle cao hơn mean baseline khoảng **10.21 điểm**.
 - Oracle cao hơn replicate tốt nhất khoảng **5.77 điểm**.
 
-Đây mới là oracle trên coverage unit, chưa phải một test suite đã được ghép và chạy chung. Cần chạy combined-suite verification để loại test xung đột, pollution và flaky behavior trước khi xem 86.75% là trần khả thi thật.
+Combined-suite verification đã ghép 26 test module của hai replicate, đổi tên để tránh collision và chạy riêng theo bốn project. Cả isort (4 test), mimesis (8 test), mlxtend (8 test) và typesystem (6 test) đều pass. Coverage đo từ suite ghép trùng với oracle coverage-unit: **86.75%**, nên đây là headroom khả thi trên calibration set hiện tại, không chỉ là phép hợp lý thuyết.
 
 ## Kết luận
 
@@ -100,16 +100,36 @@ Khoảng cách:
 3. Headroom tồn tại: các test từ hai replicate đã cùng nhau chạm oracle 86.75%.
 4. Candidate test archive/portfolio có tín hiệu mạnh hơn việc chỉ giữ một generation hoặc một global prompt.
 5. isort là nguồn nhiễu chính trong sample này; cần paired repeated evaluation và target-level reporting.
-6. Hai target không tạo attempt phải được chẩn đoán trước khi mở rộng benchmark.
+6. Hai target không tạo attempt bắt nguồn từ target discovery chọn class thay vì method trong class nhỏ; logic đã được sửa và có regression test.
 
 ## Bước tiếp theo tiết kiệm chi phí
 
-- [ ] Chẩn đoán target-to-segment discovery cho hai target không có attempt; không gọi LLM để kiểm tra bước này.
-- [ ] Chạy replicate thứ ba chỉ cho ba target không ổn định và hai target thay thế, không chạy lại toàn bộ 16 target.
-- [ ] Ghép các successful generated tests hiện có và chạy combined-suite coverage để xác nhận oracle thực tế; bước này không cần gọi LLM.
-- [ ] Tạo report tự động cho per-replicate, paired delta, repo aggregate và oracle union.
+- [x] Chẩn đoán và sửa target-to-segment discovery cho hai target không có attempt; exact method trong class nhỏ nay được chọn đúng.
+- [x] Chạy follow-up giới hạn cho ba target không ổn định và hai target discovery; kết quả hợp nhất đạt 93.36%, không chạy lại toàn bộ 16 target.
+- [x] Ghép các successful generated tests hiện có và chạy combined-suite coverage: 26/26 test module chạy thành công trên bốn repo, score 86.75%.
+- [x] Tạo report tự động cho per-replicate, paired delta, repo aggregate, failure taxonomy và oracle union.
 - [ ] Sau khi phép đo ổn định, thử một thay đổi duy nhất có ưu tiên cao: branch/path context hoặc candidate test archive.
 - [ ] Chỉ mở rộng lên 50–100 target khi phương pháp thắng ổn định trên calibration set.
+
+## Follow-up sau bản sửa target discovery
+
+Follow-up chỉ dùng `vertex_ai/gemini-3.5-flash-lite`. Dry-run của hai method đều có worklist `1/1`; sau đó evaluation thật cho kết quả:
+
+| Target | Score | Trạng thái |
+| --- | ---: | --- |
+| `isort/main.py::sort_imports` | 100.00% | Valid |
+| `isort/wrap.py::line` | 92.52% | Valid |
+| `isort/deprecated/finders.py::KnownPatternFinder.__init__` | 100.00% | Valid |
+| `mlxtend/frequent_patterns/apriori.py::apriori` | 89.28% | Valid |
+| `typesystem/fields.py::Boolean.validate` | 100.00% | Valid sau hai repair |
+
+Micro-average của năm target, dùng kết quả cuối của hai method sau bản sửa:
+
+- Aggregate score: **93.36%**.
+- Statement coverage: **96.27%** (155/161).
+- Branch coverage: **92.11%** (70/76).
+
+Kết quả này xác nhận target discovery đã hoạt động end-to-end và nhóm target nhiễu có thể đạt cao. Nó chưa chứng minh prompt mới tốt hơn baseline vì vẫn dùng cùng baseline prompt; mục tiêu của follow-up là ổn định phép đo trước P1.
 
 ## Lưu ý cấu hình trước lần chạy sau
 

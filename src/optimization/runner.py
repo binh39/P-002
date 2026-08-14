@@ -447,6 +447,10 @@ class CoverUpExperimentRunner:
             selected_tests = _saved_tests_for_target(
                 rewritten_traces, job.target, workspace=job.final_workspace,
             )
+            target_discovery_failed = any(
+                trace.get("outcome") == "target_discovery_failed"
+                for trace in target_traces
+            )
             if not selected_tests:
                 empty_test = run_dir / f"empty_target_{job.artifact_token}.py"
                 empty_test.write_text(
@@ -522,6 +526,16 @@ class CoverUpExperimentRunner:
                         ),
                         attempt_traces=target_traces,
                     )
+            if target_discovery_failed:
+                if target_result.score is None:
+                    target_result.score = {}
+                target_result.score["valid"] = False
+                target_result.score["generator_exit_code"] = completed.returncode
+                target_result.feedback = (
+                    "Score: 0. Target discovery failed: CoverUp produced no "
+                    "attempt trace or generated test for exact target "
+                    f"{job.target.source_file}::{job.target.symbol}."
+                )
             coverup_log_text = (
                 job.coverup_log.read_text(encoding="utf-8")
                 if job.coverup_log.is_file()
@@ -652,11 +666,18 @@ class CoverUpExperimentRunner:
             / run_id
         )
         run_dir.mkdir(parents=True, exist_ok=False)
-        environment = _test_environment(self.config.project_root)
         grouped: dict[str, list[SymbolTarget]] = {}
         for target in targets:
             grouped.setdefault(target.project, []).append(target)
         projects = sorted(grouped)
+        package_dirs = {
+            project: self.config.package_dir_for(project).resolve()
+            for project in projects
+        }
+        environment = _test_environment(
+            self.config.project_root,
+            tuple(sorted({path.parent for path in package_dirs.values()})),
+        )
         multi_project = len(projects) > 1
         if multi_project:
             per_project_tests = {
@@ -680,7 +701,7 @@ class CoverUpExperimentRunner:
         final_exit_code = 0
         for project in projects:
             group = grouped[project]
-            package_dir = self.config.package_dir_for(project).resolve()
+            package_dir = package_dirs[project]
             safe_project = re.sub(r"[^A-Za-z0-9_.-]+", "_", project).strip("._-")
             suffix = "" if not multi_project else f"_{safe_project}"
             after_json = run_dir / f"coverage_after{suffix}.json"
