@@ -465,6 +465,10 @@ proposal khác baseline, baseline và proposal được so sánh trên locked te
 test thì fallback về validation. Proposal chỉ được promote khi cải thiện nghiêm ngặt, nên
 một proposal hòa hoặc kém không thể thay thế baseline.
 
+`finalize --evaluation-replicates N` lặp cả baseline lẫn proposal với cùng `N`; r0 hợp lệ được
+tái sử dụng từ cache và chỉ sinh các replicate còn thiếu. Kết quả final là mean-to-mean paired theo
+cùng target/protocol, không so candidate nhiều lần với một baseline reference duy nhất.
+
 Sơ đồ ASCII chi tiết về input, batch/example, cache, reflection và promotion nằm tại
 `docs/GEPA_CURRENT_FLOW.md`.
 

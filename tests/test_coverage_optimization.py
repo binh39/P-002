@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from src.optimization.cli import (
+    _repeat_final_baseline,
     _resolve_project_layouts,
     _top_isort_targets,
     parser,
@@ -582,6 +583,57 @@ def test_optimization_cli_exposes_gepa_search_controls():
 
     assert args.gepa_seed == 19
     assert args.reflection_minibatch_size == 3
+
+
+def test_repeated_final_gate_evaluates_baseline_with_same_replicate_count(
+    tmp_path,
+    monkeypatch,
+):
+    targets = [SymbolTarget("project", "pkg/module.py", "target", "test")]
+    reference_rows = [{
+        "target": targets[0].__dict__,
+        "score": 0.4,
+        "coverage": {"valid": True, "num_statements": 1, "num_branches": 0},
+    }]
+    expected = {
+        "results": [{**reference_rows[0], "score": 0.6}],
+        "aggregate": {"score": 0.6},
+        "run_ids": ["r0", "r1", "r2"],
+        "tests_workspaces": ["w0", "w1", "w2"],
+    }
+    calls = []
+
+    def fake_repeated(
+        runner,
+        batch_targets,
+        bundle,
+        candidate_dir,
+        **kwargs,
+    ):
+        calls.append((runner, batch_targets, bundle, candidate_dir, kwargs))
+        return expected
+
+    monkeypatch.setattr("src.optimization.cli.evaluate_bundle_repeated", fake_repeated)
+    baseline = baseline_bundle()
+
+    result = _repeat_final_baseline(
+        "runner",
+        targets,
+        baseline,
+        tmp_path / "candidates",
+        split="test",
+        replicates=3,
+        reference_rows=reference_rows,
+    )
+
+    assert result is expected
+    assert len(calls) == 1
+    assert calls[0][4] == {
+        "split": "test",
+        "workspace_kind": "baseline",
+        "replicates": 3,
+        "reference_results": reference_rows,
+    }
 
 
 def test_run_streamed_forwards_retains_and_unbuffers_output(capsys):

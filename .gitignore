@@ -85,5 +85,6 @@ binh/phase1_runs/**/gepa_direct_logs/
 binh/phase1_runs/**/candidates/evaluations/
 binh/phase1_runs/**/candidates/reflection_traces.jsonl
 binh/phase1_runs/e41*/candidates/*.json
+binh/phase1_runs/e41_gepa_budget30_seed7_mb3/
 
 .claude

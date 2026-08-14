@@ -616,6 +616,36 @@ def _coverage_summary(aggregate: dict, count: int) -> dict:
     }
 
 
+def _repeat_final_baseline(
+    runner: CoverUpExperimentRunner,
+    targets: list[SymbolTarget],
+    baseline: PromptBundle,
+    candidate_dir: Path,
+    *,
+    split: str,
+    replicates: int,
+    reference_rows: list[dict],
+) -> dict:
+    """Use the same generation replicate count for both sides of a final gate."""
+    if replicates == 1:
+        return {
+            "results": reference_rows,
+            "aggregate": aggregate_coverage_score(reference_rows),
+            "run_ids": [],
+            "tests_workspaces": [],
+        }
+    return evaluate_bundle_repeated(
+        runner,
+        targets,
+        baseline,
+        candidate_dir,
+        split=split,
+        workspace_kind="baseline",
+        replicates=replicates,
+        reference_results=reference_rows,
+    )
+
+
 def finalize(args: argparse.Namespace) -> None:
     """Recover the final comparison without rerunning an expensive GEPA search."""
     load_dotenv(args.project_root.resolve() / ".env")
@@ -676,7 +706,17 @@ def finalize(args: argparse.Namespace) -> None:
     validate_reference_evaluation(
         rows, split=args.holdout_split, expected_targets=final_targets,
     )
-    baseline_aggregate = aggregate_coverage_score(rows)
+    baseline_evaluation = _repeat_final_baseline(
+        runner,
+        final_targets,
+        baseline,
+        artifacts / "candidates",
+        split=args.holdout_split,
+        replicates=args.evaluation_replicates,
+        reference_rows=rows,
+    )
+    rows = baseline_evaluation["results"]
+    baseline_aggregate = baseline_evaluation["aggregate"]
     proposed_evaluation = evaluate_bundle_repeated(
         runner,
         final_targets,
@@ -715,10 +755,18 @@ def finalize(args: argparse.Namespace) -> None:
         "production_prompt": str(final_path),
         "baseline_prompt": str(args.prompt.resolve()),
         "baseline_tests_workspaces": [
-            *reference.get("tests_workspaces", []), *repaired_workspaces,
+            *(
+                baseline_evaluation["tests_workspaces"]
+                if args.evaluation_replicates > 1
+                else [*reference.get("tests_workspaces", []), *repaired_workspaces]
+            ),
         ],
         "baseline_run_ids": [
-            *reference.get("run_ids", []), *repaired_run_ids,
+            *(
+                baseline_evaluation["run_ids"]
+                if args.evaluation_replicates > 1
+                else [*reference.get("run_ids", []), *repaired_run_ids]
+            ),
         ],
         "run_ids": proposed_evaluation["run_ids"],
         "tests_workspaces": proposed_evaluation["tests_workspaces"],
@@ -729,6 +777,7 @@ def finalize(args: argparse.Namespace) -> None:
             "source_reference_cache": str(args.reference_cache.resolve()),
             "repaired_targets": ["::".join(key[1:3]) for key in sorted(invalid_keys)],
             "gepa_search_rerun": False,
+            "paired_baseline_replicates": args.evaluation_replicates,
         },
     }
     (artifacts / "final_validation.json").write_text(

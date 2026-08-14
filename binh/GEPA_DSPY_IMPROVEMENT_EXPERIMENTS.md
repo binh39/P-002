@@ -632,11 +632,11 @@ Mỗi run cần ít nhất ba seed ở bước xác nhận cuối. Không cần 
 
 ### P1 — Ít thay đổi kiến trúc, khả năng có gain sớm
 
-- [ ] E20: budget 30/120/300. Control 30 đã chạy; 120/300 chờ holdout có headroom.
+- [x] E20 budget 30 với E41: proposal tăng validation 17,46 điểm nhưng thua paired 3-replicate holdout 9,99 điểm; reject. Chưa có lý do chạy 120/300.
 - [x] E21: đã chạy minibatch 3 so với 8 trên calibration 16 target. Chưa có cấu hình thắng: batch 3 overfit holdout, batch 8 giữ baseline; cần repeated paired evaluation vì variance lớn. Xem `binh/PHASE1_MINIBATCH_ABLATION_RESULT.md`.
 - [ ] E22: expose GEPA seed và chạy multi-seed. Đã expose seed; multi-seed chưa chạy.
 - [ ] E23: strong reflection model.
-- [ ] E26: top-K repeated reranking.
+- [ ] E26: top-K repeated reranking. Finalize đã sửa để lặp cả baseline/proposal; bước còn lại là rerank top-K trên validation trước khi mở holdout.
 - [x] E30: taxonomy/schema 3 và live control hoàn tất; không có gain, chuyển sang E41/E43 để bổ sung API/test context.
 - [ ] E40: exact branch/path context.
 
