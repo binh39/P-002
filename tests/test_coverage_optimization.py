@@ -993,10 +993,7 @@ def test_local_smoke_gepa_receives_each_subsample_trace_from_one_batch_workspace
         "first", "second",
     ]
     rows_by_target = {row["Inputs"]["target"]: row for row in reflective}
-    assert set(rows_by_target) == {"pkg/a.py::first", "pkg/b.py::second"}
-    assert rows_by_target["pkg/a.py::first"]["Generated Outputs"][
-        "candidate_test"
-    ] == "def test_first(): pass"
+    assert set(rows_by_target) == {"pkg/b.py::second"}
     assert rows_by_target["pkg/b.py::second"]["Generated Outputs"][
         "candidate_test"
     ] == "def test_second(): pass"
@@ -2431,6 +2428,77 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
     )
     assert captured["candidate_selection_strategy"].best_probability == 0.7
     assert result.best_bundle == baseline
+
+
+def test_optimize_only_samples_train_targets_below_full_coverage(
+    tmp_path, monkeypatch,
+):
+    baseline = baseline_bundle()
+    captured = {}
+
+    def fake_gepa_optimize(**kwargs):
+        captured.update(kwargs)
+        seed = kwargs["seed_candidate"]
+        return SimpleNamespace(
+            best_candidate=seed,
+            best_idx=0,
+            candidates=[seed],
+            val_aggregate_scores=[0.8],
+            total_metric_calls=2,
+        )
+
+    def fake_preflight(runner, targets, *args, split, **kwargs):
+        del runner, args, kwargs
+        results = []
+        for target in targets:
+            score = 0.4 if target.symbol in {"target_1", "target_3"} else 1.0
+            results.append({
+                "target": target.__dict__,
+                "score": score,
+                "coverage": {
+                    "valid": True,
+                    "score": score,
+                    "num_statements": 2,
+                    "num_branches": 1,
+                },
+                "feedback": "ok",
+            })
+        return {
+            "results": results,
+            "aggregate": {
+                "score": 0.8,
+                "statement_coverage": 0.8,
+                "branch_coverage": 0.8,
+            },
+        }
+
+    monkeypatch.setattr("src.optimization.gepa.gepa_core.optimize", fake_gepa_optimize)
+    monkeypatch.setattr(
+        "src.optimization.gepa.evaluate_bundle_repeated", fake_preflight,
+    )
+    train = [
+        SymbolTarget("project", f"pkg/{index}.py", f"target_{index}", "train")
+        for index in range(6)
+    ]
+    validation = [
+        SymbolTarget("project", "pkg/validation.py", "validation", "validation")
+    ]
+
+    optimize(
+        runner=SimpleNamespace(),
+        train_targets=train,
+        validation_targets=validation,
+        baseline=baseline,
+        reflection_lm=lambda prompt: [prompt],
+        artifacts_dir=tmp_path,
+        auto=None,
+        max_metric_calls=2,
+    )
+
+    assert [target.symbol for target in captured["trainset"]] == [
+        "target_1", "target_3",
+    ]
+    assert captured["reflection_minibatch_size"] == 2
 
 
 def test_tune_preflights_baseline_but_skips_proposal_when_gepa_keeps_it(

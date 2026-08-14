@@ -80,7 +80,7 @@ Environment
                 | seed candidate = baseline               |
                 | 70% best / 30% Pareto + hybrid frontier|
                 | causal selector: initial or error       |
-                | reflection minibatch <= 5 examples      |
+                | reflection <= 5 incomplete examples     |
                 | merge enabled                           |
                 +-------------------+---------------------+
                                     |
@@ -142,7 +142,7 @@ adapter.evaluate(batch=[example A, example B, ...], candidate=C)
 
 `batch` co the la:
 
-- reflection minibatch nho, toi da 5 example theo cau hinh hien tai;
+- reflection minibatch nho, toi da 5 example co coverage duoi 100% theo cau hinh hien tai;
 - mot tap example train/validation ma GEPA can cham;
 - khong nhat thiet la toan bo split.
 
@@ -381,7 +381,9 @@ seed_candidate              = exact baseline bundle
 candidate_selection_strategy = 70% current aggregate best + 30% Pareto
 frontier_type               = hybrid
 module_selector             = causal(initial or exercised error)
-reflection_minibatch_size   = min(5, number_of_train_targets)
+reflection_minibatch_size   = min(5, number_of_incomplete_train_targets)
+reflection_trainset        = baseline train targets with coverage < 100%
+reflection_context         = current candidate targets with coverage < 100%
 use_merge                   = true
 max_merge_invocations       = 5
 skip_perfect_score          = false

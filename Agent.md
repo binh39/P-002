@@ -56,7 +56,7 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
 - `--evaluation-replicates 2`: giảm nhiễu do LLM generation khi đánh giá candidate quan trọng.
 - `--max-concurrency 10`: trần mặc định cho CoverUp; hạ xuống nếu gặp HTTP 429 hoặc giới hạn quota.
 - Budget: `light=120`, `medium=300`, `heavy=600` metric calls.
-- Search dùng Pareto selection, hybrid frontier, reflection minibatch 5, merge candidates và evaluation cache. Khi có failure, reflection LM trước tiên phải viết một test chẩn đoán qua `run_test_experiment`; chỉ khi pytest pass và score của chính target tăng, nó mới được rút bài học và gọi `update_prompt_component`. Test chẩn đoán không được chép vào candidate workspace hoặc dùng để chấm GEPA; CoverUp phải sinh test mới từ prompt candidate. Reflection tái dựng đầy đủ `failing test -> error -> repaired test -> outcome`, gồm mọi lời gọi/kết quả `get_info`, và không đưa baseline test vào từng record.
+- Search dùng Pareto selection, hybrid frontier, reflection minibatch tối đa 5 target có coverage dưới 100%, merge candidates và evaluation cache. Target baseline đã đạt 100% không được đưa vào train minibatch; target vừa đạt 100% ở candidate hiện tại cũng không được đưa vào context reflection. Khi có failure, reflection LM trước tiên phải viết một test chẩn đoán qua `run_test_experiment`; chỉ khi pytest pass và score của chính target tăng, nó mới được rút bài học và gọi `update_prompt_component`. Test chẩn đoán không được chép vào candidate workspace hoặc dùng để chấm GEPA; CoverUp phải sinh test mới từ prompt candidate. Reflection tái dựng đầy đủ `failing test -> error -> repaired test -> outcome`, gồm mọi lời gọi/kết quả `get_info`, và không đưa baseline test vào từng record.
 
 ## Lệnh kiểm tra bắt buộc sau khi sửa
 

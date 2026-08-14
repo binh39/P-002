@@ -120,6 +120,7 @@ FULL_LOG_BEGIN = "PROMPTOPT_DEV_FULL_LOG_BEGIN"
 FULL_LOG_END = "PROMPTOPT_DEV_FULL_LOG_END"
 MAX_OPTIMIZER_TEST_EXPERIMENTS = 3
 REFLECTION_MINIBATCH_SIZE = 5
+PERFECT_COVERAGE_THRESHOLD = 1.0 - 1e-6
 
 _DIGEST_LOCKS: dict[str, threading.Lock] = {}
 _DIGEST_LOCKS_GUARD = threading.Lock()
@@ -461,6 +462,20 @@ def _result_identity(result: dict) -> tuple[str, str, str, str]:
 
 def _mean(values: Sequence[float]) -> float:
     return sum(values) / len(values) if values else 0.0
+
+
+def _has_incomplete_coverage(record: Mapping[str, Any]) -> bool:
+    """Return whether a measured target still has any uncovered behavior."""
+    score = record.get("candidate_score", record.get("score"))
+    if isinstance(score, (int, float)):
+        return float(score) < PERFECT_COVERAGE_THRESHOLD
+    coverage = record.get("coverage")
+    if isinstance(coverage, Mapping):
+        coverage_score = coverage.get("score")
+        if isinstance(coverage_score, (int, float)):
+            return float(coverage_score) < PERFECT_COVERAGE_THRESHOLD
+    # Missing measurements must remain eligible so failures are not hidden.
+    return True
 
 
 def _clip_text(value: Any, limit: int, *, keep_tail: bool = False) -> str:
@@ -955,6 +970,8 @@ class CausalReflectionComponentSelector:
         evidence = {component: 0 for component in candidate}
 
         for trajectory in trajectories:
+            if not _has_incomplete_coverage(trajectory):
+                continue
             target_score = min(1.0, max(0.0, float(trajectory.get("score", 0.0))))
             target_gap = max(0.05, 1.0 - target_score)
             attempts = list(trajectory.get("attempt_traces", []))
@@ -1010,7 +1027,8 @@ class LLMReflectionComponentSelector:
     ) -> list[str]:
         del state, subsample_scores, candidate_idx
         has_failure = any(
-            str(attempt.get("component", "")) in candidate
+            _has_incomplete_coverage(trajectory)
+            and str(attempt.get("component", "")) in candidate
             and _attempt_failure_severity(attempt) > 0
             for trajectory in trajectories
             for attempt in trajectory.get("attempt_traces", [])
@@ -1341,6 +1359,10 @@ class CoverUpPromptAdapter:
         trajectories = eval_batch.trajectories
         if trajectories is None:
             raise ValueError("GEPA reflection requires captured CoverUp trajectories")
+        trajectories = [
+            trajectory for trajectory in trajectories
+            if _has_incomplete_coverage(trajectory)
+        ]
         result: dict[str, list[dict[str, Any]]] = {}
         for component in components_to_update:
             placeholders = COMPONENT_PLACEHOLDERS[component]
@@ -1562,7 +1584,7 @@ class CoverUpPromptAdapter:
                 baseline_score = float(
                     outputs.get("candidate_score", outputs.get("symbol_score", 0.0))
                 )
-                if baseline_score >= 0.999999:
+                if not _has_incomplete_coverage({"score": baseline_score}):
                     continue
                 seen.add((component, label))
                 case_id = "case-" + hashlib.sha256(
@@ -2106,6 +2128,7 @@ def optimize(
         evaluation_replicates=evaluation_replicates,
     )
     validation_baseline_aggregate: dict[str, Any] | None = None
+    reflection_train_targets = list(train_targets)
     for preflight_split, preflight_targets in (
         ("train", train_targets),
         ("validation", validation_targets),
@@ -2125,6 +2148,16 @@ def optimize(
             expected_targets=preflight_targets,
         )
         adapter._remember_reference_units(baseline_preflight["results"])
+        if preflight_split == "train":
+            incomplete = {
+                _result_identity(result)
+                for result in baseline_preflight["results"]
+                if _has_incomplete_coverage(result)
+            }
+            reflection_train_targets = [
+                target for target in train_targets
+                if _target_identity(target) in incomplete
+            ]
         if preflight_split == "validation":
             validation_baseline_aggregate = baseline_preflight.get("aggregate") or (
                 aggregate_coverage_score(baseline_preflight["results"])
@@ -2141,12 +2174,26 @@ def optimize(
         f"Iteration 0: Baseline validation aggregate metrics: {baseline_metrics}",
         flush=True,
     )
+    print(
+        "Reflection train targets below 100% coverage: "
+        f"{len(reflection_train_targets)}/{len(train_targets)}",
+        flush=True,
+    )
+    adapter.targets_by_split["train"] = reflection_train_targets
+    if not reflection_train_targets:
+        return PromptOptimizationResult(
+            best_bundle=baseline,
+            best_index=0,
+            candidates=[baseline],
+            validation_scores=[baseline_metrics["score"]],
+            total_metric_calls=0,
+        )
     run_digest = _optimization_run_digest(
         runner, baseline, train_targets, validation_targets, evaluation_replicates
     )
     result = gepa_core.optimize(
         seed_candidate=baseline.as_candidate(),
-        trainset=train_targets,
+        trainset=reflection_train_targets,
         valset=validation_targets,
         adapter=adapter,
         reflection_lm=None,
@@ -2157,7 +2204,7 @@ def optimize(
         frontier_type="hybrid",
         skip_perfect_score=False,
         reflection_minibatch_size=min(
-            REFLECTION_MINIBATCH_SIZE, len(train_targets)
+            REFLECTION_MINIBATCH_SIZE, len(reflection_train_targets)
         ),
         module_selector=LLMReflectionComponentSelector(),
         use_merge=True,
