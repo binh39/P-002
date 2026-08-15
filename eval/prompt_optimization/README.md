@@ -504,6 +504,49 @@ Lệnh này ghi `candidate_rerank.json` và `prompts/gepa_reranked.json`; cache 
 sử dụng, chỉ các replicate còn thiếu mới gọi model. Sau đó dùng prompt đã chọn làm
 `--proposed-prompt` cho `finalize`.
 
+### Multi-seed search không mở holdout
+
+E22 dùng cùng artifacts directory để chia sẻ evaluation cache, nhưng mỗi seed phải lưu program
+riêng. `--search-only` dừng ngay sau GEPA search và không đo bất kỳ baseline/proposal nào trên
+locked holdout:
+
+```powershell
+foreach ($seed in 17, 37) {
+  python -m src.optimization.cli `
+    --sample-repos-dir src/sample_repo `
+    --artifacts-dir <shared-run-dir> `
+    --max-concurrency 4 `
+    --repeat-tests 5 `
+    optimize `
+    --dataset <dataset.jsonl> `
+    --prompt <baseline.json> `
+    --max-metric-calls 30 `
+    --gepa-seed $seed `
+    --reflection-minibatch-size 3 `
+    --search-only `
+    --program-output <shared-run-dir>/optimized_program_seed${seed}.json
+}
+```
+
+Sau đó lặp `--optimized-program` để pool seed 7/17/37. CLI từ chối pool nếu budget hoặc
+reflection minibatch khác nhau; baseline/candidate trùng digest được deduplicate trước rerank:
+
+```powershell
+python -m src.optimization.cli `
+  --sample-repos-dir src/sample_repo `
+  --artifacts-dir <shared-run-dir> `
+  rerank `
+  --dataset <dataset.jsonl> `
+  --prompt <baseline.json> `
+  --optimized-program <shared-run-dir>/optimized_program_seed7.json `
+  --optimized-program <shared-run-dir>/optimized_program_seed17.json `
+  --optimized-program <shared-run-dir>/optimized_program_seed37.json `
+  --top-k 5 `
+  --replicates 3
+```
+
+Chỉ `prompts/gepa_reranked.json` sau bước này mới được đưa vào `finalize` trên holdout.
+
 `finalize --evaluation-replicates N` lặp cả baseline lẫn proposal với cùng `N`; r0 hợp lệ được
 tái sử dụng từ cache và chỉ sinh các replicate còn thiếu. Kết quả final là mean-to-mean paired theo
 cùng target/protocol, không so candidate nhiều lần với một baseline reference duy nhất.

@@ -592,6 +592,34 @@ def test_optimization_cli_exposes_gepa_search_controls():
     assert args.rerank_replicates == 3
 
 
+def test_optimization_cli_accepts_search_only_and_multiple_programs():
+    search = parser().parse_args([
+        "optimize",
+        "--dataset",
+        "dataset.jsonl",
+        "--prompt",
+        "prompt.json",
+        "--search-only",
+        "--program-output",
+        "seed17.json",
+    ])
+    rerank = parser().parse_args([
+        "rerank",
+        "--dataset",
+        "dataset.jsonl",
+        "--prompt",
+        "prompt.json",
+        "--optimized-program",
+        "seed7.json",
+        "--optimized-program",
+        "seed17.json",
+    ])
+
+    assert search.search_only is True
+    assert search.program_output == Path("seed17.json")
+    assert rerank.optimized_program == [Path("seed7.json"), Path("seed17.json")]
+
+
 def test_repeated_final_gate_evaluates_baseline_with_same_replicate_count(
     tmp_path,
     monkeypatch,
@@ -751,6 +779,90 @@ def test_rerank_rejects_locked_test_split():
             replicates=3,
             split="test",
         )
+
+
+def test_rerank_saved_program_pools_candidates_from_multiple_seeds(
+    tmp_path, monkeypatch,
+):
+    from src.optimization import cli
+
+    baseline = baseline_bundle()
+    first = PromptBundle(
+        initial=baseline.initial + " First seed.", error=baseline.error,
+    )
+    second = PromptBundle(
+        initial=baseline.initial + " Second seed.", error=baseline.error,
+    )
+    prompt_path = tmp_path / "baseline.json"
+    baseline.save(prompt_path)
+    programs = []
+    for seed, candidate, score in ((7, first, 0.7), (17, second, 0.8)):
+        path = tmp_path / f"seed{seed}.json"
+        path.write_text(json.dumps({
+            "candidates": [baseline.as_candidate(), candidate.as_candidate()],
+            "validation_scores": [0.5, score],
+            "optimizer_config": {
+                "gepa_seed": seed,
+                "reflection_minibatch_size": 3,
+                "max_metric_calls": 30,
+            },
+        }), encoding="utf-8")
+        programs.append(path)
+    artifacts = tmp_path / "artifacts"
+    target = SymbolTarget("project", "pkg/module.py", "target", "validation")
+    captured = {}
+
+    monkeypatch.setattr(cli, "load_dotenv", lambda *args, **kwargs: None)
+    monkeypatch.setattr(cli, "load_targets", lambda path, split: [target])
+    monkeypatch.setattr(
+        cli,
+        "_resolve_project_layouts",
+        lambda root, targets, sample_repos_dir: {},
+    )
+    monkeypatch.setattr(
+        cli,
+        "make_runner",
+        lambda args, projects=None: SimpleNamespace(
+            config=SimpleNamespace(artifacts_dir=artifacts)
+        ),
+    )
+
+    def fake_rerank(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            selected_bundle=second,
+            leaderboard=[],
+            as_dict=lambda: {
+                "selected_digest": bundle_digest(second),
+                "top_k": 3,
+                "replicates": 3,
+                "leaderboard": [],
+            },
+        )
+
+    monkeypatch.setattr(cli, "rerank_prompt_candidates", fake_rerank)
+    cli.rerank_saved_program(SimpleNamespace(
+        project_root=tmp_path,
+        prompt=prompt_path,
+        optimized_program=programs,
+        dataset=tmp_path / "dataset.jsonl",
+        split="validation",
+        sample_repos_dir=Path("sample_repo"),
+        top_k=5,
+        replicates=3,
+        output_prompt=None,
+    ))
+
+    assert captured["candidates"] == [baseline, first, baseline, second]
+    assert captured["validation_scores"] == [0.5, 0.7, 0.5, 0.8]
+    report = json.loads(
+        (artifacts / "candidate_rerank.json").read_text(encoding="utf-8")
+    )
+    assert report["gepa_seeds"] == [7, 17]
+    assert report["source_programs"] == [str(path) for path in programs]
+    assert PromptBundle.load(
+        artifacts / "prompts" / "gepa_reranked.json"
+    ) == second
 
 
 def test_run_streamed_forwards_retains_and_unbuffers_output(capsys):
@@ -2949,6 +3061,89 @@ def test_tune_preflights_baseline_but_skips_proposal_when_gepa_keeps_it(
     assert baseline_bundle().as_candidate() == json.loads(
         (artifacts / "prompts" / "gepa_optimized.json").read_text(encoding="utf-8")
     )
+
+
+def test_tune_search_only_saves_program_without_opening_holdout(
+    tmp_path, monkeypatch,
+):
+    from src.optimization import cli
+
+    baseline = baseline_bundle()
+    prompt_path = tmp_path / "baseline.json"
+    baseline.save(prompt_path)
+    artifacts = tmp_path / "artifacts"
+    program_path = artifacts / "optimized_program_seed17.json"
+    targets = {
+        "train": [SymbolTarget("project", "pkg/a.py", "first", "train")],
+        "validation": [
+            SymbolTarget("project", "pkg/b.py", "second", "validation")
+        ],
+        "test": [SymbolTarget("project", "pkg/c.py", "third", "test")],
+    }
+    (tmp_path / "sample_repo" / "project" / "project").mkdir(parents=True)
+    (tmp_path / "sample_repo" / "project" / "tests").mkdir(parents=True)
+    events = []
+
+    monkeypatch.setattr(cli, "load_dotenv", lambda *args, **kwargs: None)
+    monkeypatch.setenv("OPTIMIZE_MODEL", "fake-optimize-model")
+    monkeypatch.setattr(
+        cli,
+        "make_runner",
+        lambda args, projects=None: SimpleNamespace(
+            config=SimpleNamespace(artifacts_dir=artifacts)
+        ),
+    )
+    monkeypatch.setattr(cli, "load_targets", lambda path, split: targets[split])
+    monkeypatch.setattr(cli.dspy, "LM", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        cli,
+        "evaluate_bundle_repeated",
+        lambda *args, **kwargs: pytest.fail("search-only opened the holdout"),
+    )
+    monkeypatch.setattr(
+        cli,
+        "optimize",
+        lambda **kwargs: (
+            events.append("optimize")
+            or SimpleNamespace(
+                as_dict=lambda: {
+                    "best_index": 0,
+                    "best_candidate": baseline.as_candidate(),
+                    "validation_scores": [0.5],
+                    "total_metric_calls": 1,
+                    "optimizer_config": {"gepa_seed": 17},
+                    "candidates": [baseline.as_candidate()],
+                }
+            )
+        ),
+    )
+    args = SimpleNamespace(
+        project_root=tmp_path,
+        artifacts_dir=artifacts,
+        prompt=prompt_path,
+        dataset=tmp_path / "dataset.jsonl",
+        holdout_split="test",
+        reflection_temperature=0.7,
+        auto=None,
+        max_metric_calls=1,
+        evaluation_replicates=1,
+        gepa_seed=17,
+        reflection_minibatch_size=3,
+        rerank_top_k=0,
+        rerank_replicates=3,
+        search_only=True,
+        program_output=program_path,
+        baseline_tests_dir=None,
+        sample_repos_dir=Path("sample_repo"),
+    )
+
+    cli.tune(args)
+
+    assert events == ["optimize"]
+    assert json.loads(program_path.read_text(encoding="utf-8"))[
+        "optimizer_config"
+    ] == {"gepa_seed": 17}
+    assert not (artifacts / "final_validation.json").exists()
 
 
 def test_exact_target_spec_does_not_match_same_name_in_another_file(monkeypatch):

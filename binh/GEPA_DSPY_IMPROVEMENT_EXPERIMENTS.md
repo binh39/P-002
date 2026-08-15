@@ -179,7 +179,10 @@ Theo dõi input tokens của reflection. Hiện mỗi trajectory có thể chứ
 
 ### E22 — Nhiều GEPA seed
 
-**Trạng thái:** cần biến seed thành cấu hình thật thay vì cố định 7.
+**Trạng thái:** đã triển khai và chạy live seed 7/17/37. Seed 17/37 tạo các proposal hợp lệ ở
+reflection nhưng không proposal nào vượt selection để vào finalist list; pool hiệu dụng vẫn chỉ
+có baseline + proposal seed 7. Rerank/final gate không đổi và proposal bị reject. Xem
+`binh/PHASE1_E22_MULTI_SEED_RESULT.md`.
 
 - Chạy tối thiểu seed 7, 17 và 37.
 - Mỗi seed dùng cùng split, budget và model.
@@ -636,7 +639,7 @@ Mỗi run cần ít nhất ba seed ở bước xác nhận cuối. Không cần 
 
 - [x] E20 budget 30 với E41: proposal tăng validation 17,46 điểm nhưng thua paired 3-replicate holdout 9,99 điểm; reject. Chưa có lý do chạy 120/300.
 - [x] E21: đã chạy minibatch 3 so với 8 trên calibration 16 target. Chưa có cấu hình thắng: batch 3 overfit holdout, batch 8 giữ baseline; cần repeated paired evaluation vì variance lớn. Xem `binh/PHASE1_MINIBATCH_ABLATION_RESULT.md`.
-- [ ] E22: expose GEPA seed và chạy multi-seed. Đã expose seed; multi-seed chưa chạy.
+- [x] E22: multi-seed seed 7/17/37 đã chạy. Pool chỉ còn 2 unique finalist; winner validation vẫn thua holdout 9,99 điểm, reject.
 - [ ] E23: strong reflection model.
 - [x] E26: top-K repeated reranking đã triển khai và chạy live. Candidate pool chỉ có 2 nên winner không đổi; validation +6,30 điểm nhưng paired holdout -9,99 điểm, reject.
 - [x] E30: taxonomy/schema 3 và live control hoàn tất; không có gain, chuyển sang E41/E43 để bổ sung API/test context.

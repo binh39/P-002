@@ -116,6 +116,16 @@ def parser() -> argparse.ArgumentParser:
         default=3,
         help="Independent validation generations per rerank finalist (default: 3)",
     )
+    tune.add_argument(
+        "--search-only",
+        action="store_true",
+        help="Save GEPA candidates without evaluating or opening the final holdout",
+    )
+    tune.add_argument(
+        "--program-output",
+        type=Path,
+        help="Optional optimized-program output path, useful for multi-seed search",
+    )
     tune.add_argument("--reflection-temperature", type=float, default=0.7)
     tune.add_argument(
         "--gepa-seed",
@@ -166,7 +176,13 @@ def parser() -> argparse.ArgumentParser:
     )
     rerank.add_argument("--dataset", type=Path, required=True)
     rerank.add_argument("--prompt", type=Path, required=True)
-    rerank.add_argument("--optimized-program", type=Path, required=True)
+    rerank.add_argument(
+        "--optimized-program",
+        type=Path,
+        action="append",
+        required=True,
+        help="Saved GEPA program; repeat this option to pool multiple seeds",
+    )
     rerank.add_argument("--split", choices=("validation",), default="validation")
     rerank.add_argument("--top-k", type=int, default=5)
     rerank.add_argument("--replicates", type=int, default=3)
@@ -399,17 +415,48 @@ def rerank_saved_program(args: argparse.Namespace) -> None:
     root = args.project_root.resolve()
     load_dotenv(root / ".env")
     baseline = PromptBundle.load(_resolve(root, args.prompt).resolve())
-    program_path = _resolve(root, args.optimized_program).resolve()
-    program = json.loads(program_path.read_text(encoding="utf-8"))
-    candidate_values = program.get("candidates")
-    validation_scores = program.get("validation_scores")
-    if not isinstance(candidate_values, list) or not isinstance(
-        validation_scores, list
-    ):
-        raise ValueError(
-            "optimized_program must contain candidate and validation score lists"
+    configured_programs = args.optimized_program
+    if isinstance(configured_programs, Path):
+        configured_programs = [configured_programs]
+    program_paths = [_resolve(root, path).resolve() for path in configured_programs]
+    candidates: list[PromptBundle] = []
+    validation_scores: list[float] = []
+    optimizer_configs = []
+    seeds = []
+    for program_path in program_paths:
+        program = json.loads(program_path.read_text(encoding="utf-8"))
+        candidate_values = program.get("candidates")
+        candidate_scores = program.get("validation_scores")
+        if not isinstance(candidate_values, list) or not isinstance(
+            candidate_scores, list
+        ):
+            raise ValueError(
+                f"{program_path} must contain candidate and validation score lists"
+            )
+        if len(candidate_values) != len(candidate_scores):
+            raise ValueError(
+                f"{program_path} candidate and validation score counts differ"
+            )
+        candidates.extend(
+            PromptBundle.from_candidate(value) for value in candidate_values
         )
-    candidates = [PromptBundle.from_candidate(value) for value in candidate_values]
+        validation_scores.extend(float(value) for value in candidate_scores)
+        config = program.get("optimizer_config")
+        if isinstance(config, dict):
+            optimizer_configs.append(config)
+            if "gepa_seed" in config:
+                seeds.append(int(config["gepa_seed"]))
+    comparable_configs = {
+        json.dumps(
+            {key: value for key, value in config.items() if key != "gepa_seed"},
+            sort_keys=True,
+        )
+        for config in optimizer_configs
+    }
+    if len(comparable_configs) > 1:
+        raise ValueError(
+            "Multi-seed programs must use the same optimizer configuration except seed"
+        )
     targets = load_targets(_resolve(root, args.dataset).resolve(), args.split)
     if not targets:
         raise ValueError(f"No targets found for split {args.split!r}")
@@ -421,7 +468,7 @@ def rerank_saved_program(args: argparse.Namespace) -> None:
         validation_targets=targets,
         baseline=baseline,
         candidates=candidates,
-        validation_scores=[float(value) for value in validation_scores],
+        validation_scores=validation_scores,
         candidate_dir=artifacts / "candidates",
         top_k=args.top_k,
         replicates=args.replicates,
@@ -429,8 +476,13 @@ def rerank_saved_program(args: argparse.Namespace) -> None:
     )
     artifacts.mkdir(parents=True, exist_ok=True)
     report_path = artifacts / "candidate_rerank.json"
+    report = {
+        **result.as_dict(),
+        "source_programs": [str(path) for path in program_paths],
+        "gepa_seeds": seeds,
+    }
     report_path.write_text(
-        json.dumps(result.as_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
+        json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
     )
     output_prompt = (
         _resolve(root, args.output_prompt).resolve()
@@ -448,7 +500,11 @@ def rerank_saved_program(args: argparse.Namespace) -> None:
 
 
 def tune(args: argparse.Namespace) -> None:
-    load_dotenv(args.project_root.resolve() / ".env")
+    root = args.project_root.resolve()
+    load_dotenv(root / ".env")
+    search_only = bool(getattr(args, "search_only", False))
+    if search_only and int(getattr(args, "rerank_top_k", 0)):
+        raise ValueError("--search-only cannot be combined with --rerank-top-k")
     baseline = PromptBundle.load(args.prompt.resolve())
     train = load_targets(args.dataset.resolve(), "train")
     validation = load_targets(args.dataset.resolve(), "validation")
@@ -470,55 +526,58 @@ def tune(args: argparse.Namespace) -> None:
     })
     artifacts = runner.config.artifacts_dir.resolve()
     existing_baseline_reference = None
-    if args.baseline_tests_dir is not None:
-        baseline_tests_dir = _resolve(
-            args.project_root.resolve(), args.baseline_tests_dir
-        ).resolve()
-        if not baseline_tests_dir.is_dir():
-            raise FileNotFoundError(
-                f"The baseline tests directory does not exist: {baseline_tests_dir}"
+    baseline_evaluation = None
+    baseline_results = None
+    baseline_aggregate = None
+    baseline_mean_score = None
+    if not search_only:
+        if args.baseline_tests_dir is not None:
+            baseline_tests_dir = _resolve(root, args.baseline_tests_dir).resolve()
+            if not baseline_tests_dir.is_dir():
+                raise FileNotFoundError(
+                    f"The baseline tests directory does not exist: {baseline_tests_dir}"
+                )
+            baseline_record = runner.evaluate_existing_tests_batch(
+                final_targets,
+                baseline_tests_dir,
+                split=final_split,
             )
-        baseline_record = runner.evaluate_existing_tests_batch(
+            historical_results = [
+                {
+                    "target": result.target.__dict__,
+                    "run_id": baseline_record.run_id,
+                    "score": float(result.score["score"]) if result.score else 0.0,
+                    "coverage": result.score,
+                    "feedback": result.feedback,
+                }
+                for result in baseline_record.results
+            ]
+            existing_baseline_reference = {
+                "run_id": baseline_record.run_id,
+                "tests_workspace": baseline_record.tests_workspace,
+                "results": historical_results,
+                "aggregate": aggregate_coverage_score(historical_results),
+            }
+
+        # The final-split baseline is only needed by the promotion gate. Search-only
+        # multi-seed runs must not inspect the locked holdout.
+        baseline_evaluation = evaluate_bundle_repeated(
+            runner,
             final_targets,
-            baseline_tests_dir,
+            baseline,
+            artifacts / "candidates",
             split=final_split,
+            workspace_kind="baseline",
+            replicates=args.evaluation_replicates,
         )
         baseline_results = [
-            {
-                "target": result.target.__dict__,
-                "run_id": baseline_record.run_id,
-                "score": float(result.score["score"]) if result.score else 0.0,
-                "coverage": result.score,
-                "feedback": result.feedback,
-            }
-            for result in baseline_record.results
+            dict(result) for result in baseline_evaluation["results"]
         ]
-        baseline_evaluation = {
-            "run_id": baseline_record.run_id,
-            "tests_workspace": baseline_record.tests_workspace,
-            "results": baseline_results,
-            "aggregate": aggregate_coverage_score(baseline_results),
-        }
-        existing_baseline_reference = baseline_evaluation
-
-    # Measure the locked final-split baseline before starting GEPA. This result
-    # is cached and reused at the promotion gate, so a broken holdout target
-    # fails early instead of wasting the entire search budget first.
-    baseline_evaluation = evaluate_bundle_repeated(
-        runner,
-        final_targets,
-        baseline,
-        artifacts / "candidates",
-        split=final_split,
-        workspace_kind="baseline",
-        replicates=args.evaluation_replicates,
-    )
-    baseline_results = baseline_evaluation["results"]
-    validate_reference_evaluation(
-        baseline_results, split=final_split, expected_targets=final_targets,
-    )
-    baseline_aggregate = baseline_evaluation["aggregate"]
-    baseline_mean_score = float(baseline_aggregate["score"])
+        validate_reference_evaluation(
+            baseline_results, split=final_split, expected_targets=final_targets,
+        )
+        baseline_aggregate = baseline_evaluation["aggregate"]
+        baseline_mean_score = float(baseline_aggregate["score"])
 
     lm = dspy.LM(
         _model_from_env("OPTIMIZE_MODEL"),
@@ -536,10 +595,25 @@ def tune(args: argparse.Namespace) -> None:
         reflection_minibatch_size=args.reflection_minibatch_size,
     )
     artifacts.mkdir(parents=True, exist_ok=True)
-    program_path = artifacts / "optimized_program.json"
+    configured_program_output = getattr(args, "program_output", None)
+    program_path = (
+        _resolve(root, configured_program_output).resolve()
+        if configured_program_output is not None
+        else artifacts / "optimized_program.json"
+    )
+    program_path.parent.mkdir(parents=True, exist_ok=True)
     program_path.write_text(
         json.dumps(optimized.as_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
     )
+    if search_only:
+        print(f"Saved search-only GEPA program to {program_path}")
+        print("Locked holdout was not evaluated.")
+        return
+
+    assert baseline_evaluation is not None
+    assert baseline_results is not None
+    assert baseline_aggregate is not None
+    assert baseline_mean_score is not None
     rerank_top_k = int(getattr(args, "rerank_top_k", 0))
     rerank_replicates = int(getattr(args, "rerank_replicates", 3))
     if rerank_top_k < 0:
