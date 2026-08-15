@@ -8,7 +8,6 @@ export type NavigationId =
   | "projects"
   | "experiments"
   | "coverage"
-  | "playground"
   | "registry"
   | "settings";
 
@@ -26,7 +25,6 @@ const navItems = [
   { id: "experiments" as NavigationId, label: "Experiments", Icon: IC.Flask },
   { id: "coverage" as NavigationId, label: "Coverage Guide", Icon: IC.Code },
   { id: "registry" as NavigationId, label: "Prompt Registry", Icon: IC.CheckSquare },
-  { id: "playground" as NavigationId, label: "Playground", Icon: IC.Play },
 ];
 
 export default function Sidebar({
