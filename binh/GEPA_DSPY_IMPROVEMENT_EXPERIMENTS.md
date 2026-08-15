@@ -372,6 +372,11 @@ Context không được bake vào global prompt và bị chặn bởi budget ký
 
 ### E42 — Relevant callers/callees
 
+**Trạng thái 2026-08-15:** đã implement retrieval có giới hạn cho constructor, direct callee và usage example,
+chỉ kích hoạt sau `test_error`. Train hard-target smoke tăng từ 0 lên 82,44%, nhưng E70 validation 8 target hòa
+baseline ở 8,04%; chưa promote. Bottleneck mới là module test nhiều case bị loại toàn bộ chỉ vì một case còn lỗi.
+Xem `binh/PHASE1_E42_E46_FAILURE_CONTEXT_RESULT.md`.
+
 Retrieve source của:
 
 - Callee trực tiếp xuất hiện trong branch khó.
@@ -424,6 +429,10 @@ Cho agent quyền hỏi thông tin giới hạn và an toàn:
 Ghi mọi tool call/output vào trace để GEPA reflection học được lúc nào nên yêu cầu thêm thông tin.
 
 ### E46 — Retrieval theo lỗi
+
+**Trạng thái 2026-08-15:** đã implement failure-family routing cho attribute/protocol, import/export,
+assertion/behavior, constructor/type và filesystem/setup; context bị cap 4.000 ký tự và không xuất hiện ở initial
+prompt. Validation chưa có gain, nên policy mặc định vẫn tắt và E70 test chưa được mở.
 
 Không đưa mọi loại context vào mọi request. Dùng policy:
 
@@ -701,9 +710,9 @@ Mỗi run cần ít nhất ba seed ở bước xác nhận cuối. Không cần 
 
 - [ ] E31–E33: contrastive/clustered reflection.
 - [x] E41: exact signature/type/default/docstring/decorator/inheritance context đã thắng validation và locked holdout; promote thành mặc định.
-- [ ] E42: callers/callees context.
+- [x] E42: callers/callees context (implemented; validation tie, not promoted).
 - [x] E43: relevant existing tests/fixtures đã implement nhưng live ablation thua; reject và giữ mặc định tắt.
-- [ ] E44–E46: project setup, failure-triggered và runtime retrieval.
+- [ ] E44–E46: E46 failure-triggered retrieval đã implement nhưng chưa thắng validation; E44 manifest và E45 runtime probes còn thiếu.
 - [ ] E25: Pareto exploration ablation.
 - [x] E28: prompt length objective/hard cap đã triển khai và replay. Penalty 0,02/1k hoặc cap 4.000 chọn baseline, tránh regression nhưng chưa tạo coverage gain.
 

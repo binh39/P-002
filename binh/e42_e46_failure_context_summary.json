@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "kind": "failure_triggered_context_ablation",
+  "experiments": [
+    "E42-E44-failure-triggered-context",
+    "E42-E44-failure-triggered-context-SFS-r2"
+  ],
+  "feature_mapping_note": "The frozen protocol names are retained for audit history. The implemented behavior is primarily E42 callers/callees plus E46 failure-routed retrieval; a complete E44 project setup manifest is not implemented.",
+  "model": "vertex_ai/gemini-3.5-flash-lite",
+  "prompt_digest": "d8123dc403839c22",
+  "source_dataset_sha256": "8876d578f2b65e64ca113fa3e27586fce2be6956ff1e2ff238e4930ffda94fdd",
+  "holdout": {
+    "split": "test",
+    "sha256": "fa029ed3f1bb2203b28a712d2d67f0c78a03d25d1aaebf2316473fd0879a815c",
+    "evaluated": false,
+    "status": "locked_unevaluated"
+  },
+  "configuration": {
+    "evaluation_replicates": 1,
+    "max_attempts": 3,
+    "repeat_tests": 2,
+    "target_context": true,
+    "target_context_max_chars": 6000,
+    "repository_test_context": false,
+    "failure_context": true,
+    "failure_context_max_chars": 4000
+  },
+  "train_smoke": {
+    "target": "isort:isort/settings.py:Config.__init__",
+    "baseline_score": 0.0,
+    "treatment_score": 0.8244444444444443,
+    "absolute_delta": 0.8244444444444443,
+    "statement_coverage": 0.8814814814814815,
+    "branch_coverage": 0.8,
+    "covered_statements": 119,
+    "num_statements": 135,
+    "covered_branches": 72,
+    "num_branches": 90,
+    "evaluation_digest": "42e07a188c50",
+    "failure_context_prompt_count": 2,
+    "terminal_outcome": "coverage_gain_saved"
+  },
+  "validation_ablation": {
+    "target_count": 8,
+    "baseline_evaluation_digest": "709c5d9915c1",
+    "treatment_evaluation_digest": "12491d84e725",
+    "baseline_score": 0.08036862939139039,
+    "treatment_score": 0.08036862939139039,
+    "absolute_delta": 0.0,
+    "baseline_statement_coverage": 0.1686046511627907,
+    "treatment_statement_coverage": 0.1686046511627907,
+    "baseline_branch_coverage": 0.0425531914893617,
+    "treatment_branch_coverage": 0.0425531914893617,
+    "full_score_targets": 7,
+    "zero_score_targets": 1,
+    "zero_target": "mlxtend:mlxtend/feature_selection/sequential_feature_selector.py:SequentialFeatureSelector.fit",
+    "decision": "tie_do_not_promote"
+  },
+  "sfs_r2_probe": {
+    "evaluation_digest": "a17999b4d56d",
+    "score": 0.0,
+    "failure_sequence": [
+      "AttributeError: estimator protocol",
+      "ValueError: fixed-feature group contract",
+      "ValueError: cross-validation split too large"
+    ],
+    "terminal_outcome": "max_attempts_exhausted"
+  },
+  "conclusion": {
+    "local_repair_capability": "supported_by_train_smoke_and_failure_transitions",
+    "validation_gain": "not_observed",
+    "ten_to_fifteen_point_gain": "not_demonstrated",
+    "primary_bottleneck": "A generated module containing many tests is accepted or rejected as a whole; one remaining failing test discards coverage from passing tests within the module.",
+    "next_experiment": "Isolate and salvage generated test functions, then repair only the failing function while retaining passing coverage."
+  }
+}
