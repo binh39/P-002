@@ -32,6 +32,7 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
    Nếu GEPA chọn lại đúng baseline (bundle digest không đổi), bỏ toàn bộ final split evaluation vì không có proposal mới để so sánh; report phải ghi rõ evaluation đã được skip.
    Khi `evaluation_replicates > 1`, final gate phải sinh/tái dùng cùng số replicate cho cả baseline và proposal rồi so mean-to-mean. Không được lặp candidate nhưng giữ baseline ở một reference replicate duy nhất.
    Khi bật top-K rerank, baseline bắt buộc nằm trong K finalist; chỉ validation được dùng để xếp hạng. Chọn theo mean coverage, failure rate, variance rồi độ dài prompt; locked holdout không được dùng để chọn finalist.
+   Length objective phải báo cả raw coverage và selection score đã phạt. Mặc định penalty/cap tắt; không được chọn ngưỡng bằng cách nhìn holdout. Hard cap phải loại proposal trước generation rerank và không được âm thầm miễn cap cho baseline.
    Multi-seed phải chạy `search-only`, cùng dataset/model/budget/minibatch; mỗi seed lưu program riêng. Chỉ pool/rerank trên validation và mở holdout cho đúng một winner cuối cùng.
 9. `--baseline-tests-dir` chỉ là historical reference bổ sung, không được dùng làm promotion gate thay cho paired baseline/proposal.
 10. Kết quả CoverUp không hợp lệ hoặc thiếu coverage phải nhận 0 covered units nhưng vẫn giữ denominator tham chiếu của baseline, tránh việc lỗi lại làm score tăng giả.

@@ -485,6 +485,18 @@ Top-K tính cả baseline bắt buộc. Reranker chỉ dùng validation, chọn 
 failure rate, variance và cuối cùng là độ dài prompt; chỉ winner mới đi tiếp tới final
 holdout. Mặc định `--rerank-top-k 0` để các workflow hiện tại không tự tăng chi phí.
 
+E28 có hai safety control opt-in:
+
+- `--rerank-length-penalty-per-1k 0.01`: trừ 0,01 selection score (một điểm coverage)
+  cho mỗi 1.000 ký tự vượt baseline. Report luôn giữ cả `mean_score`, `length_penalty` và
+  `selection_score`; raw coverage không bị ghi đè.
+- `--rerank-max-prompt-chars 4000`: loại non-baseline proposal vượt cap trước khi chạy
+  generation rerank. CLI từ chối cap nhỏ hơn chính baseline.
+
+Với lệnh standalone dùng `--length-penalty-per-1k`, `--max-prompt-chars` và
+`--report-output` tương ứng. Các control mặc định tắt; phải preregister ngưỡng trên validation,
+không được điều chỉnh bằng cách nhìn locked holdout.
+
 Nếu GEPA search đã chạy xong, có thể rerank trực tiếp `optimized_program.json` mà không
 chạy lại search:
 

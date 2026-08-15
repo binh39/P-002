@@ -117,6 +117,17 @@ def parser() -> argparse.ArgumentParser:
         help="Independent validation generations per rerank finalist (default: 3)",
     )
     tune.add_argument(
+        "--rerank-length-penalty-per-1k",
+        type=float,
+        default=0.0,
+        help="Coverage score penalty per 1,000 prompt chars above baseline",
+    )
+    tune.add_argument(
+        "--rerank-max-prompt-chars",
+        type=int,
+        help="Discard non-baseline rerank candidates above this total char cap",
+    )
+    tune.add_argument(
         "--search-only",
         action="store_true",
         help="Save GEPA candidates without evaluating or opening the final holdout",
@@ -186,6 +197,9 @@ def parser() -> argparse.ArgumentParser:
     rerank.add_argument("--split", choices=("validation",), default="validation")
     rerank.add_argument("--top-k", type=int, default=5)
     rerank.add_argument("--replicates", type=int, default=3)
+    rerank.add_argument("--length-penalty-per-1k", type=float, default=0.0)
+    rerank.add_argument("--max-prompt-chars", type=int)
+    rerank.add_argument("--report-output", type=Path)
     rerank.add_argument("--output-prompt", type=Path)
 
     archive = commands.add_parser(
@@ -473,9 +487,19 @@ def rerank_saved_program(args: argparse.Namespace) -> None:
         top_k=args.top_k,
         replicates=args.replicates,
         split=args.split,
+        length_penalty_per_1k=float(
+            getattr(args, "length_penalty_per_1k", 0.0)
+        ),
+        max_prompt_chars=getattr(args, "max_prompt_chars", None),
     )
     artifacts.mkdir(parents=True, exist_ok=True)
-    report_path = artifacts / "candidate_rerank.json"
+    configured_report_output = getattr(args, "report_output", None)
+    report_path = (
+        _resolve(root, configured_report_output).resolve()
+        if configured_report_output is not None
+        else artifacts / "candidate_rerank.json"
+    )
+    report_path.parent.mkdir(parents=True, exist_ok=True)
     report = {
         **result.as_dict(),
         "source_programs": [str(path) for path in program_paths],
@@ -495,6 +519,7 @@ def rerank_saved_program(args: argparse.Namespace) -> None:
     for row in result.leaderboard:
         print(
             f"  #{row['rank']} {row['digest']} mean={row['mean_score']:.4f} "
+            f"selection={row['selection_score']:.4f} "
             f"std={row['score_stddev']:.4f} failures={row['failure_rate']:.2%}"
         )
 
@@ -616,6 +641,10 @@ def tune(args: argparse.Namespace) -> None:
     assert baseline_mean_score is not None
     rerank_top_k = int(getattr(args, "rerank_top_k", 0))
     rerank_replicates = int(getattr(args, "rerank_replicates", 3))
+    rerank_length_penalty = float(
+        getattr(args, "rerank_length_penalty_per_1k", 0.0)
+    )
+    rerank_max_prompt_chars = getattr(args, "rerank_max_prompt_chars", None)
     if rerank_top_k < 0:
         raise ValueError("--rerank-top-k cannot be negative")
     candidate_rerank = None
@@ -631,6 +660,8 @@ def tune(args: argparse.Namespace) -> None:
             top_k=rerank_top_k,
             replicates=rerank_replicates,
             split="validation",
+            length_penalty_per_1k=rerank_length_penalty,
+            max_prompt_chars=rerank_max_prompt_chars,
         )
         candidate_rerank = reranked.as_dict()
         (artifacts / "candidate_rerank.json").write_text(

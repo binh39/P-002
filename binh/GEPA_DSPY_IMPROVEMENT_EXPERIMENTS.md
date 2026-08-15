@@ -255,7 +255,9 @@ Không nâng dependency cùng lúc với thay metric hoặc dataset. Chạy toà
 
 ### E28 — Prompt length/token objective
 
-**Trạng thái:** cần thêm metric/report.
+**Trạng thái:** đã triển khai raw/adjusted score, penalty theo 1.000 ký tự, hard cap trước
+generation và replay cache. Penalty 0,02 hoặc cap 4.000 tránh proposal regression nhưng chưa tạo
+gain so với baseline. Xem `binh/PHASE1_E28_PROMPT_LENGTH_RESULT.md`.
 
 Current proposer yêu cầu playbook đầy đủ nên prompt có thể ngày càng dài. So sánh:
 
@@ -653,7 +655,7 @@ Mỗi run cần ít nhất ba seed ở bước xác nhận cuối. Không cần 
 - [x] E43: relevant existing tests/fixtures đã implement nhưng live ablation thua; reject và giữ mặc định tắt.
 - [ ] E44–E46: project setup, failure-triggered và runtime retrieval.
 - [ ] E25: Pareto exploration ablation.
-- [ ] E28: kiểm soát prompt bloat.
+- [x] E28: prompt length objective/hard cap đã triển khai và replay. Penalty 0,02/1k hoặc cap 4.000 chọn baseline, tránh regression nhưng chưa tạo coverage gain.
 
 ### P3 — Thay đổi kiến trúc để hướng tới gain lớn
 

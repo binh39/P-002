@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import math
 import random
 import re
 import statistics
@@ -1129,6 +1130,9 @@ class PromptRerankResult:
     leaderboard: list[dict[str, Any]]
     top_k: int
     replicates: int
+    length_penalty_per_1k: float
+    max_prompt_chars: int | None
+    filtered_candidates: list[dict[str, Any]]
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -1136,6 +1140,9 @@ class PromptRerankResult:
             "selected_candidate": self.selected_bundle.as_candidate(),
             "top_k": self.top_k,
             "replicates": self.replicates,
+            "length_penalty_per_1k": self.length_penalty_per_1k,
+            "max_prompt_chars": self.max_prompt_chars,
+            "filtered_candidates": self.filtered_candidates,
             "leaderboard": self.leaderboard,
         }
 
@@ -1151,6 +1158,8 @@ def rerank_prompt_candidates(
     top_k: int = 5,
     replicates: int = 3,
     split: str = "validation",
+    length_penalty_per_1k: float = 0.0,
+    max_prompt_chars: int | None = None,
 ) -> PromptRerankResult:
     """Rerank noisy GEPA finalists without consulting the locked holdout."""
     if split != "validation":
@@ -1161,12 +1170,21 @@ def rerank_prompt_candidates(
         raise ValueError("top_k must be at least 1")
     if replicates < 2:
         raise ValueError("Candidate reranking requires at least 2 replicates")
+    if not math.isfinite(length_penalty_per_1k) or length_penalty_per_1k < 0:
+        raise ValueError("length_penalty_per_1k must be a finite non-negative value")
+    if max_prompt_chars is not None and max_prompt_chars < 1:
+        raise ValueError("max_prompt_chars must be positive when configured")
     if len(candidates) != len(validation_scores):
         raise ValueError("Candidate and validation score counts must match")
     if error := validate_bundle(baseline):
         raise ValueError(f"Invalid rerank baseline: {error}")
 
     baseline_digest = bundle_digest(baseline)
+    baseline_chars = len(baseline.initial) + len(baseline.error)
+    if max_prompt_chars is not None and baseline_chars > max_prompt_chars:
+        raise ValueError(
+            "max_prompt_chars cannot be smaller than the baseline prompt"
+        )
     unique: dict[str, tuple[PromptBundle, float]] = {}
     for candidate, search_score_value in zip(
         candidates, validation_scores, strict=True,
@@ -1182,11 +1200,28 @@ def rerank_prompt_candidates(
     baseline_search_score = (
         unique[baseline_digest][1] if baseline_digest in unique else None
     )
+    proposal_values = [
+        (digest, bundle, score)
+        for digest, (bundle, score) in unique.items()
+        if digest != baseline_digest
+    ]
+    filtered_candidates = [
+        {
+            "digest": digest,
+            "search_validation_score": score,
+            "prompt_chars": len(bundle.initial) + len(bundle.error),
+            "reason": "max_prompt_chars_exceeded",
+        }
+        for digest, bundle, score in proposal_values
+        if max_prompt_chars is not None
+        and len(bundle.initial) + len(bundle.error) > max_prompt_chars
+    ]
     proposals = sorted(
         (
             (digest, bundle, score)
-            for digest, (bundle, score) in unique.items()
-            if digest != baseline_digest
+            for digest, bundle, score in proposal_values
+            if max_prompt_chars is None
+            or len(bundle.initial) + len(bundle.error) <= max_prompt_chars
         ),
         key=lambda item: (
             -item[2],
@@ -1264,10 +1299,16 @@ def rerank_prompt_candidates(
             "tests_workspaces": evaluation["tests_workspaces"],
         })
 
+    for row in leaderboard:
+        excess_chars = max(0, row["prompt_chars"] - baseline_chars)
+        row["length_penalty"] = length_penalty_per_1k * excess_chars / 1_000
+        row["selection_score"] = row["mean_score"] - row["length_penalty"]
+
     leaderboard.sort(key=lambda row: (
-        -round(row["mean_score"], 12),
+        -round(row["selection_score"], 12),
         round(row["failure_rate"], 12),
         round(row["score_stddev"], 12),
+        -round(row["mean_score"], 12),
         row["prompt_chars"],
         row["digest"],
     ))
@@ -1279,6 +1320,9 @@ def rerank_prompt_candidates(
         leaderboard=leaderboard,
         top_k=len(pool),
         replicates=replicates,
+        length_penalty_per_1k=length_penalty_per_1k,
+        max_prompt_chars=max_prompt_chars,
+        filtered_candidates=filtered_candidates,
     )
 
 

@@ -584,12 +584,18 @@ def test_optimization_cli_exposes_gepa_search_controls():
         "5",
         "--rerank-replicates",
         "3",
+        "--rerank-length-penalty-per-1k",
+        "0.02",
+        "--rerank-max-prompt-chars",
+        "4000",
     ])
 
     assert args.gepa_seed == 19
     assert args.reflection_minibatch_size == 3
     assert args.rerank_top_k == 5
     assert args.rerank_replicates == 3
+    assert args.rerank_length_penalty_per_1k == pytest.approx(0.02)
+    assert args.rerank_max_prompt_chars == 4_000
 
 
 def test_optimization_cli_accepts_search_only_and_multiple_programs():
@@ -613,11 +619,14 @@ def test_optimization_cli_accepts_search_only_and_multiple_programs():
         "seed7.json",
         "--optimized-program",
         "seed17.json",
+        "--report-output",
+        "rerank.json",
     ])
 
     assert search.search_only is True
     assert search.program_output == Path("seed17.json")
     assert rerank.optimized_program == [Path("seed7.json"), Path("seed17.json")]
+    assert rerank.report_output == Path("rerank.json")
 
 
 def test_repeated_final_gate_evaluates_baseline_with_same_replicate_count(
@@ -778,6 +787,114 @@ def test_rerank_rejects_locked_test_split():
             top_k=1,
             replicates=3,
             split="test",
+        )
+
+
+def test_rerank_length_objective_can_select_baseline_or_filter_bloat(
+    tmp_path, monkeypatch,
+):
+    baseline = baseline_bundle()
+    long_candidate = PromptBundle(
+        initial=baseline.initial + ("x" * 3_000),
+        error=baseline.error,
+    )
+    target = SymbolTarget("project", "pkg/module.py", "target", "validation")
+    values = {
+        bundle_digest(baseline): 0.70,
+        bundle_digest(long_candidate): 0.73,
+    }
+    calls = []
+
+    def fake_repeated(
+        runner,
+        targets,
+        bundle,
+        candidate_dir,
+        *,
+        split,
+        workspace_kind,
+        replicates,
+        reference_results=None,
+    ):
+        del runner, candidate_dir, split, workspace_kind, reference_results
+        digest = bundle_digest(bundle)
+        calls.append(digest)
+        coverage = {
+            "valid": True,
+            "covered_statements": int(values[digest] * 100),
+            "num_statements": 100,
+            "covered_branches": 0,
+            "num_branches": 0,
+        }
+        row = {
+            "target": targets[0].__dict__,
+            "coverage": coverage,
+            "score": values[digest],
+            "feedback": "ok",
+        }
+        batches = [{"results": [row]} for _ in range(replicates)]
+        return {
+            "results": [row],
+            "aggregate": aggregate_coverage_score([row]),
+            "batches": batches,
+            "run_ids": [],
+            "tests_workspaces": [],
+        }
+
+    monkeypatch.setattr(
+        "src.optimization.gepa.evaluate_bundle_repeated", fake_repeated,
+    )
+    penalized = rerank_prompt_candidates(
+        runner=None,
+        validation_targets=[target],
+        baseline=baseline,
+        candidates=[baseline, long_candidate],
+        validation_scores=[0.70, 0.73],
+        candidate_dir=tmp_path / "candidates",
+        top_k=2,
+        replicates=3,
+        length_penalty_per_1k=0.02,
+    )
+
+    assert penalized.selected_bundle == baseline
+    proposal_row = next(
+        row for row in penalized.leaderboard if not row["is_baseline"]
+    )
+    assert proposal_row["length_penalty"] == pytest.approx(0.06)
+    assert proposal_row["selection_score"] == pytest.approx(0.67)
+
+    calls.clear()
+    capped = rerank_prompt_candidates(
+        runner=None,
+        validation_targets=[target],
+        baseline=baseline,
+        candidates=[baseline, long_candidate],
+        validation_scores=[0.70, 0.73],
+        candidate_dir=tmp_path / "candidates",
+        top_k=2,
+        replicates=3,
+        max_prompt_chars=len(baseline.initial) + len(baseline.error) + 100,
+    )
+
+    assert capped.selected_bundle == baseline
+    assert calls == [bundle_digest(baseline)]
+    assert capped.filtered_candidates == [{
+        "digest": bundle_digest(long_candidate),
+        "search_validation_score": 0.73,
+        "prompt_chars": len(long_candidate.initial) + len(long_candidate.error),
+        "reason": "max_prompt_chars_exceeded",
+    }]
+    with pytest.raises(ValueError, match="smaller than the baseline"):
+        rerank_prompt_candidates(
+            runner=None,
+            validation_targets=[target],
+            baseline=baseline,
+            candidates=[baseline],
+            validation_scores=[0.70],
+            candidate_dir=tmp_path / "candidates",
+            top_k=1,
+            replicates=3,
+            max_prompt_chars=len(baseline.initial) + len(baseline.error) - 1,
         )
 
 
