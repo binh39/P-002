@@ -1,0 +1,40 @@
+﻿{
+    "api_base":  "https://vinaip002.web.app/api/v1",
+    "project_id":  "7fc67d98-2361-460a-80cb-5245bed51354",
+    "experiment_id":  "42a1137b-92b3-4a1a-8e6b-7a55e50d2a90",
+    "run_id":  "d5bd96d1-9b0b-4b69-83b0-15fc3a347581",
+    "target":  {
+                   "id":  "b402626e6659641d767f1dda",
+                   "project_id":  "7fc67d98-2361-460a-80cb-5245bed51354",
+                   "file":  "isort/parse.py",
+                   "class_name":  "",
+                   "name":  "_infer_line_separator",
+                   "qualified_name":  "_infer_line_separator",
+                   "start_line":  31,
+                   "end_line":  36,
+                   "loc":  6,
+                   "statements":  6,
+                   "branches":  2,
+                   "status":  "Valid"
+               },
+    "run":  {
+                "id":  "d5bd96d1-9b0b-4b69-83b0-15fc3a347581",
+                "experiment_id":  "42a1137b-92b3-4a1a-8e6b-7a55e50d2a90",
+                "status":  "failed",
+                "target_count":  1,
+                "coverage_score":  null,
+                "statement_coverage":  null,
+                "branch_coverage":  null,
+                "prompt_digest":  null,
+                "artifact_objects":  {
+
+                                     },
+                "target_metrics":  {
+
+                                   },
+                "error_message":  "Cloud Run Job failed before publishing a result manifest",
+                "created_at":  "2026-08-06T14:12:44.564266Z",
+                "started_at":  "2026-08-06T14:12:44.840115Z",
+                "finished_at":  "2026-08-06T14:12:45.956284Z"
+            }
+}

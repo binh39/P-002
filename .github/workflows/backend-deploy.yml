@@ -1,0 +1,137 @@
+﻿name: Deploy backend production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/backend/**"
+      - "app/Dockerfile"
+      - "app/requirements.txt"
+      - "app/.dockerignore"
+      - "app/infra/cloud-run-env.yaml"
+      - "src/coverup/**"
+      - "src/optimization/**"
+      - "src/sample_repo/**"
+      - "src/sample_repo.rar"
+      - "src/sample_repo.zip"
+      - "cloud/run_job.py"
+      - "cloud/Dockerfile.web"
+      - "Dockerfile"
+      - ".dockerignore"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/backend-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: backend-production
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: project-7df9f963-9fe0-4b76-b3d
+  MODEL_PROJECT_ID: vinbuildphase
+  REGION: asia-southeast1
+  REPOSITORY: promptopt
+  SERVICE: promptopt-api
+  RUNTIME_SERVICE_ACCOUNT: promptopt-api@project-7df9f963-9fe0-4b76-b3d.iam.gserviceaccount.com
+  SOURCE_BUCKET: project-7df9f963-9fe0-4b76-b3d-promptopt-sources
+  GEPA_JOB: promptopt-gepa-runner
+  RUNNER_SERVICE_ACCOUNT: promptopt-runner@project-7df9f963-9fe0-4b76-b3d.iam.gserviceaccount.com
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: project-7df9f963-9fe0-4b76-b3d
+          workload_identity_provider: projects/861862240028/locations/global/workloadIdentityPools/github-actions/providers/p002-main
+          service_account: github-backend-deploy@project-7df9f963-9fe0-4b76-b3d.iam.gserviceaccount.com
+          token_format: access_token
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Extract bundled sample repositories
+        run: |
+          unzip -q -o src/sample_repo.zip -d src
+          test -d src/sample_repo/isort
+          test -d src/sample_repo/mimesis
+          test -d src/sample_repo/mlxtend
+          test -d src/sample_repo/typesystem
+      - name: Authenticate Docker to Artifact Registry
+        uses: docker/login-action@v4
+        with:
+          registry: asia-southeast1-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+      - name: Build and push images
+        env:
+          API_IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/api:${{ github.sha }}
+          GEPA_IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/gepa-runner:${{ github.sha }}
+        run: |
+          docker build --file app/Dockerfile --tag "$API_IMAGE" .
+          docker build --file cloud/Dockerfile.web --tag "$GEPA_IMAGE" .
+          docker push "$API_IMAGE"
+          docker push "$GEPA_IMAGE"
+      - name: Deploy isolated GEPA job
+        env:
+          GEPA_IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/gepa-runner:${{ github.sha }}
+        run: |
+          for attempt in 1 2 3; do
+            if gcloud run jobs deploy "$GEPA_JOB" \
+              --project "$PROJECT_ID" \
+              --region "$REGION" \
+              --image "$GEPA_IMAGE" \
+              --service-account "$RUNNER_SERVICE_ACCOUNT" \
+              --command python \
+              --args=-m,cloud.run_job,--help \
+              --cpu 8 \
+              --memory 8Gi \
+              --tasks 1 \
+              --parallelism 1 \
+              --max-retries 0 \
+              --task-timeout 86400s \
+              --set-env-vars "COVERUP_MODEL=vertex_ai/gemini-3.6-flash,OPTIMIZE_MODEL=vertex_ai/gemini-3.6-flash,VERTEXAI_PROJECT=$MODEL_PROJECT_ID,VERTEXAI_LOCATION=global"; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            echo "Cloud Run job provisioning failed transiently; retrying in 30 seconds."
+            sleep 30
+          done
+          gcloud run jobs add-iam-policy-binding "$GEPA_JOB" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --member "serviceAccount:$RUNTIME_SERVICE_ACCOUNT" \
+            --role roles/run.developer \
+            --quiet
+      - name: Deploy Cloud Run
+        env:
+          IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/api:${{ github.sha }}
+        run: |
+          for attempt in 1 2 3; do
+            if gcloud run deploy "$SERVICE" \
+              --project "$PROJECT_ID" \
+              --region "$REGION" \
+              --image "$IMAGE" \
+              --service-account "$RUNTIME_SERVICE_ACCOUNT" \
+              --allow-unauthenticated \
+              --port 8080 \
+              --cpu 1 \
+              --memory 512Mi \
+              --timeout 1800 \
+              --min 0 \
+              --max 3 \
+              --concurrency 40 \
+              --env-vars-file app/infra/cloud-run-env.yaml; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            echo "Cloud Run service provisioning failed transiently; retrying in 30 seconds."
+            sleep 30
+          done

@@ -1,0 +1,24 @@
+# Controls what `gcloud builds submit` uploads.
+# Takes precedence over .dockerignore and .gitignore.
+#
+# IMPORTANT: do not exclude src/sample_repo — .gitignore excludes it and that
+# made the built image miss the sample repos, breaking the GEPA job.
+
+.gcloudignore
+.git/
+.gitignore
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.ai-log/
+# Root-local data only (docker-compose volume). A bare `data/` would also
+# exclude nested dirs such as src/sample_repo/mlxtend/mlxtend/data, silently
+# stripping the mlxtend data modules from the built image.
+/data/
+docs/
+presentation/
+eval/
+*.md

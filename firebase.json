@@ -1,0 +1,35 @@
+﻿{
+  "auth": {
+    "providers": {
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "PromptOpt",
+        "supportEmail": "nguyenbinh39205@gmail.com"
+      }
+    }
+  },
+  "hosting": {
+    "target": "frontend",
+    "public": "app/frontend/dist",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "cleanUrls": true,
+    "trailingSlash": false,
+    "headers": [
+      {
+        "source": "**",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+      },
+      {
+        "source": "**/*.@(js|css|woff|woff2|png|jpg|jpeg|svg|webp)",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+      }
+    ],
+    "rewrites": [
+      {
+        "source": "/api/**",
+        "run": { "serviceId": "promptopt-api", "region": "asia-southeast1" }
+      },
+      { "source": "**", "destination": "/index.html" }
+    ]
+  }
+}
