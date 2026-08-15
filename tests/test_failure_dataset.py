@@ -150,3 +150,61 @@ def test_load_dataset_identities_rejects_leakage_input_errors(tmp_path: Path):
         ("project", "project/module.py", "target")
     }
     assert len(FAILURE_STRATA) == 7
+
+
+def test_e70_benchmark_is_frozen_balanced_and_fresh():
+    dataset_path = Path("binh/e70_failure_stratified_32.jsonl")
+    manifest_path = Path("binh/e70_failure_stratified_32_manifest.json")
+    rows = [
+        json.loads(line)
+        for line in dataset_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    assert dataset_digest(rows) == (
+        "8876d578f2b65e64ca113fa3e27586fce2be6956ff1e2ff238e4930ffda94fdd"
+    )
+    assert dataset_digest(rows, "test") == (
+        "fa029ed3f1bb2203b28a712d2d67f0c78a03d25d1aaebf2316473fd0879a815c"
+    )
+    assert manifest["dataset_sha256"] == dataset_digest(rows)
+    assert manifest["split_sha256"]["test"] == dataset_digest(rows, "test")
+    assert manifest["status"] == "frozen_before_evaluation"
+    assert manifest["holdout"]["status"] == "locked_unevaluated"
+    assert manifest["model_calls_during_selection"] == 0
+    assert manifest["holdout"]["previous_e67_holdout_excluded"] is True
+
+    assert Counter(row["split"] for row in rows) == {
+        "train": 16,
+        "validation": 8,
+        "test": 8,
+    }
+    assert Counter((row["split"], row["project"]) for row in rows) == {
+        (split, project): expected
+        for split, expected in (("train", 4), ("validation", 2), ("test", 2))
+        for project in ("isort", "mimesis", "mlxtend", "typesystem")
+    }
+    assert manifest["audit"]["difficulty_by_split"] == {
+        "train": {"easy": 4, "hard": 4, "medium": 8},
+        "validation": {"easy": 2, "hard": 2, "medium": 4},
+        "test": {"easy": 2, "hard": 2, "medium": 4},
+    }
+    for counts in manifest["audit"]["strata_by_split"].values():
+        assert set(FAILURE_STRATA) <= set(counts)
+
+    profiles = manifest["audit"]["profiles"]
+    assert len(profiles) == 32
+    assert len({profile["structural_fingerprint"] for profile in profiles}) == 32
+    identities = {
+        (row["project"], row["source_file"], row["symbol"])
+        for row in rows
+    }
+    exclusions = load_dataset_identities([
+        Path("binh/phase1_control_12.jsonl"),
+        Path("binh/phase1_ablation_16.jsonl"),
+        Path("binh/phase1_ablation_16_v2.jsonl"),
+        Path("binh/phase1_stratified_24.jsonl"),
+    ])
+    assert len(identities) == 32
+    assert identities.isdisjoint(exclusions)

@@ -1,0 +1,657 @@
+{
+  "schema_version": 1,
+  "kind": "failure_stratified_benchmark",
+  "experiment": "E70",
+  "created_on": "2026-08-15",
+  "status": "frozen_before_evaluation",
+  "selection_policy": "static_failure_stratified_v1",
+  "selection_policy_digest": "74608a32d28f943b4ceec25a619068b0589abe75e7249063f80e5ed511767097",
+  "dataset_path": "binh\\e70_failure_stratified_32.jsonl",
+  "dataset_sha256": "8876d578f2b65e64ca113fa3e27586fce2be6956ff1e2ff238e4930ffda94fdd",
+  "split_sha256": {
+    "train": "1ab7bb157977454eb18b8c6a82e8f67bbac66f813dab79a51ade282f85c8452e",
+    "validation": "16a9f246aee88bd4f0eee887cec878e2bc81cdb8c16b6824a98a0c71b8044d79",
+    "test": "fa029ed3f1bb2203b28a712d2d67f0c78a03d25d1aaebf2316473fd0879a815c"
+  },
+  "holdout": {
+    "split": "test",
+    "status": "locked_unevaluated",
+    "target_count": 8,
+    "access_rule": "No model generation, coverage evaluation, prompt selection, or policy tuning may use this split before a candidate is frozen in a commit.",
+    "previous_e67_holdout_excluded": true
+  },
+  "model_calls_during_selection": 0,
+  "quotas_per_project": {
+    "train": 4,
+    "validation": 2,
+    "test": 2
+  },
+  "excluded_datasets": [
+    {
+      "path": "binh\\phase1_control_12.jsonl",
+      "sha256": "c4da9da440fe2a9cc723130c0b350c57cdd00a0e0a7c59557ad844ea519951c2"
+    },
+    {
+      "path": "binh\\phase1_ablation_16.jsonl",
+      "sha256": "183923041c5d524e84987b5aa3ed6861d9bba309913966a9dfeba4066b5302f4"
+    },
+    {
+      "path": "binh\\phase1_ablation_16_v2.jsonl",
+      "sha256": "666f0fc09f62d3aefd3bbece394b863d472b3b526f54ef1907019ff89e6cf4cb"
+    },
+    {
+      "path": "binh\\phase1_stratified_24.jsonl",
+      "sha256": "15dd9247ede13a1566346069f8418b378200c57551749125b2743080f44a878e"
+    }
+  ],
+  "git_commit_at_generation": "0319f2cf48794876d75dc395419be73fc1f1c765",
+  "audit": {
+    "selection_kind": "static_failure_stratified_v1",
+    "excluded_identity_count": 35,
+    "excluded_structural_fingerprint_count": 35,
+    "eligible_by_project": {
+      "isort": 179,
+      "mimesis": 381,
+      "mlxtend": 330,
+      "typesystem": 167
+    },
+    "split_counts": {
+      "train": 16,
+      "validation": 8,
+      "test": 8
+    },
+    "project_split_counts": {
+      "isort/train": 4,
+      "isort/validation": 2,
+      "isort/test": 2,
+      "mimesis/train": 4,
+      "mimesis/validation": 2,
+      "mimesis/test": 2,
+      "mlxtend/train": 4,
+      "mlxtend/validation": 2,
+      "mlxtend/test": 2,
+      "typesystem/train": 4,
+      "typesystem/validation": 2,
+      "typesystem/test": 2
+    },
+    "strata_by_split": {
+      "train": {
+        "async_io": 8,
+        "branch_heavy": 4,
+        "easy_regression": 3,
+        "exception_paths": 5,
+        "fixture_mock_dependent": 5,
+        "stateful_method": 11,
+        "statement_heavy": 4
+      },
+      "validation": {
+        "async_io": 6,
+        "branch_heavy": 1,
+        "easy_regression": 1,
+        "exception_paths": 3,
+        "fixture_mock_dependent": 2,
+        "stateful_method": 5,
+        "statement_heavy": 2
+      },
+      "test": {
+        "async_io": 6,
+        "branch_heavy": 2,
+        "easy_regression": 2,
+        "exception_paths": 2,
+        "fixture_mock_dependent": 3,
+        "stateful_method": 5,
+        "statement_heavy": 2
+      }
+    },
+    "difficulty_by_split": {
+      "train": {
+        "easy": 4,
+        "hard": 4,
+        "medium": 8
+      },
+      "validation": {
+        "easy": 2,
+        "hard": 2,
+        "medium": 4
+      },
+      "test": {
+        "easy": 2,
+        "hard": 2,
+        "medium": 4
+      }
+    },
+    "source_universe_digest": "91e10b24fa3032a7a0462e4764cdc23e6ad2ff20407bc5bb70da96f95b3ea9d4",
+    "profiles": [
+      {
+        "project": "isort",
+        "source_file": "isort/api.py",
+        "symbol": "find_imports_in_file",
+        "branches": 6,
+        "statements": 5,
+        "lines": 30,
+        "lineno": 578,
+        "strata": [
+          "async_io",
+          "exception_paths",
+          "fixture_mock_dependent"
+        ],
+        "difficulty_band": "medium",
+        "structural_fingerprint": "746c8370d029bafbc0b2",
+        "split": "validation"
+      },
+      {
+        "project": "isort",
+        "source_file": "isort/deprecated/finders.py",
+        "symbol": "ReqsBaseFinder._get_files",
+        "branches": 4,
+        "statements": 6,
+        "lines": 8,
+        "lineno": 252,
+        "strata": [
+          "async_io",
+          "fixture_mock_dependent",
+          "stateful_method"
+        ],
+        "difficulty_band": "medium",
+        "structural_fingerprint": "0600e3e8011ee00009d0",
+        "split": "train"
+      },
+      {
+        "project": "isort",
+        "source_file": "isort/deprecated/finders.py",
+        "symbol": "RequirementsFinder._get_files_from_dir",
+        "branches": 0,
+        "statements": 2,
+        "lines": 3,
+        "lineno": 293,
+        "strata": [
+          "async_io",
+          "stateful_method"
+        ],
+        "difficulty_band": "easy",
+        "structural_fingerprint": "77341f85d0b49d41bae2",
+        "split": "train"
+      },
+      {
+        "project": "isort",
+        "source_file": "isort/deprecated/finders.py",
+        "symbol": "chdir",
+        "branches": 1,
+        "statements": 6,
+        "lines": 8,
+        "lineno": 36,
+        "strata": [
+          "async_io",
+          "exception_paths",
+          "fixture_mock_dependent"
+        ],
+        "difficulty_band": "medium",
+        "structural_fingerprint": "1243bd5a40100056797e",
+        "split": "train"
+      },
+      {
+        "project": "isort",
+        "source_file": "isort/hooks.py",
+        "symbol": "get_output",
+        "branches": 0,
+        "statements": 3,
+        "lines": 8,
+        "lineno": 15,
+        "strata": [
+          "async_io",
+          "fixture_mock_dependent"
+        ],
+        "difficulty_band": "easy",
+        "structural_fingerprint": "e64f975d33c2daabd309",
+        "split": "validation"
+      },
+      {
+        "project": "isort",
+        "source_file": "isort/settings.py",
+        "symbol": "Config.__init__",
+        "branches": 104,
+        "statements": 137,
+        "lines": 237,
+        "lineno": 294,
+        "strata": [
+          "async_io",
+          "branch_heavy",
+          "exception_paths",
+          "fixture_mock_dependent",
+          "stateful_method",
+          "statement_heavy"
+        ],
+        "difficulty_band": "hard",
+        "structural_fingerprint": "de47c04dadd4eea3ff34",
+        "split": "train"
+      },
+      {
+        "project": "isort",
+        "source_file": "isort/settings.py",
+        "symbol": "Config._check_folder_git_ls_files",
+        "branches": 2,
+        "statements": 9,
+        "lines": 36,
+        "lineno": 557,
+        "strata": [
+          "async_io",
+          "exception_paths",
+          "fixture_mock_dependent",
+          "stateful_method"
+        ],
+        "difficulty_band": "medium",
+        "structural_fingerprint": "0d0ccf17a8becc778899",
+        "split": "test"
+      },
+      {
+        "project": "isort",
+        "source_file": "isort/setuptools_commands.py",
+        "symbol": "ISortCommand.finalize_options",
+        "branches": 0,
+        "statements": 3,
+        "lines": 4,
+        "lineno": 27,
+        "strata": [
+          "async_io",
+          "fixture_mock_dependent",
+          "stateful_method"
+        ],
+        "difficulty_band": "easy",
+        "structural_fingerprint": "e99bc8918ac07141e460",
+        "split": "test"
+      },
+      {
+        "project": "mimesis",
+        "source_file": "mimesis/builder/core.py",
+        "symbol": "SchemaBuilder.__repr__",
+        "branches": 2,
+        "statements": 2,
+        "lines": 3,
+        "lineno": 390,
+        "strata": [
+          "stateful_method"
+        ],
+        "difficulty_band": "medium",
+        "structural_fingerprint": "9aa0d54cbb74c9e302f1",
+        "split": "validation"
+      },
+      {
+        "project": "mimesis",
+        "source_file": "mimesis/plugins/factory.py",
+        "symbol": "FactoryField.override_locale",
+        "branches": 0,
+        "statements": 5,
+        "lines": 10,
+        "lineno": 78,
+        "strata": [
+          "async_io",
+          "stateful_method"
+        ],
+        "difficulty_band": "medium",
+        "structural_fingerprint": "f88bf397bd57ffe68cf4",
+        "split": "test"
+      },
+      {
+        "project": "mimesis",
+        "source_file": "mimesis/providers/address.py",
+        "symbol": "Address.country_emoji_flag",
+        "branches": 0,
+        "statements": 6,
+        "lines": 16,
+        "lineno": 208,
+        "strata": [
+          "stateful_method"
+        ],
+        "difficulty_band": "medium",
+        "structural_fingerprint": "1c6733272575ecb1a1e7",
+        "split": "train"
+      },
+      {
+        "project": "mimesis",
+        "source_file": "mimesis/providers/base.py",
+        "symbol": "BaseDataProvider._load_dataset",
+        "branches": 4,
+        "statements": 11,
+        "lines": 22,
+        "lineno": 224,
+        "strata": [
+          "async_io",
+          "branch_heavy",
+          "stateful_method",
+          "statement_heavy"
+        ],
+        "difficulty_band": "hard",
+        "structural_fingerprint": "68ecff406ed853c4a126",
+        "split": "test"
+      },
+      {
+        "project": "mimesis",
+        "source_file": "mimesis/providers/base.py",
+        "symbol": "BaseDataProvider.override_locale",
+        "branches": 3,
+        "statements": 8,
+        "lines": 23,
+        "lineno": 281,
+        "strata": [
+          "async_io",
+          "exception_paths",
+          "stateful_method",
+          "statement_heavy"
+        ],
+        "difficulty_band": "hard",
+        "structural_fingerprint": "ed8d67e5efe582d72e3b",
+        "split": "validation"
+      },
+      {
+        "project": "mimesis",
+        "source_file": "mimesis/providers/date.py",
+        "symbol": "Datetime.future_date",
+        "branches": 0,
+        "statements": 6,
+        "lines": 11,
+        "lineno": 283,
+        "strata": [
+          "stateful_method"
+        ],
+        "difficulty_band": "medium",
+        "structural_fingerprint": "445db063d5c252e48e86",
+        "split": "train"
+      },
+      {
+        "project": "mimesis",
+        "source_file": "mimesis/providers/internet.py",
+        "symbol": "Internet.query_string",
+        "branches": 0,
+        "statements": 2,
+        "lines": 7,
+        "lineno": 342,
+        "strata": [
+          "async_io",
+          "fixture_mock_dependent",
+          "stateful_method"
+        ],
+        "difficulty_band": "easy",
+        "structural_fingerprint": "781bc51df4ca4a756c19",
+        "split": "train"
+      },
+      {
+        "project": "mimesis",
+        "source_file": "mimesis/schema.py",
+        "symbol": "BaseField.register_handler",
+        "branches": 10,
+        "statements": 12,
+        "lines": 22,
+        "lineno": 220,
+        "strata": [
+          "branch_heavy",
+          "exception_paths",
+          "stateful_method",
+          "statement_heavy"
+        ],
+        "difficulty_band": "hard",
+        "structural_fingerprint": "9bdb5e4b663264b6713a",
+        "split": "train"
+      },
+      {
+        "project": "mlxtend",
+        "source_file": "mlxtend/classifier/logistic_regression.py",
+        "symbol": "LogisticRegression._backward",
+        "branches": 0,
+        "statements": 4,
+        "lines": 5,
+        "lineno": 97,
+        "strata": [
+          "easy_regression"
+        ],
+        "difficulty_band": "easy",
+        "structural_fingerprint": "5d705b18537570f29b4d",
+        "split": "train"
+      },
+      {
+        "project": "mlxtend",
+        "source_file": "mlxtend/cluster/kmeans.py",
+        "symbol": "Kmeans._get_cluster_idx",
+        "branches": 2,
+        "statements": 3,
+        "lines": 6,
+        "lineno": 130,
+        "strata": [
+          "async_io",
+          "stateful_method"
+        ],
+        "difficulty_band": "medium",
+        "structural_fingerprint": "400f74a7780ced1eb6f7",
+        "split": "train"
+      },
+      {
+        "project": "mlxtend",
+        "source_file": "mlxtend/evaluate/bootstrap_outofbag.py",
+        "symbol": "BootstrapOutOfBag.split",
+        "branches": 2,
+        "statements": 8,
+        "lines": 21,
+        "lineno": 48,
+        "strata": [
+          "async_io",
+          "stateful_method"
+        ],
+        "difficulty_band": "medium",
+        "structural_fingerprint": "e004895b29d518ca4322",
+        "split": "validation"
+      },
+      {
+        "project": "mlxtend",
+        "source_file": "mlxtend/evaluate/holdout.py",
+        "symbol": "PredefinedHoldoutSplit.split",
+        "branches": 2,
+        "statements": 7,
+        "lines": 32,
+        "lineno": 141,
+        "strata": [
+          "async_io",
+          "stateful_method"
+        ],
+        "difficulty_band": "medium",
+        "structural_fingerprint": "31bcacc759f537870241",
+        "split": "train"
+      },
+      {
+        "project": "mlxtend",
+        "source_file": "mlxtend/evaluate/holdout.py",
+        "symbol": "RandomHoldoutSplit.split",
+        "branches": 4,
+        "statements": 7,
+        "lines": 47,
+        "lineno": 45,
+        "strata": [
+          "async_io",
+          "stateful_method"
+        ],
+        "difficulty_band": "medium",
+        "structural_fingerprint": "14c7673bb3d95e72aaaf",
+        "split": "test"
+      },
+      {
+        "project": "mlxtend",
+        "source_file": "mlxtend/feature_selection/sequential_feature_selector.py",
+        "symbol": "SequentialFeatureSelector.fit",
+        "branches": 105,
+        "statements": 143,
+        "lines": 348,
+        "lineno": 304,
+        "strata": [
+          "async_io",
+          "branch_heavy",
+          "exception_paths",
+          "stateful_method",
+          "statement_heavy"
+        ],
+        "difficulty_band": "hard",
+        "structural_fingerprint": "5914ca5a371f9756fdc1",
+        "split": "validation"
+      },
+      {
+        "project": "mlxtend",
+        "source_file": "mlxtend/file_io/find_filegroups.py",
+        "symbol": "find_filegroups",
+        "branches": 22,
+        "statements": 26,
+        "lines": 106,
+        "lineno": 15,
+        "strata": [
+          "async_io",
+          "branch_heavy",
+          "exception_paths",
+          "fixture_mock_dependent",
+          "statement_heavy"
+        ],
+        "difficulty_band": "hard",
+        "structural_fingerprint": "df898a8670adcdcafb82",
+        "split": "test"
+      },
+      {
+        "project": "mlxtend",
+        "source_file": "mlxtend/file_io/find_files.py",
+        "symbol": "find_files",
+        "branches": 18,
+        "statements": 17,
+        "lines": 68,
+        "lineno": 12,
+        "strata": [
+          "async_io",
+          "branch_heavy",
+          "fixture_mock_dependent",
+          "statement_heavy"
+        ],
+        "difficulty_band": "hard",
+        "structural_fingerprint": "57719e27e1a4965adaa5",
+        "split": "train"
+      },
+      {
+        "project": "typesystem",
+        "source_file": "typesystem/base.py",
+        "symbol": "ValidationResult.__iter__",
+        "branches": 0,
+        "statements": 2,
+        "lines": 3,
+        "lineno": 254,
+        "strata": [
+          "async_io",
+          "stateful_method"
+        ],
+        "difficulty_band": "easy",
+        "structural_fingerprint": "2d7c7b937257c304d9c0",
+        "split": "validation"
+      },
+      {
+        "project": "typesystem",
+        "source_file": "typesystem/composites.py",
+        "symbol": "Not.validate",
+        "branches": 2,
+        "statements": 4,
+        "lines": 5,
+        "lineno": 90,
+        "strata": [
+          "exception_paths",
+          "stateful_method"
+        ],
+        "difficulty_band": "medium",
+        "structural_fingerprint": "eaf0590ed8f408475e02",
+        "split": "train"
+      },
+      {
+        "project": "typesystem",
+        "source_file": "typesystem/fields.py",
+        "symbol": "Any.validate",
+        "branches": 0,
+        "statements": 1,
+        "lines": 2,
+        "lineno": 746,
+        "strata": [
+          "easy_regression"
+        ],
+        "difficulty_band": "easy",
+        "structural_fingerprint": "197f685c2c37bc2e52da",
+        "split": "test"
+      },
+      {
+        "project": "typesystem",
+        "source_file": "typesystem/fields.py",
+        "symbol": "Date.__init__",
+        "branches": 0,
+        "statements": 1,
+        "lines": 2,
+        "lineno": 688,
+        "strata": [
+          "easy_regression"
+        ],
+        "difficulty_band": "easy",
+        "structural_fingerprint": "66f74b01779093382758",
+        "split": "train"
+      },
+      {
+        "project": "typesystem",
+        "source_file": "typesystem/fields.py",
+        "symbol": "Object.validate",
+        "branches": 68,
+        "statements": 74,
+        "lines": 100,
+        "lineno": 453,
+        "strata": [
+          "branch_heavy",
+          "exception_paths",
+          "stateful_method",
+          "statement_heavy"
+        ],
+        "difficulty_band": "hard",
+        "structural_fingerprint": "92fe62d7613096d0fe2d",
+        "split": "train"
+      },
+      {
+        "project": "typesystem",
+        "source_file": "typesystem/formats.py",
+        "symbol": "EmailFormat.serialize",
+        "branches": 2,
+        "statements": 3,
+        "lines": 5,
+        "lineno": 210,
+        "strata": [
+          "easy_regression"
+        ],
+        "difficulty_band": "medium",
+        "structural_fingerprint": "025598d17ae19efb3637",
+        "split": "validation"
+      },
+      {
+        "project": "typesystem",
+        "source_file": "typesystem/json_schema.py",
+        "symbol": "get_standard_properties",
+        "branches": 2,
+        "statements": 4,
+        "lines": 5,
+        "lineno": 579,
+        "strata": [
+          "easy_regression"
+        ],
+        "difficulty_band": "medium",
+        "structural_fingerprint": "6b104a8e9fa7caf05dfa",
+        "split": "test"
+      },
+      {
+        "project": "typesystem",
+        "source_file": "typesystem/schemas.py",
+        "symbol": "Reference.serialize",
+        "branches": 2,
+        "statements": 3,
+        "lines": 4,
+        "lineno": 141,
+        "strata": [
+          "easy_regression"
+        ],
+        "difficulty_band": "medium",
+        "structural_fingerprint": "8ac5ccc04bc8fb467830",
+        "split": "train"
+      }
+    ]
+  }
+}

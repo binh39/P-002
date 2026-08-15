@@ -615,6 +615,15 @@ Create experiment
 - [x] Cost gate validation: baseline trÆ°á»›c, chá»‰ má»Ÿ stage cho target cÃ²n gap; 29/180 calls Ä‘áº¡t 96,93% vÃ  pass 5 láº§n.
 - [x] Cháº¡y one-shot holdout gate: 10/60 calls, tiáº¿t kiá»‡m 83,33% nhÆ°ng gain coverage = 0; reject E67, khÃ´ng promote production.
 
+#### E70 failure-stratified benchmark
+
+- [x] Tạo builder AST deterministic cho 7 challenge strata; không dùng model hoặc coverage để chọn target.
+- [x] Khóa dataset mới 16 train / 8 validation / 8 test, cân bằng 4 project và difficulty 25/50/25.
+- [x] Loại toàn bộ 35 target cũ, holdout E67 và structural duplicate; contract test khóa dataset/holdout hash.
+- [x] Import/setup preflight pass cho isort, mimesis, mlxtend và typesystem.
+- [ ] Chạy baseline labeling chỉ trên train/validation bằng Gemini 3.5 Flash-Lite; tuyệt đối chưa mở E70 test.
+- [ ] Đối chiếu static strata với observed failure taxonomy rồi freeze candidate E40 trước one-shot holdout.
+
 ### 10.6 PR 4 â€” Paired comparison vÃ  promotion gate
 
 - [x] Chá»n candidate báº±ng validation rá»“i khÃ³a candidate trÆ°á»›c final evaluation.

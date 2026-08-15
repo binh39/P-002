@@ -587,6 +587,13 @@ chưa thấy, vì vậy không promote và không tune lại trên holdout đã 
 
 ### E70 — Failure-stratified train set
 
+**Trạng thái 2026-08-15:** đã implement static failure-stratified builder và khóa dataset mới 32 target:
+16 train / 8 validation / 8 test, cân bằng 4 project và difficulty 25/50/25. Mỗi split có đủ bảy strata,
+32 target không trùng identity hoặc structural fingerprint với nhau và không trùng 35 target từng dùng.
+Holdout mới có SHA-256 `fa029ed3...a815c`, trạng thái `locked_unevaluated`; selection dùng 0 model calls.
+Static strata là challenge proxy, observed failure labeling mới chỉ được chạy trên train/validation. Xem
+`binh/PHASE1_E70_FAILURE_STRATIFIED_DATASET.md`.
+
 Không chỉ chọn random hoặc nhiều branch nhất. Tạo train set có đủ:
 
 - Branch-heavy.
