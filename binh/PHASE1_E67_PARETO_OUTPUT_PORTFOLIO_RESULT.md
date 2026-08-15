@@ -60,7 +60,11 @@ Không dùng kết quả này để promote prompt hoặc tuyên bố production
 
 ## Quyết định
 
-1. Chọn **hai replicate** làm cấu hình E67 ứng viên; không mặc định ba replicate.
+> Follow-up: cost-aware sequential gating sau báo cáo này giữ 96,93% bằng 29/180 target-generations.
+> Policy mới thay quyết định chạy đầy đủ hai replicate. Xem
+> `binh/PHASE1_E67_COST_AWARE_SEQUENTIAL_RESULT.md`.
+
+1. Kết quả ban đầu chọn **hai replicate**; follow-up đã thay bằng schedule tuần tự theo coverage gap.
 2. Không xây classifier router ở thời điểm này: archive đã tạo suite chạy được và mạnh hơn oracle chỉ dùng
    để phân tích.
 3. Bước tiếp theo là cost-aware sequential portfolio: chạy baseline trước, chỉ chạy prompt/replicate bổ sung

@@ -10,7 +10,10 @@ from pathlib import Path
 import dspy
 from dotenv import load_dotenv
 
-from .archive import build_candidate_test_archive
+from .archive import (
+    build_candidate_test_archive,
+    build_sequential_candidate_test_archive,
+)
 from .dataset import load_targets, validate_project_stratification
 from .gepa import (
     build_coverage_report,
@@ -25,6 +28,19 @@ from .metrics import aggregate_coverage_score
 from .models import ExperimentConfig, ProjectLayout, SymbolTarget
 from .prompts import PromptBundle, baseline_bundle
 from .runner import CoverUpExperimentRunner
+
+
+def _parse_archive_stage(value: str) -> tuple[str, int]:
+    prompt_digest, separator, replicate_value = value.rpartition(":")
+    if not separator or not prompt_digest:
+        raise argparse.ArgumentTypeError("Stage must use PROMPT_DIGEST:REPLICATE")
+    try:
+        replicate = int(replicate_value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("Stage replicate must be an integer") from exc
+    if replicate < 0:
+        raise argparse.ArgumentTypeError("Stage replicate must be non-negative")
+    return prompt_digest, replicate
 
 
 def parser() -> argparse.ArgumentParser:
@@ -230,6 +246,30 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Allow a final report on test; never use it to tune the archive",
     )
+
+    sequential_archive = commands.add_parser(
+        "sequential-archive",
+        help="Build a cost-aware archive from a fixed sequence of cached stages",
+    )
+    sequential_archive.add_argument("--output-dir", type=Path, required=True)
+    sequential_archive.add_argument(
+        "--split", choices=("train", "validation", "test"), default="validation"
+    )
+    sequential_archive.add_argument("--evaluation-digest")
+    sequential_archive.add_argument(
+        "--stage",
+        dest="stages",
+        type=_parse_archive_stage,
+        action="append",
+        required=True,
+        help="Fixed PROMPT_DIGEST:REPLICATE stage; repeat in execution order",
+    )
+    sequential_archive.add_argument("--target-stop-score", type=float, default=0.80)
+    sequential_archive.add_argument(
+        "--allow-holdout",
+        action="store_true",
+        help="Allow a final report on test; never use it to tune the policy",
+    )
     return result
 
 
@@ -273,6 +313,45 @@ def build_archive(args: argparse.Namespace) -> None:
         "selected_test_count": report["selected_test_count"],
         "verified": verification["verified"],
         "repeat_tests": verification["repeat_tests"],
+        "archive_aggregate": verification["aggregate"],
+        "verified_gain_vs_best_single": report["verified_gain_vs_best_single"],
+    }, indent=2))
+
+
+def build_sequential_archive(args: argparse.Namespace) -> None:
+    root = args.project_root.resolve()
+    report = build_sequential_candidate_test_archive(
+        project_root=root,
+        artifacts_dir=_resolve(root, args.artifacts_dir),
+        output_dir=_resolve(root, args.output_dir),
+        sample_repos_dir=_resolve(root, args.sample_repos_dir),
+        stages=args.stages,
+        target_stop_score=args.target_stop_score,
+        split=args.split,
+        evaluation_digest=args.evaluation_digest,
+        allow_holdout=args.allow_holdout,
+        pytest_args=args.pytest_args,
+        repeat_tests=args.repeat_tests,
+    )
+    verification = report["verification"]
+    policy = report["sequential_policy"]
+    print(json.dumps({
+        "split": report["split"],
+        "evaluation_digest": report["evaluation_digest"],
+        "target_stop_score": policy["target_stop_score"],
+        "target_generation_calls": policy["target_generation_calls"],
+        "exhaustive_target_generation_calls": policy[
+            "exhaustive_target_generation_calls"
+        ],
+        "cohort_exhaustive_target_generation_calls": policy[
+            "cohort_exhaustive_target_generation_calls"
+        ],
+        "target_generation_savings": policy["target_generation_savings"],
+        "cohort_target_generation_savings": policy[
+            "cohort_target_generation_savings"
+        ],
+        "selected_test_count": report["selected_test_count"],
+        "verified": verification["verified"],
         "archive_aggregate": verification["aggregate"],
         "verified_gain_vs_best_single": report["verified_gain_vs_best_single"],
     }, indent=2))
@@ -1076,6 +1155,8 @@ def main() -> None:
         rerank_saved_program(args)
     elif args.command == "archive":
         build_archive(args)
+    elif args.command == "sequential-archive":
+        build_sequential_archive(args)
     elif args.command == "finalize":
         finalize(args)
     else:  # pragma: no cover - argparse requires a known command

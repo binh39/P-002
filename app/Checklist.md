@@ -612,7 +612,7 @@ Create experiment
 
 - [x] Candidate-test archive khÃ³a theo split/evaluation digest, content-deduplicate, greedy set-cover vÃ  verify suite 5 láº§n.
 - [x] Portfolio hai replicate tá»« 5 Pareto prompts Ä‘áº¡t 96,32â€“97,59%, hÆ¡n single-best Ã­t nháº¥t 18,85 Ä‘iá»ƒm.
-- [ ] Tá»± Ä‘á»™ng hÃ³a cost gate: baseline trÆ°á»›c, replicate hai chá»‰ cho target cÃ²n thiáº¿u coverage, rá»“i verify suite.
+- [x] Cost gate validation: baseline trÆ°á»›c, chá»‰ má»Ÿ stage cho target cÃ²n gap; 29/180 calls Ä‘áº¡t 96,93% vÃ  pass 5 láº§n.
 - [ ] Cháº¡y Ä‘Ãºng má»™t paired holdout gate; chÆ°a Ä‘Æ°a portfolio vÃ o production trÆ°á»›c khi gate nÃ y Ä‘áº¡t.
 
 ### 10.6 PR 4 â€” Paired comparison vÃ  promotion gate

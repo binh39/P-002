@@ -8,6 +8,7 @@ from src.optimization.archive import (
     build_candidate_test_archive,
     collect_archive_candidates,
     select_greedy_archive,
+    select_sequential_archive_batches,
 )
 from src.optimization.cli import parser
 
@@ -45,6 +46,36 @@ def test_main_cli_accepts_repeated_source_replicates():
     ])
 
     assert args.source_replicates == [0, 2]
+
+
+def test_main_cli_accepts_ordered_sequential_archive_stages():
+    args = parser().parse_args([
+        "sequential-archive",
+        "--output-dir",
+        "archive-output",
+        "--stage",
+        "baseline:0",
+        "--stage",
+        "proposal:1",
+        "--target-stop-score",
+        "0.95",
+    ])
+
+    assert args.command == "sequential-archive"
+    assert args.stages == [("baseline", 0), ("proposal", 1)]
+    assert args.target_stop_score == 0.95
+
+
+def test_main_cli_defaults_sequential_stop_score_to_calibrated_knee():
+    args = parser().parse_args([
+        "sequential-archive",
+        "--output-dir",
+        "archive-output",
+        "--stage",
+        "baseline:0",
+    ])
+
+    assert args.target_stop_score == 0.80
 
 
 def test_greedy_archive_prefers_one_test_covering_the_union():
@@ -293,4 +324,129 @@ def test_archive_rejects_partially_missing_source_replicates(tmp_path):
             split="validation",
             evaluation_digest="evaluation",
             source_replicates={0, 2},
+        )
+
+
+def test_sequential_archive_only_opens_later_stage_for_coverage_gaps(tmp_path):
+    first_test = tmp_path / "test_first.py"
+    first_test.write_text("def test_first(): pass\n", encoding="utf-8")
+    second_test = tmp_path / "test_second.py"
+    second_test.write_text("def test_second(): pass\n", encoding="utf-8")
+    targets = [
+        {
+            "project": "repo",
+            "source_file": "repo/mod.py",
+            "symbol": symbol,
+            "split": "validation",
+        }
+        for symbol in ("covered", "gap")
+    ]
+
+    def result(target, source=None):
+        gained_lines = [1] if source is not None else []
+        traces = (
+            [{
+                "outcome": "coverage_gain_saved",
+                "saved_test": str(source),
+                "gained_lines": gained_lines,
+                "gained_branches": [],
+            }]
+            if source is not None
+            else []
+        )
+        return {
+            "target": target,
+            "coverage": {
+                "valid": True,
+                "num_statements": 1,
+                "num_branches": 0,
+                "gained_lines": gained_lines,
+                "gained_branches": [],
+            },
+            "attempt_traces": traces,
+        }
+
+    batches = [
+        {
+            "prompt_digest": "baseline",
+            "evaluation_digest": "evaluation",
+            "replicate": 0,
+            "results": [result(targets[0], first_test), result(targets[1])],
+        },
+        {
+            "prompt_digest": "proposal",
+            "evaluation_digest": "evaluation",
+            "replicate": 0,
+            "results": [result(targets[0]), result(targets[1], second_test)],
+        },
+    ]
+
+    selected, policy = select_sequential_archive_batches(
+        tmp_path,
+        batches,
+        stages=[("baseline", 0), ("proposal", 0)],
+        target_stop_score=0.98,
+    )
+
+    assert len(selected[0]["results"]) == 2
+    assert [row["target"]["symbol"] for row in selected[1]["results"]] == ["gap"]
+    assert policy["target_generation_calls"] == 3
+    assert policy["exhaustive_target_generation_calls"] == 4
+    assert policy["cohort_exhaustive_target_generation_calls"] == 4
+    assert policy["target_generation_savings"] == 0.25
+    assert policy["cohort_target_generation_savings"] == 0.25
+    assert policy["estimated_aggregate"]["score"] == 1.0
+
+
+def test_sequential_archive_rejects_missing_cached_stage(tmp_path):
+    with pytest.raises(ValueError, match="Missing cached sequential archive stages"):
+        select_sequential_archive_batches(
+            tmp_path,
+            [{"prompt_digest": "baseline", "replicate": 0}],
+            stages=[("proposal", 0)],
+            target_stop_score=0.98,
+        )
+
+
+def test_sequential_archive_requires_denominators_for_every_target(tmp_path):
+    target = {
+        "project": "repo",
+        "source_file": "repo/mod.py",
+        "split": "validation",
+    }
+    batch = {
+        "prompt_digest": "baseline",
+        "replicate": 0,
+        "results": [
+            {
+                "target": {**target, "symbol": "measured"},
+                "coverage": {
+                    "valid": True,
+                    "num_statements": 1,
+                    "num_branches": 0,
+                    "gained_lines": [],
+                    "gained_branches": [],
+                },
+            },
+            {"target": {**target, "symbol": "missing"}, "coverage": None},
+        ],
+    }
+
+    with pytest.raises(ValueError, match="missing coverage denominators for 1 target"):
+        select_sequential_archive_batches(
+            tmp_path,
+            [batch],
+            stages=[("baseline", 0)],
+            target_stop_score=0.80,
+        )
+
+
+@pytest.mark.parametrize("target_stop_score", [0.0, 1.01])
+def test_sequential_archive_rejects_invalid_stop_score(tmp_path, target_stop_score):
+    with pytest.raises(ValueError, match="target_stop_score"):
+        select_sequential_archive_batches(
+            tmp_path,
+            [],
+            stages=[("baseline", 0)],
+            target_stop_score=target_stop_score,
         )

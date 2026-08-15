@@ -568,9 +568,14 @@ GEPA đã theo dõi best outputs/Pareto nhưng pipeline cuối hiện ưu tiên 
 - So single-best score với Pareto-oracle score.
 - Chỉ triển khai routing nếu gain lặp lại trên holdout.
 
-**Quyết định hiện tại:** dùng hai replicate làm cấu hình E67 ứng viên vì ba replicate chỉ đạt 97,26% và
+**Quyết định ban đầu (đã được follow-up thay thế):** dùng hai replicate làm cấu hình E67 ứng viên vì ba replicate chỉ đạt 97,26% và
 không tạo lợi ích rõ so với hai. Bước kế tiếp là tự động hóa chiến lược chạy baseline trước, chỉ mở replicate
 thứ hai cho target còn thiếu coverage, rồi dùng đúng một one-shot holdout gate trước khi production hóa.
+
+**Follow-up cost-aware:** đã triển khai `sequential-archive`. Schedule 7 stage với stop score 0,80 chỉ mở
+29/180 target-generations nhưng suite thật vẫn đạt 96,93%, hơn best single 19,28 điểm và pass 5 lần. Policy
+và threshold đã freeze trên validation; holdout vẫn khóa. Xem
+`binh/PHASE1_E67_COST_AWARE_SEQUENTIAL_RESULT.md`.
 
 ## 10. Dataset và sampling
 
