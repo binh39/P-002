@@ -575,9 +575,14 @@ cùng protocol để tránh so sánh một historical lucky sample với một g
 run quyết định; mỗi replicate làm tăng gần tuyến tính chi phí nhưng giảm variance.
 
 `--reflection-temperature` là optimizer configuration thật: nó được lưu trong
-`optimized_program.json` và optimization run digest (schema 15). Vì vậy temperature ablation dùng
+`optimized_program.json` và optimization run digest (schema 16). Vì vậy temperature ablation dùng
 log directory riêng và multi-program pooling có thể phát hiện protocol không đồng nhất thay vì
 âm thầm so các search khác temperature như cùng một run.
+
+`--best-candidate-probability` điều khiển parent selector: `0.7` chọn aggregate current-best 70%
+và Pareto frontier 30%, `0.5` cân bằng hai phía, còn `0` là pure Pareto. Giá trị được lưu trong
+optimizer config và run digest schema 16. Rerank cho phép pool các probability/seed khác nhau nhưng
+vẫn từ chối program khác model-independent protocol như temperature, minibatch hoặc budget.
 
 ## Artifact của từng run
 

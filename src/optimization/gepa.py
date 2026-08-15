@@ -161,7 +161,7 @@ _DIGEST_LOCKS_GUARD = threading.Lock()
 
 
 class BestParetoCandidateSelector:
-    """Select the aggregate best candidate 70% of the time, Pareto otherwise."""
+    """Select the aggregate best candidate with a configurable probability."""
 
     def __init__(
         self,
@@ -1108,6 +1108,7 @@ class PromptOptimizationResult:
     gepa_seed: int
     reflection_minibatch_size: int
     reflection_temperature: float
+    best_candidate_probability: float
     max_metric_calls: int
 
     def as_dict(self) -> dict[str, Any]:
@@ -1120,6 +1121,7 @@ class PromptOptimizationResult:
                 "gepa_seed": self.gepa_seed,
                 "reflection_minibatch_size": self.reflection_minibatch_size,
                 "reflection_temperature": self.reflection_temperature,
+                "best_candidate_probability": self.best_candidate_probability,
                 "max_metric_calls": self.max_metric_calls,
             },
             "candidates": [candidate.as_candidate() for candidate in self.candidates],
@@ -2063,10 +2065,11 @@ def _optimization_run_digest(
     gepa_seed: int,
     reflection_minibatch_size: int,
     reflection_temperature: float,
+    best_candidate_probability: float,
     max_metric_calls: int,
 ) -> str:
     payload = {
-        "optimizer_schema": 15,
+        "optimizer_schema": 16,
         "baseline": baseline.as_candidate(),
         "train": [_target_identity(target) for target in train_targets],
         "validation": [_target_identity(target) for target in validation_targets],
@@ -2074,6 +2077,7 @@ def _optimization_run_digest(
         "gepa_seed": gepa_seed,
         "reflection_minibatch_size": reflection_minibatch_size,
         "reflection_temperature": reflection_temperature,
+        "best_candidate_probability": best_candidate_probability,
         "max_metric_calls": max_metric_calls,
         "train_evaluation": _evaluation_digest(runner, train_targets),
         "validation_evaluation": _evaluation_digest(runner, validation_targets),
@@ -2147,6 +2151,7 @@ def optimize(
     gepa_seed: int = 7,
     reflection_minibatch_size: int = 8,
     reflection_temperature: float = 0.7,
+    best_candidate_probability: float = 0.7,
 ) -> PromptOptimizationResult:
     """Optimize the initial and error prompt components."""
     if error := validate_bundle(baseline):
@@ -2161,6 +2166,11 @@ def optimize(
         raise ValueError("reflection_minibatch_size must be at least 1")
     if not math.isfinite(reflection_temperature) or reflection_temperature < 0:
         raise ValueError("reflection_temperature must be a finite non-negative value")
+    if (
+        not math.isfinite(best_candidate_probability)
+        or not 0.0 <= best_candidate_probability <= 1.0
+    ):
+        raise ValueError("best_candidate_probability must be between 0 and 1")
     if auto is not None:
         max_metric_calls = AUTO_METRIC_BUDGETS[auto]
     if max_metric_calls is None or max_metric_calls < 1:
@@ -2222,6 +2232,7 @@ def optimize(
         gepa_seed,
         effective_reflection_minibatch_size,
         reflection_temperature,
+        best_candidate_probability,
         max_metric_calls,
     )
     result = gepa_core.optimize(
@@ -2231,7 +2242,7 @@ def optimize(
         adapter=adapter,
         reflection_lm=None,
         candidate_selection_strategy=BestParetoCandidateSelector(
-            best_probability=0.7,
+            best_probability=best_candidate_probability,
             rng=random.Random(gepa_seed),
         ),
         frontier_type="hybrid",
@@ -2262,5 +2273,6 @@ def optimize(
         gepa_seed=gepa_seed,
         reflection_minibatch_size=effective_reflection_minibatch_size,
         reflection_temperature=reflection_temperature,
+        best_candidate_probability=best_candidate_probability,
         max_metric_calls=max_metric_calls,
     )

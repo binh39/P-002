@@ -216,7 +216,10 @@ Chọn theo tỷ lệ proposal hợp lệ, diversity digest và validation gain,
 
 ### E25 — Pareto exploration
 
-**Trạng thái:** cần thay selector/configurable.
+**Trạng thái:** đã triển khai selector configurable và chạy live `70/30`, `50/50`, pure Pareto trên
+validation 12 target. Pure Pareto tăng Pareto-oracle lên 78,88% nhưng mọi global proposal đều thua
+baseline repeated rerank; reject và không mở holdout. Post-hoc target-router oracle đạt 89,86%, cao
+hơn baseline 28,59 điểm. Xem `binh/PHASE1_E25_PARETO_EXPLORATION_RESULT.md`.
 
 **Dataset quyết định:** sau E24, validation đã được mở rộng từ 4 lên 12 target có phân tầng theo
 repo và độ khó. Baseline 3 replicate đạt 68,55%, sample SD giảm từ 11,54 xuống 5,43 điểm; 4 test
@@ -550,6 +553,9 @@ Dùng random/fuzz/search để tìm input tăng coverage, rồi cho LLM:
 
 ### E67 — Inference-time Pareto outputs
 
+**Trạng thái:** ưu tiên tiếp theo sau E25. Pool 5 prompt có post-hoc target-router oracle 89,86% so
+với baseline 61,27%; cần biến upper bound này thành router/archive không nhìn holdout.
+
 GEPA đã theo dõi best outputs/Pareto nhưng pipeline cuối hiện ưu tiên một best prompt. Thử:
 
 - Lấy best output theo từng validation/task family.
@@ -652,6 +658,7 @@ Mỗi run cần ít nhất ba seed ở bước xác nhận cuối. Không cần 
 - [x] E22: multi-seed seed 7/17/37 đã chạy. Pool chỉ còn 2 unique finalist; winner validation vẫn thua holdout 9,99 điểm, reject.
 - [x] E24: reflection temperature 0,2/0,5/0,7/1,0 đã chạy. Winner 0,2 đạt validation 97,78% nhưng thua holdout 27,92 điểm, reject.
 - [x] Dataset sau E24: khóa split 8 train / 12 validation / 4 test mới; baseline validation 3 replicate đạt 68,55% với sample SD 5,43 điểm. Test mới chưa được mở.
+- [x] E25: selector 70/30, 50/50 và pure Pareto đã chạy. Global winner vẫn là baseline; pure Pareto tăng oracle diversity và target-router upper bound đạt +28,59 điểm. Không mở holdout.
 - [ ] E23: strong reflection model.
 - [x] E26: top-K repeated reranking đã triển khai và chạy live. Candidate pool chỉ có 2 nên winner không đổi; validation +6,30 điểm nhưng paired holdout -9,99 điểm, reject.
 - [x] E30: taxonomy/schema 3 và live control hoàn tất; không có gain, chuyển sang E41/E43 để bổ sung API/test context.

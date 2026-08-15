@@ -139,6 +139,15 @@ def parser() -> argparse.ArgumentParser:
     )
     tune.add_argument("--reflection-temperature", type=float, default=0.7)
     tune.add_argument(
+        "--best-candidate-probability",
+        type=float,
+        default=0.7,
+        help=(
+            "Probability of mutating the aggregate current-best candidate; "
+            "0 selects pure Pareto exploration (default: 0.7)"
+        ),
+    )
+    tune.add_argument(
         "--gepa-seed",
         type=int,
         default=7,
@@ -460,16 +469,22 @@ def rerank_saved_program(args: argparse.Namespace) -> None:
             optimizer_configs.append(config)
             if "gepa_seed" in config:
                 seeds.append(int(config["gepa_seed"]))
+    allowed_variations = {"gepa_seed", "best_candidate_probability"}
     comparable_configs = {
         json.dumps(
-            {key: value for key, value in config.items() if key != "gepa_seed"},
+            {
+                key: value
+                for key, value in config.items()
+                if key not in allowed_variations
+            },
             sort_keys=True,
         )
         for config in optimizer_configs
     }
     if len(comparable_configs) > 1:
         raise ValueError(
-            "Multi-seed programs must use the same optimizer configuration except seed"
+            "Pooled programs must use the same optimizer configuration except "
+            "gepa_seed and best_candidate_probability"
         )
     targets = load_targets(_resolve(root, args.dataset).resolve(), args.split)
     if not targets:
@@ -504,6 +519,7 @@ def rerank_saved_program(args: argparse.Namespace) -> None:
         **result.as_dict(),
         "source_programs": [str(path) for path in program_paths],
         "gepa_seeds": seeds,
+        "optimizer_configs": optimizer_configs,
     }
     report_path.write_text(
         json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -619,6 +635,9 @@ def tune(args: argparse.Namespace) -> None:
         gepa_seed=args.gepa_seed,
         reflection_minibatch_size=args.reflection_minibatch_size,
         reflection_temperature=args.reflection_temperature,
+        best_candidate_probability=float(
+            getattr(args, "best_candidate_probability", 0.7)
+        ),
     )
     artifacts.mkdir(parents=True, exist_ok=True)
     configured_program_output = getattr(args, "program_output", None)

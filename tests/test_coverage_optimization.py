@@ -580,6 +580,8 @@ def test_optimization_cli_exposes_gepa_search_controls():
         "19",
         "--reflection-minibatch-size",
         "3",
+        "--best-candidate-probability",
+        "0.5",
         "--rerank-top-k",
         "5",
         "--rerank-replicates",
@@ -592,6 +594,7 @@ def test_optimization_cli_exposes_gepa_search_controls():
 
     assert args.gepa_seed == 19
     assert args.reflection_minibatch_size == 3
+    assert args.best_candidate_probability == pytest.approx(0.5)
     assert args.rerank_top_k == 5
     assert args.rerank_replicates == 3
     assert args.rerank_length_penalty_per_1k == pytest.approx(0.02)
@@ -913,7 +916,11 @@ def test_rerank_saved_program_pools_candidates_from_multiple_seeds(
     prompt_path = tmp_path / "baseline.json"
     baseline.save(prompt_path)
     programs = []
-    for seed, candidate, score in ((7, first, 0.7), (17, second, 0.8)):
+    configurations = (
+        (7, 0.7, first, 0.7),
+        (17, 0.5, second, 0.8),
+    )
+    for seed, best_probability, candidate, score in configurations:
         path = tmp_path / f"seed{seed}.json"
         path.write_text(json.dumps({
             "candidates": [baseline.as_candidate(), candidate.as_candidate()],
@@ -921,6 +928,7 @@ def test_rerank_saved_program_pools_candidates_from_multiple_seeds(
             "optimizer_config": {
                 "gepa_seed": seed,
                 "reflection_minibatch_size": 3,
+                "best_candidate_probability": best_probability,
                 "max_metric_calls": 30,
             },
         }), encoding="utf-8")
@@ -976,6 +984,10 @@ def test_rerank_saved_program_pools_candidates_from_multiple_seeds(
         (artifacts / "candidate_rerank.json").read_text(encoding="utf-8")
     )
     assert report["gepa_seeds"] == [7, 17]
+    assert [
+        config["best_candidate_probability"]
+        for config in report["optimizer_configs"]
+    ] == [0.7, 0.5]
     assert report["source_programs"] == [str(path) for path in programs]
     assert PromptBundle.load(
         artifacts / "prompts" / "gepa_reranked.json"
@@ -2974,6 +2986,17 @@ def test_best_pareto_selector_uses_seventy_thirty_probability_boundary():
     assert selector.select_candidate_idx(object()) == 22
 
 
+def test_best_pareto_selector_can_use_pure_pareto():
+    selector = BestParetoCandidateSelector(
+        best_probability=0.0,
+        rng=SimpleNamespace(random=lambda: 0.0),
+    )
+    selector.best_selector = SimpleNamespace(select_candidate_idx=lambda state: 11)
+    selector.pareto_selector = SimpleNamespace(select_candidate_idx=lambda state: 22)
+
+    assert selector.select_candidate_idx(object()) == 22
+
+
 def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
     baseline = baseline_bundle()
     captured = {}
@@ -3032,6 +3055,7 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
         gepa_seed=19,
         reflection_minibatch_size=3,
         reflection_temperature=0.2,
+        best_candidate_probability=0.5,
     )
 
     assert captured["seed_candidate"] == baseline.as_candidate()
@@ -3043,12 +3067,13 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
     assert isinstance(
         captured["candidate_selection_strategy"], BestParetoCandidateSelector
     )
-    assert captured["candidate_selection_strategy"].best_probability == 0.7
+    assert captured["candidate_selection_strategy"].best_probability == 0.5
     assert result.best_bundle == baseline
     assert result.as_dict()["optimizer_config"] == {
         "gepa_seed": 19,
         "reflection_minibatch_size": 3,
         "reflection_temperature": 0.2,
+        "best_candidate_probability": 0.5,
         "max_metric_calls": 2,
     }
 
