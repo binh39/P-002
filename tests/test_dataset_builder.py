@@ -1,3 +1,5 @@
+import json
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -250,3 +252,33 @@ class Other:
         "Base.find",
         "Other.__init__",
     ]
+
+
+def test_phase1_stratified_dataset_has_balanced_existing_targets():
+    dataset = Path("binh/phase1_stratified_24.jsonl")
+    rows = [json.loads(line) for line in dataset.read_text(encoding="utf-8").splitlines()]
+    identities = {
+        (row["project"], row["source_file"], row["symbol"])
+        for row in rows
+    }
+
+    assert len(rows) == len(identities) == 24
+    assert Counter(row["split"] for row in rows) == {
+        "train": 8,
+        "validation": 12,
+        "test": 4,
+    }
+    assert Counter((row["split"], row["project"]) for row in rows) == {
+        (split, project): expected
+        for split, expected in (("train", 2), ("validation", 3), ("test", 1))
+        for project in ("isort", "mimesis", "mlxtend", "typesystem")
+    }
+
+    available = set()
+    for project in ("isort", "mimesis", "mlxtend", "typesystem"):
+        package_dir = Path("src/sample_repo") / project / project
+        available.update(
+            (info.project, info.source_file, info.symbol)
+            for info in collect_project_functions(package_dir, project)
+        )
+    assert identities <= available

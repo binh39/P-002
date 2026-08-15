@@ -218,6 +218,10 @@ Chọn theo tỷ lệ proposal hợp lệ, diversity digest và validation gain,
 
 **Trạng thái:** cần thay selector/configurable.
 
+**Dataset quyết định:** sau E24, validation đã được mở rộng từ 4 lên 12 target có phân tầng theo
+repo và độ khó. Baseline 3 replicate đạt 68,55%, sample SD giảm từ 11,54 xuống 5,43 điểm; 4 test
+target mới vẫn khóa. Xem `binh/PHASE1_STRATIFIED_VALIDATION_RESULT.md`.
+
 So sánh:
 
 - Current-best 70% / Pareto 30% hiện tại.
@@ -647,6 +651,7 @@ Mỗi run cần ít nhất ba seed ở bước xác nhận cuối. Không cần 
 - [x] E21: đã chạy minibatch 3 so với 8 trên calibration 16 target. Chưa có cấu hình thắng: batch 3 overfit holdout, batch 8 giữ baseline; cần repeated paired evaluation vì variance lớn. Xem `binh/PHASE1_MINIBATCH_ABLATION_RESULT.md`.
 - [x] E22: multi-seed seed 7/17/37 đã chạy. Pool chỉ còn 2 unique finalist; winner validation vẫn thua holdout 9,99 điểm, reject.
 - [x] E24: reflection temperature 0,2/0,5/0,7/1,0 đã chạy. Winner 0,2 đạt validation 97,78% nhưng thua holdout 27,92 điểm, reject.
+- [x] Dataset sau E24: khóa split 8 train / 12 validation / 4 test mới; baseline validation 3 replicate đạt 68,55% với sample SD 5,43 điểm. Test mới chưa được mở.
 - [ ] E23: strong reflection model.
 - [x] E26: top-K repeated reranking đã triển khai và chạy live. Candidate pool chỉ có 2 nên winner không đổi; validation +6,30 điểm nhưng paired holdout -9,99 điểm, reject.
 - [x] E30: taxonomy/schema 3 và live control hoàn tất; không có gain, chuyển sang E41/E43 để bổ sung API/test context.
