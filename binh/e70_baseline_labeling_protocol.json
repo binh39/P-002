@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "experiment": "E70-baseline-labeling",
+  "status": "frozen_before_model_calls",
+  "dataset": "binh/e70_failure_stratified_32.jsonl",
+  "dataset_sha256": "8876d578f2b65e64ca113fa3e27586fce2be6956ff1e2ff238e4930ffda94fdd",
+  "allowed_splits": [
+    "train",
+    "validation"
+  ],
+  "forbidden_split": "test",
+  "holdout_sha256": "fa029ed3f1bb2203b28a712d2d67f0c78a03d25d1aaebf2316473fd0879a815c",
+  "prompt": "binh/e67_prompts/d8123dc403839c22.json",
+  "prompt_digest": "d8123dc403839c22",
+  "coverup_model": "vertex_ai/gemini-3.5-flash-lite",
+  "evaluation_replicates": 1,
+  "max_attempts": 3,
+  "repeat_tests": 2,
+  "max_concurrency": 4,
+  "target_context": true,
+  "target_context_max_chars": 6000,
+  "repository_test_context": false,
+  "artifacts_dir": "binh/phase1_runs/e70_baseline_labeling_r1",
+  "purpose": "Observed failure taxonomy and headroom calibration only; not candidate promotion"
+}
