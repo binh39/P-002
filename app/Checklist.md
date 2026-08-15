@@ -621,8 +621,10 @@ Create experiment
 - [x] Khóa dataset mới 16 train / 8 validation / 8 test, cân bằng 4 project và difficulty 25/50/25.
 - [x] Loại toàn bộ 35 target cũ, holdout E67 và structural duplicate; contract test khóa dataset/holdout hash.
 - [x] Import/setup preflight pass cho isort, mimesis, mlxtend và typesystem.
-- [ ] Chạy baseline labeling chỉ trên train/validation bằng Gemini 3.5 Flash-Lite; tuyệt đối chưa mở E70 test.
-- [ ] Đối chiếu static strata với observed failure taxonomy rồi freeze candidate E40 trước one-shot holdout.
+- [x] Chạy baseline labeling chỉ trên train/validation bằng Gemini 3.5 Flash-Lite; E70 test vẫn chưa mở.
+- [x] Xác định hai hard target bằng 0 chiếm 99,64% statement và 95,24% branch headroom.
+- [ ] Triển khai failure-triggered E42/E44 retrieval cho constructor/callee/usage/setup contract.
+- [ ] Paired validation candidate với baseline; chỉ freeze winner trước one-shot E70 holdout.
 
 ### 10.6 PR 4 â€” Paired comparison vÃ  promotion gate
 

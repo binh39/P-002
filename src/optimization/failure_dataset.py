@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .dataset_builder import FunctionInfo, count_branches, count_statements, function_lines
+from .failures import classify_attempt_failure
+from .metrics import aggregate_coverage_score
 
 FAILURE_STRATA = (
     "branch_heavy",
@@ -342,6 +344,214 @@ def dataset_digest(rows: list[dict[str, str]], split: str | None = None) -> str:
 
     selected = rows if split is None else [row for row in rows if row["split"] == split]
     return hashlib.sha256(dataset_bytes(selected)).hexdigest()
+
+
+def analyze_observed_failures(
+    manifest: dict[str, object],
+    batches: list[dict[str, object]],
+    *,
+    allowed_splits: tuple[str, ...] = ("train", "validation"),
+) -> dict[str, object]:
+    """Join live baseline results to frozen static profiles.
+
+    The analyzer refuses any batch outside ``allowed_splits``.  This makes the
+    ordinary E70 labeling command structurally unable to summarize the locked
+    test split by accident.
+    """
+
+    audit = manifest.get("audit")
+    if not isinstance(audit, dict) or not isinstance(audit.get("profiles"), list):
+        raise ValueError("Manifest does not contain E70 profile metadata")
+    profiles = audit["profiles"]
+    profile_by_identity = {
+        (profile["project"], profile["source_file"], profile["symbol"]): profile
+        for profile in profiles
+        if isinstance(profile, dict) and profile.get("split") in allowed_splits
+    }
+    expected = set(profile_by_identity)
+    observed: set[tuple[str, str, str]] = set()
+    target_rows: list[dict[str, object]] = []
+    attempt_outcomes: Counter[str] = Counter()
+    failure_stages: Counter[str] = Counter()
+    failure_types: Counter[str] = Counter()
+    terminal_outcomes: Counter[str] = Counter()
+    run_ids: list[str] = []
+    evaluation_digests: dict[str, str] = {}
+
+    for batch in batches:
+        split = str(batch.get("split", ""))
+        if split not in allowed_splits:
+            raise ValueError(f"Refusing observed-failure analysis for locked split {split!r}")
+        if int(batch.get("replicate", -1)) != 0:
+            raise ValueError("E70 baseline labeling expects exactly replicate 0")
+        evaluation_digests[split] = str(batch.get("evaluation_digest", ""))
+        run_ids.extend(str(value) for value in batch.get("run_ids", []))
+        results = batch.get("results")
+        if not isinstance(results, list):
+            raise ValueError(f"Batch {split!r} has no result list")
+        for result in results:
+            if not isinstance(result, dict) or not isinstance(result.get("target"), dict):
+                raise ValueError(f"Batch {split!r} contains an invalid result")
+            target = result["target"]
+            identity = (target["project"], target["source_file"], target["symbol"])
+            if identity not in profile_by_identity:
+                raise ValueError(f"Unexpected E70 target result: {'::'.join(identity)}")
+            if identity in observed:
+                raise ValueError(f"Duplicate E70 target result: {'::'.join(identity)}")
+            observed.add(identity)
+            coverage = result.get("coverage")
+            if not isinstance(coverage, dict):
+                raise ValueError(f"E70 result has no coverage denominator: {'::'.join(identity)}")
+            traces = result.get("attempt_traces") or []
+            if not isinstance(traces, list):
+                raise ValueError(f"E70 result has invalid attempt traces: {'::'.join(identity)}")
+            previous = None
+            classified_events = []
+            for attempt in traces:
+                if not isinstance(attempt, dict):
+                    continue
+                outcome = str(attempt.get("outcome", "unknown"))
+                attempt_outcomes[outcome] += 1
+                failure = classify_attempt_failure(attempt, previous)
+                if failure:
+                    classified_events.append(failure)
+                    failure_stages[str(failure["failure_stage"])] += 1
+                    failure_types[str(failure["failure_type"])] += 1
+                previous = attempt
+            terminal_outcome = (
+                str(traces[-1].get("outcome", "unknown"))
+                if traces and isinstance(traces[-1], dict)
+                else "missing_trace"
+            )
+            terminal_outcomes[terminal_outcome] += 1
+            profile = profile_by_identity[identity]
+            target_rows.append({
+                "project": identity[0],
+                "source_file": identity[1],
+                "symbol": identity[2],
+                "split": split,
+                "difficulty_band": profile["difficulty_band"],
+                "strata": list(profile["strata"]),
+                "score": float(result.get("score", 0.0)),
+                "coverage": {
+                    key: coverage[key]
+                    for key in (
+                        "covered_statements",
+                        "num_statements",
+                        "covered_branches",
+                        "num_branches",
+                        "statement_coverage",
+                        "branch_coverage",
+                        "score",
+                    )
+                    if key in coverage
+                },
+                "attempt_event_count": sum(
+                    isinstance(attempt, dict)
+                    and attempt.get("outcome") != "max_attempts_exhausted"
+                    for attempt in traces
+                ),
+                "attempt_outcomes": [
+                    attempt.get("outcome") for attempt in traces if isinstance(attempt, dict)
+                ],
+                "terminal_outcome": terminal_outcome,
+                "failure_events": classified_events,
+            })
+
+    missing = expected - observed
+    if missing:
+        example = "::".join(sorted(missing)[0])
+        raise ValueError(f"E70 baseline labeling is incomplete; missing {len(missing)} targets, e.g. {example}")
+    if observed - expected:
+        raise ValueError("E70 baseline labeling contains targets outside train/validation")
+
+    grouped = {
+        "split": _group_target_rows(target_rows, lambda row: [str(row["split"])]),
+        "project": _group_target_rows(target_rows, lambda row: [str(row["project"])]),
+        "difficulty": _group_target_rows(
+            target_rows, lambda row: [str(row["difficulty_band"])]
+        ),
+        "stratum": _group_target_rows(
+            target_rows, lambda row: [str(value) for value in row["strata"]]
+        ),
+    }
+    overall = _summarize_target_rows(target_rows)
+    zero_rows = [row for row in target_rows if float(row["score"]) == 0.0]
+    zero_denominators = aggregate_coverage_score(zero_rows)
+    uncovered_statements = int(overall["num_statements"] - overall["covered_statements"])
+    uncovered_branches = int(overall["num_branches"] - overall["covered_branches"])
+    return {
+        "schema_version": 1,
+        "kind": "observed_failure_baseline",
+        "experiment": "E70",
+        "dataset_sha256": manifest.get("dataset_sha256"),
+        "holdout_status": manifest.get("holdout", {}).get("status"),
+        "analyzed_splits": list(allowed_splits),
+        "holdout_analyzed": False,
+        "target_count": len(target_rows),
+        "run_ids": run_ids,
+        "evaluation_digests": dict(sorted(evaluation_digests.items())),
+        "overall": overall,
+        "headroom": {
+            "uncovered_statements": uncovered_statements,
+            "uncovered_branches": uncovered_branches,
+            "zero_score_target_count": len(zero_rows),
+            "zero_score_statement_denominator": zero_denominators["num_statements"],
+            "zero_score_branch_denominator": zero_denominators["num_branches"],
+            "zero_score_share_of_statement_headroom": (
+                zero_denominators["num_statements"] / uncovered_statements
+                if uncovered_statements
+                else 0.0
+            ),
+            "zero_score_share_of_branch_headroom": (
+                zero_denominators["num_branches"] / uncovered_branches
+                if uncovered_branches
+                else 0.0
+            ),
+        },
+        "events": {
+            "attempt_count": sum(row["attempt_event_count"] for row in target_rows),
+            "attempt_outcomes": dict(sorted(attempt_outcomes.items())),
+            "failure_stages": dict(sorted(failure_stages.items())),
+            "failure_types": dict(sorted(failure_types.items())),
+            "terminal_outcomes": dict(sorted(terminal_outcomes.items())),
+        },
+        "groups": grouped,
+        "targets": sorted(
+            target_rows,
+            key=lambda row: (row["split"], row["project"], row["source_file"], row["symbol"]),
+        ),
+    }
+
+
+def _group_target_rows(target_rows, key_values):
+    groups: dict[str, list[dict[str, object]]] = {}
+    for row in target_rows:
+        for key in key_values(row):
+            groups.setdefault(key, []).append(row)
+    return {
+        key: _summarize_target_rows(rows)
+        for key, rows in sorted(groups.items())
+    }
+
+
+def _summarize_target_rows(target_rows: list[dict[str, object]]) -> dict[str, object]:
+    coverage_rows = [
+        {"coverage": row["coverage"], "score": row["score"]}
+        for row in target_rows
+    ]
+    aggregate = aggregate_coverage_score(coverage_rows)
+    scores = [float(row["score"]) for row in target_rows]
+    return {
+        **aggregate,
+        "target_count": len(target_rows),
+        "mean_target_score": sum(scores) / len(scores) if scores else 0.0,
+        "zero_score_count": sum(score == 0.0 for score in scores),
+        "full_score_count": sum(score == 1.0 for score in scores),
+        "exhausted_count": sum(
+            row["terminal_outcome"] == "max_attempts_exhausted" for row in target_rows
+        ),
+    }
 
 
 def _collect_nodes(

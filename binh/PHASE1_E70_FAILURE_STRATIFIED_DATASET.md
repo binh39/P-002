@@ -76,12 +76,11 @@ lần mở đó phải có holdout khác.
 
 ## Bước tiếp theo
 
-1. Chạy baseline trên **chỉ train + validation**, dùng
-   `vertex_ai/gemini-3.5-flash-lite`, để gắn observed failure taxonomy và đo headroom.
-2. Kiểm tra static strata nào thật sự tương quan với `test_error`, `max_attempts_exhausted`, partial coverage
-   và low branch coverage.
-3. Giữ hoặc điều chỉnh curriculum bằng train/validation; không thay membership của locked test.
-4. Sau đó mới triển khai E40 branch/path-condition context và đánh giá repeated paired validation.
+Baseline labeling trên train + validation đã hoàn tất. Easy/medium đạt 100%; hai hard target bằng 0 chiếm
+gần toàn bộ headroom. Kết quả đầy đủ nằm trong `binh/PHASE1_E70_BASELINE_LABELING_RESULT.md`.
+
+Tiếp theo triển khai failure-triggered E42/E44 retrieval cho hai failure family đã quan sát, sau đó paired
+validation. Không thay membership hoặc mở locked test.
 
 ## Verification
 

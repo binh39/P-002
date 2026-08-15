@@ -1,0 +1,1173 @@
+{
+  "schema_version": 1,
+  "kind": "observed_failure_baseline",
+  "experiment": "E70",
+  "dataset_sha256": "8876d578f2b65e64ca113fa3e27586fce2be6956ff1e2ff238e4930ffda94fdd",
+  "holdout_status": "locked_unevaluated",
+  "analyzed_splits": [
+    "train",
+    "validation"
+  ],
+  "holdout_analyzed": false,
+  "target_count": 24,
+  "run_ids": [
+    "multi-project-validation-batch-5e6cc96b",
+    "multi-project-train-batch-0c1b062b"
+  ],
+  "evaluation_digests": {
+    "train": "a44da3d67f1d",
+    "validation": "709c5d9915c1"
+  },
+  "overall": {
+    "score": 0.3489779384270223,
+    "statement_coverage": 0.3827433628318584,
+    "branch_coverage": 0.3345070422535211,
+    "covered_statements": 173,
+    "num_statements": 452,
+    "covered_branches": 95,
+    "num_branches": 284,
+    "target_count": 24,
+    "mean_target_score": 0.910911390220866,
+    "zero_score_count": 2,
+    "full_score_count": 20,
+    "exhausted_count": 2
+  },
+  "headroom": {
+    "uncovered_statements": 279,
+    "uncovered_branches": 189,
+    "zero_score_target_count": 2,
+    "zero_score_statement_denominator": 278,
+    "zero_score_branch_denominator": 180,
+    "zero_score_share_of_statement_headroom": 0.996415770609319,
+    "zero_score_share_of_branch_headroom": 0.9523809523809523
+  },
+  "events": {
+    "attempt_count": 35,
+    "attempt_outcomes": {
+      "coverage_gain_saved": 22,
+      "max_attempts_exhausted": 2,
+      "test_error": 13
+    },
+    "failure_stages": {
+      "assertion": 5,
+      "collection": 2,
+      "coverage": 4,
+      "execution": 6,
+      "repair": 2
+    },
+    "failure_types": {
+      "assertion_error": 5,
+      "attribute_error": 5,
+      "import_error": 2,
+      "max_attempts_exhausted": 2,
+      "partial_coverage": 4,
+      "type_error": 1
+    },
+    "terminal_outcomes": {
+      "coverage_gain_saved": 22,
+      "max_attempts_exhausted": 2
+    }
+  },
+  "groups": {
+    "split": {
+      "train": {
+        "score": 0.48954887218045107,
+        "statement_coverage": 0.5142857142857142,
+        "branch_coverage": 0.4789473684210526,
+        "covered_statements": 144,
+        "num_statements": 280,
+        "covered_branches": 91,
+        "num_branches": 190,
+        "target_count": 16,
+        "mean_target_score": 0.928867085331299,
+        "zero_score_count": 1,
+        "full_score_count": 13,
+        "exhausted_count": 1
+      },
+      "validation": {
+        "score": 0.08036862939139039,
+        "statement_coverage": 0.1686046511627907,
+        "branch_coverage": 0.0425531914893617,
+        "covered_statements": 29,
+        "num_statements": 172,
+        "covered_branches": 4,
+        "num_branches": 94,
+        "target_count": 8,
+        "mean_target_score": 0.875,
+        "zero_score_count": 1,
+        "full_score_count": 7,
+        "exhausted_count": 1
+      }
+    },
+    "project": {
+      "isort": {
+        "score": 0.06508135168961202,
+        "statement_coverage": 0.11764705882352941,
+        "branch_coverage": 0.0425531914893617,
+        "covered_statements": 18,
+        "num_statements": 153,
+        "covered_branches": 4,
+        "num_branches": 94,
+        "target_count": 6,
+        "mean_target_score": 0.8333333333333334,
+        "zero_score_count": 1,
+        "full_score_count": 5,
+        "exhausted_count": 1
+      },
+      "mimesis": {
+        "score": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 32,
+        "num_statements": 32,
+        "covered_branches": 10,
+        "num_branches": 10,
+        "target_count": 6,
+        "mean_target_score": 1.0,
+        "zero_score_count": 0,
+        "full_score_count": 6,
+        "exhausted_count": 0
+      },
+      "mlxtend": {
+        "score": 0.19291666666666663,
+        "statement_coverage": 0.20555555555555555,
+        "branch_coverage": 0.1875,
+        "covered_statements": 37,
+        "num_statements": 180,
+        "covered_branches": 21,
+        "num_branches": 112,
+        "target_count": 6,
+        "mean_target_score": 0.8260416666666667,
+        "zero_score_count": 1,
+        "full_score_count": 4,
+        "exhausted_count": 1
+      },
+      "typesystem": {
+        "score": 0.9141987829614604,
+        "statement_coverage": 0.9885057471264368,
+        "branch_coverage": 0.8823529411764706,
+        "covered_statements": 86,
+        "num_statements": 87,
+        "covered_branches": 60,
+        "num_branches": 68,
+        "target_count": 6,
+        "mean_target_score": 0.9842705608834641,
+        "zero_score_count": 0,
+        "full_score_count": 5,
+        "exhausted_count": 0
+      }
+    },
+    "difficulty": {
+      "easy": {
+        "score": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 11,
+        "num_statements": 11,
+        "covered_branches": 0,
+        "num_branches": 0,
+        "target_count": 6,
+        "mean_target_score": 1.0,
+        "zero_score_count": 0,
+        "full_score_count": 6,
+        "exhausted_count": 0
+      },
+      "hard": {
+        "score": 0.2906216340975535,
+        "statement_coverage": 0.2809278350515464,
+        "branch_coverage": 0.2947761194029851,
+        "covered_statements": 109,
+        "num_statements": 388,
+        "covered_branches": 79,
+        "num_branches": 268,
+        "target_count": 6,
+        "mean_target_score": 0.643645560883464,
+        "zero_score_count": 2,
+        "full_score_count": 2,
+        "exhausted_count": 2
+      },
+      "medium": {
+        "score": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 53,
+        "num_statements": 53,
+        "covered_branches": 16,
+        "num_branches": 16,
+        "target_count": 12,
+        "mean_target_score": 1.0,
+        "zero_score_count": 0,
+        "full_score_count": 12,
+        "exhausted_count": 0
+      }
+    },
+    "stratum": {
+      "async_io": {
+        "score": 0.1396573386636208,
+        "statement_coverage": 0.18235294117647058,
+        "branch_coverage": 0.12135922330097088,
+        "covered_statements": 62,
+        "num_statements": 340,
+        "covered_branches": 25,
+        "num_branches": 206,
+        "target_count": 14,
+        "mean_target_score": 0.8540178571428572,
+        "zero_score_count": 2,
+        "full_score_count": 11,
+        "exhausted_count": 2
+      },
+      "branch_heavy": {
+        "score": 0.2860801256873527,
+        "statement_coverage": 0.2657894736842105,
+        "branch_coverage": 0.2947761194029851,
+        "covered_statements": 101,
+        "num_statements": 380,
+        "covered_branches": 79,
+        "num_branches": 268,
+        "target_count": 5,
+        "mean_target_score": 0.5723746730601569,
+        "zero_score_count": 2,
+        "full_score_count": 1,
+        "exhausted_count": 2
+      },
+      "easy_regression": {
+        "score": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 11,
+        "num_statements": 11,
+        "covered_branches": 4,
+        "num_branches": 4,
+        "target_count": 4,
+        "mean_target_score": 1.0,
+        "zero_score_count": 0,
+        "full_score_count": 4,
+        "exhausted_count": 0
+      },
+      "exception_paths": {
+        "score": 0.26448716637693015,
+        "statement_coverage": 0.2753246753246753,
+        "branch_coverage": 0.25984251968503935,
+        "covered_statements": 106,
+        "num_statements": 385,
+        "covered_branches": 66,
+        "num_branches": 254,
+        "target_count": 8,
+        "mean_target_score": 0.7382029206625981,
+        "zero_score_count": 2,
+        "full_score_count": 5,
+        "exhausted_count": 2
+      },
+      "fixture_mock_dependent": {
+        "score": 0.18267379679144383,
+        "statement_coverage": 0.20588235294117646,
+        "branch_coverage": 0.17272727272727273,
+        "covered_statements": 35,
+        "num_statements": 170,
+        "covered_branches": 19,
+        "num_branches": 110,
+        "target_count": 7,
+        "mean_target_score": 0.8508928571428571,
+        "zero_score_count": 1,
+        "full_score_count": 5,
+        "exhausted_count": 1
+      },
+      "stateful_method": {
+        "score": 0.29835981170932624,
+        "statement_coverage": 0.32281553398058255,
+        "branch_coverage": 0.2878787878787879,
+        "covered_statements": 133,
+        "num_statements": 412,
+        "covered_branches": 76,
+        "num_branches": 264,
+        "target_count": 16,
+        "mean_target_score": 0.869101460331299,
+        "zero_score_count": 2,
+        "full_score_count": 13,
+        "exhausted_count": 2
+      },
+      "statement_heavy": {
+        "score": 0.2906216340975535,
+        "statement_coverage": 0.2809278350515464,
+        "branch_coverage": 0.2947761194029851,
+        "covered_statements": 109,
+        "num_statements": 388,
+        "covered_branches": 79,
+        "num_branches": 268,
+        "target_count": 6,
+        "mean_target_score": 0.643645560883464,
+        "zero_score_count": 2,
+        "full_score_count": 2,
+        "exhausted_count": 2
+      }
+    }
+  },
+  "targets": [
+    {
+      "project": "isort",
+      "source_file": "isort/deprecated/finders.py",
+      "symbol": "ReqsBaseFinder._get_files",
+      "split": "train",
+      "difficulty_band": "medium",
+      "strata": [
+        "async_io",
+        "fixture_mock_dependent",
+        "stateful_method"
+      ],
+      "score": 1.0,
+      "coverage": {
+        "covered_statements": 5,
+        "num_statements": 5,
+        "covered_branches": 4,
+        "num_branches": 4,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "score": 1.0
+      },
+      "attempt_event_count": 1,
+      "attempt_outcomes": [
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": []
+    },
+    {
+      "project": "isort",
+      "source_file": "isort/deprecated/finders.py",
+      "symbol": "RequirementsFinder._get_files_from_dir",
+      "split": "train",
+      "difficulty_band": "easy",
+      "strata": [
+        "async_io",
+        "stateful_method"
+      ],
+      "score": 1.0,
+      "coverage": {
+        "covered_statements": 1,
+        "num_statements": 1,
+        "covered_branches": 0,
+        "num_branches": 0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "score": 1.0
+      },
+      "attempt_event_count": 2,
+      "attempt_outcomes": [
+        "test_error",
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": [
+        {
+          "failure_stage": "execution",
+          "failure_type": "type_error",
+          "error_type": "TypeError",
+          "error_message": "ReqsBaseFinder.__init__() missing 1 required positional argument: 'config'",
+          "actionable_frame": {
+            "path": "binh\\phase1_runs\\e70_baseline_labeling_r1\\runs\\d8123dc403839c22-a44da3d67f1d\\train\\multi-project-train-batch-0c1b062b\\target_workspaces\\54ef319a0b94_0001\\tmp_test_ovanjqxp.py",
+            "line": 12
+          }
+        }
+      ]
+    },
+    {
+      "project": "isort",
+      "source_file": "isort/deprecated/finders.py",
+      "symbol": "chdir",
+      "split": "train",
+      "difficulty_band": "medium",
+      "strata": [
+        "async_io",
+        "exception_paths",
+        "fixture_mock_dependent"
+      ],
+      "score": 1.0,
+      "coverage": {
+        "covered_statements": 5,
+        "num_statements": 5,
+        "covered_branches": 0,
+        "num_branches": 0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "score": 1.0
+      },
+      "attempt_event_count": 1,
+      "attempt_outcomes": [
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": []
+    },
+    {
+      "project": "isort",
+      "source_file": "isort/settings.py",
+      "symbol": "Config.__init__",
+      "split": "train",
+      "difficulty_band": "hard",
+      "strata": [
+        "async_io",
+        "branch_heavy",
+        "exception_paths",
+        "fixture_mock_dependent",
+        "stateful_method",
+        "statement_heavy"
+      ],
+      "score": 0.0,
+      "coverage": {
+        "covered_statements": 0,
+        "num_statements": 135,
+        "covered_branches": 0,
+        "num_branches": 90,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "score": 0.0
+      },
+      "attempt_event_count": 3,
+      "attempt_outcomes": [
+        "test_error",
+        "test_error",
+        "test_error",
+        "max_attempts_exhausted"
+      ],
+      "terminal_outcome": "max_attempts_exhausted",
+      "failure_events": [
+        {
+          "failure_stage": "assertion",
+          "failure_type": "assertion_error",
+          "error_type": "AssertionError",
+          "error_message": "assert 79 == 99",
+          "actionable_frame": {
+            "path": "binh\\phase1_runs\\e70_baseline_labeling_r1\\runs\\d8123dc403839c22-a44da3d67f1d\\train\\multi-project-train-batch-0c1b062b\\target_workspaces\\b63333416937_0003\\tmp_test_6hczqr2t.py",
+            "line": 27
+          },
+          "actual": "config.line_length",
+          "expected": "99",
+          "comparison": "=="
+        },
+        {
+          "failure_stage": "collection",
+          "failure_type": "import_error",
+          "error_type": "ModuleNotFoundError",
+          "error_message": "No module named 'pkg_resources'",
+          "actionable_frame": {
+            "path": "binh\\phase1_runs\\e70_baseline_labeling_r1\\runs\\d8123dc403839c22-a44da3d67f1d\\train\\multi-project-train-batch-0c1b062b\\target_workspaces\\b63333416937_0003\\tmp_test__jjzw6kh.py",
+            "line": 49
+          }
+        },
+        {
+          "failure_stage": "assertion",
+          "failure_type": "assertion_error",
+          "error_type": "AssertionError",
+          "error_message": "assert WindowsPath('C:/Users/ADMIN/AppData/Local/Temp/pytest-of-ADMIN/pytest-627/test_config_init_src_paths_1_20/src') in (WindowsPath('D:/VinAI/P-002/src'),)",
+          "actionable_frame": {
+            "path": "binh\\phase1_runs\\e70_baseline_labeling_r1\\runs\\d8123dc403839c22-a44da3d67f1d\\train\\multi-project-train-batch-0c1b062b\\target_workspaces\\b63333416937_0003\\tmp_test_7jft1cob.py",
+            "line": 86
+          }
+        },
+        {
+          "failure_stage": "repair",
+          "failure_type": "max_attempts_exhausted",
+          "root_failure_stage": "assertion",
+          "root_failure_type": "assertion_error",
+          "error_type": "AssertionError",
+          "error_message": "assert WindowsPath('C:/Users/ADMIN/AppData/Local/Temp/pytest-of-ADMIN/pytest-627/test_config_init_src_paths_1_20/src') in (WindowsPath('D:/VinAI/P-002/src'),)",
+          "actionable_frame": {
+            "path": "binh\\phase1_runs\\e70_baseline_labeling_r1\\runs\\d8123dc403839c22-a44da3d67f1d\\train\\multi-project-train-batch-0c1b062b\\target_workspaces\\b63333416937_0003\\tmp_test_7jft1cob.py",
+            "line": 86
+          }
+        }
+      ]
+    },
+    {
+      "project": "mimesis",
+      "source_file": "mimesis/providers/address.py",
+      "symbol": "Address.country_emoji_flag",
+      "split": "train",
+      "difficulty_band": "medium",
+      "strata": [
+        "stateful_method"
+      ],
+      "score": 1.0,
+      "coverage": {
+        "covered_statements": 5,
+        "num_statements": 5,
+        "covered_branches": 0,
+        "num_branches": 0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "score": 1.0
+      },
+      "attempt_event_count": 1,
+      "attempt_outcomes": [
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": []
+    },
+    {
+      "project": "mimesis",
+      "source_file": "mimesis/providers/date.py",
+      "symbol": "Datetime.future_date",
+      "split": "train",
+      "difficulty_band": "medium",
+      "strata": [
+        "stateful_method"
+      ],
+      "score": 1.0,
+      "coverage": {
+        "covered_statements": 5,
+        "num_statements": 5,
+        "covered_branches": 0,
+        "num_branches": 0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "score": 1.0
+      },
+      "attempt_event_count": 1,
+      "attempt_outcomes": [
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": []
+    },
+    {
+      "project": "mimesis",
+      "source_file": "mimesis/providers/internet.py",
+      "symbol": "Internet.query_string",
+      "split": "train",
+      "difficulty_band": "easy",
+      "strata": [
+        "async_io",
+        "fixture_mock_dependent",
+        "stateful_method"
+      ],
+      "score": 1.0,
+      "coverage": {
+        "covered_statements": 1,
+        "num_statements": 1,
+        "covered_branches": 0,
+        "num_branches": 0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "score": 1.0
+      },
+      "attempt_event_count": 1,
+      "attempt_outcomes": [
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": []
+    },
+    {
+      "project": "mimesis",
+      "source_file": "mimesis/schema.py",
+      "symbol": "BaseField.register_handler",
+      "split": "train",
+      "difficulty_band": "hard",
+      "strata": [
+        "branch_heavy",
+        "exception_paths",
+        "stateful_method",
+        "statement_heavy"
+      ],
+      "score": 1.0,
+      "coverage": {
+        "covered_statements": 11,
+        "num_statements": 11,
+        "covered_branches": 10,
+        "num_branches": 10,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "score": 1.0
+      },
+      "attempt_event_count": 1,
+      "attempt_outcomes": [
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": []
+    },
+    {
+      "project": "mlxtend",
+      "source_file": "mlxtend/classifier/logistic_regression.py",
+      "symbol": "LogisticRegression._backward",
+      "split": "train",
+      "difficulty_band": "easy",
+      "strata": [
+        "easy_regression"
+      ],
+      "score": 1.0,
+      "coverage": {
+        "covered_statements": 4,
+        "num_statements": 4,
+        "covered_branches": 0,
+        "num_branches": 0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "score": 1.0
+      },
+      "attempt_event_count": 1,
+      "attempt_outcomes": [
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": []
+    },
+    {
+      "project": "mlxtend",
+      "source_file": "mlxtend/cluster/kmeans.py",
+      "symbol": "Kmeans._get_cluster_idx",
+      "split": "train",
+      "difficulty_band": "medium",
+      "strata": [
+        "async_io",
+        "stateful_method"
+      ],
+      "score": 1.0,
+      "coverage": {
+        "covered_statements": 3,
+        "num_statements": 3,
+        "covered_branches": 2,
+        "num_branches": 2,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "score": 1.0
+      },
+      "attempt_event_count": 1,
+      "attempt_outcomes": [
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": []
+    },
+    {
+      "project": "mlxtend",
+      "source_file": "mlxtend/evaluate/holdout.py",
+      "symbol": "PredefinedHoldoutSplit.split",
+      "split": "train",
+      "difficulty_band": "medium",
+      "strata": [
+        "async_io",
+        "stateful_method"
+      ],
+      "score": 1.0,
+      "coverage": {
+        "covered_statements": 6,
+        "num_statements": 6,
+        "covered_branches": 2,
+        "num_branches": 2,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "score": 1.0
+      },
+      "attempt_event_count": 1,
+      "attempt_outcomes": [
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": []
+    },
+    {
+      "project": "mlxtend",
+      "source_file": "mlxtend/file_io/find_files.py",
+      "symbol": "find_files",
+      "split": "train",
+      "difficulty_band": "hard",
+      "strata": [
+        "async_io",
+        "branch_heavy",
+        "fixture_mock_dependent",
+        "statement_heavy"
+      ],
+      "score": 0.95625,
+      "coverage": {
+        "covered_statements": 17,
+        "num_statements": 17,
+        "covered_branches": 15,
+        "num_branches": 16,
+        "statement_coverage": 1.0,
+        "branch_coverage": 0.9375,
+        "score": 0.95625
+      },
+      "attempt_event_count": 2,
+      "attempt_outcomes": [
+        "test_error",
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": [
+        {
+          "failure_stage": "assertion",
+          "failure_type": "assertion_error",
+          "error_type": "AssertionError",
+          "error_message": "assert ['.hidden_tes...st_file3.txt'] == ['test_file1....st_file3.txt']",
+          "actionable_frame": {
+            "path": "binh\\phase1_runs\\e70_baseline_labeling_r1\\runs\\d8123dc403839c22-a44da3d67f1d\\train\\multi-project-train-batch-0c1b062b\\target_workspaces\\90b2544716a3_0011\\tmp_test_dn4_k0yy.py",
+            "line": 61
+          },
+          "actual": "len(results)",
+          "expected": "1",
+          "comparison": "=="
+        },
+        {
+          "failure_stage": "coverage",
+          "failure_type": "partial_coverage"
+        }
+      ]
+    },
+    {
+      "project": "typesystem",
+      "source_file": "typesystem/composites.py",
+      "symbol": "Not.validate",
+      "split": "train",
+      "difficulty_band": "medium",
+      "strata": [
+        "exception_paths",
+        "stateful_method"
+      ],
+      "score": 1.0,
+      "coverage": {
+        "covered_statements": 4,
+        "num_statements": 4,
+        "covered_branches": 2,
+        "num_branches": 2,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "score": 1.0
+      },
+      "attempt_event_count": 3,
+      "attempt_outcomes": [
+        "test_error",
+        "test_error",
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": [
+        {
+          "failure_stage": "execution",
+          "failure_type": "attribute_error",
+          "error_type": "AttributeError",
+          "error_message": "'ValidationError' object has no attribute 'code'",
+          "actionable_frame": {
+            "path": "binh\\phase1_runs\\e70_baseline_labeling_r1\\runs\\d8123dc403839c22-a44da3d67f1d\\train\\multi-project-train-batch-0c1b062b\\target_workspaces\\a0874427771f_0012\\tmp_test_wdhlb8w3.py",
+            "line": 26
+          }
+        },
+        {
+          "failure_stage": "assertion",
+          "failure_type": "assertion_error",
+          "error_type": "AssertionError",
+          "error_message": "assert [Message(text...de='negated')] == {'': 'Must not match.'}",
+          "actionable_frame": {
+            "path": "binh\\phase1_runs\\e70_baseline_labeling_r1\\runs\\d8123dc403839c22-a44da3d67f1d\\train\\multi-project-train-batch-0c1b062b\\target_workspaces\\a0874427771f_0012\\tmp_test_wk8mdpd0.py",
+            "line": 26
+          },
+          "actual": "error.messages()",
+          "expected": "{\"\": \"Must not match.\"}",
+          "comparison": "=="
+        }
+      ]
+    },
+    {
+      "project": "typesystem",
+      "source_file": "typesystem/fields.py",
+      "symbol": "Date.__init__",
+      "split": "train",
+      "difficulty_band": "easy",
+      "strata": [
+        "easy_regression"
+      ],
+      "score": 1.0,
+      "coverage": {
+        "covered_statements": 1,
+        "num_statements": 1,
+        "covered_branches": 0,
+        "num_branches": 0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "score": 1.0
+      },
+      "attempt_event_count": 1,
+      "attempt_outcomes": [
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": []
+    },
+    {
+      "project": "typesystem",
+      "source_file": "typesystem/fields.py",
+      "symbol": "Object.validate",
+      "split": "train",
+      "difficulty_band": "hard",
+      "strata": [
+        "branch_heavy",
+        "exception_paths",
+        "stateful_method",
+        "statement_heavy"
+      ],
+      "score": 0.9056233653007846,
+      "coverage": {
+        "covered_statements": 73,
+        "num_statements": 74,
+        "covered_branches": 54,
+        "num_branches": 62,
+        "statement_coverage": 0.9864864864864865,
+        "branch_coverage": 0.8709677419354839,
+        "score": 0.9056233653007846
+      },
+      "attempt_event_count": 1,
+      "attempt_outcomes": [
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": [
+        {
+          "failure_stage": "coverage",
+          "failure_type": "partial_coverage"
+        }
+      ]
+    },
+    {
+      "project": "typesystem",
+      "source_file": "typesystem/schemas.py",
+      "symbol": "Reference.serialize",
+      "split": "train",
+      "difficulty_band": "medium",
+      "strata": [
+        "easy_regression"
+      ],
+      "score": 1.0,
+      "coverage": {
+        "covered_statements": 3,
+        "num_statements": 3,
+        "covered_branches": 2,
+        "num_branches": 2,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "score": 1.0
+      },
+      "attempt_event_count": 2,
+      "attempt_outcomes": [
+        "test_error",
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": [
+        {
+          "failure_stage": "collection",
+          "failure_type": "import_error",
+          "error_type": "ImportError",
+          "error_message": "cannot import name 'Definitions' from 'typesystem.base' (D:\\VinAI\\P-002\\src\\sample_repo\\typesystem\\typesystem\\base.py)",
+          "actionable_frame": {
+            "path": "binh\\phase1_runs\\e70_baseline_labeling_r1\\runs\\d8123dc403839c22-a44da3d67f1d\\train\\multi-project-train-batch-0c1b062b\\target_workspaces\\4b9d562dc3b9_0015\\tmp_test_hfwj9nsd.py",
+            "line": 3,
+            "function": "<module>"
+          }
+        }
+      ]
+    },
+    {
+      "project": "isort",
+      "source_file": "isort/api.py",
+      "symbol": "find_imports_in_file",
+      "split": "validation",
+      "difficulty_band": "medium",
+      "strata": [
+        "async_io",
+        "exception_paths",
+        "fixture_mock_dependent"
+      ],
+      "score": 1.0,
+      "coverage": {
+        "covered_statements": 5,
+        "num_statements": 5,
+        "covered_branches": 0,
+        "num_branches": 0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "score": 1.0
+      },
+      "attempt_event_count": 1,
+      "attempt_outcomes": [
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": [
+        {
+          "failure_stage": "coverage",
+          "failure_type": "partial_coverage"
+        }
+      ]
+    },
+    {
+      "project": "isort",
+      "source_file": "isort/hooks.py",
+      "symbol": "get_output",
+      "split": "validation",
+      "difficulty_band": "easy",
+      "strata": [
+        "async_io",
+        "fixture_mock_dependent"
+      ],
+      "score": 1.0,
+      "coverage": {
+        "covered_statements": 2,
+        "num_statements": 2,
+        "covered_branches": 0,
+        "num_branches": 0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "score": 1.0
+      },
+      "attempt_event_count": 1,
+      "attempt_outcomes": [
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": []
+    },
+    {
+      "project": "mimesis",
+      "source_file": "mimesis/builder/core.py",
+      "symbol": "SchemaBuilder.__repr__",
+      "split": "validation",
+      "difficulty_band": "medium",
+      "strata": [
+        "stateful_method"
+      ],
+      "score": 1.0,
+      "coverage": {
+        "covered_statements": 2,
+        "num_statements": 2,
+        "covered_branches": 0,
+        "num_branches": 0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "score": 1.0
+      },
+      "attempt_event_count": 2,
+      "attempt_outcomes": [
+        "test_error",
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": [
+        {
+          "failure_stage": "assertion",
+          "failure_type": "assertion_error",
+          "error_type": "AssertionError",
+          "error_message": "assert 'SchemaBuilde...hemas=[none])' == 'SchemaBuilde...hemas=[none])'",
+          "actionable_frame": {
+            "path": "binh\\phase1_runs\\e70_baseline_labeling_r1\\runs\\d8123dc403839c22-709c5d9915c1\\validation\\multi-project-validation-batch-5e6cc96b\\target_workspaces\\f76ec63e1f24_0002\\tmp_test_8ocd5bwc.py",
+            "line": 8
+          },
+          "actual": "repr_str",
+          "expected": "\"SchemaBuilder(locale=en, schemas=[none])\"",
+          "comparison": "=="
+        }
+      ]
+    },
+    {
+      "project": "mimesis",
+      "source_file": "mimesis/providers/base.py",
+      "symbol": "BaseDataProvider.override_locale",
+      "split": "validation",
+      "difficulty_band": "hard",
+      "strata": [
+        "async_io",
+        "exception_paths",
+        "stateful_method",
+        "statement_heavy"
+      ],
+      "score": 1.0,
+      "coverage": {
+        "covered_statements": 8,
+        "num_statements": 8,
+        "covered_branches": 0,
+        "num_branches": 0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "score": 1.0
+      },
+      "attempt_event_count": 2,
+      "attempt_outcomes": [
+        "test_error",
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": [
+        {
+          "failure_stage": "execution",
+          "failure_type": "attribute_error",
+          "error_type": "AttributeError",
+          "error_message": "'LocaleIndependentProvider' object has no attribute 'override_locale'",
+          "actionable_frame": {
+            "path": "binh\\phase1_runs\\e70_baseline_labeling_r1\\runs\\d8123dc403839c22-709c5d9915c1\\validation\\multi-project-validation-batch-5e6cc96b\\target_workspaces\\eaa18c0885d6_0003\\tmp_test_akp77bet.py",
+            "line": 30
+          }
+        },
+        {
+          "failure_stage": "coverage",
+          "failure_type": "partial_coverage"
+        }
+      ]
+    },
+    {
+      "project": "mlxtend",
+      "source_file": "mlxtend/evaluate/bootstrap_outofbag.py",
+      "symbol": "BootstrapOutOfBag.split",
+      "split": "validation",
+      "difficulty_band": "medium",
+      "strata": [
+        "async_io",
+        "stateful_method"
+      ],
+      "score": 1.0,
+      "coverage": {
+        "covered_statements": 7,
+        "num_statements": 7,
+        "covered_branches": 2,
+        "num_branches": 2,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "score": 1.0
+      },
+      "attempt_event_count": 1,
+      "attempt_outcomes": [
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": []
+    },
+    {
+      "project": "mlxtend",
+      "source_file": "mlxtend/feature_selection/sequential_feature_selector.py",
+      "symbol": "SequentialFeatureSelector.fit",
+      "split": "validation",
+      "difficulty_band": "hard",
+      "strata": [
+        "async_io",
+        "branch_heavy",
+        "exception_paths",
+        "stateful_method",
+        "statement_heavy"
+      ],
+      "score": 0.0,
+      "coverage": {
+        "covered_statements": 0,
+        "num_statements": 143,
+        "covered_branches": 0,
+        "num_branches": 90,
+        "statement_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "score": 0.0
+      },
+      "attempt_event_count": 3,
+      "attempt_outcomes": [
+        "test_error",
+        "test_error",
+        "test_error",
+        "max_attempts_exhausted"
+      ],
+      "terminal_outcome": "max_attempts_exhausted",
+      "failure_events": [
+        {
+          "failure_stage": "execution",
+          "failure_type": "attribute_error",
+          "error_type": "AttributeError",
+          "error_message": "Estimator must have an ._estimator_type for infering `scoring`",
+          "actionable_frame": {
+            "path": "binh\\phase1_runs\\e70_baseline_labeling_r1\\runs\\d8123dc403839c22-709c5d9915c1\\validation\\multi-project-validation-batch-5e6cc96b\\target_workspaces\\8b5fa044ab64_0005\\tmp_test_blb5sf6z.py",
+            "line": 24
+          }
+        },
+        {
+          "failure_stage": "execution",
+          "failure_type": "attribute_error",
+          "error_type": "AttributeError",
+          "error_message": "Estimator must have an ._estimator_type for infering `scoring`",
+          "actionable_frame": {
+            "path": "binh\\phase1_runs\\e70_baseline_labeling_r1\\runs\\d8123dc403839c22-709c5d9915c1\\validation\\multi-project-validation-batch-5e6cc96b\\target_workspaces\\8b5fa044ab64_0005\\tmp_test__u52v67u.py",
+            "line": 26
+          }
+        },
+        {
+          "failure_stage": "execution",
+          "failure_type": "attribute_error",
+          "error_type": "AttributeError",
+          "error_message": "Estimator must have an ._estimator_type for infering `scoring`",
+          "actionable_frame": {
+            "path": "binh\\phase1_runs\\e70_baseline_labeling_r1\\runs\\d8123dc403839c22-709c5d9915c1\\validation\\multi-project-validation-batch-5e6cc96b\\target_workspaces\\8b5fa044ab64_0005\\tmp_test_qkgnuq75.py",
+            "line": 24
+          }
+        },
+        {
+          "failure_stage": "repair",
+          "failure_type": "max_attempts_exhausted",
+          "root_failure_stage": "execution",
+          "root_failure_type": "attribute_error",
+          "error_type": "AttributeError",
+          "error_message": "Estimator must have an ._estimator_type for infering `scoring`",
+          "actionable_frame": {
+            "path": "binh\\phase1_runs\\e70_baseline_labeling_r1\\runs\\d8123dc403839c22-709c5d9915c1\\validation\\multi-project-validation-batch-5e6cc96b\\target_workspaces\\8b5fa044ab64_0005\\tmp_test_qkgnuq75.py",
+            "line": 24
+          }
+        }
+      ]
+    },
+    {
+      "project": "typesystem",
+      "source_file": "typesystem/base.py",
+      "symbol": "ValidationResult.__iter__",
+      "split": "validation",
+      "difficulty_band": "easy",
+      "strata": [
+        "async_io",
+        "stateful_method"
+      ],
+      "score": 1.0,
+      "coverage": {
+        "covered_statements": 2,
+        "num_statements": 2,
+        "covered_branches": 0,
+        "num_branches": 0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "score": 1.0
+      },
+      "attempt_event_count": 1,
+      "attempt_outcomes": [
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": []
+    },
+    {
+      "project": "typesystem",
+      "source_file": "typesystem/formats.py",
+      "symbol": "EmailFormat.serialize",
+      "split": "validation",
+      "difficulty_band": "medium",
+      "strata": [
+        "easy_regression"
+      ],
+      "score": 1.0,
+      "coverage": {
+        "covered_statements": 3,
+        "num_statements": 3,
+        "covered_branches": 2,
+        "num_branches": 2,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "score": 1.0
+      },
+      "attempt_event_count": 1,
+      "attempt_outcomes": [
+        "coverage_gain_saved"
+      ],
+      "terminal_outcome": "coverage_gain_saved",
+      "failure_events": []
+    }
+  ]
+}

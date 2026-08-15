@@ -2,8 +2,11 @@ import json
 from collections import Counter
 from pathlib import Path
 
+import pytest
+
 from src.optimization.failure_dataset import (
     FAILURE_STRATA,
+    analyze_observed_failures,
     build_failure_stratified_dataset,
     collect_failure_profiles,
     dataset_digest,
@@ -208,3 +211,159 @@ def test_e70_benchmark_is_frozen_balanced_and_fresh():
     ])
     assert len(identities) == 32
     assert identities.isdisjoint(exclusions)
+
+
+def test_observed_failure_analysis_joins_profiles_and_rejects_holdout():
+    manifest = {
+        "dataset_sha256": "dataset",
+        "holdout": {"status": "locked_unevaluated"},
+        "audit": {
+            "profiles": [
+                {
+                    "project": "alpha",
+                    "source_file": "alpha/a.py",
+                    "symbol": "easy",
+                    "split": "train",
+                    "difficulty_band": "easy",
+                    "strata": ["easy_regression"],
+                },
+                {
+                    "project": "beta",
+                    "source_file": "beta/b.py",
+                    "symbol": "hard",
+                    "split": "validation",
+                    "difficulty_band": "hard",
+                    "strata": ["branch_heavy", "statement_heavy"],
+                },
+                {
+                    "project": "gamma",
+                    "source_file": "gamma/c.py",
+                    "symbol": "locked",
+                    "split": "test",
+                    "difficulty_band": "medium",
+                    "strata": ["exception_paths"],
+                },
+            ]
+        },
+    }
+    train_result = {
+        "target": {
+            "project": "alpha",
+            "source_file": "alpha/a.py",
+            "symbol": "easy",
+            "split": "train",
+        },
+        "score": 1.0,
+        "coverage": {
+            "score": 1.0,
+            "statement_coverage": 1.0,
+            "branch_coverage": 1.0,
+            "covered_statements": 2,
+            "num_statements": 2,
+            "covered_branches": 0,
+            "num_branches": 0,
+        },
+        "attempt_traces": [{"attempt": 1, "outcome": "coverage_gain_saved"}],
+    }
+    validation_result = {
+        "target": {
+            "project": "beta",
+            "source_file": "beta/b.py",
+            "symbol": "hard",
+            "split": "validation",
+        },
+        "score": 0.0,
+        "coverage": {
+            "score": 0.0,
+            "statement_coverage": 0.0,
+            "branch_coverage": 0.0,
+            "covered_statements": 0,
+            "num_statements": 8,
+            "covered_branches": 0,
+            "num_branches": 4,
+        },
+        "attempt_traces": [
+            {
+                "attempt": 1,
+                "outcome": "test_error",
+                "execution_error": "E   AttributeError: missing behavior",
+            },
+            {"attempt": 1, "outcome": "max_attempts_exhausted"},
+        ],
+    }
+    batches = [
+        {
+            "split": "train",
+            "replicate": 0,
+            "evaluation_digest": "train-digest",
+            "run_ids": ["train-run"],
+            "results": [train_result],
+        },
+        {
+            "split": "validation",
+            "replicate": 0,
+            "evaluation_digest": "validation-digest",
+            "run_ids": ["validation-run"],
+            "results": [validation_result],
+        },
+    ]
+
+    summary = analyze_observed_failures(manifest, batches)
+
+    assert summary["target_count"] == 2
+    assert summary["holdout_analyzed"] is False
+    assert summary["overall"]["covered_statements"] == 2
+    assert summary["overall"]["num_statements"] == 10
+    assert summary["headroom"]["zero_score_share_of_statement_headroom"] == 1.0
+    assert summary["events"]["attempt_count"] == 2
+    assert summary["events"]["failure_types"] == {
+        "attribute_error": 1,
+        "max_attempts_exhausted": 1,
+    }
+    assert summary["groups"]["stratum"]["branch_heavy"]["zero_score_count"] == 1
+
+    locked_batch = {
+        "split": "test",
+        "replicate": 0,
+        "run_ids": ["forbidden"],
+        "results": [],
+    }
+    with pytest.raises(ValueError, match="locked split"):
+        analyze_observed_failures(manifest, [locked_batch])
+
+
+def test_e70_baseline_summary_keeps_holdout_locked_and_headroom_stable():
+    summary = json.loads(
+        Path("binh/e70_baseline_labeling_summary.json").read_text(encoding="utf-8")
+    )
+
+    assert summary["dataset_sha256"] == (
+        "8876d578f2b65e64ca113fa3e27586fce2be6956ff1e2ff238e4930ffda94fdd"
+    )
+    assert summary["analyzed_splits"] == ["train", "validation"]
+    assert summary["holdout_status"] == "locked_unevaluated"
+    assert summary["holdout_analyzed"] is False
+    assert summary["target_count"] == 24
+    assert summary["overall"]["score"] == pytest.approx(0.3489779384270223)
+    assert summary["overall"]["full_score_count"] == 20
+    assert summary["overall"]["zero_score_count"] == 2
+    assert summary["headroom"]["zero_score_share_of_statement_headroom"] == (
+        pytest.approx(0.996415770609319)
+    )
+    assert summary["headroom"]["zero_score_share_of_branch_headroom"] == (
+        pytest.approx(0.9523809523809523)
+    )
+    assert summary["events"]["attempt_count"] == 35
+    assert summary["events"]["terminal_outcomes"] == {
+        "coverage_gain_saved": 22,
+        "max_attempts_exhausted": 2,
+    }
+    zero_targets = {
+        (target["project"], target["symbol"])
+        for target in summary["targets"]
+        if target["score"] == 0.0
+    }
+    assert zero_targets == {
+        ("isort", "Config.__init__"),
+        ("mlxtend", "SequentialFeatureSelector.fit"),
+    }

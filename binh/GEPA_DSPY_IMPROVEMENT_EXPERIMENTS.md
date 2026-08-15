@@ -594,6 +594,12 @@ Holdout mới có SHA-256 `fa029ed3...a815c`, trạng thái `locked_unevaluated`
 Static strata là challenge proxy, observed failure labeling mới chỉ được chạy trên train/validation. Xem
 `binh/PHASE1_E70_FAILURE_STRATIFIED_DATASET.md`.
 
+**Baseline labeling follow-up:** đã chạy đúng một replicate trên 16 train + 8 validation bằng Gemini 3.5
+Flash-Lite; E70 test vẫn khóa. Combined aggregate là 34,90%, nhưng 20/24 target full coverage. Hai hard target
+bằng 0 chiếm 99,64% statement headroom và 95,24% branch headroom. Đưa cả hai lên khoảng 20% coverage tương
+ứng gain ước tính +12,56 điểm. Ưu tiên failure-triggered E42/E44 retrieval thay vì tăng global GEPA budget.
+Xem `binh/PHASE1_E70_BASELINE_LABELING_RESULT.md`.
+
 Không chỉ chọn random hoặc nhiều branch nhất. Tạo train set có đủ:
 
 - Branch-heavy.
