@@ -147,7 +147,6 @@ export default function Dashboard({ onNavigate }: Props) {
             <div>
               <span className="card-kicker">Coverage signal</span>
               <h2>Coverage trend</h2>
-              <p>Branch and statement coverage over the last eight days.</p>
             </div>
             <div className="chart-legend">
               <span>
@@ -160,7 +159,7 @@ export default function Dashboard({ onNavigate }: Props) {
               </span>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={230}>
+          <ResponsiveContainer width="100%" height={165}>
             <AreaChart data={data.coverage} margin={{ top: 16, right: 10, bottom: 0, left: -20 }}>
               <defs>
                 <linearGradient id="branchFill" x1="0" y1="0" x2="0" y2="1">

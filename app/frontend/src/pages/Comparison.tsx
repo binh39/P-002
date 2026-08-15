@@ -130,7 +130,6 @@ export default function Comparison() {
       <PageHeader
         eyebrow={`Paired comparison · ${run.id.slice(0, 8)}`}
         title={experiment?.name ?? "Final prompt comparison"}
-        description="Baseline and candidate evaluated on the same locked test targets and replicate protocol."
         actions={
           <StatusBadge tone={statusTone(run.status)}>
             {statusLabels[run.status] ?? run.status.replace(/_/g, " ")}
@@ -232,7 +231,6 @@ export default function Comparison() {
           <div className="card-heading">
             <div>
               <h2>Paired metrics</h2>
-              <p>Candidate deltas are calculated against the immutable baseline.</p>
             </div>
           </div>
           <div className="table-scroll">
@@ -275,7 +273,6 @@ export default function Comparison() {
           <div className="card-heading">
             <div>
               <h2>Evaluation protocol</h2>
-              <p>Identifiers and reliability signals from this run.</p>
             </div>
           </div>
           <dl className="definition-list comparison-definition-list">
@@ -318,7 +315,6 @@ export default function Comparison() {
           <div className="card-heading">
             <div>
               <h2>Prompt lineage</h2>
-              <p>Digests prove which prompt pair was evaluated.</p>
             </div>
           </div>
           <dl className="definition-list comparison-definition-list">
@@ -340,7 +336,6 @@ export default function Comparison() {
           <div className="card-heading">
             <div>
               <h2>Comparison artifacts</h2>
-              <p>Authenticated final-validation downloads.</p>
             </div>
             <StatusBadge tone={run.artifacts.length > 0 ? "success" : "neutral"}>
               {run.artifacts.length} files

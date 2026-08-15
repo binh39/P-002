@@ -232,11 +232,7 @@ export default function CreateExperiment() {
       <button className="back-link" onClick={() => navigate("/experiments")}>
         ← All experiments
       </button>
-      <PageHeader
-        eyebrow="New experiment"
-        title="Configure prompt optimization"
-        description="Build a reproducible multi-project dataset, then configure CoverUp and GEPA."
-      />
+      <PageHeader eyebrow="New experiment" title="Configure prompt optimization" />
 
       <ol className="wizard-steps experiment-wizard-steps">
         {steps.map((item, index) => (

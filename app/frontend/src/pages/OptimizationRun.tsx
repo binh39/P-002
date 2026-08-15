@@ -395,7 +395,6 @@ export default function OptimizationRun() {
       <PageHeader
         eyebrow={`Optimization run · ${run.id.slice(0, 8)}`}
         title={experiment?.name ?? "Prompt optimization"}
-        description="GEPA candidate search and validation results from the production pipeline."
         actions={
           <StatusBadge tone={statusTone(run.status)}>
             {statusLabels[run.status] ?? run.status.replace(/_/g, " ")}
@@ -469,7 +468,6 @@ export default function OptimizationRun() {
         <div className="card-heading optimization-results-heading">
           <div>
             <h2>Evaluation results</h2>
-            <p>Validation performance and the final locked-test decision.</p>
           </div>
           {run.finalComparison && (
             <StatusBadge tone={run.finalComparison.promoted ? "success" : "warning"}>
@@ -481,7 +479,6 @@ export default function OptimizationRun() {
         <div className="optimization-result-section">
           <div className="optimization-result-heading">
             <h3>Validation</h3>
-            <p>Best scores from the GEPA search.</p>
           </div>
           <div className="platform-stats-grid baseline-metrics-grid">
             <StatCard
@@ -514,7 +511,6 @@ export default function OptimizationRun() {
           <div className="optimization-result-section is-final">
             <div className="optimization-result-heading">
               <h3>Final locked test</h3>
-              <p>Baseline and optimized prompt on the same held-out targets.</p>
             </div>
             <div className="platform-stats-grid baseline-metrics-grid">
               <StatCard
@@ -577,7 +573,6 @@ export default function OptimizationRun() {
           <div className="card-heading">
             <div>
               <h2>Prompt lineage</h2>
-              <p>Digests identify the immutable parent and selected candidate.</p>
             </div>
           </div>
           <dl className="definition-list">
@@ -612,7 +607,6 @@ export default function OptimizationRun() {
           <div className="card-heading">
             <div>
               <h2>Optimization artifacts</h2>
-              <p>Authenticated candidate and GEPA result downloads.</p>
             </div>
             <StatusBadge tone={run.artifacts.length > 0 ? "success" : "neutral"}>
               {run.artifacts.length} files
