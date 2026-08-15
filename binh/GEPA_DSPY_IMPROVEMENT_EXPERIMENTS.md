@@ -203,6 +203,10 @@ Không đổi đồng thời task model và reflection model. Nếu đổi cả 
 
 ### E24 — Reflection temperature
 
+**Trạng thái:** đã chạy live `0,2 / 0,5 / 0,7 / 1,0` với seed 7, budget 30. Temperature 0,2
+thắng repeated validation nhưng thua paired holdout 27,92 điểm; reject. Xem
+`binh/PHASE1_E24_REFLECTION_TEMPERATURE_RESULT.md`.
+
 So sánh `0.2`, `0.5`, `0.7`, `1.0` trên budget nhỏ trước.
 
 - Quá thấp: proposal ít đa dạng, dễ lặp lại baseline.
@@ -642,6 +646,7 @@ Mỗi run cần ít nhất ba seed ở bước xác nhận cuối. Không cần 
 - [x] E20 budget 30 với E41: proposal tăng validation 17,46 điểm nhưng thua paired 3-replicate holdout 9,99 điểm; reject. Chưa có lý do chạy 120/300.
 - [x] E21: đã chạy minibatch 3 so với 8 trên calibration 16 target. Chưa có cấu hình thắng: batch 3 overfit holdout, batch 8 giữ baseline; cần repeated paired evaluation vì variance lớn. Xem `binh/PHASE1_MINIBATCH_ABLATION_RESULT.md`.
 - [x] E22: multi-seed seed 7/17/37 đã chạy. Pool chỉ còn 2 unique finalist; winner validation vẫn thua holdout 9,99 điểm, reject.
+- [x] E24: reflection temperature 0,2/0,5/0,7/1,0 đã chạy. Winner 0,2 đạt validation 97,78% nhưng thua holdout 27,92 điểm, reject.
 - [ ] E23: strong reflection model.
 - [x] E26: top-K repeated reranking đã triển khai và chạy live. Candidate pool chỉ có 2 nên winner không đổi; validation +6,30 điểm nhưng paired holdout -9,99 điểm, reject.
 - [x] E30: taxonomy/schema 3 và live control hoàn tất; không có gain, chuyển sang E41/E43 để bổ sung API/test context.

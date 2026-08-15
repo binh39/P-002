@@ -618,6 +618,7 @@ def tune(args: argparse.Namespace) -> None:
         evaluation_replicates=args.evaluation_replicates,
         gepa_seed=args.gepa_seed,
         reflection_minibatch_size=args.reflection_minibatch_size,
+        reflection_temperature=args.reflection_temperature,
     )
     artifacts.mkdir(parents=True, exist_ok=True)
     configured_program_output = getattr(args, "program_output", None)

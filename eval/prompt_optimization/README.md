@@ -574,6 +574,11 @@ cùng protocol để tránh so sánh một historical lucky sample với một g
 `--max-metric-calls` để override. Có thể thêm `--evaluation-replicates 2` hoặc `3` cho
 run quyết định; mỗi replicate làm tăng gần tuyến tính chi phí nhưng giảm variance.
 
+`--reflection-temperature` là optimizer configuration thật: nó được lưu trong
+`optimized_program.json` và optimization run digest (schema 15). Vì vậy temperature ablation dùng
+log directory riêng và multi-program pooling có thể phát hiện protocol không đồng nhất thay vì
+âm thầm so các search khác temperature như cùng một run.
+
 ## Artifact của từng run
 
 ```text

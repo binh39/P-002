@@ -1107,6 +1107,7 @@ class PromptOptimizationResult:
     total_metric_calls: int
     gepa_seed: int
     reflection_minibatch_size: int
+    reflection_temperature: float
     max_metric_calls: int
 
     def as_dict(self) -> dict[str, Any]:
@@ -1118,6 +1119,7 @@ class PromptOptimizationResult:
             "optimizer_config": {
                 "gepa_seed": self.gepa_seed,
                 "reflection_minibatch_size": self.reflection_minibatch_size,
+                "reflection_temperature": self.reflection_temperature,
                 "max_metric_calls": self.max_metric_calls,
             },
             "candidates": [candidate.as_candidate() for candidate in self.candidates],
@@ -2060,16 +2062,18 @@ def _optimization_run_digest(
     evaluation_replicates: int,
     gepa_seed: int,
     reflection_minibatch_size: int,
+    reflection_temperature: float,
     max_metric_calls: int,
 ) -> str:
     payload = {
-        "optimizer_schema": 14,
+        "optimizer_schema": 15,
         "baseline": baseline.as_candidate(),
         "train": [_target_identity(target) for target in train_targets],
         "validation": [_target_identity(target) for target in validation_targets],
         "evaluation_replicates": evaluation_replicates,
         "gepa_seed": gepa_seed,
         "reflection_minibatch_size": reflection_minibatch_size,
+        "reflection_temperature": reflection_temperature,
         "max_metric_calls": max_metric_calls,
         "train_evaluation": _evaluation_digest(runner, train_targets),
         "validation_evaluation": _evaluation_digest(runner, validation_targets),
@@ -2142,6 +2146,7 @@ def optimize(
     evaluation_replicates: int = 1,
     gepa_seed: int = 7,
     reflection_minibatch_size: int = 8,
+    reflection_temperature: float = 0.7,
 ) -> PromptOptimizationResult:
     """Optimize the initial and error prompt components."""
     if error := validate_bundle(baseline):
@@ -2154,6 +2159,8 @@ def optimize(
         raise ValueError("gepa_seed cannot be negative")
     if reflection_minibatch_size < 1:
         raise ValueError("reflection_minibatch_size must be at least 1")
+    if not math.isfinite(reflection_temperature) or reflection_temperature < 0:
+        raise ValueError("reflection_temperature must be a finite non-negative value")
     if auto is not None:
         max_metric_calls = AUTO_METRIC_BUDGETS[auto]
     if max_metric_calls is None or max_metric_calls < 1:
@@ -2214,6 +2221,7 @@ def optimize(
         evaluation_replicates,
         gepa_seed,
         effective_reflection_minibatch_size,
+        reflection_temperature,
         max_metric_calls,
     )
     result = gepa_core.optimize(
@@ -2253,5 +2261,6 @@ def optimize(
         total_metric_calls=int(result.total_metric_calls or 0),
         gepa_seed=gepa_seed,
         reflection_minibatch_size=effective_reflection_minibatch_size,
+        reflection_temperature=reflection_temperature,
         max_metric_calls=max_metric_calls,
     )

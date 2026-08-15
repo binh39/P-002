@@ -3031,6 +3031,7 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
         max_metric_calls=2,
         gepa_seed=19,
         reflection_minibatch_size=3,
+        reflection_temperature=0.2,
     )
 
     assert captured["seed_candidate"] == baseline.as_candidate()
@@ -3047,6 +3048,7 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
     assert result.as_dict()["optimizer_config"] == {
         "gepa_seed": 19,
         "reflection_minibatch_size": 3,
+        "reflection_temperature": 0.2,
         "max_metric_calls": 2,
     }
 
