@@ -3,8 +3,8 @@ import type { AuthService, AuthStateListener, AuthUser } from "@/auth/AuthServic
 const DEMO_SESSION_KEY = "promptopt-demo-session";
 const demoUser: AuthUser = {
   id: "demo-user",
-  name: "Alex Morgan",
-  email: "alex.morgan@company.com",
+  name: "Administrator",
+  email: "admin@gmail.com",
   photoUrl: null,
   role: "Senior Engineer",
 };
