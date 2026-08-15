@@ -10,7 +10,6 @@ const destinations = [
   { label: "Projects", detail: "Source repositories", path: "/projects" },
   { label: "Experiments", detail: "Optimization runs", path: "/experiments" },
   { label: "Prompt registry", detail: "Versioned prompt bundles", path: "/prompts" },
-  { label: "Playground", detail: "Try a prompt against a target", path: "/playground" },
 ];
 
 export default function TopNav({ onMenu }: { onMenu: () => void }) {
