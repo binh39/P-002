@@ -5,7 +5,7 @@ from collections.abc import Callable
 import coverup.codeinfo as codeinfo
 
 from ..segment import CodeSegment
-from ..target_context import build_target_context
+from ..target_context import build_failure_context, build_target_context
 from .prompter import Prompter, mk_message
 
 _STRATEGY_PLAYBOOK = re.compile(
@@ -87,14 +87,28 @@ Respond ONLY with the Python code enclosed in backticks, without any explanation
 
     def error_prompt(self, segment: CodeSegment, error: str) -> list[dict] | None:
         if "error" in self.templates:
-            return [mk_message(self._render("error", self.templates["error"], error=error))]
-        return [mk_message(f"""\
+            prompt = self._render("error", self.templates["error"], error=error)
+            return [mk_message(self._with_failure_context(prompt, segment, error))]
+        prompt = f"""\
 Executing the test yields an error, shown below.
 Modify or rewrite the test to correct it; respond only with the complete Python code in backticks.
 Use the get_info tool function as necessary.
 
-{error}""")
-        ]
+{error}"""
+        return [mk_message(self._with_failure_context(prompt, segment, error))]
+
+    def _with_failure_context(
+        self, prompt: str, segment: CodeSegment, error: str,
+    ) -> str:
+        if not getattr(self.args, "failure_context", False):
+            return prompt
+        context = build_failure_context(
+            segment,
+            error,
+            project_root=getattr(self.args, "failure_context_root", None),
+            max_chars=getattr(self.args, "failure_context_max_chars", 4_000),
+        )
+        return f"{prompt.rstrip()}\n\n{context}" if context else prompt
 
 
     def get_info(self, ctx: CodeSegment, name: str) -> str:

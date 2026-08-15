@@ -300,6 +300,7 @@ def _evaluation_digest(
             "coverup_model", "max_attempts", "repeat_tests", "pytest_args",
             "max_concurrency", "rate_limit", "target_context",
             "target_context_max_chars", "repository_test_context",
+            "failure_context", "failure_context_max_chars",
         )
     }
     source_hashes = {}
@@ -349,8 +350,9 @@ def _evaluation_digest(
         # Schema 16 includes the exact target contract and repository-local test
         # patterns, with the test tree and context controls in the fingerprint.
         # Schema 17 forwards target context explicitly end-to-end and separates
-        # exact-contract context from repository test/fixture retrieval.
-        "cache_schema": 17,
+        # exact-contract context from repository test/fixture retrieval. Schema
+        # 18 isolates bounded failure-triggered constructor/callee/usage context.
+        "cache_schema": 18,
         "config": config_values,
         "targets": [_target_identity(target) for target in targets],
         "sources": source_hashes,

@@ -92,5 +92,7 @@ binh/phase1_runs/stratified24_baseline_r3/
 binh/phase1_runs/e25_pareto*/
 binh/phase1_runs/e67_holdout_one_shot/
 binh/phase1_runs/e70_baseline_labeling_r1/
+binh/phase1_runs/e42_e44_failure_context_smoke/
+binh/phase1_runs/e42_e44_failure_context_validation/
 
 .claude

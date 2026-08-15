@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "experiment": "E42-E44-failure-triggered-context",
+  "status": "frozen_before_model_calls",
+  "purpose": "Test whether bounded evidence retrieval after test_error repairs the two E70 zero-coverage failure families without exposing repository tests in the initial prompt.",
+  "implementation_parent_commit": "e679adc0717e3c4868a11fa913aed0514d1868a1",
+  "source_dataset": "binh/e70_failure_stratified_32.jsonl",
+  "source_dataset_sha256": "8876d578f2b65e64ca113fa3e27586fce2be6956ff1e2ff238e4930ffda94fdd",
+  "smoke_dataset": "binh/e70_e42_e44_train_smoke.jsonl",
+  "smoke_dataset_sha256": "2dda918ed05bf2725d82cba0cd14baa81bcd39162a6ef4ec84e246e38da8b381",
+  "allowed_splits": [
+    "train",
+    "validation"
+  ],
+  "forbidden_split": "test",
+  "holdout_sha256": "fa029ed3f1bb2203b28a712d2d67f0c78a03d25d1aaebf2316473fd0879a815c",
+  "prompt": "binh/e67_prompts/d8123dc403839c22.json",
+  "prompt_digest": "d8123dc403839c22",
+  "coverup_model": "vertex_ai/gemini-3.5-flash-lite",
+  "evaluation_replicates": 1,
+  "max_attempts": 3,
+  "repeat_tests": 2,
+  "max_concurrency": 4,
+  "target_context": true,
+  "target_context_max_chars": 6000,
+  "repository_test_context": false,
+  "treatment": {
+    "failure_context": true,
+    "failure_context_max_chars": 4000,
+    "activation": "test_error_only",
+    "retrieval_order": [
+      "enclosing_constructor",
+      "import_export_evidence",
+      "failure_relevant_usage",
+      "direct_callee"
+    ]
+  },
+  "baseline_references": {
+    "train_config_init": {
+      "evaluation_digest": "a44da3d67f1d",
+      "score": 0.0
+    },
+    "validation": {
+      "evaluation_digest": "709c5d9915c1",
+      "aggregate_score": 0.08036862939139039,
+      "target_count": 8
+    }
+  },
+  "execution_order": [
+    "one-target train smoke",
+    "all-eight-target paired-by-target validation ablation"
+  ],
+  "decision_rule": "Report target-level deltas and failure transitions. Treat one replicate as directional evidence only; do not promote or open E70 test from this experiment.",
+  "artifacts": {
+    "smoke": "binh/phase1_runs/e42_e44_failure_context_smoke",
+    "validation": "binh/phase1_runs/e42_e44_failure_context_validation"
+  }
+}

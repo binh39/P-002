@@ -106,6 +106,18 @@ def parser() -> argparse.ArgumentParser:
         help="Include relevant existing tests/fixtures when target context is enabled",
     )
     result.add_argument(
+        "--failure-context",
+        default=False,
+        action=argparse.BooleanOptionalAction,
+        help="Retrieve bounded constructor/callee/usage evidence only after a test error",
+    )
+    result.add_argument(
+        "--failure-context-max-chars",
+        type=int,
+        default=4_000,
+        help="Maximum failure-triggered context characters per repair prompt",
+    )
+    result.add_argument(
         "--target-context-max-chars",
         type=int,
         default=6_000,
@@ -538,6 +550,8 @@ def make_runner(
         raise ValueError("--rate-limit must be at least 1")
     if args.target_context_max_chars < 0:
         raise ValueError("--target-context-max-chars cannot be negative")
+    if args.failure_context_max_chars < 0:
+        raise ValueError("--failure-context-max-chars cannot be negative")
     root = args.project_root.resolve()
     config = ExperimentConfig(
         project_root=root,
@@ -554,6 +568,8 @@ def make_runner(
         target_context=args.target_context,
         target_context_max_chars=args.target_context_max_chars,
         repository_test_context=args.repository_test_context,
+        failure_context=args.failure_context,
+        failure_context_max_chars=args.failure_context_max_chars,
     )
     # ``package_dir`` is only the single-project fallback. Dynamic and
     # multi-project runs have already validated every entry in ``projects``.

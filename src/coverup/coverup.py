@@ -71,6 +71,13 @@ def parse_args(args=None):
                     help='include the target API contract and relevant repository tests in prompts')
     ap.add_argument('--target-context-max-chars', type=int, default=6000,
                     help='maximum target-specific context characters per initial prompt')
+    ap.add_argument('--failure-context', default=False,
+                    action=argparse.BooleanOptionalAction,
+                    help='retrieve bounded source/usage evidence after a generated test fails')
+    ap.add_argument('--failure-context-root', type=Path_dir,
+                    help='project root searched only after a test failure')
+    ap.add_argument('--failure-context-max-chars', type=int, default=4000,
+                    help='maximum failure-triggered context characters per repair prompt')
 
     g = ap.add_mutually_exclusive_group(required=False)
     g.add_argument('--package-dir', type=Path_dir,

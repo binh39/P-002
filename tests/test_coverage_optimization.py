@@ -242,6 +242,125 @@ def test_target_context_respects_hard_character_budget(tmp_path, monkeypatch):
     assert context.endswith("[END TARGET CONTEXT]")
 
 
+def test_failure_context_retrieves_constructor_callee_and_matching_usage(
+    tmp_path,
+    monkeypatch,
+):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    code_segment = importlib.import_module("coverup.segment").CodeSegment
+    build_failure_context = importlib.import_module(
+        "coverup.target_context"
+    ).build_failure_context
+    project_root = tmp_path / "project"
+    source_path = project_root / "pkg" / "selector.py"
+    test_path = project_root / "pkg" / "tests" / "test_selector.py"
+    source_path.parent.mkdir(parents=True)
+    test_path.parent.mkdir(parents=True)
+    source_path.write_text(
+        """class Selector:
+    def __init__(self, estimator, scoring=None):
+        self.estimator = estimator
+        self.scoring = scoring
+
+    def _score(self, values):
+        return len(values)
+
+    def fit(self, values):
+        if self.scoring is None and not hasattr(self.estimator, "_estimator_type"):
+            raise AttributeError("Estimator requires ._estimator_type")
+        return self._score(values)
+""",
+        encoding="utf-8",
+    )
+    test_path.write_text(
+        """class ValidEstimator:
+    _estimator_type = "classifier"
+
+def test_selector_fit_uses_classifier_protocol():
+    selector = Selector(ValidEstimator())
+    assert selector.fit([1, 2]) == 2
+""",
+        encoding="utf-8",
+    )
+    segment = code_segment(
+        source_path,
+        "fit",
+        9,
+        12,
+        "Selector.fit",
+        {9, 10, 11, 12},
+        {9, 10, 11, 12},
+        set(),
+        set(),
+        [],
+        [],
+    )
+
+    context = build_failure_context(
+        segment,
+        "E AttributeError: Estimator requires ._estimator_type",
+        project_root=project_root,
+        max_chars=4_000,
+    )
+
+    assert "[FAILURE-TRIGGERED CONTEXT]" in context
+    assert "Failure family: attribute/protocol" in context
+    assert "def Selector.__init__(self, estimator, scoring=None)" in context
+    assert "Selector._score" in context
+    assert "test_selector_fit_uses_classifier_protocol" in context
+    assert '_estimator_type = "classifier"' in context
+    assert context.index("[FAILURE-RELEVANT USAGE EXAMPLES]") < context.index(
+        "[DIRECT CALLEE CONTRACT]"
+    )
+    assert len(context) <= 4_000
+    assert context.endswith("[END FAILURE-TRIGGERED CONTEXT]")
+
+
+def test_gpt_v2_failure_context_is_opt_in_and_bounded(tmp_path, monkeypatch):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    code_segment = importlib.import_module("coverup.segment").CodeSegment
+    prompter_class = importlib.import_module(
+        "coverup.prompt.gpt_v2"
+    ).GptV2Prompter
+    source_path = tmp_path / "pkg" / "module.py"
+    source_path.parent.mkdir(parents=True)
+    source_path.write_text(
+        "def target(value):\n    return value\n",
+        encoding="utf-8",
+    )
+    template = tmp_path / "prompt.json"
+    template.write_text(
+        json.dumps({"initial": "{source_excerpt}", "error": "ERROR={error}"}),
+        encoding="utf-8",
+    )
+    segment = code_segment(
+        source_path, "target", 1, 2, "target", {1, 2}, {1, 2}, set(), set(), [], []
+    )
+    disabled = prompter_class(SimpleNamespace(
+        prompt_template_file=template,
+        failure_context=False,
+    ))
+    enabled = prompter_class(SimpleNamespace(
+        prompt_template_file=template,
+        failure_context=True,
+        failure_context_root=tmp_path,
+        failure_context_max_chars=300,
+    ))
+
+    disabled_prompt = disabled.error_prompt(segment, "AssertionError")[0]["content"]
+    enabled_prompt = enabled.error_prompt(segment, "AssertionError")[0]["content"]
+
+    assert disabled_prompt == "ERROR=AssertionError"
+    assert enabled_prompt.startswith("ERROR=AssertionError")
+    assert "[FAILURE-TRIGGERED CONTEXT]" in enabled_prompt
+    assert len(enabled_prompt) <= len("ERROR=AssertionError\n\n") + 300
+    assert enabled_prompt.endswith("[END FAILURE-TRIGGERED CONTEXT]")
+
+
 def test_gpt_v2_appends_context_without_changing_prompt_template_contract(
     tmp_path,
     monkeypatch,
@@ -315,6 +434,32 @@ def test_evaluation_digest_changes_when_repository_test_context_changes(tmp_path
         "def test_target():\n    assert True\n",
         encoding="utf-8",
     )
+    after = _evaluation_digest(runner, targets)
+
+    assert before != after
+
+
+def test_evaluation_digest_changes_when_failure_context_is_enabled(tmp_path):
+    package_dir = tmp_path / "repo" / "pkg"
+    tests_dir = tmp_path / "repo" / "tests"
+    package_dir.mkdir(parents=True)
+    tests_dir.mkdir()
+    (package_dir / "module.py").write_text(
+        "def target():\n    return 1\n",
+        encoding="utf-8",
+    )
+    runner = CoverUpExperimentRunner(ExperimentConfig(
+        project_root=tmp_path,
+        package_dir=package_dir,
+        tests_dir=tests_dir,
+        artifacts_dir=tmp_path / "artifacts",
+        coverup_model="fake-model",
+    ))
+    targets = [SymbolTarget("project", "pkg/module.py", "target", "train")]
+
+    before = _evaluation_digest(runner, targets)
+    runner.config.failure_context = True
+    runner.config.failure_context_max_chars = 3_500
     after = _evaluation_digest(runner, targets)
 
     assert before != after
@@ -547,6 +692,8 @@ def test_optimization_cli_defaults_to_five_test_repetitions():
     assert args.target_context is True
     assert args.target_context_max_chars == 6_000
     assert args.repository_test_context is False
+    assert args.failure_context is False
+    assert args.failure_context_max_chars == 4_000
 
 
 def test_optimization_cli_can_disable_and_bound_target_context():
@@ -565,6 +712,22 @@ def test_optimization_cli_can_disable_and_bound_target_context():
     assert args.target_context is False
     assert args.target_context_max_chars == 2_500
     assert args.repository_test_context is False
+
+
+def test_optimization_cli_can_enable_and_bound_failure_context():
+    args = parser().parse_args([
+        "--failure-context",
+        "--failure-context-max-chars",
+        "3500",
+        "evaluate",
+        "--dataset",
+        "dataset.jsonl",
+        "--prompt",
+        "prompt.json",
+    ])
+
+    assert args.failure_context is True
+    assert args.failure_context_max_chars == 3_500
 
 
 def test_optimization_cli_exposes_gepa_search_controls():
@@ -1279,6 +1442,8 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
         coverup_model="fake-model",
         target_context=True,
         repository_test_context=True,
+        failure_context=True,
+        failure_context_max_chars=3_500,
     ))
     targets = [
         SymbolTarget("project", "pkg/a.py", "first", "train"),
@@ -1326,6 +1491,16 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
     )
     assert all(
         command[command.index("--target-context-max-chars") + 1] == "6000"
+        for command in commands
+    )
+    assert all("--failure-context" in command for command in commands)
+    assert all(
+        command[command.index("--failure-context-max-chars") + 1] == "3500"
+        for command in commands
+    )
+    assert all(
+        Path(command[command.index("--failure-context-root") + 1])
+        == package_dir.parent.resolve()
         for command in commands
     )
     assert all("--no-final-coverage" in command for command in commands)

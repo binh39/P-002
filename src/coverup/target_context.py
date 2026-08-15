@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from .segment import CodeSegment
 
 TARGET_CONTEXT_SCHEMA = 1
 DEFAULT_TARGET_CONTEXT_MAX_CHARS = 6_000
+DEFAULT_FAILURE_CONTEXT_MAX_CHARS = 4_000
 _MAX_TEST_FILES = 4
 _MAX_TEST_SNIPPETS = 4
 _MAX_FIXTURE_SNIPPETS = 2
@@ -226,3 +228,291 @@ def build_target_context(
         return rendered
     suffix = "\n[CONTEXT TRUNCATED]\n[END TARGET CONTEXT]"
     return rendered[: max(0, max_chars - len(suffix))].rstrip() + suffix
+
+
+def build_failure_context(
+    segment: CodeSegment,
+    error: str,
+    *,
+    project_root: Path | None = None,
+    max_chars: int = DEFAULT_FAILURE_CONTEXT_MAX_CHARS,
+) -> str:
+    """Return bounded source/usage evidence selected by one execution failure.
+
+    Unlike ``build_target_context``, this function is called only after a test
+    has failed.  It may retrieve a small number of existing usage examples,
+    but never injects the repository test tree into the initial generation.
+    """
+
+    if max_chars <= 0:
+        return ""
+    failure_type = _failure_context_type(error)
+    sections = [
+        "[FAILURE-TRIGGERED CONTEXT]",
+        f"Failure family: {failure_type}",
+        _repair_guidance(failure_type),
+    ]
+    constructor = _enclosing_constructor_context(segment)
+    if constructor:
+        sections.extend(["", "[ENCLOSING CONSTRUCTOR/PROTOCOL]", constructor])
+    root = Path(project_root).resolve() if project_root is not None else None
+    exports = _import_export_context(root, error)
+    if exports:
+        sections.extend(["", "[IMPORT/EXPORT EVIDENCE]", exports])
+    usages = _failure_usage_context(root, segment, error)
+    if usages:
+        sections.extend(["", "[FAILURE-RELEVANT USAGE EXAMPLES]", usages])
+    callees = _direct_callee_context(segment)
+    if callees:
+        sections.extend(["", "[DIRECT CALLEE CONTRACT]", callees])
+    sections.extend([
+        "",
+        "Use only this evidence and the traceback to repair the complete test module. "
+        "Do not repeat the same failing setup.",
+        "[END FAILURE-TRIGGERED CONTEXT]",
+    ])
+    rendered = "\n".join(sections)
+    if len(rendered) <= max_chars:
+        return rendered
+    suffix = "\n[FAILURE CONTEXT TRUNCATED]\n[END FAILURE-TRIGGERED CONTEXT]"
+    return rendered[: max(0, max_chars - len(suffix))].rstrip() + suffix
+
+
+def _failure_context_type(error: str) -> str:
+    lowered = error.lower()
+    if "attributeerror" in lowered or "has no attribute" in lowered:
+        return "attribute/protocol"
+    if "importerror" in lowered or "modulenotfounderror" in lowered:
+        return "import/export"
+    if "assertionerror" in lowered or re.search(r"(?m)^E\s+assert\s", error):
+        return "assertion/behavior"
+    if "typeerror" in lowered:
+        return "type/constructor"
+    if "filenotfounderror" in lowered or "oserror" in lowered:
+        return "filesystem/environment"
+    return "execution/setup"
+
+
+def _repair_guidance(failure_type: str) -> str:
+    common = (
+        "Repair the root cause, preserve useful assertions, and return the entire test module. "
+    )
+    if failure_type == "attribute/protocol":
+        return common + (
+            "Instantiate a real object that satisfies the required protocol or configure the "
+            "documented attribute explicitly; inspect constructor and usage evidence before retrying."
+        )
+    if failure_type == "import/export":
+        return common + (
+            "Do not invent an import or add a missing dependency. Use the repository's actual export "
+            "location, or remove the unnecessary dependency from the test."
+        )
+    if failure_type == "assertion/behavior":
+        return common + (
+            "Derive expectations from source behavior. Avoid guessed counts, absolute paths, ordering, "
+            "or environment-specific values; assert stable invariants instead."
+        )
+    if failure_type == "type/constructor":
+        return common + "Match the real constructor and argument types shown in the retrieved contract."
+    if failure_type == "filesystem/environment":
+        return common + (
+            "Use tmp_path/monkeypatch and assert repository-defined semantics without depending on cwd."
+        )
+    return common + "Use the retrieved contracts to replace the invalid setup, not only the assertion."
+
+
+def _enclosing_constructor_context(segment: CodeSegment) -> str:
+    try:
+        source = segment.path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(segment.path))
+    except (OSError, UnicodeDecodeError, SyntaxError):
+        return ""
+    found = _target_node(segment, tree)
+    if found is None:
+        return ""
+    node, _qualname, parents = found
+    class_name = next(reversed(parents), "") if parents else ""
+    if not class_name and isinstance(node, ast.ClassDef):
+        class_name = node.name
+    class_node = next(
+        (
+            candidate
+            for candidate, qualname, _ in _qualified_nodes(tree)
+            if isinstance(candidate, ast.ClassDef) and qualname == class_name
+        ),
+        None,
+    )
+    if class_node is None:
+        return ""
+    constructor = next(
+        (
+            child
+            for child in class_node.body
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and child.name == "__init__"
+        ),
+        None,
+    )
+    if constructor is None:
+        bases = ", ".join(ast.unparse(base) for base in class_node.bases) or "object"
+        return f"{class_name} inherits {bases}; no local __init__ is defined."
+    signature = _format_signature(constructor, f"{class_name}.__init__")
+    body = _node_source(source, constructor)
+    if len(body) > 900:
+        body = body[:900].rstrip() + "\n# constructor truncated"
+    return f"{signature}\n{body}"
+
+
+def _direct_callee_context(segment: CodeSegment) -> str:
+    try:
+        source = segment.path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(segment.path))
+    except (OSError, UnicodeDecodeError, SyntaxError):
+        return ""
+    found = _target_node(segment, tree)
+    if found is None:
+        return ""
+    target_node = found[0]
+    called_names = {
+        _call_name(node.func)
+        for node in ast.walk(target_node)
+        if isinstance(node, ast.Call)
+    }
+    called_names.discard("")
+    candidates = []
+    for node, qualname, _parents in _qualified_nodes(tree):
+        if node is target_node or not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if node.name not in called_names:
+            continue
+        body = _node_source(source, node)
+        candidates.append((qualname, body[:650]))
+    return "\n\n".join(
+        f"{qualname}:\n{body}" for qualname, body in sorted(candidates)[:1]
+    )
+
+
+def _call_name(node: ast.AST) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return ""
+
+
+def _failure_usage_context(
+    project_root: Path | None,
+    segment: CodeSegment,
+    error: str,
+) -> str:
+    if project_root is None or not project_root.is_dir():
+        return ""
+    tests, _fixtures = _collect_test_snippets(project_root, segment)
+    error_tokens = _failure_tokens(error)
+    scored = []
+    for snippet in tests:
+        lowered = snippet.source.lower()
+        error_score = sum(12 for token in error_tokens if token.lower() in lowered)
+        scored.append((
+            -(snippet.score + error_score),
+            -error_score,
+            str(snippet.path),
+            getattr(snippet.node, "lineno", 0),
+            snippet,
+        ))
+    error_matches = [item for item in scored if item[1] < 0]
+    selected = sorted(error_matches)[:1]
+    selected_ids = {(item[2], item[3]) for item in selected}
+    positive_matches = [
+        item for item in scored
+        if item[1] == 0 and (item[2], item[3]) not in selected_ids
+    ]
+    selected.extend(sorted(positive_matches)[: max(0, 2 - len(selected))])
+    if not selected:
+        selected = sorted(scored)[:2]
+    parts = []
+    for _score, negative_error_score, _path, _line, snippet in selected:
+        try:
+            relative = snippet.path.relative_to(project_root)
+        except ValueError:
+            relative = snippet.path
+        support = _supporting_definitions(snippet)
+        source = snippet.source
+        if len(source) > 850:
+            source = source[:850].rstrip() + "\n# usage truncated"
+        kind = "failure/contract example" if negative_error_score < 0 else "valid usage candidate"
+        rendered = f"{kind} from {relative.as_posix()}:\n"
+        if support:
+            rendered += support + "\n\n"
+        rendered += source
+        parts.append(rendered)
+    return "\n\n".join(parts)
+
+
+def _supporting_definitions(snippet: _Snippet) -> str:
+    try:
+        source = snippet.path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(snippet.path))
+    except (OSError, UnicodeDecodeError, SyntaxError):
+        return ""
+    referenced = {
+        node.id for node in ast.walk(snippet.node) if isinstance(node, ast.Name)
+    }
+    definitions = []
+    for node in tree.body:
+        if not isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if node.name not in referenced:
+            continue
+        rendered = _node_source(source, node)
+        if len(rendered) > 400:
+            rendered = rendered[:400].rstrip() + "\n# supporting definition truncated"
+        definitions.append(rendered)
+    return "\n\n".join(definitions[:2])
+
+
+def _failure_tokens(error: str) -> set[str]:
+    tokens = {
+        value
+        for value in re.findall(r"[`'\"]([A-Za-z_][A-Za-z0-9_.]{2,})[`'\"]", error)
+    }
+    tokens.update(re.findall(r"\.[A-Za-z_][A-Za-z0-9_]{2,}", error))
+    tokens.update(
+        value
+        for value in re.findall(r"\b[A-Za-z_][A-Za-z0-9_]{4,}\b", error)
+        if "_" in value
+    )
+    return {value.lstrip(".") for value in tokens}
+
+
+def _import_export_context(project_root: Path | None, error: str) -> str:
+    if project_root is None or not project_root.is_dir():
+        return ""
+    match = re.search(r"cannot import name ['\"]([^'\"]+)['\"]", error, re.IGNORECASE)
+    missing_module = re.search(r"No module named ['\"]([^'\"]+)['\"]", error)
+    wanted = match.group(1) if match else ""
+    if missing_module and not wanted:
+        return (
+            f"Module {missing_module.group(1)!r} is unavailable in this project environment. "
+            "Do not import it in the repaired test unless repository source proves it is required."
+        )
+    if not wanted:
+        return ""
+    matches = []
+    for path in sorted(project_root.rglob("*.py")):
+        if any(part in {".git", ".promptopt-site", "__pycache__"} for part in path.parts):
+            continue
+        try:
+            source = path.read_text(encoding="utf-8")
+            tree = ast.parse(source, filename=str(path))
+        except (OSError, UnicodeDecodeError, SyntaxError):
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == wanted:
+                matches.append(path)
+                break
+    if not matches:
+        return f"No repository definition named {wanted!r} was found; do not invent this import."
+    return "Actual definitions: " + ", ".join(
+        path.relative_to(project_root).as_posix() for path in matches[:4]
+    )

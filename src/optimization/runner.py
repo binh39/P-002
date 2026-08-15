@@ -394,6 +394,7 @@ class CoverUpExperimentRunner:
                 "--log-file", str(coverup_log),
                 "--trace-file", str(target_trace),
                 "--target-context-max-chars", str(self.config.target_context_max_chars),
+                "--failure-context-max-chars", str(self.config.failure_context_max_chars),
                 "--no-checkpoint",
                 # Target-specific coverage below is authoritative. Avoid CoverUp's
                 # redundant final suite pass, especially expensive with repeats.
@@ -407,6 +408,14 @@ class CoverUpExperimentRunner:
                     context_tests_dir = self.config.tests_dir_for(target.project).resolve()
                     if context_tests_dir.is_dir():
                         command.extend(["--context-tests-dir", str(context_tests_dir)])
+            if self.config.failure_context:
+                command.extend([
+                    "--failure-context",
+                    "--failure-context-root",
+                    str(package_dirs[target.project].parent),
+                ])
+            else:
+                command.append("--no-failure-context")
             if self.config.repeat_tests:
                 command.extend(["--repeat-tests", str(self.config.repeat_tests)])
             else:
