@@ -6355,3 +6355,76 @@ textarea {
     transition: none;
   }
 }
+.registry-page .platform-page-header {
+  margin-bottom: 24px;
+}
+
+.registry-filters,
+.registry-table-card {
+  width: 100%;
+}
+
+.registry-table-card {
+  overflow-x: auto;
+}
+
+.registry-table {
+  width: 100%;
+  min-width: 1380px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.registry-table th,
+.registry-table td {
+  vertical-align: middle;
+}
+
+.registry-col-id {
+  width: 90px;
+}
+
+.registry-col-name {
+  width: 220px;
+}
+
+.registry-col-model {
+  width: 160px;
+}
+
+.registry-col-version {
+  width: 90px;
+}
+
+.registry-col-coverage {
+  width: 150px;
+}
+
+.registry-col-cost,
+.registry-col-latency,
+.registry-col-actions {
+  width: 90px;
+}
+
+.registry-col-status {
+  width: 120px;
+}
+
+.registry-col-created {
+  width: 130px;
+}
+
+.registry-id-cell {
+  white-space: nowrap;
+}
+
+.registry-name-cell > div:first-child,
+.registry-model-chip {
+  line-height: 1.45;
+}
+
+.registry-model-chip {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
