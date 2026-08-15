@@ -3973,13 +3973,19 @@ body {
   margin: 8px 10px;
 }
 
-.sidebar-system-label {
-  margin-top: 20px;
-  padding-top: 17px;
+.sidebar-system-navigation {
+  flex: 0 0 auto;
+  margin: 0 3px;
+  padding: 12px 0 6px;
   border-top: 1px solid rgba(226, 232, 240, 0.8);
 }
 
-.sidebar-navigation button {
+.sidebar-system-navigation .sidebar-label {
+  margin: 0 10px 6px;
+}
+
+.sidebar-navigation button,
+.sidebar-system-navigation button {
   position: relative;
   width: 100%;
   display: flex;
@@ -3996,18 +4002,21 @@ body {
   text-align: left;
 }
 
-.sidebar-navigation button:hover {
+.sidebar-navigation button:hover,
+.sidebar-system-navigation button:hover {
   color: var(--po-ink);
   background: rgba(241, 245, 249, 0.9);
 }
 
-.sidebar-navigation button.is-active {
+.sidebar-navigation button.is-active,
+.sidebar-system-navigation button.is-active {
   color: #096aa8;
   background: rgba(49, 168, 255, 0.1);
   box-shadow: inset 0 0 0 1px rgba(49, 168, 255, 0.13);
 }
 
-.sidebar-navigation button.is-active::before {
+.sidebar-navigation button.is-active::before,
+.sidebar-system-navigation button.is-active::before {
   position: absolute;
   left: -3px;
   width: 3px;
@@ -4021,8 +4030,7 @@ body {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 12px 9px 4px;
-  border-top: 1px solid rgba(226, 232, 240, 0.85);
+  padding: 6px 9px 4px;
 }
 
 .sidebar-avatar {
@@ -5050,7 +5058,8 @@ textarea {
   font-size: 11px;
 }
 
-.sidebar-navigation button {
+.sidebar-navigation button,
+.sidebar-system-navigation button {
   min-height: 42px;
   gap: 11px;
   padding: 10px 12px;
@@ -5725,23 +5734,26 @@ textarea {
   color: var(--po-ink);
 }
 
-:root[data-theme="dark"] .sidebar-navigation button {
+:root[data-theme="dark"] .sidebar-navigation button,
+:root[data-theme="dark"] .sidebar-system-navigation button {
   color: #95a3b7;
 }
 
-:root[data-theme="dark"] .sidebar-navigation button:hover {
+:root[data-theme="dark"] .sidebar-navigation button:hover,
+:root[data-theme="dark"] .sidebar-system-navigation button:hover {
   color: var(--po-ink);
   background: rgba(30, 44, 64, 0.86);
 }
 
-:root[data-theme="dark"] .sidebar-navigation button.is-active {
+:root[data-theme="dark"] .sidebar-navigation button.is-active,
+:root[data-theme="dark"] .sidebar-system-navigation button.is-active {
   color: #8bd2ff;
   background: rgba(49, 168, 255, 0.13);
   box-shadow: inset 0 0 0 1px rgba(77, 179, 255, 0.18);
 }
 
 :root[data-theme="dark"] .sidebar-user,
-:root[data-theme="dark"] .sidebar-system-label {
+:root[data-theme="dark"] .sidebar-system-navigation {
   border-color: rgba(41, 54, 74, 0.9);
 }
 
