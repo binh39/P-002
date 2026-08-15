@@ -1,4 +1,5 @@
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 
@@ -336,7 +337,7 @@ export default function CreateExperiment() {
           disabled={step === 0 || startOptimization.isPending}
           onClick={() => setStep((value) => Math.max(0, value - 1))}
         >
-          Back
+          <ArrowLeft size={15} /> Back
         </button>
         <span>
           Step {step + 1} of {steps.length}
@@ -347,7 +348,7 @@ export default function CreateExperiment() {
             disabled={!canContinue}
             onClick={() => setStep((value) => value + 1)}
           >
-            Continue →
+            Continue <ArrowRight size={15} />
           </button>
         ) : (
           <button

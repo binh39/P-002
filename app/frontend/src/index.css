@@ -2529,18 +2529,31 @@ body {
   color: #7784c9;
 }
 .wizard-actions {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 14px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--po-line);
 }
 .wizard-actions > span {
+  order: 0;
+  margin-right: auto;
   color: #9ca3af;
   font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.wizard-actions > button {
+  min-width: 116px;
+  min-height: 42px;
+  flex: 0 0 auto;
+}
+.wizard-actions > button:first-child {
+  order: 1;
 }
 .wizard-actions > button:last-child {
-  justify-self: end;
+  order: 2;
 }
 
 .sidebar-signout {
@@ -5624,6 +5637,21 @@ textarea {
   .platform-header-actions .primary-button,
   .platform-header-actions .secondary-button {
     width: 100%;
+  }
+
+  .wizard-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .wizard-actions > span {
+    grid-column: 1 / -1;
+    margin-right: 0;
+  }
+
+  .wizard-actions > button {
+    width: 100%;
+    min-width: 0;
   }
 
   .project-grid {
