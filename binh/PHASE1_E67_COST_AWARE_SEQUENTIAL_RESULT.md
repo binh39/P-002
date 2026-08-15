@@ -80,3 +80,13 @@ nó bỏ 11 calls và chỉ mất một branch outcome, tương đương 0,33 đ
 - Repository suite đúng phạm vi `tests/`: 128 passed.
 - Không tạo evaluation/artifact split `test`.
 - Raw archive outputs nằm trong ignore pattern `binh/phase1_candidate_archive_e25*/`.
+
+## One-shot holdout follow-up
+
+Policy trên được freeze tại commit `44baed8` trước khi mở split `test`. One-shot holdout chỉ dùng 10/60
+target-generations (tiết kiệm proxy 83,33%), nhưng suite cuối đạt 89,48%, bằng đúng baseline replicate 0 và
+gain bằng 0,00 điểm. Tất cả bốn test được chọn đều do baseline replicate 0 sinh ra; các stage bổ sung không có
+marginal coverage.
+
+Vì vậy candidate validation này đã bị **reject khỏi production promotion**. Không tiếp tục tune policy bằng
+holdout đã dùng. Báo cáo đầy đủ: `binh/PHASE1_E67_ONE_SHOT_HOLDOUT_RESULT.md`.

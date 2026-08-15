@@ -556,7 +556,7 @@ Dùng random/fuzz/search để tìm input tăng coverage, rồi cho LLM:
 
 ### E67 — Inference-time Pareto outputs
 
-**Trạng thái:** đã có validation proof bằng candidate-test portfolio, chưa mở holdout. Pool 5 prompt được
+**Trạng thái:** đã chạy one-shot holdout và **reject**. Pool 5 prompt từng cho validation proof bằng candidate-test portfolio. Pool được
 chạy theo từng replicate, test có coverage gain được content-deduplicate, greedy set-cover và chạy lại cùng
 nhau 5 lần. Một replicate đạt trung bình 90,15%; mọi cặp hai replicate đạt 96,32–97,59%, trong khi
 baseline repeated mean là 61,27%. Đây là gain của portfolio test, không phải một global prompt tốt hơn.
@@ -572,10 +572,16 @@ GEPA đã theo dõi best outputs/Pareto nhưng pipeline cuối hiện ưu tiên 
 không tạo lợi ích rõ so với hai. Bước kế tiếp là tự động hóa chiến lược chạy baseline trước, chỉ mở replicate
 thứ hai cho target còn thiếu coverage, rồi dùng đúng một one-shot holdout gate trước khi production hóa.
 
-**Follow-up cost-aware:** đã triển khai `sequential-archive`. Schedule 7 stage với stop score 0,80 chỉ mở
+**Follow-up cost-aware trên validation:** đã triển khai `sequential-archive`. Schedule 7 stage với stop score 0,80 chỉ mở
 29/180 target-generations nhưng suite thật vẫn đạt 96,93%, hơn best single 19,28 điểm và pass 5 lần. Policy
-và threshold đã freeze trên validation; holdout vẫn khóa. Xem
+và threshold được freeze trên validation. Xem
 `binh/PHASE1_E67_COST_AWARE_SEQUENTIAL_RESULT.md`.
+
+**One-shot holdout:** policy được commit/freeze trước khi mở holdout. Nó chỉ dùng 10/60 target-generations
+(tiết kiệm proxy 83,33%), nhưng score 89,48% bằng đúng baseline replicate 0; cả 4 test được chọn đều từ
+baseline và sáu stage bổ sung có marginal gain bằng 0. E67 không chứng minh được gain 10–15 điểm trên dữ liệu
+chưa thấy, vì vậy không promote và không tune lại trên holdout đã dùng. Xem
+`binh/PHASE1_E67_ONE_SHOT_HOLDOUT_RESULT.md`.
 
 ## 10. Dataset và sampling
 
