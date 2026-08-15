@@ -252,6 +252,9 @@ def build_failure_context(
         f"Failure family: {failure_type}",
         _repair_guidance(failure_type),
     ]
+    assertion_evidence = _assertion_failure_context(error)
+    if assertion_evidence:
+        sections.extend(["", "[ASSERTION EVIDENCE]", assertion_evidence])
     constructor = _enclosing_constructor_context(segment)
     if constructor:
         sections.extend(["", "[ENCLOSING CONSTRUCTOR/PROTOCOL]", constructor])
@@ -310,7 +313,9 @@ def _repair_guidance(failure_type: str) -> str:
     if failure_type == "assertion/behavior":
         return common + (
             "Derive expectations from source behavior. Avoid guessed counts, absolute paths, ordering, "
-            "or environment-specific values; assert stable invariants instead."
+            "or environment-specific values; assert stable invariants instead. When pytest reports an "
+            "Expected regex and Actual message, remember that match= is a regular expression: prefer "
+            "re.escape(actual_message) or capture exc_info and assert a stable literal substring."
         )
     if failure_type == "type/constructor":
         return common + "Match the real constructor and argument types shown in the retrieved contract."
@@ -319,6 +324,26 @@ def _repair_guidance(failure_type: str) -> str:
             "Use tmp_path/monkeypatch and assert repository-defined semantics without depending on cwd."
         )
     return common + "Use the retrieved contracts to replace the invalid setup, not only the assertion."
+
+
+def _assertion_failure_context(error: str) -> str:
+    expected = re.search(r"Expected regex:\s*(['\"])(.*?)\1", error, re.DOTALL)
+    actual = re.search(r"Actual message:\s*(['\"])(.*?)\1", error, re.DOTALL)
+    if not expected and not actual:
+        return ""
+    lines = [
+        "pytest's match= argument is a regex, not a literal string. Do not guess or normalize "
+        "the runtime message's spacing/punctuation."
+    ]
+    if expected:
+        lines.append(f"Failed expected regex: {expected.group(2)!r}")
+    if actual:
+        lines.append(f"Observed runtime message (exact): {actual.group(2)!r}")
+    lines.append(
+        "Repair with re.escape(observed_message), a short regex-safe substring, or exc_info plus "
+        "a literal assertion on str(exc_info.value)."
+    )
+    return "\n".join(lines)
 
 
 def _enclosing_constructor_context(segment: CodeSegment) -> str:

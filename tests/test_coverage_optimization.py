@@ -361,6 +361,38 @@ def test_gpt_v2_failure_context_is_opt_in_and_bounded(tmp_path, monkeypatch):
     assert enabled_prompt.endswith("[END FAILURE-TRIGGERED CONTEXT]")
 
 
+def test_failure_context_highlights_exact_pytest_regex_mismatch(tmp_path, monkeypatch):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    code_segment = importlib.import_module("coverup.segment").CodeSegment
+    build_failure_context = importlib.import_module(
+        "coverup.target_context"
+    ).build_failure_context
+    source_path = tmp_path / "module.py"
+    source_path.write_text("def target():\n    return 1\n", encoding="utf-8")
+    segment = code_segment(
+        source_path, "target", 1, 2, "target", {1, 2}, {1, 2}, set(), set(), [], []
+    )
+
+    context = build_failure_context(
+        segment,
+        "E AssertionError: Regex pattern did not match.\n"
+        "E Expected regex: 'group-mates must be specified'\n"
+        "E Actual message: 'group-matesmust be specified.'",
+        project_root=tmp_path,
+        max_chars=4_000,
+    )
+
+    assert "[ASSERTION EVIDENCE]" in context
+    assert "Observed runtime message (exact): 'group-matesmust be specified.'" in context
+    assert "re.escape(observed_message)" in context
+    if "[FAILURE-RELEVANT USAGE EXAMPLES]" in context:
+        assert context.index("[ASSERTION EVIDENCE]") < context.index(
+            "[FAILURE-RELEVANT USAGE EXAMPLES]"
+        )
+
+
 def test_gpt_v2_appends_context_without_changing_prompt_template_contract(
     tmp_path,
     monkeypatch,
