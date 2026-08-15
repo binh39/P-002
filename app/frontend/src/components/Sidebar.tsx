@@ -61,8 +61,10 @@ export default function Sidebar({
             <span>{label}</span>
           </button>
         ))}
+      </nav>
 
-        <p className="sidebar-label sidebar-system-label">System</p>
+      <nav className="sidebar-system-navigation" aria-label="System navigation">
+        <p className="sidebar-label">System</p>
         <button
           type="button"
           className={currentPage === "settings" ? "is-active" : ""}
