@@ -45,6 +45,10 @@ The code below, extracted from {filename}, does not achieve full coverage:
 when tested, {coverage_targets} not execute.
 Create new pytest test functions that execute all missing lines and branches. Each test must
 be correct, deterministic, contain meaningful assertions, and clean up all modified state.
+Prefer several small, independent test_* functions over one large function with many sequential
+inline scenarios: an early failure inside a shared function blocks coverage measurement of every
+later scenario. If a target is best covered by many scenarios, split them into separate test
+functions so an isolated failure does not discard the rest.
 Use the get_info tool function as necessary. Always return an entire Python test module.
 Do not call pytest.main and do not execute tests at module import time.
 Respond only with Python code enclosed in a python markdown code block.

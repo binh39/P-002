@@ -61,8 +61,27 @@ def _test_functions_with_parents(tree: ast.AST) -> list[tuple[ast.AST, ast.AST]]
     return found
 
 
+def _names_with_context(statement: ast.AST, context: type[ast.expr_context]) -> set[str]:
+    return {
+        node.id
+        for node in ast.walk(statement)
+        if isinstance(node, ast.Name) and isinstance(node.ctx, context)
+    }
+
+
+def _mutated_receiver_names(statement: ast.AST) -> set[str]:
+    receivers = set()
+    for node in ast.walk(statement):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        receiver = node.func.value
+        if isinstance(receiver, ast.Name) and receiver.id not in {"pytest"}:
+            receivers.add(receiver.id)
+    return receivers
+
+
 def truncate_failing_test_module(test: str, error: str) -> str | None:
-    """Remove the failing suffix while retaining already-asserted test behavior."""
+    """Remove one failing scenario and statements that depend on its invalid value."""
 
     failure_line = _generated_test_failure_line(error)
     if failure_line is None:
@@ -94,13 +113,21 @@ def truncate_failing_test_module(test: str, error: str) -> str | None:
     )
     if failing_statement is None:
         return None
-    retained = [
-        statement
-        for statement in function.body
-        if (statement.end_lineno or statement.lineno) < failing_statement.lineno
-    ]
+    failing_index = function.body.index(failing_statement)
+    retained = list(function.body[:failing_index])
+    poisoned = _names_with_context(failing_statement, ast.Store)
+    if not poisoned:
+        poisoned = _mutated_receiver_names(failing_statement)
+    for statement in function.body[failing_index + 1:]:
+        assigned = _names_with_context(statement, ast.Store)
+        loaded = _names_with_context(statement, ast.Load)
+        if loaded & poisoned:
+            poisoned.update(assigned)
+            continue
+        retained.append(statement)
+        poisoned.difference_update(assigned)
     if _has_meaningful_assertion(retained):
-        function.body = [*retained, ast.Return(value=None)]
+        function.body = retained
     else:
         body = getattr(parent, "body", None)
         if not isinstance(body, list):

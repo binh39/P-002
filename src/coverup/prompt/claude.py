@@ -32,6 +32,10 @@ The following code, extracted from {filename}, does not achieve full coverage:
 Your task:
 - Write new **pytest test functions** that cause all missing lines and branches to execute.
 - Tests must be correct and include assertions that verify postconditions.
+- Prefer several small, independent test_* functions over one large function with many sequential
+  inline scenarios: an early failure inside a shared function blocks coverage measurement of every
+  later scenario. If a target is best covered by many scenarios, split them into separate test
+  functions so an isolated failure does not discard the rest.
 - If necessary, use the `get_info` tool function to learn more about symbols.
 - Ensure each test leaves no state behind; use `monkeypatch` or `pytest-mock` if helpful.
 - Do NOT include any top-level code that calls `pytest.main` or the test itself.

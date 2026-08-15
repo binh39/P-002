@@ -255,6 +255,9 @@ def build_failure_context(
     assertion_evidence = _assertion_failure_context(error)
     if assertion_evidence:
         sections.extend(["", "[ASSERTION EVIDENCE]", assertion_evidence])
+    clone_pitfall = _clone_pitfall_context(segment, error)
+    if clone_pitfall:
+        sections.extend(["", "[CLONE/REBUILD PITFALL]", clone_pitfall])
     constructor = _enclosing_constructor_context(segment)
     if constructor:
         sections.extend(["", "[ENCLOSING CONSTRUCTOR/PROTOCOL]", constructor])
@@ -342,6 +345,44 @@ def _assertion_failure_context(error: str) -> str:
     lines.append(
         "Repair with re.escape(observed_message), a short regex-safe substring, or exc_info plus "
         "a literal assertion on str(exc_info.value)."
+    )
+    return "\n".join(lines)
+
+
+_CLONE_PITFALL_SIGNALS = ("_estimator_type", "clone(", "clone_estimator")
+
+
+def _clone_pitfall_context(segment: CodeSegment, error: str) -> str:
+    """Explain an estimator-protocol failure caused by instance attributes lost in clone().
+
+    Many sklearn-style meta-estimators rebuild their wrapped estimator with
+    ``sklearn.base.clone()`` (or repeat ``get_params()``-only reconstruction) inside
+    ``__init__`` when ``clone_estimator`` is enabled. Attributes set manually on an
+    instance the test passes in (e.g. ``obj._estimator_type = "classifier"``) are not
+    ``get_params()``-exposed and are silently dropped, so the exact same failure recurs
+    on every repair. This hint is injected only when the error and the enclosing
+    constructor source match that pattern.
+    """
+
+    if "_estimator_type" not in error:
+        return ""
+    try:
+        source = segment.path.read_text(encoding="utf-8")
+        ast.parse(source, filename=str(segment.path))
+    except (OSError, UnicodeDecodeError, SyntaxError):
+        return ""
+    if not any(signal in source for signal in _CLONE_PITFALL_SIGNALS):
+        return ""
+    lines = [
+        "The wrapped estimator is rebuilt via clone() (or get_params()-only reconstruction) "
+        "when clone_estimator is enabled, so attributes set directly on the instance you pass "
+        "in (for example `obj._estimator_type = \"classifier\"`) are silently discarded and the "
+        "same failure will recur on every rewrite.",
+    ]
+    lines.append(
+        "Do not monkey-patch the instance. Instead pass the parameter through the documented "
+        "constructor kwarg (e.g. `scoring='accuracy'`), use an estimator that already declares "
+        "`_estimator_type` at class scope, or set `clone_estimator=False`."
     )
     return "\n".join(lines)
 

@@ -3749,7 +3749,7 @@ def test_coverup_retries_null_assistant_content_without_crashing(tmp_path, monke
     assert "Empty assistant response" in (tmp_path / "coverup.log").read_text()
 
 
-def test_test_salvage_truncates_only_after_asserted_prefix(tmp_path, monkeypatch):
+def test_test_salvage_iteratively_prunes_failing_statements(tmp_path, monkeypatch):
     import importlib
 
     monkeypatch.syspath_prepend(str(Path("src").resolve()))
@@ -3774,16 +3774,61 @@ def test_independent():
         if "assert actual == 4" in line
     )
 
-    salvaged = truncate(
+    first_salvage = truncate(
         generated,
         f"tmp_test_generated.py:{failure_line}: AssertionError",
     )
 
+    assert first_salvage is not None
+    assert "pytest.raises(ValueError)" in first_salvage
+    assert "actual == 4" not in first_salvage
+    assert "assert False" in first_salvage
+    second_failure_line = next(
+        index
+        for index, line in enumerate(first_salvage.splitlines(), start=1)
+        if "assert False" in line
+    )
+    second_salvage = truncate(
+        first_salvage,
+        f"tmp_test_generated.py:{second_failure_line}: AssertionError",
+    )
+    assert second_salvage is not None
+    assert "assert False" not in second_salvage
+    assert "test_independent" in second_salvage
+
+
+def test_test_salvage_drops_only_scenario_dependent_on_failed_assignment(
+    tmp_path, monkeypatch,
+):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    truncate = importlib.import_module(
+        "coverup.testrunner"
+    ).truncate_failing_test_module
+    generated = """def test_many_scenarios():
+    broken = build_invalid()
+    broken.fit()
+    assert broken.fitted
+    independent = build_valid()
+    independent.fit()
+    assert independent.fitted
+"""
+    failure_line = next(
+        index
+        for index, line in enumerate(generated.splitlines(), start=1)
+        if "broken =" in line
+    )
+
+    salvaged = truncate(
+        generated,
+        f"tmp_test_generated.py:{failure_line}: ValueError",
+    )
+
     assert salvaged is not None
-    assert "pytest.raises(ValueError)" in salvaged
-    assert "actual == 4" not in salvaged
-    assert "assert False" not in salvaged
-    assert "test_independent" in salvaged
+    assert "broken" not in salvaged
+    assert "independent = build_valid()" in salvaged
+    assert "assert independent.fitted" in salvaged
 
 
 def test_test_salvage_removes_function_without_prior_assertion(tmp_path, monkeypatch):
@@ -3854,6 +3899,19 @@ def test_target_paths():
                 output=(
                     f"tmp_test_generated.py:{failure_line}: "
                     "NameError: missing_name"
+                ).encode(),
+            )
+        if "assert False" in kwargs["test"]:
+            failure_line = next(
+                index
+                for index, line in enumerate(kwargs["test"].splitlines(), start=1)
+                if "assert False" in line
+            )
+            raise subprocess.CalledProcessError(
+                1,
+                ["pytest"],
+                output=(
+                    f"tmp_test_generated.py:{failure_line}: AssertionError"
                 ).encode(),
             )
         assert "missing_name" not in kwargs["test"]
@@ -3932,12 +3990,12 @@ def test_target_paths():
 
     assert result is True
     assert chatter.calls == 3
-    assert len(coverage_calls) == 4
+    assert len(coverage_calls) == 5
     assert [trace["outcome"] for trace in traces] == [
         "test_error", "test_error", "test_error", "coverage_gain_saved",
     ]
     assert traces[-1]["component"] == "salvage"
-    assert traces[-1]["salvaged_failures"] == 1
+    assert traces[-1]["salvaged_failures"] == 2
     saved = Path(traces[-1]["saved_test"]).read_text(encoding="utf-8")
     assert "pytest.raises(ValueError)" in saved
     assert "missing_name" not in saved

@@ -69,6 +69,10 @@ The code below, extracted from {filename}, does not achieve full coverage:
 when tested, {segment.lines_branches_missing_do()} not execute.
 Create new pytest test functions that execute all missing lines and branches, always making
 sure that each test is correct and indeed improves coverage.
+Prefer several small, independent test_* functions over one large function with many sequential
+inline scenarios: an early failure inside a shared function blocks coverage measurement of every
+later scenario. If a target is best covered by many scenarios, split them into separate test
+functions so an isolated failure does not discard the rest.
 Use the get_info tool function as necessary.
 Always send entire Python test scripts when proposing a new test or correcting one you
 previously proposed.
