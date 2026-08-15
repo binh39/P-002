@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { IC } from "../components/Icons";
+import { PageHeader } from "../components/PlatformUI";
 
 const card = {
   background: "#fff",
@@ -199,59 +200,21 @@ export default function Registry() {
   });
 
   return (
-    <div style={{ padding: "28px 32px", maxWidth: 1200 }}>
-      {/* Header */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          marginBottom: 24,
-        }}
-      >
-        <div>
-          <h1
-            style={{
-              fontSize: 22,
-              fontWeight: 700,
-              color: "#0F1117",
-              margin: 0,
-              letterSpacing: "-0.02em",
-            }}
-          >
-            Prompt Registry
-          </h1>
-          <p style={{ color: "#9CA3AF", fontSize: 13, margin: "4px 0 0" }}>
-            {prompts.length} registered prompts · payment-service project
-          </p>
-        </div>
-        <button
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 7,
-            padding: "9px 18px",
-
-            background: "linear-gradient(135deg, #4F6EF7, #7C3AED)",
-            color: "#fff",
-
-            border: "none",
-            borderRadius: 10,
-            fontSize: 13.5,
-            fontWeight: 600,
-
-            cursor: "pointer",
-            fontFamily: "inherit",
-
-            boxShadow: "0 4px 12px rgba(79,110,247,0.25)",
-          }}
-        >
-          <IC.Plus /> Import Prompt
-        </button>
-      </div>
+    <div className="platform-page registry-page">
+      <PageHeader
+        eyebrow="Prompt library"
+        title="Prompt Registry"
+        description={`${prompts.length} registered prompts · payment-service project`}
+        actions={
+          <button className="primary-button" type="button">
+            <IC.Plus /> Import Prompt
+          </button>
+        }
+      />
 
       {/* Filters */}
       <div
+        className="registry-filters"
         style={{
           ...card,
           padding: "16px 20px",
@@ -357,8 +320,21 @@ export default function Registry() {
       </div>
 
       {/* Table */}
-      <div style={{ ...card, overflow: "hidden" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <div className="registry-table-card" style={card}>
+        <table className="registry-table">
+          <colgroup>
+            <col className="registry-col-id" />
+            <col className="registry-col-name" />
+            <col className="registry-col-model" />
+            <col className="registry-col-version" />
+            <col className="registry-col-coverage" />
+            <col className="registry-col-coverage" />
+            <col className="registry-col-cost" />
+            <col className="registry-col-latency" />
+            <col className="registry-col-status" />
+            <col className="registry-col-created" />
+            <col className="registry-col-actions" />
+          </colgroup>
           <thead>
             <tr style={{ background: "#FAFBFF" }}>
               {[
@@ -402,6 +378,7 @@ export default function Registry() {
                 }}
               >
                 <td
+                  className="registry-id-cell"
                   style={{
                     padding: "13px 18px",
                     fontSize: 12,
@@ -412,7 +389,7 @@ export default function Registry() {
                 >
                   {p.id}
                 </td>
-                <td style={{ padding: "13px 18px" }}>
+                <td className="registry-name-cell" style={{ padding: "13px 18px" }}>
                   <div
                     style={{
                       fontSize: 13.5,
@@ -428,6 +405,7 @@ export default function Registry() {
                 </td>
                 <td style={{ padding: "13px 18px" }}>
                   <span
+                    className="registry-model-chip"
                     style={{
                       fontSize: 11.5,
                       background: "#F0F1F5",
