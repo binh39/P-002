@@ -47,7 +47,7 @@ export default function Sidebar({
         <Brand />
       </div>
 
-      <nav className="sidebar-navigation">
+      <nav className="sidebar-navigation" aria-label="Workspace navigation">
         <p className="sidebar-label">Workspace</p>
         {navItems.map(({ id, label, Icon }) => (
           <button
