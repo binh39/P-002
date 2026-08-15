@@ -608,6 +608,13 @@ Create experiment
 - [ ] LÆ°u candidate prompt, parent prompt, generation, score, cost, latency vÃ  failure reason.
 - [x] KhÃ´ng tá»± ghi Ä‘Ã¨ baseline hoáº·c production prompt sau GEPA search.
 
+#### E67 validation-only Pareto output portfolio
+
+- [x] Candidate-test archive khÃ³a theo split/evaluation digest, content-deduplicate, greedy set-cover vÃ  verify suite 5 láº§n.
+- [x] Portfolio hai replicate tá»« 5 Pareto prompts Ä‘áº¡t 96,32â€“97,59%, hÆ¡n single-best Ã­t nháº¥t 18,85 Ä‘iá»ƒm.
+- [ ] Tá»± Ä‘á»™ng hÃ³a cost gate: baseline trÆ°á»›c, replicate hai chá»‰ cho target cÃ²n thiáº¿u coverage, rá»“i verify suite.
+- [ ] Cháº¡y Ä‘Ãºng má»™t paired holdout gate; chÆ°a Ä‘Æ°a portfolio vÃ o production trÆ°á»›c khi gate nÃ y Ä‘áº¡t.
+
 ### 10.6 PR 4 â€” Paired comparison vÃ  promotion gate
 
 - [x] Chá»n candidate báº±ng validation rá»“i khÃ³a candidate trÆ°á»›c final evaluation.

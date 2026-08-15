@@ -219,6 +219,13 @@ def parser() -> argparse.ArgumentParser:
     archive.add_argument("--split", choices=("train", "validation", "test"), default="validation")
     archive.add_argument("--evaluation-digest")
     archive.add_argument(
+        "--source-replicate",
+        dest="source_replicates",
+        type=int,
+        action="append",
+        help="Only archive tests from this generation replicate; may be repeated",
+    )
+    archive.add_argument(
         "--allow-holdout",
         action="store_true",
         help="Allow a final report on test; never use it to tune the archive",
@@ -250,6 +257,9 @@ def build_archive(args: argparse.Namespace) -> None:
         sample_repos_dir=_resolve(root, args.sample_repos_dir),
         split=args.split,
         evaluation_digest=args.evaluation_digest,
+        source_replicates=(
+            set(args.source_replicates) if args.source_replicates is not None else None
+        ),
         allow_holdout=args.allow_holdout,
         pytest_args=args.pytest_args,
         repeat_tests=args.repeat_tests,
@@ -258,6 +268,7 @@ def build_archive(args: argparse.Namespace) -> None:
     print(json.dumps({
         "split": report["split"],
         "evaluation_digest": report["evaluation_digest"],
+        "source_replicates": report["source_replicates"],
         "candidate_test_count": report["candidate_test_count"],
         "selected_test_count": report["selected_test_count"],
         "verified": verification["verified"],

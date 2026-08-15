@@ -30,6 +30,21 @@ def test_main_cli_exposes_split_locked_archive_command():
     assert args.command == "archive"
     assert args.repeat_tests == 5
     assert args.allow_holdout is False
+    assert args.source_replicates is None
+
+
+def test_main_cli_accepts_repeated_source_replicates():
+    args = parser().parse_args([
+        "archive",
+        "--output-dir",
+        "archive-output",
+        "--source-replicate",
+        "0",
+        "--source-replicate",
+        "2",
+    ])
+
+    assert args.source_replicates == [0, 2]
 
 
 def test_greedy_archive_prefers_one_test_covering_the_union():
@@ -109,6 +124,17 @@ def test_archive_requires_repeated_verification(tmp_path):
         )
 
 
+def test_archive_rejects_negative_source_replicate(tmp_path):
+    with pytest.raises(ValueError, match="non-negative integers"):
+        build_candidate_test_archive(
+            project_root=tmp_path,
+            artifacts_dir=tmp_path / "artifacts",
+            output_dir=tmp_path / "archive",
+            sample_repos_dir=Path("src/sample_repo"),
+            source_replicates={-1},
+        )
+
+
 def test_archive_content_deduplicates_and_unions_coverage_units(tmp_path):
     source = tmp_path / "test_generated.py"
     source.write_text("def test_generated(): pass\n", encoding="utf-8")
@@ -184,3 +210,87 @@ def test_archive_auto_selects_largest_evaluation_cohort(tmp_path):
 
     assert digest == "large"
     assert len(batches[0]["results"]) == 2
+
+
+def test_archive_filters_source_replicates(tmp_path):
+    root = tmp_path / "candidates" / "evaluations" / "prompt" / "evaluation"
+    target = {
+        "project": "repo",
+        "source_file": "repo/mod.py",
+        "symbol": "target",
+        "split": "validation",
+    }
+    for replicate in range(3):
+        path = root / "validation" / f"batch_r{replicate}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps({
+                "evaluation_digest": "evaluation",
+                "split": "validation",
+                "replicate": replicate,
+                "results": [{"target": target}],
+            }),
+            encoding="utf-8",
+        )
+
+    digest, batches = _load_evaluation_cohort(
+        tmp_path,
+        split="validation",
+        source_replicates={0, 2},
+    )
+
+    assert digest == "evaluation"
+    assert {batch["replicate"] for batch in batches} == {0, 2}
+
+
+def test_archive_rejects_missing_source_replicate(tmp_path):
+    root = tmp_path / "candidates" / "evaluations" / "prompt" / "evaluation"
+    path = root / "validation" / "batch_r0.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps({
+            "evaluation_digest": "evaluation",
+            "split": "validation",
+            "replicate": 0,
+            "results": [],
+        }),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"source replicates \[2\]"):
+        _load_evaluation_cohort(
+            tmp_path,
+            split="validation",
+            evaluation_digest="evaluation",
+            source_replicates={2},
+        )
+
+
+def test_archive_rejects_partially_missing_source_replicates(tmp_path):
+    root = tmp_path / "candidates" / "evaluations" / "prompt" / "evaluation"
+    path = root / "validation" / "batch_r0.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps({
+            "evaluation_digest": "evaluation",
+            "split": "validation",
+            "replicate": 0,
+            "results": [{
+                "target": {
+                    "project": "repo",
+                    "source_file": "repo/mod.py",
+                    "symbol": "target",
+                    "split": "validation",
+                }
+            }],
+        }),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"missing source replicates \[2\]"):
+        _load_evaluation_cohort(
+            tmp_path,
+            split="validation",
+            evaluation_digest="evaluation",
+            source_replicates={0, 2},
+        )

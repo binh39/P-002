@@ -35,19 +35,31 @@ def _load_evaluation_cohort(
     *,
     split: str,
     evaluation_digest: str | None = None,
+    source_replicates: set[int] | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     pattern = f"candidates/evaluations/*/*/{split}/*batch*.json"
     for path in sorted(artifacts_dir.glob(pattern)):
         batch = json.loads(path.read_text(encoding="utf-8"))
         digest = str(batch.get("evaluation_digest", ""))
-        if digest and batch.get("split") == split:
+        replicate = int(batch.get("replicate", 0))
+        if (
+            digest
+            and batch.get("split") == split
+            and (source_replicates is None or replicate in source_replicates)
+        ):
             batch["_cache_path"] = str(path.resolve())
             grouped[digest].append(batch)
     if evaluation_digest is not None:
         if evaluation_digest not in grouped:
+            replicate_suffix = (
+                f" for source replicates {sorted(source_replicates)}"
+                if source_replicates is not None
+                else ""
+            )
             raise ValueError(
                 f"No {split!r} evaluation cohort {evaluation_digest!r} was found"
+                f"{replicate_suffix}"
             )
         selected_digest = evaluation_digest
     else:
@@ -63,6 +75,14 @@ def _load_evaluation_cohort(
 
         selected_digest = max(grouped.items(), key=cohort_rank)[0]
     batches = grouped[selected_digest]
+    if source_replicates is not None:
+        observed_replicates = {int(batch.get("replicate", 0)) for batch in batches}
+        missing_replicates = source_replicates - observed_replicates
+        if missing_replicates:
+            raise ValueError(
+                f"Evaluation cohort {selected_digest!r} is missing source replicates "
+                f"{sorted(missing_replicates)}"
+            )
     target_sets = [
         {_identity(result) for result in batch.get("results", [])}
         for batch in batches
@@ -253,12 +273,17 @@ def build_candidate_test_archive(
     sample_repos_dir: Path,
     split: str = "validation",
     evaluation_digest: str | None = None,
+    source_replicates: set[int] | None = None,
     allow_holdout: bool = False,
     pytest_args: str = "",
     repeat_tests: int = 5,
 ) -> dict[str, Any]:
     if repeat_tests < 1:
         raise ValueError("Candidate archive verification requires repeat_tests >= 1")
+    if source_replicates is not None and (
+        not source_replicates or any(value < 0 for value in source_replicates)
+    ):
+        raise ValueError("Source replicates must be a non-empty set of non-negative integers")
     if split == "test" and not allow_holdout:
         raise ValueError(
             "The test split is locked. Build the archive from train/validation, "
@@ -270,7 +295,10 @@ def build_candidate_test_archive(
     if output_dir.exists():
         raise FileExistsError(f"Archive output already exists: {output_dir}")
     selected_digest, batches = _load_evaluation_cohort(
-        artifacts_dir, split=split, evaluation_digest=evaluation_digest
+        artifacts_dir,
+        split=split,
+        evaluation_digest=evaluation_digest,
+        source_replicates=source_replicates,
     )
     candidates, denominators = collect_archive_candidates(artifacts_dir, batches)
     if not candidates:
@@ -324,6 +352,9 @@ def build_candidate_test_archive(
         "kind": "candidate_test_archive",
         "split": split,
         "evaluation_digest": selected_digest,
+        "source_replicates": (
+            sorted(source_replicates) if source_replicates is not None else None
+        ),
         "selection_scope": (
             "Archive selection is isolated from GEPA prompt metrics and this split only"
         ),
@@ -358,6 +389,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--split", default="validation")
     parser.add_argument("--evaluation-digest")
+    parser.add_argument(
+        "--source-replicate",
+        dest="source_replicates",
+        type=int,
+        action="append",
+        help="Only archive tests from this generation replicate; may be repeated",
+    )
     parser.add_argument("--allow-holdout", action="store_true")
     parser.add_argument("--pytest-args", default="")
     parser.add_argument("--repeat-tests", type=int, default=5)
@@ -369,6 +407,9 @@ def main(argv: list[str] | None = None) -> int:
         sample_repos_dir=args.sample_repos_dir,
         split=args.split,
         evaluation_digest=args.evaluation_digest,
+        source_replicates=(
+            set(args.source_replicates) if args.source_replicates is not None else None
+        ),
         allow_holdout=args.allow_holdout,
         pytest_args=args.pytest_args,
         repeat_tests=args.repeat_tests,
@@ -377,6 +418,7 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps({
         "split": report["split"],
         "evaluation_digest": report["evaluation_digest"],
+        "source_replicates": report["source_replicates"],
         "candidate_test_count": report["candidate_test_count"],
         "selected_test_count": report["selected_test_count"],
         "verified": verification["verified"],

@@ -489,7 +489,10 @@ Những phương pháp này không còn là “chỉ tối ưu một global prom
 
 **Ưu tiên cao nếu oracle union lớn.**
 
-**Trạng thái:** đã triển khai greedy archive khóa theo split/evaluation digest. Calibration hiện tại chọn 14/26 test, pass `repeat_tests=5`, giữ score 86.75% và cao hơn single-best 5.77 điểm.
+**Trạng thái:** đã triển khai greedy archive khóa theo split/evaluation digest và bộ lọc source replicate.
+Calibration ban đầu chọn 14/26 test, đạt 86,75%. Trên pool E25, archive hai replicate đạt
+96,32–97,59%, pass `repeat_tests=5` và hơn single-best tương ứng ít nhất 18,85 điểm. Xem
+`binh/PHASE1_E67_PARETO_OUTPUT_PORTFOLIO_RESULT.md`.
 
 - Giữ mọi generated test tạo thêm statement/branch mà không regression.
 - Không vứt test tốt chỉ vì aggregate candidate prompt không thắng.
@@ -553,8 +556,10 @@ Dùng random/fuzz/search để tìm input tăng coverage, rồi cho LLM:
 
 ### E67 — Inference-time Pareto outputs
 
-**Trạng thái:** ưu tiên tiếp theo sau E25. Pool 5 prompt có post-hoc target-router oracle 89,86% so
-với baseline 61,27%; cần biến upper bound này thành router/archive không nhìn holdout.
+**Trạng thái:** đã có validation proof bằng candidate-test portfolio, chưa mở holdout. Pool 5 prompt được
+chạy theo từng replicate, test có coverage gain được content-deduplicate, greedy set-cover và chạy lại cùng
+nhau 5 lần. Một replicate đạt trung bình 90,15%; mọi cặp hai replicate đạt 96,32–97,59%, trong khi
+baseline repeated mean là 61,27%. Đây là gain của portfolio test, không phải một global prompt tốt hơn.
 
 GEPA đã theo dõi best outputs/Pareto nhưng pipeline cuối hiện ưu tiên một best prompt. Thử:
 
@@ -562,6 +567,10 @@ GEPA đã theo dõi best outputs/Pareto nhưng pipeline cuối hiện ưu tiên 
 - Gom strategy hoặc test tạo gain.
 - So single-best score với Pareto-oracle score.
 - Chỉ triển khai routing nếu gain lặp lại trên holdout.
+
+**Quyết định hiện tại:** dùng hai replicate làm cấu hình E67 ứng viên vì ba replicate chỉ đạt 97,26% và
+không tạo lợi ích rõ so với hai. Bước kế tiếp là tự động hóa chiến lược chạy baseline trước, chỉ mở replicate
+thứ hai cho target còn thiếu coverage, rồi dùng đúng một one-shot holdout gate trước khi production hóa.
 
 ## 10. Dataset và sampling
 
