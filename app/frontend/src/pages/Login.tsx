@@ -5,6 +5,11 @@ import { IC } from "@/components/Icons";
 type AuthMode = "login" | "register";
 type PendingAction = "email" | "google" | "reset" | null;
 
+const DEMO_ACCOUNT = {
+  email: "admin@gmail.com",
+  password: "88888888",
+} as const;
+
 interface Props {
   onClearError: () => void;
   onGoogleSignIn: () => Promise<void>;
@@ -26,8 +31,8 @@ export default function Login({
 }: Props) {
   const [mode, setMode] = useState<AuthMode>("login");
   const [name, setName] = useState("");
-  const [email, setEmail] = useState(connected ? "" : "alex.morgan@company.com");
-  const [password, setPassword] = useState(connected ? "" : "demo-password");
+  const [email, setEmail] = useState<string>(DEMO_ACCOUNT.email);
+  const [password, setPassword] = useState<string>(DEMO_ACCOUNT.password);
   const [confirmPassword, setConfirmPassword] = useState("");
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -43,8 +48,11 @@ export default function Login({
   };
 
   const switchMode = () => {
-    setMode((current) => (current === "login" ? "register" : "login"));
-    setPassword(connected ? "" : "demo-password");
+    setMode((current) => {
+      const nextMode = current === "login" ? "register" : "login";
+      setPassword(nextMode === "login" ? DEMO_ACCOUNT.password : "");
+      return nextMode;
+    });
     setConfirmPassword("");
     clearMessages();
   };
