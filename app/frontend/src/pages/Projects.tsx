@@ -41,8 +41,14 @@ export default function Projects() {
         title="Sample Python Projects"
         description="Run experiments against four immutable repositories without uploading source."
         actions={
-          <button className="primary-button" onClick={() => navigate("/experiments/new")}>
-            + Create experiment
+          <button
+            className="primary-button"
+            type="button"
+            disabled
+            title="Project import is coming soon"
+            aria-label="Create project (coming soon)"
+          >
+            + Create project
           </button>
         }
       />
