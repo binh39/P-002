@@ -78,6 +78,7 @@ binh/phase0_runs/followup2_target_discovery_verified/
 binh/phase1_candidate_archive/
 binh/phase1_candidate_archive_r5/
 binh/phase1_candidate_archive_e25*/
+binh/phase1_candidate_archive_e67_holdout/
 binh/phase1_runs/ablation16_holdout_probe/
 binh/phase1_runs/ablation16_v2_validation_probe/
 binh/phase1_runs/**/runs/
@@ -89,5 +90,6 @@ binh/phase1_runs/e41*/candidates/*.json
 binh/phase1_runs/e41_gepa_budget30_seed7_mb3/
 binh/phase1_runs/stratified24_baseline_r3/
 binh/phase1_runs/e25_pareto*/
+binh/phase1_runs/e67_holdout_one_shot/
 
 .claude

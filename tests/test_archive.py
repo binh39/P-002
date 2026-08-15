@@ -1,8 +1,10 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+import src.optimization.sequential as sequential_module
 from src.optimization.archive import (
     _load_evaluation_cohort,
     build_candidate_test_archive,
@@ -11,6 +13,9 @@ from src.optimization.archive import (
     select_sequential_archive_batches,
 )
 from src.optimization.cli import parser
+from src.optimization.models import SymbolTarget
+from src.optimization.prompts import baseline_bundle
+from src.optimization.sequential import run_live_sequential_archive
 
 
 def _unit(kind, value):
@@ -76,6 +81,133 @@ def test_main_cli_defaults_sequential_stop_score_to_calibrated_knee():
     ])
 
     assert args.target_stop_score == 0.80
+
+
+def test_main_cli_accepts_live_sequential_holdout_stages():
+    args = parser().parse_args([
+        "live-sequential-archive",
+        "--dataset",
+        "dataset.jsonl",
+        "--output-dir",
+        "archive-output",
+        "--stage-prompt",
+        "prompts/baseline.json:0",
+        "--stage-prompt",
+        "prompts/proposal.json:2",
+        "--cohort-stage-count",
+        "15",
+        "--allow-holdout",
+    ])
+
+    assert args.stage_prompts == [
+        (Path("prompts/baseline.json"), 0),
+        (Path("prompts/proposal.json"), 2),
+    ]
+    assert args.cohort_stage_count == 15
+    assert args.allow_holdout is True
+
+
+def test_live_sequential_archive_keeps_holdout_locked(tmp_path):
+    target = SymbolTarget("repo", "repo/mod.py", "target", "test")
+
+    with pytest.raises(ValueError, match="test split is locked"):
+        run_live_sequential_archive(
+            runner=SimpleNamespace(),
+            targets=[target],
+            stages=[(tmp_path / "missing.json", 0)],
+            output_dir=tmp_path / "output",
+            sample_repos_dir=tmp_path,
+            split="test",
+        )
+
+
+def test_live_sequential_archive_generates_only_remaining_targets(tmp_path, monkeypatch):
+    prompt_path = tmp_path / "baseline.json"
+    baseline_bundle().save(prompt_path)
+    tests = [tmp_path / "test_first.py", tmp_path / "test_second.py"]
+    for index, path in enumerate(tests):
+        path.write_text(f"def test_{index}(): pass\n", encoding="utf-8")
+    targets = [
+        SymbolTarget("repo", "repo/mod.py", symbol, "validation")
+        for symbol in ("covered", "gap")
+    ]
+    calls = []
+
+    def fake_evaluate(runner, stage_targets, bundle, candidate_dir, **kwargs):
+        replicate = kwargs["replicate"]
+        calls.append([target.symbol for target in stage_targets])
+        results = []
+        for target in stage_targets:
+            gains = [1] if (replicate == 0 and target.symbol == "covered") or replicate == 1 else []
+            traces = (
+                [{
+                    "outcome": "coverage_gain_saved",
+                    "saved_test": str(tests[replicate]),
+                    "gained_lines": gains,
+                    "gained_branches": [],
+                }]
+                if gains
+                else []
+            )
+            results.append({
+                "target": target.__dict__,
+                "coverage": {
+                    "valid": True,
+                    "num_statements": 1,
+                    "num_branches": 0,
+                    "gained_lines": gains,
+                    "gained_branches": [],
+                },
+                "attempt_traces": traces,
+            })
+        return {
+            "prompt_digest": "prompt",
+            "evaluation_digest": f"evaluation-{replicate}",
+            "replicate": replicate,
+            "results": results,
+            "run_ids": [f"run-{replicate}"],
+            "tests_workspaces": [],
+        }
+
+    captured = {}
+
+    def fake_materialize(**kwargs):
+        captured.update(kwargs)
+        return {
+            "verification": {"verified": True},
+            "sequential_policy": kwargs["report_metadata"]["sequential_policy"],
+        }
+
+    monkeypatch.setattr(sequential_module, "evaluate_bundle_batch_cached", fake_evaluate)
+    monkeypatch.setattr(
+        sequential_module, "_materialize_candidate_test_archive", fake_materialize
+    )
+    runner = SimpleNamespace(config=SimpleNamespace(
+        artifacts_dir=tmp_path / "artifacts",
+        coverup_model="vertex_ai/gemini-3.5-flash-lite",
+        max_attempts=3,
+        repeat_tests=5,
+        project_root=tmp_path,
+        pytest_args="",
+    ))
+
+    report = run_live_sequential_archive(
+        runner=runner,
+        targets=targets,
+        stages=[(prompt_path, 0), (prompt_path, 1)],
+        output_dir=tmp_path / "output",
+        sample_repos_dir=tmp_path,
+        split="validation",
+        target_stop_score=0.80,
+    )
+
+    assert calls == [["covered", "gap"], ["gap"]]
+    assert report["sequential_policy"]["target_generation_calls"] == 3
+    assert len(captured["batches"][1]["results"]) == 1
+    state = json.loads(
+        (tmp_path / "artifacts" / "sequential_holdout_state.json").read_text()
+    )
+    assert state["status"] == "completed"
 
 
 def test_greedy_archive_prefers_one_test_covering_the_union():

@@ -28,6 +28,7 @@ from .metrics import aggregate_coverage_score
 from .models import ExperimentConfig, ProjectLayout, SymbolTarget
 from .prompts import PromptBundle, baseline_bundle
 from .runner import CoverUpExperimentRunner
+from .sequential import run_live_sequential_archive
 
 
 def _parse_archive_stage(value: str) -> tuple[str, int]:
@@ -41,6 +42,19 @@ def _parse_archive_stage(value: str) -> tuple[str, int]:
     if replicate < 0:
         raise argparse.ArgumentTypeError("Stage replicate must be non-negative")
     return prompt_digest, replicate
+
+
+def _parse_live_archive_stage(value: str) -> tuple[Path, int]:
+    prompt_path, separator, replicate_value = value.rpartition(":")
+    if not separator or not prompt_path:
+        raise argparse.ArgumentTypeError("Live stage must use PROMPT_PATH:REPLICATE")
+    try:
+        replicate = int(replicate_value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("Live stage replicate must be an integer") from exc
+    if replicate < 0:
+        raise argparse.ArgumentTypeError("Live stage replicate must be non-negative")
+    return Path(prompt_path), replicate
 
 
 def parser() -> argparse.ArgumentParser:
@@ -270,6 +284,33 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Allow a final report on test; never use it to tune the policy",
     )
+
+    live_sequential = commands.add_parser(
+        "live-sequential-archive",
+        help="Generate and verify a frozen sequential portfolio on one split",
+    )
+    live_sequential.add_argument("--dataset", type=Path, required=True)
+    live_sequential.add_argument("--output-dir", type=Path, required=True)
+    live_sequential.add_argument("--split", default="test")
+    live_sequential.add_argument(
+        "--stage-prompt",
+        dest="stage_prompts",
+        type=_parse_live_archive_stage,
+        action="append",
+        required=True,
+        help="Frozen PROMPT_PATH:REPLICATE stage; repeat in execution order",
+    )
+    live_sequential.add_argument("--target-stop-score", type=float, default=0.80)
+    live_sequential.add_argument(
+        "--cohort-stage-count",
+        type=int,
+        help="Full prompt x replicate stage count used only as a cost baseline",
+    )
+    live_sequential.add_argument(
+        "--allow-holdout",
+        action="store_true",
+        help="Required to consume the locked test split",
+    )
     return result
 
 
@@ -354,6 +395,47 @@ def build_sequential_archive(args: argparse.Namespace) -> None:
         "verified": verification["verified"],
         "archive_aggregate": verification["aggregate"],
         "verified_gain_vs_best_single": report["verified_gain_vs_best_single"],
+    }, indent=2))
+
+
+def run_live_archive(args: argparse.Namespace) -> None:
+    root = args.project_root.resolve()
+    targets = load_targets(_resolve(root, args.dataset).resolve(), args.split)
+    if not targets:
+        raise ValueError(f"No targets found for split {args.split!r}")
+    sample_repos_dir = _resolve(root, args.sample_repos_dir).resolve()
+    projects = _resolve_project_layouts(root, targets, sample_repos_dir)
+    runner = make_runner(args, projects=projects)
+    report = run_live_sequential_archive(
+        runner=runner,
+        targets=targets,
+        stages=[
+            (_resolve(root, prompt_path), replicate)
+            for prompt_path, replicate in args.stage_prompts
+        ],
+        output_dir=_resolve(root, args.output_dir),
+        sample_repos_dir=sample_repos_dir,
+        split=args.split,
+        target_stop_score=args.target_stop_score,
+        cohort_stage_count=args.cohort_stage_count,
+        allow_holdout=args.allow_holdout,
+    )
+    verification = report["verification"]
+    policy = report["sequential_policy"]
+    print(json.dumps({
+        "split": report["split"],
+        "policy_digest": policy["policy_digest"],
+        "target_generation_calls": policy["target_generation_calls"],
+        "cohort_exhaustive_target_generation_calls": policy[
+            "cohort_exhaustive_target_generation_calls"
+        ],
+        "cohort_target_generation_savings": policy[
+            "cohort_target_generation_savings"
+        ],
+        "selected_test_count": report["selected_test_count"],
+        "verified": verification["verified"],
+        "archive_aggregate": verification["aggregate"],
+        "verified_gain_vs_baseline": report["verified_gain_vs_best_single"],
     }, indent=2))
 
 
@@ -1157,6 +1239,8 @@ def main() -> None:
         build_archive(args)
     elif args.command == "sequential-archive":
         build_sequential_archive(args)
+    elif args.command == "live-sequential-archive":
+        run_live_archive(args)
     elif args.command == "finalize":
         finalize(args)
     else:  # pragma: no cover - argparse requires a known command

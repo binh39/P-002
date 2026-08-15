@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "status": "frozen_before_holdout",
+  "source_validation_commit": "25c301d",
+  "dataset": "binh/phase1_stratified_24.jsonl",
+  "dataset_sha256": "15dd9247ede13a1566346069f8418b378200c57551749125b2743080f44a878e",
+  "split": "test",
+  "target_count": 4,
+  "coverup_model": "vertex_ai/gemini-3.5-flash-lite",
+  "target_stop_score": 0.8,
+  "cohort_stage_count": 15,
+  "repeat_tests": 5,
+  "stages": [
+    {
+      "prompt": "binh/e67_prompts/d8123dc403839c22.json",
+      "prompt_digest": "d8123dc403839c22",
+      "prompt_sha256": "e0277d1d9398a60d5ff04c4dd1c3bae355bcd0c75e101c0876fbdd2f8e6ecdb0",
+      "replicate": 0
+    },
+    {
+      "prompt": "binh/e67_prompts/cc77e6b43adcbdee.json",
+      "prompt_digest": "cc77e6b43adcbdee",
+      "prompt_sha256": "f17ecbbb197e6d962a6e58ddc848703a5df81db000696e91bd14af7d98fff416",
+      "replicate": 0
+    },
+    {
+      "prompt": "binh/e67_prompts/60e345515e31d517.json",
+      "prompt_digest": "60e345515e31d517",
+      "prompt_sha256": "747ded8a014e2ad5741b30f590263a6d2c9dd1bea748bc809af22b2bdd081b15",
+      "replicate": 0
+    },
+    {
+      "prompt": "binh/e67_prompts/38e9aea1f8872c09.json",
+      "prompt_digest": "38e9aea1f8872c09",
+      "prompt_sha256": "808e7ea7345d01c6f61011831c0d13f3b51510f6ad97d266b23fdc9e857e54aa",
+      "replicate": 0
+    },
+    {
+      "prompt": "binh/e67_prompts/60e345515e31d517.json",
+      "prompt_digest": "60e345515e31d517",
+      "prompt_sha256": "747ded8a014e2ad5741b30f590263a6d2c9dd1bea748bc809af22b2bdd081b15",
+      "replicate": 1
+    },
+    {
+      "prompt": "binh/e67_prompts/d8123dc403839c22.json",
+      "prompt_digest": "d8123dc403839c22",
+      "prompt_sha256": "e0277d1d9398a60d5ff04c4dd1c3bae355bcd0c75e101c0876fbdd2f8e6ecdb0",
+      "replicate": 1
+    },
+    {
+      "prompt": "binh/e67_prompts/d8123dc403839c22.json",
+      "prompt_digest": "d8123dc403839c22",
+      "prompt_sha256": "e0277d1d9398a60d5ff04c4dd1c3bae355bcd0c75e101c0876fbdd2f8e6ecdb0",
+      "replicate": 2
+    }
+  ],
+  "decision_rule": "Run stages in order only for targets below score 0.8; do not retune after holdout."
+}
