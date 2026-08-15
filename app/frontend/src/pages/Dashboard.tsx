@@ -26,7 +26,6 @@ import type { ExperimentStatus, Kpi } from "@/domain/dashboard";
 type Page =
   | "dashboard"
   | "experiments"
-  | "playground"
   | "optimization"
   | "comparison"
   | "review"
@@ -227,8 +226,8 @@ export default function Dashboard({ onNavigate }: Props) {
               </div>
             ))}
           </div>
-          <button className="text-button" onClick={() => onNavigate("playground")}>
-            Open playground <ArrowUpRight size={15} />
+          <button className="text-button" onClick={() => onNavigate("experiments")}>
+            View experiments <ArrowUpRight size={15} />
           </button>
         </section>
       </div>
