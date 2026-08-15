@@ -4,7 +4,6 @@ import { useLocation } from "wouter";
 
 import { useAuth } from "@/auth/AuthProvider";
 import { currentNavigationId, pathByNavigationId } from "@/app/navigation";
-import AppFooter from "@/components/AppFooter";
 import Sidebar, { type NavigationId } from "@/components/Sidebar";
 import TopNav from "@/components/TopNav";
 
@@ -43,7 +42,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <TopNav onMenu={() => setSidebarOpen(true)} />
         <main className="main-scroll" id="main-content" key={location}>
           <div className="page-stage">{children}</div>
-          <AppFooter />
         </main>
       </div>
     </div>

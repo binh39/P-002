@@ -35,11 +35,10 @@ export default function Projects() {
   const totalFunctions = pythonProjects.reduce((sum, project) => sum + project.functions, 0);
 
   return (
-    <div className="platform-page">
+    <div className="platform-page projects-page">
       <PageHeader
         eyebrow="Experiment fixtures"
         title="Sample Python Projects"
-        description="Run experiments against four immutable repositories without uploading source."
         actions={
           <button
             className="primary-button"
@@ -54,25 +53,18 @@ export default function Projects() {
       />
 
       <div className="platform-stats-grid">
-        <StatCard label="Projects" value={pythonProjects.length} detail="Pinned snapshots" />
+        <StatCard label="Projects" value={pythonProjects.length} />
         <StatCard
           label="Python files"
           value={pythonProjects.reduce((sum, project) => sum + project.files, 0)}
-          detail="Bundled with the API"
           tone="violet"
         />
-        <StatCard
-          label="Functions"
-          value={totalFunctions}
-          detail="Analyzed in memory with AST"
-          tone="green"
-        />
+        <StatCard label="Functions" value={totalFunctions} tone="green" />
         <StatCard
           label="Branches"
           value={pythonProjects
             .reduce((sum, project) => sum + project.branches, 0)
             .toLocaleString()}
-          detail="Coverage candidates"
           tone="orange"
         />
       </div>
@@ -121,10 +113,7 @@ export default function Projects() {
       <div className="platform-callout">
         <div>
           <strong>No project upload is required</strong>
-          <p>
-            isort, mimesis, mlxtend and typesystem are pinned snapshots. Experiments and runs are
-            saved, but these projects and their analyzed functions are not written to Firestore.
-          </p>
+          <p>Sample repositories stay read-only; only experiments and runs are persisted.</p>
         </div>
         <button className="secondary-button" onClick={() => navigate("/experiments/new")}>
           Start with a sample

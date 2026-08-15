@@ -92,11 +92,10 @@ export default function Experiments() {
   const failed = items.filter((item) => item.status === "failed").length;
 
   return (
-    <div className="platform-page">
+    <div className="platform-page experiments-page">
       <PageHeader
         eyebrow="Evaluation workspace"
         title="Experiments"
-        description="Create and monitor real prompt evaluation runs."
         actions={
           <button className="primary-button" onClick={() => navigate("/experiments/new")}>
             + Create experiment
@@ -104,21 +103,15 @@ export default function Experiments() {
         }
       />
       <div className="platform-stats-grid">
-        <StatCard label="Total experiments" value={items.length} detail="Owned by your account" />
-        <StatCard label="Active" value={active} detail="Queued or running" tone="violet" />
-        <StatCard
-          label="Baselines complete"
-          value={completed}
-          detail="Ready for optimization"
-          tone="green"
-        />
-        <StatCard label="Failed" value={failed} detail="Review the run error" tone="orange" />
+        <StatCard label="Total experiments" value={items.length} />
+        <StatCard label="Active" value={active} tone="violet" />
+        <StatCard label="Baselines complete" value={completed} tone="green" />
+        <StatCard label="Failed" value={failed} tone="orange" />
       </div>
       <section className="platform-card table-card">
         <div className="table-toolbar">
           <div>
             <h2>All experiments</h2>
-            <p>Live records from the PromptOpt API.</p>
           </div>
         </div>
         {items.length === 0 ? (
