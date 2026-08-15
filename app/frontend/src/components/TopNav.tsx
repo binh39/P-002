@@ -9,7 +9,6 @@ const destinations = [
   { label: "Dashboard", detail: "Workspace overview", path: "/dashboard" },
   { label: "Projects", detail: "Source repositories", path: "/projects" },
   { label: "Experiments", detail: "Optimization runs", path: "/experiments" },
-  { label: "Datasets", detail: "Train, validation and test splits", path: "/datasets" },
   { label: "Prompt registry", detail: "Versioned prompt bundles", path: "/prompts" },
   { label: "Playground", detail: "Try a prompt against a target", path: "/playground" },
 ];
