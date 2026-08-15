@@ -7,7 +7,6 @@ export type NavigationId =
   | "dashboard"
   | "projects"
   | "experiments"
-  | "datasets"
   | "coverage"
   | "playground"
   | "registry"
@@ -25,7 +24,6 @@ const navItems = [
   { id: "dashboard" as NavigationId, label: "Dashboard", Icon: IC.Dashboard },
   { id: "projects" as NavigationId, label: "Projects", Icon: IC.Code },
   { id: "experiments" as NavigationId, label: "Experiments", Icon: IC.Flask },
-  { id: "datasets" as NavigationId, label: "Datasets", Icon: IC.Database },
   { id: "coverage" as NavigationId, label: "Coverage Guide", Icon: IC.Code },
   { id: "registry" as NavigationId, label: "Prompt Registry", Icon: IC.CheckSquare },
   { id: "playground" as NavigationId, label: "Playground", Icon: IC.Play },
