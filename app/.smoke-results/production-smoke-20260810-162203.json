@@ -1,0 +1,9 @@
+﻿{
+    "schema_version":  2,
+    "generated_at":  "2026-08-10T09:28:09.3515871Z",
+    "sample":  "sample:isort",
+    "experiment_status":  "draft",
+    "optimization_status":  "optimization_succeeded",
+    "comparison_status":  "comparison_succeeded",
+    "review_status":  null
+}

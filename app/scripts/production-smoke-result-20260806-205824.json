@@ -1,0 +1,40 @@
+﻿{
+    "api_base":  "https://vinaip002.web.app/api/v1",
+    "project_id":  "743b4f6d-d82c-4a5b-b540-f4e9c7405435",
+    "experiment_id":  "10ecd72c-aece-4b55-aea7-3b87906abe7d",
+    "run_id":  "e4602a26-6cb8-400b-acd3-1072bba444a2",
+    "target":  {
+                   "id":  "b402626e6659641d767f1dda",
+                   "project_id":  "743b4f6d-d82c-4a5b-b540-f4e9c7405435",
+                   "file":  "isort/parse.py",
+                   "class_name":  "",
+                   "name":  "_infer_line_separator",
+                   "qualified_name":  "_infer_line_separator",
+                   "start_line":  31,
+                   "end_line":  36,
+                   "loc":  6,
+                   "statements":  6,
+                   "branches":  2,
+                   "status":  "Valid"
+               },
+    "run":  {
+                "id":  "e4602a26-6cb8-400b-acd3-1072bba444a2",
+                "experiment_id":  "10ecd72c-aece-4b55-aea7-3b87906abe7d",
+                "status":  "failed",
+                "target_count":  1,
+                "coverage_score":  null,
+                "statement_coverage":  null,
+                "branch_coverage":  null,
+                "prompt_digest":  null,
+                "artifact_objects":  {
+
+                                     },
+                "target_metrics":  {
+
+                                   },
+                "error_message":  "Task \u003cTask pending name=\u0027starlette.middleware.base.BaseHTTPMiddleware.__call__.\u003clocals\u003e.call_next.\u003clocals\u003e.coro\u0027 coro=\u003cTaskHandle._run_coro() running at /usr/local/lib/python3.11/site-packages/anyio/_core/_tasks.py:275\u003e cb=[TaskGroup._spawn.\u003clocals\u003e.task_done() at /usr/local/lib/python3.11/site-packages/anyio/_backends/_asyncio.py:836]\u003e got Future \u003cTask pending name=\u0027Task-139\u0027 coro=\u003cInterceptedUnaryUnaryCall._invoke() running at /usr/local/lib/python3.11/site-packages/grpc/aio/_interceptor.py:667\u003e cb=[InterceptedCall._fire_or_add_pending_done_callbacks()]\u003e attached to a different loop",
+                "created_at":  "2026-08-06T13:58:36.470379Z",
+                "started_at":  "2026-08-06T13:58:36.722435Z",
+                "finished_at":  "2026-08-06T13:58:43.610387Z"
+            }
+}

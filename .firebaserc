@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "project-7df9f963-9fe0-4b76-b3d",
+    "prod": "project-7df9f963-9fe0-4b76-b3d"
+  },
+  "targets": {
+    "project-7df9f963-9fe0-4b76-b3d": {
+      "hosting": {
+        "frontend": [
+          "project-7df9f963-9fe0-4b76-b3d"
+        ]
+      }
+    }
+  }
+}

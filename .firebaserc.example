@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "dev": "YOUR_DEV_FIREBASE_PROJECT_ID",
+    "prod": "YOUR_PROD_FIREBASE_PROJECT_ID"
+  }
+}

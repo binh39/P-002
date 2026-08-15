@@ -1,0 +1,11 @@
+target-version = "py311"
+line-length = 120
+exclude = ["frontend"]
+
+[lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]
+
+[format]
+quote-style = "double"
+indent-style = "space"

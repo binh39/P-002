@@ -9,6 +9,16 @@ python-dotenv>=1.0.0
 langchain>=0.3.0
 langchain-openai>=0.3.0
 langgraph>=0.2.0
+aiolimiter>=1.2.1
+litellm[google]>=1.94.0
+dspy==3.2.1
+gepa==0.0.27
+
+# Sample repo evaluation (mlxtend targets) runtime dependencies
+matplotlib==3.11.1
+pandas==3.0.5
+scipy==1.18.0
+scikit-learn==1.9.0
 
 # Database (uncomment as needed)
 # sqlalchemy>=2.0.0
@@ -20,6 +30,12 @@ langgraph>=0.2.0
 
 # Dev tools
 ruff>=0.8.0
+isort==8.0.1
 pytest>=8.0.0
 pytest-asyncio>=0.24.0
+coverage>=7.15.2
+pytest-cov>=7.1.0
+pytest-repeat==0.9.4
+coverup==0.6.3
+google-auth==2.56.2
 httpx>=0.28.0

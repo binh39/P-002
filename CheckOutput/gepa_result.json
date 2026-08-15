@@ -1,0 +1,45 @@
+{
+  "engine": "duyvu1105-cloud-run-gepa",
+  "optimized_program": {
+    "best_index": 0,
+    "best_candidate": {
+      "initial": "You are an expert Python test-driven developer.\nThe code below, extracted from {filename}, does not achieve full coverage:\nwhen tested, {coverage_targets} not execute.\nCreate new pytest test functions that execute all missing lines and branches. Each test must\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\nUse the get_info tool function as necessary. Always return an entire Python test module.\nDo not call pytest.main and do not execute tests at module import time.\nRespond only with Python code enclosed in a python markdown code block.\n\n```python\n{source_excerpt}\n```",
+      "error": "Executing the test yields an error, shown below.\nModify or rewrite the test to correct it. Return the complete Python test module, not a patch.\nPreserve useful assertions from the previous test and use get_info when more source context is needed.\nRespond only with Python code enclosed in a python markdown code block.\n\n{error}"
+    },
+    "validation_scores": [
+      0.02696629213483146
+    ],
+    "total_metric_calls": 38,
+    "candidates": [
+      {
+        "initial": "You are an expert Python test-driven developer.\nThe code below, extracted from {filename}, does not achieve full coverage:\nwhen tested, {coverage_targets} not execute.\nCreate new pytest test functions that execute all missing lines and branches. Each test must\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\nUse the get_info tool function as necessary. Always return an entire Python test module.\nDo not call pytest.main and do not execute tests at module import time.\nRespond only with Python code enclosed in a python markdown code block.\n\n```python\n{source_excerpt}\n```",
+        "error": "Executing the test yields an error, shown below.\nModify or rewrite the test to correct it. Return the complete Python test module, not a patch.\nPreserve useful assertions from the previous test and use get_info when more source context is needed.\nRespond only with Python code enclosed in a python markdown code block.\n\n{error}"
+      }
+    ]
+  },
+  "final_validation": {
+    "mean_score": null,
+    "baseline_mean_score": null,
+    "optimized_mean_score": null,
+    "baseline_aggregate_coverage": null,
+    "optimized_aggregate_coverage": null,
+    "absolute_gain": null,
+    "promoted": false,
+    "final_evaluation_skipped": true,
+    "skip_reason": "GEPA selected the unchanged baseline; there is no new prompt to compare on the final split.",
+    "final_split": "test",
+    "used_locked_holdout": true,
+    "evaluation_replicates": 1,
+    "prompt": "/tmp/promptopt-gepa-job-p7g_13h_/artifacts/prompts/gepa_proposed.json",
+    "production_prompt": "/tmp/promptopt-gepa-job-p7g_13h_/artifacts/prompts/gepa_optimized.json",
+    "baseline_prompt": "/tmp/promptopt-gepa-job-p7g_13h_/prompt.json",
+    "baseline_tests_workspaces": [],
+    "baseline_run_ids": [],
+    "run_ids": [],
+    "tests_workspaces": [],
+    "baseline_results": [],
+    "results": [],
+    "existing_baseline_reference": null
+  },
+  "artifact_prefix": "runner-jobs/gepa/89f12cb4100e416ea5955c5a8a781f52/artifacts"
+}

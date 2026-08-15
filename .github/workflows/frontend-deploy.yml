@@ -1,0 +1,71 @@
+﻿name: Deploy frontend production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/frontend/**"
+      - "firebase.json"
+      - ".github/workflows/frontend-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: frontend-production
+  cancel-in-progress: false
+
+env:
+  FIREBASE_PROJECT_ID: project-7df9f963-9fe0-4b76-b3d
+  FIREBASE_WEB_APP_ID: 1:861862240028:web:25b6f12238bce0664be4d9
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: app/frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: app/frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: app/frontend
+        run: npm ci
+      - name: Verify frontend
+        working-directory: app/frontend
+        run: |
+          npm run format:check
+          npm run lint
+          npm run typecheck
+          npm run test
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: project-7df9f963-9fe0-4b76-b3d
+          workload_identity_provider: projects/861862240028/locations/global/workloadIdentityPools/github-actions/providers/p002-main
+          service_account: github-frontend-deploy@project-7df9f963-9fe0-4b76-b3d.iam.gserviceaccount.com
+      - name: Load Firebase Web App config
+        shell: bash
+        run: |
+          firebase_config="$(npx --yes firebase-tools@15.19.0 apps:sdkconfig WEB "$FIREBASE_WEB_APP_ID" --project "$FIREBASE_PROJECT_ID")"
+          {
+            echo "VITE_FIREBASE_API_KEY=$(jq -r '.apiKey' <<< "$firebase_config")"
+            echo "VITE_FIREBASE_AUTH_DOMAIN=$(jq -r '.authDomain' <<< "$firebase_config")"
+            echo "VITE_FIREBASE_PROJECT_ID=$(jq -r '.projectId' <<< "$firebase_config")"
+            echo "VITE_FIREBASE_STORAGE_BUCKET=$(jq -r '.storageBucket' <<< "$firebase_config")"
+            echo "VITE_FIREBASE_APP_ID=$(jq -r '.appId' <<< "$firebase_config")"
+          } >> "$GITHUB_ENV"
+      - name: Build production frontend
+        working-directory: app/frontend
+        env:
+          VITE_AUTH_MODE: firebase
+          VITE_DATA_MODE: connected
+          VITE_API_BASE_URL: /api/v1
+        run: npm run build
+      - name: Deploy Firebase Hosting
+        run: npx --yes firebase-tools@15.19.0 deploy --only hosting:frontend --project "$FIREBASE_PROJECT_ID" --non-interactive
