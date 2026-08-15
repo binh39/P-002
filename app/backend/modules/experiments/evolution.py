@@ -166,8 +166,11 @@ def parse_evolution_log(entries: Iterable[CloudLogLine]) -> EvolutionResponse:
                 continue
             if objectives := _NEW_PROGRAM_OBJECTIVES.search(body):
                 values = _literal_mapping(objectives.group(1))
-                current.new_program_statement = _number(str(values.get("statement")))
-                current.new_program_branch = _number(str(values.get("branch")))
+                # The explicit coverage keys distinguish current micro coverage
+                # from legacy ``statement``/``branch`` objectives, which were
+                # macro-averaged per-target gains and are not chart-compatible.
+                current.new_program_statement = _number(str(values.get("statement_coverage")))
+                current.new_program_branch = _number(str(values.get("branch_coverage")))
                 continue
             if best_program := _BEST_PROGRAM.search(body):
                 current.best_program_index = int(best_program.group(1))
@@ -227,10 +230,10 @@ def parse_evolution_log(entries: Iterable[CloudLogLine]) -> EvolutionResponse:
         selected_metrics = candidate_metrics.get(last_best_program_index)
         if selected_metrics is not None:
             statement, branch, score = selected_metrics
-            if statement is not None:
-                last_statement = statement
-            if branch is not None:
-                last_branch = branch
+            # Do not carry coverage from a different candidate when parsing
+            # legacy logs that do not contain explicit micro coverage metrics.
+            last_statement = statement
+            last_branch = branch
             if score is not None:
                 last_score = score
         if current.best_score is not None:
@@ -270,7 +273,7 @@ def parse_evolution_log(entries: Iterable[CloudLogLine]) -> EvolutionResponse:
     return EvolutionResponse(
         available=True,
         source="cloud_run_stdout",
-        message="Parsed aggregate-best candidate metrics from Cloud Run stdout; target-level details are not available.",
+        message="Parsed aggregate-best candidate micro-coverage metrics from Cloud Run stdout; target-level details are not available.",
         iterations=iterations,
         metrics=metrics,
     )

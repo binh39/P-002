@@ -599,11 +599,42 @@ class State:
             json.dump(ckpt, f)
 
 
+_PYTHON_BLOCK = re.compile(
+    r"```[ \t]*python[ \t]*\r?\n(.*?)(?:```|\Z)",
+    re.DOTALL | re.IGNORECASE,
+)
+_REFLECTION_BLOCK = re.compile(
+    r"<REFLECTION>(.*?)</REFLECTION>",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def extract_response_parts(response: str) -> tuple[str, str]:
+    """Separate non-executable reflection from exactly one Python test module.
+
+    The reflection is diagnostic context only.  CoverUp never writes or executes
+    it.  A truncated final code fence remains acceptable because the generated
+    Python will still be validated by the normal test runner.
+    """
+    matches = list(_PYTHON_BLOCK.finditer(response))
+    if len(matches) != 1:
+        raise RuntimeError(
+            "Expected exactly one fenced Python test module, "
+            f"found {len(matches)}"
+        )
+    match = matches[0]
+    outside_code = (response[:match.start()] + response[match.end():]).strip()
+    tagged_reflection = _REFLECTION_BLOCK.search(outside_code)
+    reflection = (
+        tagged_reflection.group(1).strip()
+        if tagged_reflection else outside_code
+    )
+    return reflection, match.group(1)
+
+
 def extract_python(response: str) -> str:
-    # This regex accepts a truncated code block... this seems fine since we'll try it anyway
-    m = re.search(r'```python\n(.*?)(?:```|\Z)', response, re.DOTALL)
-    if not m: raise RuntimeError(f"Unable to extract Python code from response {response}")
-    return m.group(1)
+    """Backward-compatible accessor for callers that only need executable code."""
+    return extract_response_parts(response)[1]
 
 
 state: State
@@ -703,11 +734,11 @@ async def improve_coverage(
             })
             continue
 
-        if '```python' in content:
-            last_test = extract_python(content)
-        else:
+        try:
+            model_reflection, last_test = extract_response_parts(content)
+        except RuntimeError as exc:
             state.inc_counter('R')
-            log_write(args, seg, "No Python code block in LLM response; retrying")
+            log_write(args, seg, f"Invalid Python code block response ({exc}); retrying")
             trace_write(args, seg, {
                 "attempt": attempts,
                 "component": component,
@@ -719,11 +750,16 @@ async def improve_coverage(
             messages.append({
                 "role": "user",
                 "content": (
-                    "Return the complete test module inside a ```python code block "
-                    "without prose."
+                    "Return exactly one complete test module inside one ```python "
+                    "code block. If you include a concise reflection summary, put it "
+                    "only inside <REFLECTION>...</REFLECTION>, outside the code block."
                 ),
             })
             continue
+
+        response_context = (
+            {"model_reflection": model_reflection} if model_reflection else {}
+        )
 
         if missing := missing_imports(find_imports(last_test)):
             log_write(args, seg, f"Missing modules {' '.join(missing)}")
@@ -734,6 +770,7 @@ async def improve_coverage(
                     "prompt_input": prompt_input,
                     "outcome": "missing_imports",
                     "generated_test": last_test,
+                    **response_context,
                     "missing_imports": missing,
                     "get_info_calls": get_info_calls,
                 })
@@ -761,6 +798,7 @@ async def improve_coverage(
                 "prompt_input": prompt_input,
                 "outcome": "coverage_timeout",
                 "generated_test": last_test,
+                **response_context,
                 "get_info_calls": get_info_calls,
             })
             # FIXME is the built-in timeout reasonable? Do we prompt for a faster test?
@@ -778,6 +816,7 @@ async def improve_coverage(
                     "prompt_input": prompt_input,
                     "outcome": "test_error_unrepairable",
                     "generated_test": last_test,
+                    **response_context,
                     "execution_error": error,
                     "get_info_calls": get_info_calls,
                 })
@@ -789,6 +828,7 @@ async def improve_coverage(
                 "prompt_input": prompt_input,
                 "outcome": "test_error",
                 "generated_test": last_test,
+                **response_context,
                 "execution_error": error,
                 "next_component": "error",
                 "get_info_calls": get_info_calls,
@@ -821,6 +861,7 @@ async def improve_coverage(
                 "prompt_input": prompt_input,
                 "outcome": "no_coverage_gain_unrepairable",
                 "generated_test": last_test,
+                **response_context,
                 "gained_lines": [],
                 "gained_branches": [],
                 "remaining_lines": sorted(seg.missing_lines),
@@ -844,6 +885,7 @@ async def improve_coverage(
             "prompt_input": prompt_input,
             "outcome": "coverage_gain_saved",
             "generated_test": last_test,
+            **response_context,
             "gained_lines": sorted(gained_lines),
             "gained_branches": sorted(gained_branches),
             "remaining_lines": sorted(seg.missing_lines - gained_lines),

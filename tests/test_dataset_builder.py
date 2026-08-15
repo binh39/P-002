@@ -190,6 +190,51 @@ def test_build_dataset_stratifies_every_split_by_project(tmp_path: Path):
     assert {row["symbol"] for row in targets} == {"f1", "f2", "f3"}
 
 
+def test_build_dataset_can_split_the_fixed_global_top_pool(tmp_path: Path):
+    _write_file(
+        tmp_path,
+        "alpha/pkg/mod.py",
+        "\n".join(
+            f"def a{index}(x):\n    if x:\n        return {index}\n"
+            for index in range(1, 7)
+        ),
+    )
+    _write_file(
+        tmp_path,
+        "beta/pkg/mod.py",
+        "\n".join(
+            f"def b{index}(x):\n    if x and x > {index}:\n        return {index}\n"
+            for index in range(1, 7)
+        ),
+    )
+
+    targets, ranked = build_dataset(
+        [
+            ("alpha", tmp_path / "alpha" / "pkg"),
+            ("beta", tmp_path / "beta" / "pkg"),
+        ],
+        train_limit=2,
+        validation_limit=2,
+        test_limit=2,
+        global_top=True,
+    )
+
+    selected = {
+        (row["project"], row["source_file"], row["symbol"])
+        for row in targets
+    }
+    expected = {
+        (info.project, info.source_file, info.symbol) for info in ranked[:6]
+    }
+    assert selected == expected
+    assert {split: sum(row["split"] == split for row in targets)
+            for split in ("train", "validation", "test")} == {
+        "train": 2,
+        "validation": 2,
+        "test": 2,
+    }
+
+
 def test_project_stratification_validator_rejects_skewed_splits():
     def targets(split: str, alpha: int, beta: int) -> list[SymbolTarget]:
         return [

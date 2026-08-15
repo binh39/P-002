@@ -237,8 +237,8 @@ function EvolutionPanel({ evolution }: { evolution: OptimizationEvolution }) {
             <div className="evolution-chart-panel">
               <div className="evolution-panel-label">Best validation metrics</div>
               <p className="evolution-chart-description">
-                Score, statement and branch belong to the same aggregate-best candidate, not
-                separate Pareto-front maxima.
+                Statement and branch are micro-averaged over executable units for the same
+                aggregate-best candidate as score, not separate Pareto-front maxima.
               </p>
               <div
                 className="evolution-chart"

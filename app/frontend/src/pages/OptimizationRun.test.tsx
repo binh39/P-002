@@ -138,7 +138,9 @@ describe("optimization run", () => {
     expect(screen.getByText("Parent minibatch sum")).toBeInTheDocument();
     expect(screen.getByText("Best validation candidate")).toBeInTheDocument();
     expect(
-      screen.getByText(/same aggregate-best candidate, not separate Pareto-front maxima/i),
+      screen.getByText(
+        /micro-averaged over executable units for the same aggregate-best candidate/i,
+      ),
     ).toBeInTheDocument();
   });
 

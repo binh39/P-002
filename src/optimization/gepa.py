@@ -35,16 +35,25 @@ COMPONENT_PLACEHOLDERS = {
     "error": ERROR_PLACEHOLDERS,
 }
 COMPONENT_ROLES = {
-    "initial": "Generate the first complete pytest module from source and missing coverage.",
-    "error": "Repair a complete pytest module after an execution or collection error.",
+    "initial": (
+        "Generate the first complete pytest module from source and missing coverage "
+        "using an explicit Reflexion-style observe-plan-act-check procedure."
+    ),
+    "error": (
+        "Reflect on execution or collection feedback, identify the concrete failed "
+        "assumption, and repair the complete pytest module without losing useful behavior."
+    ),
 }
+MIN_COMPONENT_CHAR_BUDGET = {"initial": 2_400, "error": 1_600}
 UPDATE_PROMPT_COMPONENT_TOOL = {
     "type": "function",
     "function": {
         "name": "update_prompt_component",
         "description": (
             "Select initial, error, or all and return complete replacement "
-            "templates in the same call. The all selection is always allowed."
+            "templates in the same call. Replacements must give a less-capable "
+            "test model a detailed Reflexion procedure and an unambiguous reflection/code "
+            "output contract. The all selection is always allowed."
         ),
         "parameters": {
             "type": "object",
@@ -504,6 +513,10 @@ def _compact_attempt(attempt: Mapping[str, Any]) -> dict[str, Any]:
         )
     if "generated_test" in attempt:
         row["generated_test"] = _clip_text(attempt["generated_test"], 10_000)
+    if "model_reflection" in attempt:
+        row["model_reflection"] = _clip_text(
+            attempt["model_reflection"], 3_000
+        )
     if "execution_error" in attempt:
         row["execution_error"] = _clip_text(
             attempt["execution_error"], 6_000, keep_tail=True
@@ -571,6 +584,9 @@ def _build_execution_episodes(
                     ),
                     "repaired_test": _clip_text(
                         attempt.get("generated_test", ""), 10_000
+                    ),
+                    "model_reflection": _clip_text(
+                        attempt.get("model_reflection", ""), 3_000
                     ),
                     "outcome": attempt.get("outcome", "unknown"),
                     "get_info_calls": _compact_attempt(attempt).get(
@@ -1076,7 +1092,7 @@ class CoverUpPromptAdapter:
         self.evaluation_replicates = evaluation_replicates
         self.reference_units: dict[tuple[str, str, str, str], tuple[int, int]] = {}
         self.max_component_chars = {
-            name: max(600, len(text) * 3)
+            name: max(MIN_COMPONENT_CHAR_BUDGET[name], len(text) * 3)
             for name, text in baseline.as_candidate().items()
         }
         self.candidate_lineage: dict[str, dict[str, Any]] = {}
@@ -1092,12 +1108,13 @@ class CoverUpPromptAdapter:
                     int(coverage["num_statements"]), int(coverage["num_branches"])
                 )
 
-    def _weighted_score(
+    def _micro_coverage_components(
         self,
         result: dict,
         evaluated_results: list[dict],
         reference_targets: list[SymbolTarget],
-    ) -> float:
+    ) -> tuple[float, float, bool]:
+        """Return per-target contributions whose mean is split micro coverage."""
         self._remember_reference_units(evaluated_results)
         reference_identities = [
             _target_identity(target) for target in reference_targets
@@ -1123,20 +1140,31 @@ class CoverUpPromptAdapter:
         covered_statements = int(coverage["covered_statements"]) if valid else 0
         covered_branches = int(coverage["covered_branches"]) if valid else 0
         count = len(identities)
-        if not total_branches:
-            return (
-                count * covered_statements / total_statements
-                if total_statements else 1.0
-            )
         statement = (
-            count * STATEMENT_SCORE_WEIGHT * covered_statements / total_statements
-            if total_statements else STATEMENT_SCORE_WEIGHT
+            count * covered_statements / total_statements
+            if total_statements else 1.0
         )
         branch = (
-            count * BRANCH_SCORE_WEIGHT * covered_branches / total_branches
-            if total_branches else 0.0
+            count * covered_branches / total_branches
+            if total_branches else 1.0
         )
-        return statement + branch
+        return statement, branch, bool(total_branches)
+
+    def _weighted_score(
+        self,
+        result: dict,
+        evaluated_results: list[dict],
+        reference_targets: list[SymbolTarget],
+    ) -> float:
+        statement, branch, has_branches = self._micro_coverage_components(
+            result, evaluated_results, reference_targets
+        )
+        if not has_branches:
+            return statement
+        return (
+            STATEMENT_SCORE_WEIGHT * statement
+            + BRANCH_SCORE_WEIGHT * branch
+        )
 
     def _evaluate_replicates(
         self,
@@ -1257,15 +1285,21 @@ class CoverUpPromptAdapter:
         for target in batch:
             identity = _target_identity(target)
             samples = [lookup[identity] for lookup in lookups]
-            weighted_scores = [
-                self._weighted_score(
+            micro_coverage_samples = [
+                self._micro_coverage_components(
                     sample, record["results"], reference_targets
                 )
                 for sample, record in zip(samples, repeated_batches, strict=True)
             ]
+            weighted_scores = [
+                (
+                    STATEMENT_SCORE_WEIGHT * statement
+                    + BRANCH_SCORE_WEIGHT * branch
+                    if has_branches else statement
+                )
+                for statement, branch, has_branches in micro_coverage_samples
+            ]
             raw_scores = [float(sample["score"]) for sample in samples]
-            coverage_samples = [sample.get("coverage") for sample in samples]
-            valid_coverage = [coverage for coverage in coverage_samples if coverage]
             score = _mean(weighted_scores)
             raw_score = _mean(raw_scores)
             output = {
@@ -1277,13 +1311,14 @@ class CoverUpPromptAdapter:
             outputs.append(output)
             scores.append(score)
             objectives.append({
-                "statement": _mean([
-                    float(coverage.get("statement_gain", 0.0))
-                    for coverage in valid_coverage
+                # GEPA macro-averages objective values over validation targets.
+                # These scaled contributions therefore aggregate back to the
+                # same micro coverage components used by the weighted score.
+                "statement_coverage": _mean([
+                    statement for statement, _, _ in micro_coverage_samples
                 ]),
-                "branch": _mean([
-                    float(coverage.get("branch_gain", 0.0))
-                    for coverage in valid_coverage
+                "branch_coverage": _mean([
+                    branch for _, branch, _ in micro_coverage_samples
                 ]),
             })
             if trajectories is not None:
@@ -1846,7 +1881,17 @@ Optimizer-authored test experiments:
 
 In one decision, choose `initial`, `error`, or `all`, then call `update_prompt_component` exactly once with every complete revised template selected. `all` is always allowed, even when direct evidence exists for only one stage. When selecting `all`, provide both `initial` and `error` replacements and change both; the update is rejected atomically otherwise. For a single component, provide only that component's replacement.
 
-The successful diagnostic test is teacher evidence, not part of the candidate and not part of GEPA's score. Compare it with the failed generated test and encode only the smallest reusable causal lesson that made the experiment pass and cover more of the target. The replacement must operationalize that learned behavior; do not add generic advice such as "analyze carefully", "be robust", "handle edge cases", or "use appropriate mocks" without a concrete trigger and action.
+The successful diagnostic test is teacher evidence, not part of the candidate and not part of GEPA's score. Compare it with the failed generated test, identify the reusable causal lesson that made the experiment pass and cover more of the target, and turn that lesson into a detailed operational procedure suitable for a less-capable test-generation model. Do not compress away necessary intermediate checks merely to make the prompt short, and do not pad it with unrelated advice.
+
+Use one strategy consistently: Reflexion. The revised templates must explicitly tell the test model how to:
+1. OBSERVE the target source, requested missing lines/branches, dependencies, and (for `error`) the latest execution feedback.
+2. REFLECT by naming the concrete branch preconditions or failed assumption and deciding what evidence is still missing; call `get_info` for that evidence rather than guessing APIs.
+3. PLAN exact inputs, state setup, mocks/monkeypatch boundaries, invocation, and meaningful postconditions for each intended path.
+4. ACT by writing a complete deterministic pytest module, then CHECK imports, reachability, assertions, cleanup, and preservation of already-valid behavior before answering.
+
+Every instruction learned from evidence must have a concrete trigger, action, and verification criterion. Avoid unsupported generic advice such as "analyze carefully", "be robust", "handle edge cases", or "use appropriate mocks". Spell out the decision procedure; assume the downstream model will not infer omitted steps.
+
+The template must also define an output protocol that CoverUp can parse safely: an optional concise reflection summary goes only inside `<REFLECTION>...</REFLECTION>` and contains no Python test code; the complete executable test module goes in exactly one fenced `python` block. No Python outside that block and no second `python` block. This reflection is a concise plan/root-cause summary, not a request to reveal private token-by-token chain-of-thought. The `error` replacement must apply the same protocol while explicitly comparing the failing behavior with the proposed repair.
 
 Preserve useful instructions and required literal placeholders. Do not copy target-specific file names, symbols, line numbers, repository facts, assertions, constructor arguments, or literal values from the diagnostic test. Keep every replacement within its component's maximum length. Cite only successful experiment ids in successful_experiment_ids and explain the observed failed-to-successful behavior change in diagnosis and evidence. Do not answer with JSON or prose outside the function call.
 """
@@ -1854,9 +1899,10 @@ Preserve useful instructions and required literal placeholders. Do not copy targ
             {
                 "role": "system",
                 "content": (
-                        "You optimize reusable CoverUp prompt components. "
-                        "Distill only execution-proven behavior from successful "
-                        "test experiments, then call update_prompt_component once."
+                        "You optimize reusable CoverUp prompt components for a less-capable "
+                        "test model. Distill execution-proven behavior into a detailed "
+                        "Reflexion procedure with a strict reflection-versus-Python output "
+                        "contract, then call update_prompt_component once."
                 ),
             },
             {"role": "user", "content": prompt},

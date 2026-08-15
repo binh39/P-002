@@ -1631,6 +1631,70 @@ def test_direct_gepa_adapter_evaluates_only_requested_minibatch(tmp_path):
     assert [output["target"]["symbol"] for output in evaluated.outputs] == ["second"]
 
 
+def test_direct_gepa_adapter_objectives_aggregate_to_micro_coverage(tmp_path):
+    targets = [
+        SymbolTarget("project", "pkg/a.py", "small", "validation"),
+        SymbolTarget("project", "pkg/b.py", "large", "validation"),
+    ]
+    adapter = CoverUpPromptAdapter(
+        runner=SimpleNamespace(),
+        candidate_dir=tmp_path / "candidates",
+        targets_by_split={"validation": targets},
+        baseline=baseline_bundle(),
+        reflection_lm=lambda prompt: ["<template>unchanged</template>"],
+    )
+
+    def fake_evaluate_replicates(requested, bundle, *, split):
+        assert requested == targets
+        return [{
+            "results": [
+                {
+                    "target": targets[0].__dict__,
+                    "score": 1.0,
+                    "coverage": {
+                        "valid": True,
+                        "covered_statements": 1,
+                        "num_statements": 1,
+                        "covered_branches": 1,
+                        "num_branches": 1,
+                        "statement_gain": 1.0,
+                        "branch_gain": 1.0,
+                    },
+                },
+                {
+                    "target": targets[1].__dict__,
+                    "score": 0.0,
+                    "coverage": {
+                        "valid": True,
+                        "covered_statements": 0,
+                        "num_statements": 99,
+                        "covered_branches": 0,
+                        "num_branches": 99,
+                        "statement_gain": 0.0,
+                        "branch_gain": 0.0,
+                    },
+                },
+            ],
+        }]
+
+    adapter._evaluate_replicates = fake_evaluate_replicates
+    evaluated = adapter.evaluate(
+        targets, adapter.baseline.as_candidate(), capture_traces=False
+    )
+
+    statement = sum(
+        objective["statement_coverage"] for objective in evaluated.objective_scores
+    ) / len(evaluated.objective_scores)
+    branch = sum(
+        objective["branch_coverage"] for objective in evaluated.objective_scores
+    ) / len(evaluated.objective_scores)
+    score = sum(evaluated.scores) / len(evaluated.scores)
+
+    assert statement == pytest.approx(0.01)
+    assert branch == pytest.approx(0.01)
+    assert score == pytest.approx(0.3 * statement + 0.7 * branch)
+
+
 def test_reflection_compares_candidate_with_parent_and_balances_exemplars(tmp_path):
     project = tmp_path / "sample_repo"
     package = project / "pkg"
@@ -2176,7 +2240,15 @@ def test_prompt_mutation_selects_and_updates_component_in_one_call(tmp_path):
 
     assert proposals["initial"] == improved
     assert len(calls) == 2
-    assert "`all` is always allowed" in calls[1]["messages"][-1]["content"]
+    update_prompt = calls[1]["messages"][-1]["content"]
+    assert "`all` is always allowed" in update_prompt
+    assert "Use one strategy consistently: Reflexion" in update_prompt
+    assert "suitable for a less-capable test-generation model" in update_prompt
+    assert "<REFLECTION>...</REFLECTION>" in update_prompt
+    assert "exactly one fenced `python` block" in update_prompt
+    assert "trigger, action, and verification criterion" in update_prompt
+    assert adapter.max_component_chars["initial"] >= 2_400
+    assert adapter.max_component_chars["error"] >= 1_600
     assert calls[0]["tools"][0]["type"] == "function"
 
 
@@ -2726,6 +2798,32 @@ def test_baseline_preflight_rejects_missing_coverage_denominators():
         }])
 
 
+def test_coverup_separates_reflection_from_executable_python(monkeypatch):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    coverup_module = importlib.import_module("coverup.coverup")
+    response = """<REFLECTION>
+Exercise the false branch with a sentinel and verify the returned state.
+</REFLECTION>
+```python
+def test_false_branch():
+    assert True
+```"""
+
+    reflection, code = coverup_module.extract_response_parts(response)
+
+    assert reflection == (
+        "Exercise the false branch with a sentinel and verify the returned state."
+    )
+    assert code == "def test_false_branch():\n    assert True\n"
+    assert "REFLECTION" not in coverup_module.extract_python(response)
+    with pytest.raises(RuntimeError, match="exactly one"):
+        coverup_module.extract_response_parts(
+            "```python\nassert True\n```\n```python\nassert False\n```"
+        )
+
+
 def test_coverup_retries_null_assistant_content_without_crashing(tmp_path, monkeypatch):
     import importlib
 
@@ -2828,7 +2926,10 @@ def test_coverup_trace_preserves_component_level_attempt_history(tmp_path, monke
                     "finish_reason": "stop",
                     "message": {
                         "role": "assistant",
-                        "content": f"```python\n{code}\n```",
+                        "content": (
+                            f"<REFLECTION>repair plan {self.calls}</REFLECTION>\n"
+                            f"```python\n{code}\n```"
+                        ),
                     },
                 }]
             }
@@ -2879,6 +2980,9 @@ def test_coverup_trace_preserves_component_level_attempt_history(tmp_path, monke
     ]
     assert traces[0]["execution_error"] == "AssertionError: wrong result"
     assert traces[1]["generated_test"].strip() == "assert True"
+    assert traces[0]["model_reflection"] == "repair plan 1"
+    assert traces[1]["model_reflection"] == "repair plan 2"
+    assert "REFLECTION" not in traces[1]["generated_test"]
     assert traces[0]["get_info_calls"] == [{
         "name": "get_info",
         "arguments": {"name": "dependency_1"},
