@@ -78,6 +78,11 @@ def parse_args(args=None):
                     help='project root searched only after a test failure')
     ap.add_argument('--failure-context-max-chars', type=int, default=4000,
                     help='maximum failure-triggered context characters per repair prompt')
+    ap.add_argument('--salvage-failing-tests', default=False,
+                    action=argparse.BooleanOptionalAction,
+                    help='after the last model attempt, retain verified assertion-bearing prefixes')
+    ap.add_argument('--salvage-max-prunes', type=int, default=8,
+                    help='maximum failing test suffixes removed during final salvage verification')
 
     g = ap.add_mutually_exclusive_group(required=False)
     g.add_argument('--package-dir', type=Path_dir,
@@ -781,30 +786,66 @@ async def improve_coverage(
         except subprocess.CalledProcessError as e:
             state.inc_counter('F')
             error = clean_error(str(e.stdout, 'UTF-8', errors='ignore'))
-            if not (prompts := prompter.error_prompt(seg, error)):
-                log_write(args, seg, "Test failed:\n\n" + error)
+            salvaged = None
+            salvage_pruned_failures = 0
+            if (
+                getattr(args, "salvage_failing_tests", False)
+                and attempts >= args.max_attempts
+            ):
                 trace_write(args, seg, {
                     "attempt": attempts,
                     "component": component,
                     "prompt_input": prompt_input,
-                    "outcome": "test_error_unrepairable",
+                    "outcome": "test_error",
                     "generated_test": last_test,
                     "execution_error": error,
+                    "next_component": "salvage",
                 })
-                break
+                salvaged = await salvage_test_coverage(
+                    test=last_test,
+                    error=error,
+                    tests_dir=args.tests_dir,
+                    pytest_args=pytest_args,
+                    isolate_tests=args.isolate_tests,
+                    branch_coverage=args.branch_coverage,
+                    max_prunes=getattr(args, "salvage_max_prunes", 8),
+                    log_write=lambda msg: log_write(args, seg, msg),
+                )
+                if salvaged is not None:
+                    last_test = salvaged.test
+                    coverage = salvaged.coverage
+                    component = "salvage"
+                    salvage_pruned_failures = salvaged.pruned_failures
 
-            trace_write(args, seg, {
-                "attempt": attempts,
-                "component": component,
-                "prompt_input": prompt_input,
-                "outcome": "test_error",
-                "generated_test": last_test,
-                "execution_error": error,
-                "next_component": "error",
-            })
-            messages.extend(prompts)
-            component = "error"
-            continue
+            if salvaged is None:
+                if (
+                    getattr(args, "salvage_failing_tests", False)
+                    and attempts >= args.max_attempts
+                ):
+                    continue
+                if not (prompts := prompter.error_prompt(seg, error)):
+                    log_write(args, seg, "Test failed:\n\n" + error)
+                    trace_write(args, seg, {
+                        "attempt": attempts,
+                        "component": component,
+                        "prompt_input": prompt_input,
+                        "outcome": "test_error_unrepairable",
+                        "generated_test": last_test,
+                        "execution_error": error,
+                    })
+                    break
+                trace_write(args, seg, {
+                    "attempt": attempts,
+                    "component": component,
+                    "prompt_input": prompt_input,
+                    "outcome": "test_error",
+                    "generated_test": last_test,
+                    "execution_error": error,
+                    "next_component": "error",
+                })
+                messages.extend(prompts)
+                component = "error"
+                continue
 
         result = coverage['files'].get(seg.filename, None)
         new_lines = set(result['executed_lines']) if result else set()
@@ -857,6 +898,8 @@ async def improve_coverage(
             "remaining_lines": sorted(seg.missing_lines - gained_lines),
             "remaining_branches": sorted(seg.missing_branches - gained_branches),
             "saved_test": str(new_test),
+            **({"salvaged_failures": salvage_pruned_failures}
+               if component == "salvage" else {}),
         })
 
         log_write(args, seg, f"Saved as {new_test}\n")

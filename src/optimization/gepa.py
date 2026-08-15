@@ -301,6 +301,7 @@ def _evaluation_digest(
             "max_concurrency", "rate_limit", "target_context",
             "target_context_max_chars", "repository_test_context",
             "failure_context", "failure_context_max_chars",
+            "salvage_failing_tests", "salvage_max_prunes",
         )
     }
     source_hashes = {}
@@ -352,7 +353,8 @@ def _evaluation_digest(
         # Schema 17 forwards target context explicitly end-to-end and separates
         # exact-contract context from repository test/fixture retrieval. Schema
         # 18 isolates bounded failure-triggered constructor/callee/usage context.
-        "cache_schema": 18,
+        # Schema 19 isolates verified failing-test prefix salvage.
+        "cache_schema": 19,
         "config": config_values,
         "targets": [_target_identity(target) for target in targets],
         "sources": source_hashes,

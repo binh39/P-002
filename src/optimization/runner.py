@@ -395,6 +395,7 @@ class CoverUpExperimentRunner:
                 "--trace-file", str(target_trace),
                 "--target-context-max-chars", str(self.config.target_context_max_chars),
                 "--failure-context-max-chars", str(self.config.failure_context_max_chars),
+                "--salvage-max-prunes", str(self.config.salvage_max_prunes),
                 "--no-checkpoint",
                 # Target-specific coverage below is authoritative. Avoid CoverUp's
                 # redundant final suite pass, especially expensive with repeats.
@@ -416,6 +417,11 @@ class CoverUpExperimentRunner:
                 ])
             else:
                 command.append("--no-failure-context")
+            command.append(
+                "--salvage-failing-tests"
+                if self.config.salvage_failing_tests
+                else "--no-salvage-failing-tests"
+            )
             if self.config.repeat_tests:
                 command.extend(["--repeat-tests", str(self.config.repeat_tests)])
             else:

@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "experiment": "E47-verified-failure-prefix-salvage-SFS-r1",
+  "status": "frozen_before_model_calls",
+  "purpose": "Test whether verified prefix salvage converts a large all-or-nothing generated test module into valid partial coverage without spending additional model attempts.",
+  "implementation_parent_commit": "6ce88de01cd73b80870cde37f20d7f978a7055d1",
+  "source_dataset": "binh/e70_failure_stratified_32.jsonl",
+  "source_dataset_sha256": "8876d578f2b65e64ca113fa3e27586fce2be6956ff1e2ff238e4930ffda94fdd",
+  "probe_dataset": "binh/e70_e42_e44_validation_sfs_probe.jsonl",
+  "probe_dataset_sha256": "11667a74f4879d6bb0154706fb14838711a1b50ea6aeae084f4fdc37677a89eb",
+  "allowed_split": "validation",
+  "forbidden_split": "test",
+  "holdout_sha256": "fa029ed3f1bb2203b28a712d2d67f0c78a03d25d1aaebf2316473fd0879a815c",
+  "target": {
+    "project": "mlxtend",
+    "source_file": "mlxtend/feature_selection/sequential_feature_selector.py",
+    "symbol": "SequentialFeatureSelector.fit"
+  },
+  "prompt": "binh/e67_prompts/d8123dc403839c22.json",
+  "prompt_digest": "d8123dc403839c22",
+  "coverup_model": "vertex_ai/gemini-3.5-flash-lite",
+  "evaluation_replicates": 1,
+  "max_attempts": 3,
+  "repeat_tests": 2,
+  "max_concurrency": 1,
+  "target_context": true,
+  "target_context_max_chars": 6000,
+  "repository_test_context": false,
+  "failure_context": true,
+  "failure_context_max_chars": 4000,
+  "salvage_failing_tests": true,
+  "salvage_max_prunes": 8,
+  "salvage_invariants": [
+    "activate only after the final model attempt fails",
+    "retain a failing-function prefix only when it already contains an assertion or pytest raises/warns contract",
+    "remove an unverified failing function instead of retaining setup-only execution",
+    "rerun the complete salvaged module with repeat-tests before saving",
+    "score only the verified saved module"
+  ],
+  "no_model_replay_preflight": {
+    "source_evaluation_digest": "a17999b4d56d",
+    "salvaged": true,
+    "pruned_failures": 1,
+    "covered_statements": 18,
+    "num_statements": 143,
+    "covered_branches": 6,
+    "num_branches": 90,
+    "target_score": 0.08442890442890442
+  },
+  "references": {
+    "e70_baseline_target_score": 0.0,
+    "e42_e46_r1_target_score": 0.0,
+    "e42_e46_r2_target_score": 0.0,
+    "frozen_validation_score_without_salvage": 0.08036862939139039
+  },
+  "decision_rule": "Require a saved test with component=salvage, at least one pruned failure, valid repeated execution, and target score above zero. Report projected validation aggregate separately; do not promote or open E70 test from this one-target probe.",
+  "artifacts_dir": "binh/phase1_runs/e47_test_salvage_sfs_r1"
+}

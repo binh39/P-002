@@ -497,6 +497,32 @@ def test_evaluation_digest_changes_when_failure_context_is_enabled(tmp_path):
     assert before != after
 
 
+def test_evaluation_digest_changes_when_test_salvage_is_enabled(tmp_path):
+    package_dir = tmp_path / "repo" / "pkg"
+    tests_dir = tmp_path / "repo" / "tests"
+    package_dir.mkdir(parents=True)
+    tests_dir.mkdir()
+    (package_dir / "module.py").write_text(
+        "def target():\n    return 1\n",
+        encoding="utf-8",
+    )
+    runner = CoverUpExperimentRunner(ExperimentConfig(
+        project_root=tmp_path,
+        package_dir=package_dir,
+        tests_dir=tests_dir,
+        artifacts_dir=tmp_path / "artifacts",
+        coverup_model="fake-model",
+    ))
+    targets = [SymbolTarget("project", "pkg/module.py", "target", "train")]
+
+    before = _evaluation_digest(runner, targets)
+    runner.config.salvage_failing_tests = True
+    runner.config.salvage_max_prunes = 5
+    after = _evaluation_digest(runner, targets)
+
+    assert before != after
+
+
 def coverage(*, executed_lines=(), missing_lines=(), executed_branches=(), missing_branches=()):
     return SymbolCoverage(
         source_file="pkg/module.py",
@@ -726,6 +752,8 @@ def test_optimization_cli_defaults_to_five_test_repetitions():
     assert args.repository_test_context is False
     assert args.failure_context is False
     assert args.failure_context_max_chars == 4_000
+    assert args.salvage_failing_tests is False
+    assert args.salvage_max_prunes == 8
 
 
 def test_optimization_cli_can_disable_and_bound_target_context():
@@ -760,6 +788,22 @@ def test_optimization_cli_can_enable_and_bound_failure_context():
 
     assert args.failure_context is True
     assert args.failure_context_max_chars == 3_500
+
+
+def test_optimization_cli_can_enable_and_bound_test_salvage():
+    args = parser().parse_args([
+        "--salvage-failing-tests",
+        "--salvage-max-prunes",
+        "5",
+        "evaluate",
+        "--dataset",
+        "dataset.jsonl",
+        "--prompt",
+        "prompt.json",
+    ])
+
+    assert args.salvage_failing_tests is True
+    assert args.salvage_max_prunes == 5
 
 
 def test_optimization_cli_exposes_gepa_search_controls():
@@ -1476,6 +1520,8 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
         repository_test_context=True,
         failure_context=True,
         failure_context_max_chars=3_500,
+        salvage_failing_tests=True,
+        salvage_max_prunes=5,
     ))
     targets = [
         SymbolTarget("project", "pkg/a.py", "first", "train"),
@@ -1533,6 +1579,11 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
     assert all(
         Path(command[command.index("--failure-context-root") + 1])
         == package_dir.parent.resolve()
+        for command in commands
+    )
+    assert all("--salvage-failing-tests" in command for command in commands)
+    assert all(
+        command[command.index("--salvage-max-prunes") + 1] == "5"
         for command in commands
     )
     assert all("--no-final-coverage" in command for command in commands)
@@ -3696,6 +3747,200 @@ def test_coverup_retries_null_assistant_content_without_crashing(tmp_path, monke
     assert chatter.calls == 1
     assert counters == ["R"]
     assert "Empty assistant response" in (tmp_path / "coverup.log").read_text()
+
+
+def test_test_salvage_truncates_only_after_asserted_prefix(tmp_path, monkeypatch):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    truncate = importlib.import_module(
+        "coverup.testrunner"
+    ).truncate_failing_test_module
+    generated = """import pytest
+
+def test_many_paths():
+    with pytest.raises(ValueError):
+        raise ValueError("expected")
+    actual = 3
+    assert actual == 4
+    assert False
+
+def test_independent():
+    assert 2 + 2 == 4
+"""
+    failure_line = next(
+        index
+        for index, line in enumerate(generated.splitlines(), start=1)
+        if "assert actual == 4" in line
+    )
+
+    salvaged = truncate(
+        generated,
+        f"tmp_test_generated.py:{failure_line}: AssertionError",
+    )
+
+    assert salvaged is not None
+    assert "pytest.raises(ValueError)" in salvaged
+    assert "actual == 4" not in salvaged
+    assert "assert False" not in salvaged
+    assert "test_independent" in salvaged
+
+
+def test_test_salvage_removes_function_without_prior_assertion(tmp_path, monkeypatch):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    truncate = importlib.import_module(
+        "coverup.testrunner"
+    ).truncate_failing_test_module
+    generated = """def test_unverified_prefix():
+    value = expensive_setup()
+    assert value
+
+def test_independent():
+    assert True
+"""
+    failure_line = next(
+        index
+        for index, line in enumerate(generated.splitlines(), start=1)
+        if "expensive_setup" in line
+    )
+
+    salvaged = truncate(
+        generated,
+        f"tmp_test_generated.py:{failure_line}: RuntimeError",
+    )
+
+    assert salvaged is not None
+    assert "test_unverified_prefix" not in salvaged
+    assert "test_independent" in salvaged
+
+
+def test_coverup_salvages_verified_prefix_after_last_attempt(tmp_path, monkeypatch):
+    import importlib
+    import subprocess
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    coverup_module = importlib.import_module("coverup.coverup")
+    testrunner_module = importlib.import_module("coverup.testrunner")
+    monkeypatch.setattr(
+        coverup_module,
+        "state",
+        SimpleNamespace(inc_counter=lambda key: None),
+        raising=False,
+    )
+    monkeypatch.setattr(coverup_module, "test_seq", 1)
+    coverage_calls = []
+    generated = """import pytest
+
+def test_target_paths():
+    with pytest.raises(ValueError):
+        raise ValueError("expected")
+    assert missing_name
+    assert False
+"""
+
+    async def fake_measure_test_coverage(**kwargs):
+        coverage_calls.append(kwargs["test"])
+        if len(coverage_calls) <= 3:
+            failure_line = next(
+                index
+                for index, line in enumerate(kwargs["test"].splitlines(), start=1)
+                if "assert missing_name" in line
+            )
+            raise subprocess.CalledProcessError(
+                1,
+                ["pytest"],
+                output=(
+                    f"tmp_test_generated.py:{failure_line}: "
+                    "NameError: missing_name"
+                ).encode(),
+            )
+        assert "missing_name" not in kwargs["test"]
+        return {
+            "files": {
+                "pkg/a.py": {
+                    "executed_lines": [2],
+                    "executed_branches": [],
+                }
+            }
+        }
+
+    monkeypatch.setattr(
+        coverup_module, "measure_test_coverage", fake_measure_test_coverage
+    )
+    monkeypatch.setattr(
+        testrunner_module, "measure_test_coverage", fake_measure_test_coverage
+    )
+
+    class Chatter:
+        calls = 0
+
+        async def chat(self, messages, *, ctx=None):
+            self.calls += 1
+            return {
+                "choices": [{
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": f"```python\n{generated}\n```",
+                    },
+                }]
+            }
+
+    class Prompter:
+        def initial_prompt(self, seg):
+            return [{"role": "user", "content": "initial"}]
+
+        def error_prompt(self, seg, error):
+            return [{"role": "user", "content": f"repair: {error}"}]
+
+    segment = SimpleNamespace(
+        filename="pkg/a.py",
+        qualname="first",
+        name="first",
+        missing_lines={2},
+        missing_branches=set(),
+        identify=lambda: "pkg/a.py:1-3",
+    )
+    args = SimpleNamespace(
+        dry_run=False,
+        max_attempts=3,
+        log_file=str(tmp_path / "coverup.log"),
+        trace_file=tmp_path / "attempt_trace.jsonl",
+        install_missing_modules=False,
+        pytest_args="",
+        repeat_tests=2,
+        tests_dir=tmp_path,
+        prefix="trace",
+        isolate_tests=True,
+        branch_coverage=True,
+        show_details=False,
+        save_coverage_to=None,
+        salvage_failing_tests=True,
+        salvage_max_prunes=4,
+    )
+    chatter = Chatter()
+
+    result = asyncio.run(
+        coverup_module.improve_coverage(args, chatter, Prompter(), segment)
+    )
+    traces = [
+        json.loads(line)
+        for line in args.trace_file.read_text(encoding="utf-8").splitlines()
+    ]
+
+    assert result is True
+    assert chatter.calls == 3
+    assert len(coverage_calls) == 4
+    assert [trace["outcome"] for trace in traces] == [
+        "test_error", "test_error", "test_error", "coverage_gain_saved",
+    ]
+    assert traces[-1]["component"] == "salvage"
+    assert traces[-1]["salvaged_failures"] == 1
+    saved = Path(traces[-1]["saved_test"]).read_text(encoding="utf-8")
+    assert "pytest.raises(ValueError)" in saved
+    assert "missing_name" not in saved
 
 
 def test_coverup_trace_preserves_component_level_attempt_history(tmp_path, monkeypatch):

@@ -118,6 +118,18 @@ def parser() -> argparse.ArgumentParser:
         help="Maximum failure-triggered context characters per repair prompt",
     )
     result.add_argument(
+        "--salvage-failing-tests",
+        default=False,
+        action=argparse.BooleanOptionalAction,
+        help="After the last model attempt, retain verified assertion-bearing prefixes",
+    )
+    result.add_argument(
+        "--salvage-max-prunes",
+        type=int,
+        default=8,
+        help="Maximum failing test suffixes removed during final salvage verification",
+    )
+    result.add_argument(
         "--target-context-max-chars",
         type=int,
         default=6_000,
@@ -552,6 +564,8 @@ def make_runner(
         raise ValueError("--target-context-max-chars cannot be negative")
     if args.failure_context_max_chars < 0:
         raise ValueError("--failure-context-max-chars cannot be negative")
+    if args.salvage_max_prunes < 1:
+        raise ValueError("--salvage-max-prunes must be at least 1")
     root = args.project_root.resolve()
     config = ExperimentConfig(
         project_root=root,
@@ -570,6 +584,8 @@ def make_runner(
         repository_test_context=args.repository_test_context,
         failure_context=args.failure_context,
         failure_context_max_chars=args.failure_context_max_chars,
+        salvage_failing_tests=args.salvage_failing_tests,
+        salvage_max_prunes=args.salvage_max_prunes,
     )
     # ``package_dir`` is only the single-project fallback. Dynamic and
     # multi-project runs have already validated every entry in ``projects``.
