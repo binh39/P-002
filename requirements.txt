@@ -39,3 +39,6 @@ pytest-repeat==0.9.4
 coverup==0.6.3
 google-auth==2.56.2
 httpx>=0.28.0
+
+# isort setuptools_commands target imports setuptools (ISortCommand.finalize_options)
+setuptools>=75.0

@@ -1,0 +1,1773 @@
+{
+  "runs": [
+    "multi-project-validation-batch-56868e5a",
+    "multi-project-validation-batch-c6575349",
+    "multi-project-validation-batch-dc2e42fa",
+    "multi-project-validation-batch-72cb0f5a",
+    "multi-project-validation-batch-4456df37",
+    "multi-project-validation-batch-f67382ac"
+  ],
+  "aggregate_score": 0.8753628566716146,
+  "aggregate_coverage": {
+    "branch_coverage": 0.8634751773049646,
+    "covered_branches": 81.16666666666667,
+    "covered_statements": 155.33333333333334,
+    "num_branches": 94.0,
+    "num_statements": 172.0,
+    "score": 0.8753628566716146,
+    "statement_coverage": 0.9031007751937984
+  },
+  "results": [
+    {
+      "prompt_digest": "3a5a78e405676b45",
+      "evaluation_digest": "af695d60ce49",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/api.py",
+        "symbol": "find_imports_in_file",
+        "split": "validation"
+      },
+      "run_id": "multi-project-validation-batch-56868e5a",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 5.0,
+        "num_statements": 5.0,
+        "covered_branches": 0.0,
+        "num_branches": 0.0,
+        "gained_lines": [
+          596,
+          597,
+          598,
+          606,
+          607
+        ],
+        "gained_branches": [],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 1.0000\nStatement gain: 5 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 1:\nScore: 1.0000\nStatement gain: 5 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 2:\nScore: 1.0000\nStatement gain: 5 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 3:\nScore: 1.0000\nStatement gain: 5 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 4:\nScore: 1.0000\nStatement gain: 5 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 5:\nScore: 1.0000\nStatement gain: 5 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "attempt_traces": [
+        {
+          "source_file": "src\\sample_repo\\isort\\isort\\api.py",
+          "symbol": "find_imports_in_file",
+          "name": "find_imports_in_file",
+          "segment": "src\\sample_repo\\isort\\isort\\api.py:578-607",
+          "attempt": 1,
+          "component": "initial",
+          "prompt_input": "You are an expert Python test-driven developer.\nThe code below, extracted from isort\\api.py, does not achieve full coverage:\nwhen tested, lines 578-607 do not execute.\nCreate new pytest test functions that execute all missing lines and branches. Each test must\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\nPrefer several small, independent test_* functions over one large function with many sequential inline scenarios: an early failure inside a shared function blocks coverage measurement of every later scenario. If a target is best covered by many scenarios, split them into separate test functions so an isolated failure does not discard the rest.\nUse the get_info tool function as necessary. Always return an entire Python test module.\nDo not call pytest.main and do not execute tests at module import time.\nRespond only with Python code enclosed in a python markdown code block.\n\n```python\n            from pathlib import Path\n            from typing import Any, Iterator, Optional, Union\n            from warnings import warn\n            from isort import identify, io\n            from isort.settings import DEFAULT_CONFIG, Config\n       578: def find_imports_in_file(\n       579:     filename: Union[str, Path],\n       580:     config: Config = DEFAULT_CONFIG,\n       581:     file_path: Optional[Path] = None,\n       582:     unique: Union[bool, ImportKey] = False,\n       583:     top_only: bool = False,\n       584:     **config_kwargs: Any,\n       585: ) -> Iterator[identify.Import]:\n                \"\"\"Finds and returns all imports within the provided source file.\n            \n                - **filename**: The name or Path of the file to look for imports in.\n                - **extension**: The file extension that contains imports. Defaults to filename extension or py.\n                - **config**: The config object to use when sorting imports.\n                - **file_path**: The disk location where the code string was pulled from.\n                - **unique**: If True, only the first instance of an import is returned.\n                - **top_only**: If True, only return imports that occur before the first function or class.\n                - ****config_kwargs**: Any config modifications.\n                \"\"\"\n       596:     try:\n       597:         with io.File.read(filename) as source_file:\n       598:             yield from find_imports_in_stream(\n       599:                 input_stream=source_file.stream,\n       600:                 config=config,\n       601:                 file_path=file_path or source_file.path,\n       602:                 unique=unique,\n       603:                 top_only=top_only,\n       604:                 **config_kwargs,\n                        )\n       606:     except OSError as error:\n       607:         warn(f\"Unable to parse file {filename} due to {error}\", stacklevel=2)\n\n```\n\n[TARGET CONTRACT]\nSignature: def find_imports_in_file(filename: Union[str, Path], config: Config=DEFAULT_CONFIG, file_path: Optional[Path]=None, unique: Union[bool, ImportKey]=False, top_only: bool=False, **config_kwargs: Any) -> Iterator[identify.Import]\nDocstring: Finds and returns all imports within the provided source file. - **filename**: The name or Path of the file to look for imports in. - **extension**: The file extension that contains imports. Defaults to filename extension or py. - **config**: The config object to use when sorting imports. - **file_path**: The disk location where the code string was pulled from. - **unique**: If True, only the first instance of an import is returned. - **top_only**: If True, only return imports that occur before the first function or class. - ****config_kwargs**: Any config modifications.\n\nUse this repository-local context as guidance only. Do not modify existing tests.\n[END TARGET CONTEXT]",
+          "outcome": "coverage_gain_saved",
+          "generated_test": "import pytest\nfrom pathlib import Path\nfrom isort.api import find_imports_in_file\n\n\ndef test_find_imports_in_file_success(tmp_path: Path):\n    test_file = tmp_path / \"test_imports.py\"\n    test_file.write_text(\"import os\\nimport sys\\n\")\n\n    imports = list(find_imports_in_file(test_file))\n    assert len(imports) == 2\n    assert {imp.module for imp in imports} == {\"os\", \"sys\"}\n\n\ndef test_find_imports_in_file_oserror(tmp_path: Path):\n    non_existent = tmp_path / \"does_not_exist.py\"\n\n    with pytest.warns(UserWarning, match=\"Unable to parse file\"):\n        imports = list(find_imports_in_file(non_existent))\n    \n    assert imports == []\n",
+          "gained_lines": [
+            578,
+            579,
+            581,
+            582,
+            583,
+            596,
+            597,
+            598,
+            599,
+            600,
+            601,
+            602,
+            603,
+            604,
+            606,
+            607
+          ],
+          "gained_branches": [],
+          "remaining_lines": [
+            580,
+            584,
+            585
+          ],
+          "remaining_branches": [],
+          "saved_test": "D:\\VinAI\\P-002\\eval\\prompt_optimization_nolever\\generated_tests\\validation\\tests_candidate_3a5a78e405676b45-af695d60ce49\\isort\\test_opt_d92bfc9ea13a_0000_1.py"
+        }
+      ],
+      "replicate_scores": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "prompt_digest": "3a5a78e405676b45",
+      "evaluation_digest": "af695d60ce49",
+      "replicate": 0,
+      "target": {
+        "project": "isort",
+        "source_file": "isort/hooks.py",
+        "symbol": "get_output",
+        "split": "validation"
+      },
+      "run_id": "multi-project-validation-batch-56868e5a",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 2.0,
+        "num_statements": 2.0,
+        "covered_branches": 0.0,
+        "num_branches": 0.0,
+        "gained_lines": [
+          21,
+          22
+        ],
+        "gained_branches": [],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 1.0000\nStatement gain: 2 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 1:\nScore: 1.0000\nStatement gain: 2 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 2:\nScore: 1.0000\nStatement gain: 2 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 3:\nScore: 1.0000\nStatement gain: 2 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 4:\nScore: 1.0000\nStatement gain: 2 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 5:\nScore: 1.0000\nStatement gain: 2 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "attempt_traces": [
+        {
+          "source_file": "src\\sample_repo\\isort\\isort\\hooks.py",
+          "symbol": "get_output",
+          "name": "get_output",
+          "segment": "src\\sample_repo\\isort\\isort\\hooks.py:15-22",
+          "attempt": 1,
+          "component": "initial",
+          "prompt_input": "You are an expert Python test-driven developer.\nThe code below, extracted from isort\\hooks.py, does not achieve full coverage:\nwhen tested, lines 15-22 do not execute.\nCreate new pytest test functions that execute all missing lines and branches. Each test must\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\nPrefer several small, independent test_* functions over one large function with many sequential inline scenarios: an early failure inside a shared function blocks coverage measurement of every later scenario. If a target is best covered by many scenarios, split them into separate test functions so an isolated failure does not discard the rest.\nUse the get_info tool function as necessary. Always return an entire Python test module.\nDo not call pytest.main and do not execute tests at module import time.\nRespond only with Python code enclosed in a python markdown code block.\n\n```python\n            import subprocess\n            from typing import List\n        15: def get_output(command: List[str]) -> str:\n                \"\"\"Run a command and return raw output\n            \n                :param str command: the command to run\n                :returns: the stdout output of the command\n                \"\"\"\n        21:     result = subprocess.run(command, stdout=subprocess.PIPE, check=True)  # nosec - trusted input\n        22:     return result.stdout.decode()\n\n```\n\n[TARGET CONTRACT]\nSignature: def get_output(command: List[str]) -> str\nDocstring: Run a command and return raw output :param str command: the command to run :returns: the stdout output of the command\n\nUse this repository-local context as guidance only. Do not modify existing tests.\n[END TARGET CONTEXT]",
+          "outcome": "coverage_gain_saved",
+          "generated_test": "import sys\nimport subprocess\nimport pytest\nfrom isort.hooks import get_output\n\n\ndef test_get_output_success():\n    # Run a simple, cross-platform command that outputs known text\n    # e.g., python -c \"print('hello')\"\n    command = [sys.executable, \"-c\", \"print('hello')\"]\n    output = get_output(command)\n    assert \"hello\" in output\n\n\ndef test_get_output_failure():\n    # Run a command that fails (returns non-zero exit code) to test check=True raising CalledProcessError\n    command = [sys.executable, \"-c\", \"import sys; sys.exit(1)\"]\n    with pytest.raises(subprocess.CalledProcessError):\n        get_output(command)\n",
+          "gained_lines": [
+            15,
+            21,
+            22
+          ],
+          "gained_branches": [],
+          "remaining_lines": [],
+          "remaining_branches": [],
+          "saved_test": "D:\\VinAI\\P-002\\eval\\prompt_optimization_nolever\\generated_tests\\validation\\tests_candidate_3a5a78e405676b45-af695d60ce49\\isort\\test_opt_8529f5237a00_0001_1.py"
+        }
+      ],
+      "replicate_scores": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "prompt_digest": "3a5a78e405676b45",
+      "evaluation_digest": "af695d60ce49",
+      "replicate": 0,
+      "target": {
+        "project": "mimesis",
+        "source_file": "mimesis/builder/core.py",
+        "symbol": "SchemaBuilder.__repr__",
+        "split": "validation"
+      },
+      "run_id": "multi-project-validation-batch-56868e5a",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 2.0,
+        "num_statements": 2.0,
+        "covered_branches": 0.0,
+        "num_branches": 0.0,
+        "gained_lines": [
+          391,
+          392
+        ],
+        "gained_branches": [],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 1.0000\nStatement gain: 2 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 1:\nScore: 1.0000\nStatement gain: 2 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 2:\nScore: 1.0000\nStatement gain: 2 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 3:\nScore: 1.0000\nStatement gain: 2 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 4:\nScore: 1.0000\nStatement gain: 2 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 5:\nScore: 1.0000\nStatement gain: 2 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "attempt_traces": [
+        {
+          "source_file": "src\\sample_repo\\mimesis\\mimesis\\builder\\core.py",
+          "symbol": "SchemaBuilder.__repr__",
+          "name": "__repr__",
+          "segment": "src\\sample_repo\\mimesis\\mimesis\\builder\\core.py:390-392",
+          "attempt": 1,
+          "component": "initial",
+          "prompt_input": "You are an expert Python test-driven developer.\nThe code below, extracted from mimesis\\builder\\core.py, does not achieve full coverage:\nwhen tested, lines 390-392 do not execute.\nCreate new pytest test functions that execute all missing lines and branches. Each test must\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\nPrefer several small, independent test_* functions over one large function with many sequential inline scenarios: an early failure inside a shared function blocks coverage measurement of every later scenario. If a target is best covered by many scenarios, split them into separate test functions so an isolated failure does not discard the rest.\nUse the get_info tool function as necessary. Always return an entire Python test module.\nDo not call pytest.main and do not execute tests at module import time.\nRespond only with Python code enclosed in a python markdown code block.\n\n```python\n            class SchemaBuilder:\n       390:     def __repr__(self) -> str:\n       391:         schemas = \", \".join(self._schemas.keys()) or \"none\"\n       392:         return f\"SchemaBuilder(locale={self._locale}, schemas=[{schemas}])\"\n\n```\n\n[TARGET CONTRACT]\nSignature: def SchemaBuilder.__repr__(self) -> str\nEnclosing classes: SchemaBuilder(object)\n\nUse this repository-local context as guidance only. Do not modify existing tests.\n[END TARGET CONTEXT]",
+          "outcome": "test_error",
+          "generated_test": "import pytest\nfrom mimesis import SchemaBuilder\nfrom mimesis.locales import Locale\n\n\ndef test_schema_builder_repr_empty():\n    \"\"\"Test __repr__ when no schemas are added (coverage for 'none').\"\"\"\n    sb = SchemaBuilder(locale=Locale.EN)\n    result = repr(sb)\n    assert result == \"SchemaBuilder(locale=en, schemas=[none])\"\n\n\ndef test_schema_builder_repr_with_schemas():\n    \"\"\"Test __repr__ when schemas are present (coverage for schema keys).\"\"\"\n    sb = SchemaBuilder(locale=Locale.ES)\n    sb.schema(\"users\", {\"id\": sb.f(\"increment\")})\n    sb.schema(\"posts\", {\"id\": sb.f(\"increment\")})\n    result = repr(sb)\n    assert \"SchemaBuilder(locale=es, schemas=[users, posts])\" in result\n",
+          "execution_error": "F\r\n================================== FAILURES ===================================\r\n_____________________ test_schema_builder_repr_empty[1-2] _____________________\r\n\r\n    def test_schema_builder_repr_empty():\r\n        \"\"\"Test __repr__ when no schemas are added (coverage for 'none').\"\"\"\r\n        sb = SchemaBuilder(locale=Locale.EN)\r\n        result = repr(sb)\r\n>       assert result == \"SchemaBuilder(locale=en, schemas=[none])\"\r\nE       AssertionError: assert 'SchemaBuilde...hemas=[none])' == 'SchemaBuilde...hemas=[none])'\r\nE         \r\nE         - SchemaBuilder(locale=en, schemas=[none])\r\nE         ?                       ^\r\nE         + SchemaBuilder(locale=Locale.EN, schemas=[none])\r\nE         ?                      +++++ ^^^\r\n\r\neval\\prompt_optimization_nolever\\runs\\3a5a78e405676b45-af695d60ce49\\validation\\multi-project-validation-batch-56868e5a\\target_workspaces\\f76ec63e1f24_0002\\tmp_test_17ny5q_y.py:10: AssertionError\r\n",
+          "next_component": "error"
+        },
+        {
+          "source_file": "src\\sample_repo\\mimesis\\mimesis\\builder\\core.py",
+          "symbol": "SchemaBuilder.__repr__",
+          "name": "__repr__",
+          "segment": "src\\sample_repo\\mimesis\\mimesis\\builder\\core.py:390-392",
+          "attempt": 2,
+          "component": "error",
+          "prompt_input": "Executing the test yields an error, shown below.\nModify or rewrite the test to correct it. Return the complete Python test module, not a patch.\nPreserve useful assertions from the previous test and use get_info when more source context is needed.\nRespond only with Python code enclosed in a python markdown code block.\n\nF\r\n================================== FAILURES ===================================\r\n_____________________ test_schema_builder_repr_empty[1-2] _____________________\r\n\r\n    def test_schema_builder_repr_empty():\r\n        \"\"\"Test __repr__ when no schemas are added (coverage for 'none').\"\"\"\r\n        sb = SchemaBuilder(locale=Locale.EN)\r\n        result = repr(sb)\r\n>       assert result == \"SchemaBuilder(locale=en, schemas=[none])\"\r\nE       AssertionError: assert 'SchemaBuilde...hemas=[none])' == 'SchemaBuilde...hemas=[none])'\r\nE         \r\nE         - SchemaBuilder(locale=en, schemas=[none])\r\nE         ?                       ^\r\nE         + SchemaBuilder(locale=Locale.EN, schemas=[none])\r\nE         ?                      +++++ ^^^\r\n\r\neval\\prompt_optimization_nolever\\runs\\3a5a78e405676b45-af695d60ce49\\validation\\multi-project-validation-batch-56868e5a\\target_workspaces\\f76ec63e1f24_0002\\tmp_test_17ny5q_y.py:10: AssertionError\r\n",
+          "outcome": "coverage_gain_saved",
+          "generated_test": "import pytest\nfrom mimesis import SchemaBuilder\nfrom mimesis.locales import Locale\n\n\ndef test_schema_builder_repr_empty():\n    \"\"\"Test __repr__ when no schemas are added (coverage for 'none').\"\"\"\n    sb = SchemaBuilder(locale=Locale.EN)\n    result = repr(sb)\n    assert result == f\"SchemaBuilder(locale={Locale.EN}, schemas=[none])\"\n\n\ndef test_schema_builder_repr_with_schemas():\n    \"\"\"Test __repr__ when schemas are present (coverage for schema keys).\"\"\"\n    sb = SchemaBuilder(locale=Locale.ES)\n    sb.schema(\"users\", {\"id\": sb.f(\"increment\")})\n    sb.schema(\"posts\", {\"id\": sb.f(\"increment\")})\n    result = repr(sb)\n    assert f\"SchemaBuilder(locale={Locale.ES}, schemas=[users, posts])\" in result\n",
+          "gained_lines": [
+            390,
+            391,
+            392
+          ],
+          "gained_branches": [],
+          "remaining_lines": [],
+          "remaining_branches": [],
+          "saved_test": "D:\\VinAI\\P-002\\eval\\prompt_optimization_nolever\\generated_tests\\validation\\tests_candidate_3a5a78e405676b45-af695d60ce49\\mimesis\\test_opt_f76ec63e1f24_0002_1.py"
+        }
+      ],
+      "replicate_scores": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "prompt_digest": "3a5a78e405676b45",
+      "evaluation_digest": "af695d60ce49",
+      "replicate": 0,
+      "target": {
+        "project": "mimesis",
+        "source_file": "mimesis/providers/base.py",
+        "symbol": "BaseDataProvider.override_locale",
+        "split": "validation"
+      },
+      "run_id": "multi-project-validation-batch-56868e5a",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 8.0,
+        "num_statements": 8.0,
+        "covered_branches": 0.0,
+        "num_branches": 0.0,
+        "gained_lines": [
+          293,
+          294,
+          295,
+          296,
+          297,
+          299,
+          300,
+          301
+        ],
+        "gained_branches": [],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 1.0000\nStatement gain: 8 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 1:\nScore: 1.0000\nStatement gain: 8 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 2:\nScore: 1.0000\nStatement gain: 8 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 3:\nScore: 1.0000\nStatement gain: 8 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 4:\nScore: 1.0000\nStatement gain: 8 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 5:\nScore: 1.0000\nStatement gain: 8 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "attempt_traces": [
+        {
+          "source_file": "src\\sample_repo\\mimesis\\mimesis\\providers\\base.py",
+          "symbol": "BaseDataProvider.override_locale",
+          "name": "override_locale",
+          "segment": "src\\sample_repo\\mimesis\\mimesis\\providers\\base.py:280-303",
+          "attempt": 1,
+          "component": "initial",
+          "prompt_input": "You are an expert Python test-driven developer.\nThe code below, extracted from mimesis\\providers\\base.py, does not achieve full coverage:\nwhen tested, lines 280-303 do not execute.\nCreate new pytest test functions that execute all missing lines and branches. Each test must\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\nPrefer several small, independent test_* functions over one large function with many sequential inline scenarios: an early failure inside a shared function blocks coverage measurement of every later scenario. If a target is best covered by many scenarios, split them into separate test functions so an isolated failure does not discard the rest.\nUse the get_info tool function as necessary. Always return an entire Python test module.\nDo not call pytest.main and do not execute tests at module import time.\nRespond only with Python code enclosed in a python markdown code block.\n\n```python\n            import contextlib\n            import typing as t\n            from mimesis.locales import Locale\n            class BaseDataProvider(BaseProvider):\n       280:     @contextlib.contextmanager\n       281:     def override_locale(\n                    self,\n       283:         locale: Locale,\n       284:     ) -> t.Generator[\"BaseDataProvider\", None, None]:\n                    \"\"\"Context manager that allows overriding current locale.\n            \n                    Temporarily overrides current locale for\n                    locale-dependent providers.\n            \n                    :param locale: Locale.\n                    :return: Provider with overridden locale.\n                    \"\"\"\n       293:         try:\n       294:             origin_locale = Locale(self.locale)\n       295:             self._override_locale(locale)\n       296:             try:\n       297:                 yield self\n                        finally:\n       299:                 self._override_locale(origin_locale)\n       300:         except AttributeError as err:\n       301:             raise ValueError(\n       302:                 f\"\u00c2\u00ab{self.__class__.__name__}\u00c2\u00bb is not locale-dependent\",\n       303:             ) from err\n\n```\n\n[TARGET CONTRACT]\nSignature: def BaseDataProvider.override_locale(self, locale: Locale) -> t.Generator['BaseDataProvider', None, None]\nDecorators: @contextlib.contextmanager\nDocstring: Context manager that allows overriding current locale. Temporarily overrides current locale for locale-dependent providers. :param locale: Locale. :return: Provider with overridden locale.\nEnclosing classes: BaseDataProvider(BaseProvider)\n\nUse this repository-local context as guidance only. Do not modify existing tests.\n[END TARGET CONTEXT]",
+          "outcome": "test_error",
+          "generated_test": "import pytest\nfrom mimesis.locales import Locale\nfrom mimesis.providers.base import BaseDataProvider, BaseProvider\n\n\ndef test_override_locale_success():\n    provider = BaseDataProvider(locale=Locale.EN)\n    original_locale = provider.locale\n\n    with provider.override_locale(Locale.RU) as p:\n        assert p is provider\n        assert provider.locale == Locale.RU\n\n    assert provider.locale == original_locale\n\n\ndef test_override_locale_attribute_error():\n    class NonLocaleProvider(BaseProvider):\n        pass\n\n    provider = NonLocaleProvider()\n    \n    with pytest.raises(ValueError) as exc_info:\n        with provider.override_locale(Locale.RU):\n            pass\n\n    assert \"is not locale-dependent\" in str(exc_info.value)\n    assert isinstance(exc_info.value.__cause__, AttributeError)\n",
+          "execution_error": "F\r\n================================== FAILURES ===================================\r\n______________________ test_override_locale_success[1-2] ______________________\r\n\r\n    def test_override_locale_success():\r\n        provider = BaseDataProvider(locale=Locale.EN)\r\n        original_locale = provider.locale\r\n    \r\n        with provider.override_locale(Locale.RU) as p:\r\n            assert p is provider\r\n>           assert provider.locale == Locale.RU\r\nE           AssertionError: assert 'ru' == <Locale.RU: 'ru'>\r\nE            +  where 'ru' = <mimesis.providers.base.BaseDataProvider object at 0x000002662FF61EB0>.locale\r\nE            +  and   <Locale.RU: 'ru'> = Locale.RU\r\n\r\neval\\prompt_optimization_nolever\\runs\\3a5a78e405676b45-af695d60ce49\\validation\\multi-project-validation-batch-56868e5a\\target_workspaces\\eaa18c0885d6_0003\\tmp_test_fkr8xqks.py:12: AssertionError\r\n",
+          "next_component": "error"
+        },
+        {
+          "source_file": "src\\sample_repo\\mimesis\\mimesis\\providers\\base.py",
+          "symbol": "BaseDataProvider.override_locale",
+          "name": "override_locale",
+          "segment": "src\\sample_repo\\mimesis\\mimesis\\providers\\base.py:280-303",
+          "attempt": 2,
+          "component": "error",
+          "prompt_input": "Executing the test yields an error, shown below.\nModify or rewrite the test to correct it. Return the complete Python test module, not a patch.\nPreserve useful assertions from the previous test and use get_info when more source context is needed.\nRespond only with Python code enclosed in a python markdown code block.\n\nF\r\n================================== FAILURES ===================================\r\n______________________ test_override_locale_success[1-2] ______________________\r\n\r\n    def test_override_locale_success():\r\n        provider = BaseDataProvider(locale=Locale.EN)\r\n        original_locale = provider.locale\r\n    \r\n        with provider.override_locale(Locale.RU) as p:\r\n            assert p is provider\r\n>           assert provider.locale == Locale.RU\r\nE           AssertionError: assert 'ru' == <Locale.RU: 'ru'>\r\nE            +  where 'ru' = <mimesis.providers.base.BaseDataProvider object at 0x000002662FF61EB0>.locale\r\nE            +  and   <Locale.RU: 'ru'> = Locale.RU\r\n\r\neval\\prompt_optimization_nolever\\runs\\3a5a78e405676b45-af695d60ce49\\validation\\multi-project-validation-batch-56868e5a\\target_workspaces\\eaa18c0885d6_0003\\tmp_test_fkr8xqks.py:12: AssertionError\r\n",
+          "outcome": "test_error",
+          "generated_test": "import pytest\nfrom mimesis.locales import Locale\nfrom mimesis.providers.base import BaseDataProvider, BaseProvider\n\n\ndef test_override_locale_success():\n    provider = BaseDataProvider(locale=Locale.EN)\n    original_locale = provider.locale\n\n    with provider.override_locale(Locale.RU) as p:\n        assert p is provider\n        assert provider.locale == Locale.RU.value\n\n    assert provider.locale == original_locale\n\n\ndef test_override_locale_attribute_error():\n    class NonLocaleProvider(BaseProvider):\n        pass\n\n    provider = NonLocaleProvider()\n    \n    with pytest.raises(ValueError) as exc_info:\n        with provider.override_locale(Locale.RU):\n            pass\n\n    assert \"is not locale-dependent\" in str(exc_info.value)\n    assert isinstance(exc_info.value.__cause__, AttributeError)\n",
+          "execution_error": "..F\r\n================================== FAILURES ===================================\r\n__________________ test_override_locale_attribute_error[1-2] __________________\r\n\r\n    def test_override_locale_attribute_error():\r\n        class NonLocaleProvider(BaseProvider):\r\n            pass\r\n    \r\n        provider = NonLocaleProvider()\r\n    \r\n        with pytest.raises(ValueError) as exc_info:\r\n>           with provider.override_locale(Locale.RU):\r\n                 ^^^^^^^^^^^^^^^^^^^^^^^^\r\nE           AttributeError: 'NonLocaleProvider' object has no attribute 'override_locale'\r\n\r\neval\\prompt_optimization_nolever\\runs\\3a5a78e405676b45-af695d60ce49\\validation\\multi-project-validation-batch-56868e5a\\target_workspaces\\eaa18c0885d6_0003\\tmp_test_lee2_eka.py:24: AttributeError\r\n",
+          "next_component": "error"
+        },
+        {
+          "source_file": "src\\sample_repo\\mimesis\\mimesis\\providers\\base.py",
+          "symbol": "BaseDataProvider.override_locale",
+          "name": "override_locale",
+          "segment": "src\\sample_repo\\mimesis\\mimesis\\providers\\base.py:280-303",
+          "attempt": 3,
+          "component": "error",
+          "prompt_input": "Executing the test yields an error, shown below.\nModify or rewrite the test to correct it. Return the complete Python test module, not a patch.\nPreserve useful assertions from the previous test and use get_info when more source context is needed.\nRespond only with Python code enclosed in a python markdown code block.\n\n..F\r\n================================== FAILURES ===================================\r\n__________________ test_override_locale_attribute_error[1-2] __________________\r\n\r\n    def test_override_locale_attribute_error():\r\n        class NonLocaleProvider(BaseProvider):\r\n            pass\r\n    \r\n        provider = NonLocaleProvider()\r\n    \r\n        with pytest.raises(ValueError) as exc_info:\r\n>           with provider.override_locale(Locale.RU):\r\n                 ^^^^^^^^^^^^^^^^^^^^^^^^\r\nE           AttributeError: 'NonLocaleProvider' object has no attribute 'override_locale'\r\n\r\neval\\prompt_optimization_nolever\\runs\\3a5a78e405676b45-af695d60ce49\\validation\\multi-project-validation-batch-56868e5a\\target_workspaces\\eaa18c0885d6_0003\\tmp_test_lee2_eka.py:24: AttributeError\r\n",
+          "outcome": "coverage_gain_saved",
+          "generated_test": "import pytest\nfrom mimesis.locales import Locale\nfrom mimesis.providers.base import BaseDataProvider, BaseProvider\n\n\ndef test_override_locale_success():\n    provider = BaseDataProvider(locale=Locale.EN)\n    original_locale = provider.locale\n\n    with provider.override_locale(Locale.RU) as p:\n        assert p is provider\n        assert provider.locale == Locale.RU.value\n\n    assert provider.locale == original_locale\n\n\ndef test_override_locale_attribute_error():\n    class NonLocaleProvider(BaseDataProvider):\n        pass\n\n    provider = NonLocaleProvider()\n    del provider.locale\n    \n    with pytest.raises(ValueError) as exc_info:\n        with provider.override_locale(Locale.RU):\n            pass\n\n    assert \"is not locale-dependent\" in str(exc_info.value)\n    assert isinstance(exc_info.value.__cause__, AttributeError)\n",
+          "gained_lines": [
+            280,
+            281,
+            284,
+            293,
+            294,
+            295,
+            296,
+            297,
+            299,
+            300,
+            301,
+            302,
+            303
+          ],
+          "gained_branches": [],
+          "remaining_lines": [
+            283
+          ],
+          "remaining_branches": [],
+          "saved_test": "D:\\VinAI\\P-002\\eval\\prompt_optimization_nolever\\generated_tests\\validation\\tests_candidate_3a5a78e405676b45-af695d60ce49\\mimesis\\test_opt_eaa18c0885d6_0003_1.py"
+        }
+      ],
+      "replicate_scores": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "prompt_digest": "3a5a78e405676b45",
+      "evaluation_digest": "af695d60ce49",
+      "replicate": 0,
+      "target": {
+        "project": "mlxtend",
+        "source_file": "mlxtend/evaluate/bootstrap_outofbag.py",
+        "symbol": "BootstrapOutOfBag.split",
+        "split": "validation"
+      },
+      "run_id": "multi-project-validation-batch-56868e5a",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 7.0,
+        "num_statements": 7.0,
+        "covered_branches": 2.0,
+        "num_branches": 2.0,
+        "gained_lines": [
+          61,
+          62,
+          63,
+          65,
+          66,
+          67,
+          68
+        ],
+        "gained_branches": [
+          [
+            65,
+            -48
+          ],
+          [
+            65,
+            66
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 1.0000\nStatement gain: 7 newly covered; 0 remain.\nBranch gain: 2 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 1:\nScore: 1.0000\nStatement gain: 7 newly covered; 0 remain.\nBranch gain: 2 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 2:\nScore: 1.0000\nStatement gain: 7 newly covered; 0 remain.\nBranch gain: 2 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 3:\nScore: 1.0000\nStatement gain: 7 newly covered; 0 remain.\nBranch gain: 2 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 4:\nScore: 1.0000\nStatement gain: 7 newly covered; 0 remain.\nBranch gain: 2 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 5:\nScore: 1.0000\nStatement gain: 7 newly covered; 0 remain.\nBranch gain: 2 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "attempt_traces": [
+        {
+          "source_file": "src\\sample_repo\\mlxtend\\mlxtend\\evaluate\\bootstrap_outofbag.py",
+          "symbol": "BootstrapOutOfBag.split",
+          "name": "split",
+          "segment": "src\\sample_repo\\mlxtend\\mlxtend\\evaluate\\bootstrap_outofbag.py:48-68",
+          "attempt": 1,
+          "component": "initial",
+          "prompt_input": "You are an expert Python test-driven developer.\nThe code below, extracted from mlxtend\\evaluate\\bootstrap_outofbag.py, does not achieve full coverage:\nwhen tested, lines 48-68 do not execute.\nCreate new pytest test functions that execute all missing lines and branches. Each test must\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\nPrefer several small, independent test_* functions over one large function with many sequential inline scenarios: an early failure inside a shared function blocks coverage measurement of every later scenario. If a target is best covered by many scenarios, split them into separate test functions so an isolated failure does not discard the rest.\nUse the get_info tool function as necessary. Always return an entire Python test module.\nDo not call pytest.main and do not execute tests at module import time.\nRespond only with Python code enclosed in a python markdown code block.\n\n```python\n            import numpy as np\n            class BootstrapOutOfBag(object):\n        48:     def split(self, X, y=None, groups=None):\n                    \"\"\"\n            \n                    y : array-like or None (default: None)\n                        Argument is not used and only included as parameter\n                        for compatibility, similar to `KFold` in scikit-learn.\n            \n                    groups : array-like or None (default: None)\n                        Argument is not used and only included as parameter\n                        for compatibility, similar to `KFold` in scikit-learn.\n            \n            \n                    \"\"\"\n        61:         rng = np.random.RandomState(self.random_seed)\n        62:         sample_idx = np.arange(X.shape[0])\n        63:         set_idx = set(sample_idx)\n            \n        65:         for _ in range(self.n_splits):\n        66:             train_idx = rng.choice(sample_idx, size=sample_idx.shape[0], replace=True)\n        67:             test_idx = np.array(list(set_idx - set(train_idx)))\n        68:             yield train_idx, test_idx\n\n```\n\n[TARGET CONTRACT]\nSignature: def BootstrapOutOfBag.split(self, X, y=None, groups=None)\nDocstring: y : array-like or None (default: None) Argument is not used and only included as parameter for compatibility, similar to `KFold` in scikit-learn. groups : array-like or None (default: None) Argument is not used and only included as parameter for compatibility, similar to `KFold` in scikit-learn.\nEnclosing classes: BootstrapOutOfBag(object)\n\nUse this repository-local context as guidance only. Do not modify existing tests.\n[END TARGET CONTEXT]",
+          "outcome": "coverage_gain_saved",
+          "generated_test": "import numpy as np\nimport pytest\nfrom mlxtend.evaluate.bootstrap_outofbag import BootstrapOutOfBag\n\n\ndef test_bootstrap_outofbag_split_basic():\n    X = np.array([[1, 2], [3, 4], [5, 6], [7, 8], [9, 10]])\n    boot = BootstrapOutOfBag(n_splits=3, random_seed=42)\n    splits = list(boot.split(X))\n    \n    assert len(splits) == 3\n    for train_idx, test_idx in splits:\n        assert isinstance(train_idx, np.ndarray)\n        assert isinstance(test_idx, np.ndarray)\n        assert train_idx.shape[0] == X.shape[0]\n        # Union of train and test might not be all indices, but test_idx is out-of-bag\n        # Ensure test_idx elements are not in train_idx\n        for t in test_idx:\n            assert t not in train_idx\n\n\ndef test_bootstrap_outofbag_split_with_y_and_groups():\n    X = np.zeros((10, 2))\n    y = np.ones(10)\n    groups = np.zeros(10)\n    \n    boot = BootstrapOutOfBag(n_splits=2, random_seed=123)\n    splits = list(boot.split(X, y=y, groups=groups))\n    \n    assert len(splits) == 2\n    for train_idx, test_idx in splits:\n        assert train_idx.shape[0] == 10\n        assert test_idx.ndim == 1\n",
+          "gained_lines": [
+            48,
+            61,
+            62,
+            63,
+            65,
+            66,
+            67,
+            68
+          ],
+          "gained_branches": [
+            [
+              65,
+              0
+            ],
+            [
+              65,
+              66
+            ]
+          ],
+          "remaining_lines": [],
+          "remaining_branches": [],
+          "saved_test": "D:\\VinAI\\P-002\\eval\\prompt_optimization_nolever\\generated_tests\\validation\\tests_candidate_3a5a78e405676b45-af695d60ce49\\mlxtend\\test_opt_60f488c15276_0004_1.py"
+        }
+      ],
+      "replicate_scores": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "prompt_digest": "3a5a78e405676b45",
+      "evaluation_digest": "af695d60ce49",
+      "replicate": 0,
+      "target": {
+        "project": "mlxtend",
+        "source_file": "mlxtend/feature_selection/sequential_feature_selector.py",
+        "symbol": "SequentialFeatureSelector.fit",
+        "split": "validation"
+      },
+      "run_id": "multi-project-validation-batch-56868e5a",
+      "score": 0.8652201502201501,
+      "coverage": {
+        "score": 0.8652201502201501,
+        "statement_gain": 0.8834498834498835,
+        "branch_gain": 0.8574074074074073,
+        "statement_coverage": 0.8834498834498835,
+        "branch_coverage": 0.8574074074074073,
+        "covered_statements": 126.33333333333333,
+        "num_statements": 143.0,
+        "covered_branches": 77.16666666666667,
+        "num_branches": 90.0,
+        "gained_lines": [
+          332,
+          333,
+          334,
+          335,
+          336,
+          337,
+          339,
+          340,
+          342,
+          343,
+          344,
+          348,
+          349,
+          350,
+          352,
+          353,
+          354,
+          358,
+          359,
+          360,
+          365,
+          369,
+          370,
+          375,
+          376,
+          377,
+          379,
+          380,
+          381,
+          385,
+          388,
+          389,
+          393,
+          394,
+          395,
+          402,
+          403,
+          404,
+          405,
+          407,
+          409,
+          412,
+          418,
+          419,
+          420,
+          421,
+          423,
+          424,
+          426,
+          430,
+          431,
+          437,
+          438,
+          440,
+          445,
+          449,
+          450,
+          453,
+          454,
+          456,
+          457,
+          458,
+          463,
+          464,
+          469,
+          470,
+          473,
+          479,
+          480,
+          483,
+          489,
+          490,
+          491,
+          492,
+          496,
+          497,
+          499,
+          500,
+          501,
+          503,
+          505,
+          506,
+          508,
+          509,
+          510,
+          512,
+          513,
+          515,
+          516,
+          517,
+          526,
+          532,
+          533,
+          534,
+          535,
+          536,
+          537,
+          538,
+          540,
+          541,
+          543,
+          554,
+          556,
+          557,
+          558,
+          564,
+          568,
+          569,
+          570,
+          571,
+          575,
+          576,
+          577,
+          623,
+          626,
+          627,
+          637,
+          638,
+          639,
+          641,
+          642,
+          643,
+          645,
+          646,
+          648,
+          649,
+          651
+        ],
+        "gained_branches": [
+          [
+            343,
+            344
+          ],
+          [
+            343,
+            348
+          ],
+          [
+            349,
+            350
+          ],
+          [
+            349,
+            352
+          ],
+          [
+            353,
+            354
+          ],
+          [
+            353,
+            358
+          ],
+          [
+            358,
+            359
+          ],
+          [
+            358,
+            369
+          ],
+          [
+            359,
+            360
+          ],
+          [
+            359,
+            365
+          ],
+          [
+            369,
+            370
+          ],
+          [
+            369,
+            375
+          ],
+          [
+            376,
+            377
+          ],
+          [
+            376,
+            379
+          ],
+          [
+            379,
+            380
+          ],
+          [
+            379,
+            385
+          ],
+          [
+            380,
+            379
+          ],
+          [
+            380,
+            381
+          ],
+          [
+            388,
+            389
+          ],
+          [
+            388,
+            393
+          ],
+          [
+            393,
+            394
+          ],
+          [
+            393,
+            409
+          ],
+          [
+            394,
+            395
+          ],
+          [
+            394,
+            402
+          ],
+          [
+            403,
+            404
+          ],
+          [
+            403,
+            407
+          ],
+          [
+            409,
+            412
+          ],
+          [
+            409,
+            418
+          ],
+          [
+            419,
+            420
+          ],
+          [
+            419,
+            423
+          ],
+          [
+            420,
+            419
+          ],
+          [
+            420,
+            421
+          ],
+          [
+            430,
+            431
+          ],
+          [
+            430,
+            437
+          ],
+          [
+            440,
+            445
+          ],
+          [
+            440,
+            449
+          ],
+          [
+            450,
+            453
+          ],
+          [
+            450,
+            456
+          ],
+          [
+            456,
+            457
+          ],
+          [
+            456,
+            489
+          ],
+          [
+            457,
+            458
+          ],
+          [
+            457,
+            463
+          ],
+          [
+            463,
+            464
+          ],
+          [
+            463,
+            469
+          ],
+          [
+            469,
+            470
+          ],
+          [
+            469,
+            479
+          ],
+          [
+            479,
+            480
+          ],
+          [
+            490,
+            491
+          ],
+          [
+            490,
+            499
+          ],
+          [
+            491,
+            492
+          ],
+          [
+            491,
+            496
+          ],
+          [
+            496,
+            497
+          ],
+          [
+            496,
+            499
+          ],
+          [
+            499,
+            500
+          ],
+          [
+            499,
+            501
+          ],
+          [
+            501,
+            503
+          ],
+          [
+            508,
+            509
+          ],
+          [
+            508,
+            512
+          ],
+          [
+            516,
+            517
+          ],
+          [
+            516,
+            532
+          ],
+          [
+            534,
+            535
+          ],
+          [
+            534,
+            645
+          ],
+          [
+            536,
+            537
+          ],
+          [
+            536,
+            540
+          ],
+          [
+            556,
+            557
+          ],
+          [
+            564,
+            568
+          ],
+          [
+            564,
+            623
+          ],
+          [
+            570,
+            571
+          ],
+          [
+            571,
+            575
+          ],
+          [
+            571,
+            576
+          ],
+          [
+            576,
+            577
+          ],
+          [
+            623,
+            626
+          ],
+          [
+            626,
+            627
+          ],
+          [
+            626,
+            637
+          ],
+          [
+            637,
+            534
+          ],
+          [
+            637,
+            638
+          ],
+          [
+            645,
+            646
+          ],
+          [
+            645,
+            648
+          ]
+        ],
+        "remaining_lines": [
+          579,
+          581,
+          582,
+          585,
+          586,
+          590,
+          605,
+          606,
+          611,
+          612,
+          614,
+          615,
+          616,
+          617,
+          624,
+          625
+        ],
+        "remaining_branches": [
+          [
+            479,
+            489
+          ],
+          [
+            501,
+            505
+          ],
+          [
+            556,
+            564
+          ],
+          [
+            570,
+            623
+          ],
+          [
+            576,
+            579
+          ],
+          [
+            579,
+            581
+          ],
+          [
+            579,
+            585
+          ],
+          [
+            605,
+            606
+          ],
+          [
+            605,
+            611
+          ],
+          [
+            611,
+            612
+          ],
+          [
+            611,
+            614
+          ],
+          [
+            623,
+            624
+          ]
+        ],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 0.8731\nStatement gain: 127 newly covered; 16 remain.\nBranch gain: 78 newly covered; 12 remain.\nRemaining lines: [579, 581, 582, 585, 586, 590, 605, 606, 611, 612, 614, 615, 616, 617, 624, 625]\nRemaining branches: [(479, 489), (501, 505), (556, 564), (570, 623), (576, 579), (579, 581), (579, 585), (605, 606), (605, 611), (611, 612), (611, 614), (623, 624)]\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 1:\nScore: 0.8632\nStatement gain: 126 newly covered; 17 remain.\nBranch gain: 77 newly covered; 13 remain.\nRemaining lines: [496, 497, 500, 579, 581, 582, 585, 586, 590, 605, 606, 611, 612, 614, 615, 616, 617]\nRemaining branches: [(491, 496), (496, 497), (496, 499), (499, 500), (556, 564), (570, 623), (576, 579), (579, 581), (579, 585), (605, 606), (605, 611), (611, 612), (611, 614)]\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 2:\nScore: 0.8929\nStatement gain: 129 newly covered; 14 remain.\nBranch gain: 80 newly covered; 10 remain.\nRemaining lines: [579, 581, 582, 585, 586, 590, 605, 606, 611, 612, 614, 615, 616, 617]\nRemaining branches: [(496, 499), (556, 564), (570, 623), (576, 579), (579, 581), (579, 585), (605, 606), (605, 611), (611, 612), (611, 614)]\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 3:\nScore: 0.8632\nStatement gain: 126 newly covered; 17 remain.\nBranch gain: 77 newly covered; 13 remain.\nRemaining lines: [496, 497, 500, 579, 581, 582, 585, 586, 590, 605, 606, 611, 612, 614, 615, 616, 617]\nRemaining branches: [(491, 496), (496, 497), (496, 499), (499, 500), (556, 564), (570, 623), (576, 579), (579, 581), (579, 585), (605, 606), (605, 611), (611, 612), (611, 614)]\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 4:\nScore: 0.8653\nStatement gain: 127 newly covered; 16 remain.\nBranch gain: 77 newly covered; 13 remain.\nRemaining lines: [370, 431, 579, 581, 582, 585, 586, 590, 605, 606, 611, 612, 614, 615, 616, 617]\nRemaining branches: [(369, 370), (430, 431), (479, 489), (501, 505), (556, 564), (570, 623), (576, 579), (579, 581), (579, 585), (605, 606), (605, 611), (611, 612), (611, 614)]\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 5:\nScore: 0.8336\nStatement gain: 123 newly covered; 20 remain.\nBranch gain: 74 newly covered; 16 remain.\nRemaining lines: [365, 402, 403, 404, 405, 407, 579, 581, 582, 585, 586, 590, 605, 606, 611, 612, 614, 615, 616, 617]\nRemaining branches: [(359, 365), (394, 402), (403, 404), (403, 407), (479, 489), (496, 499), (501, 505), (556, 564), (570, 623), (576, 579), (579, 581), (579, 585), (605, 606), (605, 611), (611, 612), (611, 614)]\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "attempt_traces": [
+        {
+          "source_file": "src\\sample_repo\\mlxtend\\mlxtend\\feature_selection\\sequential_feature_selector.py",
+          "symbol": "SequentialFeatureSelector.fit",
+          "name": "fit",
+          "segment": "src\\sample_repo\\mlxtend\\mlxtend\\feature_selection\\sequential_feature_selector.py:304-651",
+          "attempt": 1,
+          "component": "initial",
+          "prompt_input": "You are an expert Python test-driven developer.\nThe code below, extracted from mlxtend\\feature_selection\\sequential_feature_selector.py, does not achieve full coverage:\nwhen tested, lines 304-651 do not execute.\nCreate new pytest test functions that execute all missing lines and branches. Each test must\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\nPrefer several small, independent test_* functions over one large function with many sequential inline scenarios: an early failure inside a shared function blocks coverage measurement of every later scenario. If a target is best covered by many scenarios, split them into separate test functions so an isolated failure does not discard the rest.\nUse the get_info tool function as necessary. Always return an entire Python test module.\nDo not call pytest.main and do not execute tests at module import time.\nRespond only with Python code enclosed in a python markdown code block.\n\n```python\n            import datetime\n            import sys\n            import numpy as np\n            from mlxtend.feature_selection.utilities import _calc_score, _merge_lists, _preprocess\n            class SequentialFeatureSelector(_BaseXComposition, MetaEstimatorMixin):\n       304:     def fit(self, X, y, groups=None, **fit_params):\n                    \"\"\"Perform feature selection and learn model from training data.\n            \n                    Parameters\n                    ----------\n                    X : {array-like, sparse matrix}, shape = [n_samples, n_features]\n                        Training vectors, where n_samples is the number of samples and\n                        n_features is the number of features.\n                        New in v 0.13.0: pandas DataFrames are now also accepted as\n                        argument for X.\n                    y : array-like, shape = [n_samples]\n                        Target values.\n                        New in v 0.13.0: pandas DataFrames are now also accepted as\n                        argument for y.\n                    groups : array-like, with shape (n_samples,), optional\n                        Group labels for the samples used while splitting the dataset into\n                        train/test set. Passed to the fit method of the cross-validator.\n                    fit_params : various, optional\n                        Additional parameters that are being passed to the estimator.\n                        For example, `sample_weights=weights`.\n            \n                    Returns\n                    -------\n                    self : object\n            \n                    \"\"\"\n            \n                    # reset from a potential previous fit run\n       332:         self.subsets_ = {}\n       333:         self.fitted = False\n       334:         self.interrupted_ = False\n       335:         self.k_feature_idx_ = None\n       336:         self.k_feature_names_ = None\n       337:         self.k_score_ = None\n            \n       339:         X_, self.feature_names = _preprocess(X)\n       340:         self.n_features = X_.shape[1]\n            \n       342:         self.feature_names_to_idx_mapper = None\n       343:         if self.feature_names is not None:\n       344:             self.feature_names_to_idx_mapper = {\n       345:                 name: idx for idx, name in enumerate(self.feature_names)\n                        }\n            \n       348:         self.fixed_features_ = self.fixed_features\n       349:         if self.fixed_features_ is None:\n       350:             self.fixed_features_ = tuple()\n            \n       352:         fixed_feature_types = {type(i) for i in self.fixed_features_}\n       353:         if len(fixed_feature_types) > 1:\n       354:             raise ValueError(\n       355:                 f\"fixed_features values must have the same type. Found {fixed_feature_types}.\"\n                        )\n            \n       358:         if len(self.fixed_features_) > 0 and isinstance(self.fixed_features_[0], str):\n       359:             if self.feature_names_to_idx_mapper is None:\n       360:                 raise ValueError(\n       361:                     \"The input X does not contain name of features provived in\"\n                                \" `fixed_features`. Try passing input X as pandas DataFrames.\"\n                            )\n            \n       365:             self.fixed_features_ = tuple(\n       366:                 self.feature_names_to_idx_mapper[name] for name in self.fixed_features_\n                        )\n            \n       369:         if not set(self.fixed_features_).issubset(set(range(X_.shape[1]))):\n       370:             raise ValueError(\n       371:                 \"`fixed_features` contains at least one feature that is not in the\"\n                            \" input data `X`.\"\n                        )\n            \n       375:         self.feature_groups_ = self.feature_groups\n       376:         if self.feature_groups_ is None:\n       377:             self.feature_groups_ = [[i] for i in range(X_.shape[1])]\n            \n       379:         for fg in self.feature_groups_:\n       380:             if len(fg) == 0:\n       381:                 raise ValueError(\n       382:                     \"Each list in the nested lists `features_group` cannot be empty\"\n                            )\n            \n       385:         feature_group_types = {\n       386:             type(i) for sublist in self.feature_groups_ for i in sublist\n                    }\n       388:         if len(feature_group_types) > 1:\n       389:             raise ValueError(\n       390:                 f\"feature_group values must have the same type. Found {feature_group_types}.\"\n                        )\n            \n       393:         if isinstance(self.feature_groups_[0][0], str):\n       394:             if self.feature_names_to_idx_mapper is None:\n       395:                 raise ValueError(\n       396:                     \"The input X does not contain name of features provived in\"\n                                \" `feature_groups`. Try passing input X as pandas DataFrames\"\n                                \" in which the name of features match the ones provided in\"\n                                \" `feature_groups`\"\n                            )\n            \n       402:             lst = []\n       403:             for item in self.feature_groups_:\n       404:                 tmp = [self.feature_names_to_idx_mapper[name] for name in item]\n       405:                 lst.append(tmp)\n            \n       407:             self.feature_groups_ = lst\n            \n       409:         if sorted(_merge_lists(self.feature_groups_)) != sorted(\n       410:             list(range(X_.shape[1]))\n                    ):\n       412:             raise ValueError(\n       413:                 \"`feature_group` must contain all features within `range(X.shape[1])`\"\n                            \" and there should be no common feature betweeen any two distinct\"\n                            \" group of features provided in `feature_group`\"\n                        )\n            \n       418:         features_encoded_by_groupID = np.full(X_.shape[1], -1, dtype=np.int64)\n       419:         for group_id, group in enumerate(self.feature_groups_):\n       420:             for idx in group:\n       421:                 features_encoded_by_groupID[idx] = group_id\n            \n       423:         lst = [features_encoded_by_groupID[idx] for idx in self.fixed_features_]\n       424:         self.fixed_features_group_set = set(lst)\n            \n       426:         n_fixed_features_expected = sum(\n       427:             len(self.feature_groups_[group_id])\n       428:             for group_id in self.fixed_features_group_set\n                    )\n       430:         if n_fixed_features_expected != len(self.fixed_features_):\n       431:             raise ValueError(\n       432:                 \"For each feature specified in the `fixed feature`, its group-mates\"\n                            \"must be specified as `fix_features` as well when `feature_groups`\"\n                            \"is provided.\"\n                        )\n            \n       437:         self.k_lb = max(1, len(self.fixed_features_group_set))\n       438:         self.k_ub = len(self.feature_groups_)\n            \n       440:         if (\n       441:             not isinstance(self.k_features, int)\n       442:             and not isinstance(self.k_features, tuple)\n       443:             and not isinstance(self.k_features, str)\n                    ):\n       445:             raise AttributeError(\n       446:                 \"k_features must be a positive integer\" \", tuple, or string\"\n                        )\n            \n       449:         eligible_k_values_range = range(self.k_lb, self.k_ub + 1)\n       450:         if isinstance(self.k_features, int) and (\n       451:             self.k_features not in eligible_k_values_range\n                    ):\n       453:             err_msg = self.generate_error_message_k_features(\"k_features\")\n       454:             raise AttributeError(err_msg)\n            \n       456:         if isinstance(self.k_features, tuple):\n       457:             if len(self.k_features) != 2:\n       458:                 raise AttributeError(\n       459:                     \"k_features tuple must consist of 2\"\n                                \" elements, a min and a max value.\"\n                            )\n            \n       463:             if self.k_features[0] > self.k_features[1]:\n       464:                 raise AttributeError(\n       465:                     \"The min k_features value must be smaller\"\n                                \" than the max k_features value.\"\n                            )\n            \n       469:             if self.k_features[0] not in eligible_k_values_range:\n       470:                 err_msg = self.generate_error_message_k_features(\n       471:                     \"k_features tuple min value\"\n                            )\n       473:                 raise AttributeError(err_msg)\n            \n                            # raise AttributeError(\n                            #    \"k_features tuple min value must be in\" \" range(1, X.shape[1]+1).\"\n                            # )\n            \n       479:             if self.k_features[1] not in eligible_k_values_range:\n       480:                 err_msg = self.generate_error_message_k_features(\n       481:                     \"k_features tuple max value\"\n                            )\n       483:                 raise AttributeError(err_msg)\n            \n                            # raise AttributeError(\n                            #    \"k_features tuple max value must be in\" \" range(1, X.shape[1]+1).\"\n                            # )\n            \n       489:         self.is_parsimonious = False\n       490:         if isinstance(self.k_features, str):\n       491:             if self.k_features not in {\"best\", \"parsimonious\"}:\n       492:                 raise AttributeError(\n       493:                     \"If a string argument is provided, \"\n                                'it must be \"best\" or \"parsimonious\"'\n                            )\n       496:             if self.k_features == \"parsimonious\":\n       497:                 self.is_parsimonious = True\n            \n       499:         if isinstance(self.k_features, str):\n       500:             self.k_features = (self.k_lb, self.k_ub)\n       501:         elif isinstance(self.k_features, int):\n                        # we treat k_features as k group of features\n       503:             self.k_features = (self.k_features, self.k_features)\n            \n       505:         self.min_k = self.k_features[0]\n       506:         self.max_k = self.k_features[1]\n            \n       508:         if self.forward:\n       509:             k_idx = tuple(sorted(self.fixed_features_group_set))\n       510:             k_stop = self.max_k\n                    else:\n       512:             k_idx = tuple(range(self.k_ub))\n       513:             k_stop = self.min_k\n            \n       515:         k = len(k_idx)\n       516:         if k > 0:\n       517:             k_idx, k_score = _calc_score(\n       518:                 self,\n       519:                 X_,\n       520:                 y,\n       521:                 k_idx,\n       522:                 groups=groups,\n       523:                 feature_groups=self.feature_groups_,\n       524:                 **fit_params,\n                        )\n       526:             self.subsets_[k] = {\n       527:                 \"feature_idx\": k_idx,\n       528:                 \"cv_scores\": k_score,\n       529:                 \"avg_score\": np.nanmean(k_score),\n                        }\n            \n       532:         orig_set = set(range(self.k_ub))\n       533:         try:\n       534:             while k != k_stop:\n       535:                 prev_subset = set(k_idx)\n       536:                 if self.forward:\n       537:                     search_set = orig_set\n       538:                     must_include_set = prev_subset\n                            else:\n       540:                     search_set = prev_subset\n       541:                     must_include_set = self.fixed_features_group_set\n            \n       543:                 k_idx, k_score, cv_scores = self._feature_selector(\n       544:                     search_set,\n       545:                     must_include_set,\n       546:                     X=X_,\n       547:                     y=y,\n       548:                     is_forward=self.forward,\n       549:                     groups=groups,\n       550:                     feature_groups=self.feature_groups_,\n       551:                     **fit_params,\n                            )\n            \n       554:                 k = len(k_idx)\n                            # floating can lead to multiple same-sized subsets\n       556:                 if k not in self.subsets_ or (k_score > self.subsets_[k][\"avg_score\"]):\n       557:                     k_idx = tuple(sorted(k_idx))\n       558:                     self.subsets_[k] = {\n       559:                         \"feature_idx\": k_idx,\n       560:                         \"cv_scores\": cv_scores,\n       561:                         \"avg_score\": k_score,\n                                }\n            \n       564:                 if self.floating:\n                                # floating direction is opposite of self.forward, i.e. in\n                                # forward selection, we do floating in backward manner,\n                                # and in backward selection, we do floating in forward manner\n       568:                     is_float_forward = not self.forward\n       569:                     (new_feature_idx,) = set(k_idx) ^ prev_subset\n       570:                     for _ in range(X_.shape[1]):\n       571:                         if (\n       572:                             self.forward\n       573:                             and (len(k_idx) - len(self.fixed_features_group_set)) <= 2\n                                    ):\n       575:                             break\n       576:                         if not self.forward and (len(orig_set) - len(k_idx) <= 2):\n       577:                             break\n            \n       579:                         if is_float_forward:\n                                        # corresponding to self.forward=False\n       581:                             search_set = orig_set - {new_feature_idx}\n       582:                             must_include_set = set(k_idx)\n                                    else:\n                                        # corresponding to self.forward=True\n       585:                             search_set = set(k_idx)\n       586:                             must_include_set = self.fixed_features_group_set | {\n       587:                                 new_feature_idx\n                                        }\n            \n       590:                         (\n       591:                             k_idx_c,\n       592:                             k_score_c,\n       593:                             cv_scores_c,\n       594:                         ) = self._feature_selector(\n       595:                             search_set,\n       596:                             must_include_set,\n       597:                             X=X_,\n       598:                             y=y,\n       599:                             is_forward=is_float_forward,\n       600:                             groups=groups,\n       601:                             feature_groups=self.feature_groups_,\n       602:                             **fit_params,\n                                    )\n            \n       605:                         if k_score_c <= k_score:\n       606:                             break\n            \n                                    # In the floating process, we basically revisit our previous\n                                    # steps. so, len(k_idx_c) definitely exists as a key in\n                                    # the dictionary `self.subsets_`\n       611:                         if k_score_c <= self.subsets_[len(k_idx_c)][\"avg_score\"]:\n       612:                             break\n                                    else:\n       614:                             k_idx, k_score, cv_scores = k_idx_c, k_score_c, cv_scores_c\n       615:                             k_idx = tuple(sorted(k_idx))\n       616:                             k = len(k_idx)\n       617:                             self.subsets_[k] = {\n       618:                                 \"feature_idx\": k_idx,\n       619:                                 \"cv_scores\": cv_scores,\n       620:                                 \"avg_score\": k_score,\n                                        }\n            \n       623:                 if self.verbose == 1:\n       624:                     sys.stderr.write(\"\\rFeatures: %d/%s\" % (len(k_idx), k_stop))\n       625:                     sys.stderr.flush()\n       626:                 elif self.verbose > 1:\n       627:                     sys.stderr.write(\n       628:                         \"\\n[%s] Features: %d/%s -- score: %s\"\n       629:                         % (\n       630:                             datetime.datetime.now().strftime(\"%Y-%m-%d %H:%M:%S\"),\n       631:                             len(k_idx),\n       632:                             k_stop,\n       633:                             k_score,\n                                    )\n                                )\n            \n       637:                 if self._TESTING_INTERRUPT_MODE:  # just to test `KeyboardInterrupt`\n       638:                     self.finalize_fit()\n       639:                     raise KeyboardInterrupt\n            \n       641:         except KeyboardInterrupt:\n       642:             self.interrupted_ = True\n       643:             sys.stderr.write(\"\\nSTOPPING EARLY DUE TO KEYBOARD INTERRUPT...\")\n            \n       645:         if self.interrupted_:\n       646:             self.fitted = False\n                    else:\n       648:             self.fitted = True  # the completion of sequential selection process.\n       649:             self.finalize_fit()\n            \n       651:         return self\n\n```\n\n[TARGET CONTRACT]\nSignature: def SequentialFeatureSelector.fit(self, X, y, groups=None, **fit_params)\nDocstring: Perform feature selection and learn model from training data. Parameters ---------- X : {array-like, sparse matrix}, shape = [n_samples, n_features] Training vectors, where n_samples is the number of samples and n_features is the number of features. New in v 0.13.0: pandas DataFrames are now also accepted as argument for X. y : array-like, shape = [n_samples] Target values. New in v 0.13.0: pandas DataFrames are now also accepted as argument for y. groups : array-like, with shape (n_samples,), optional Group labels for the samples used while splitting the dataset into train/test set. Passed to the fit method of the cross-validator. fit_params : various, optional Additional parameters that are being passed to the estimator. For example, `sample_weights=weights`. Returns ------- self : objec\nEnclosing classes: SequentialFeatureSelector(_BaseXComposition, MetaEstimatorMixin)\n\nUse this repository-local context as guidance only. Do not modify existing tests.\n[END TARGET CONTEXT]",
+          "outcome": "test_error",
+          "generated_test": "import numpy as np\nimport pandas as pd\nimport pytest\nfrom sklearn.linear_model import LinearRegression\nfrom mlxtend.feature_selection import SequentialFeatureSelector as SFS\n\n\ndef test_sfs_fit_basic_forward():\n    X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], dtype=float)\n    y = np.array([1, 2, 3, 4], dtype=float)\n    est = LinearRegression()\n    sfs = SFS(est, k_features=2, forward=True, floating=False)\n    sfs.fit(X, y)\n    assert sfs.fitted\n    assert len(sfs.k_feature_idx_) == 2\n\n\ndef test_sfs_fit_basic_backward():\n    X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], dtype=float)\n    y = np.array([1, 2, 3, 4], dtype=float)\n    est = LinearRegression()\n    sfs = SFS(est, k_features=2, forward=False, floating=False)\n    sfs.fit(X, y)\n    assert sfs.fitted\n    assert len(sfs.k_feature_idx_) == 2\n\n\ndef test_sfs_fit_floating_forward():\n    X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12], [13, 14, 15]], dtype=float)\n    y = np.array([1, 2, 3, 4, 5], dtype=float)\n    est = LinearRegression()\n    sfs = SFS(est, k_features=2, forward=True, floating=True)\n    sfs.fit(X, y)\n    assert sfs.fitted\n\n\ndef test_sfs_fit_floating_backward():\n    X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12], [13, 14, 15]], dtype=float)\n    y = np.array([1, 2, 3, 4, 5], dtype=float)\n    est = LinearRegression()\n    sfs = SFS(est, k_features=2, forward=False, floating=True)\n    sfs.fit(X, y)\n    assert sfs.fitted\n\n\ndef test_sfs_fit_pandas_dataframe_and_strings():\n    df = pd.DataFrame({\"feat_a\": [1, 2, 3, 4], \"feat_b\": [5, 6, 7, 8], \"feat_c\": [9, 10, 11, 12]})\n    y = pd.Series([1, 2, 3, 4])\n    est = LinearRegression()\n    sfs = SFS(\n        est,\n        k_features=\"best\",\n        forward=True,\n        fixed_features=[\"feat_a\"],\n        feature_groups=[[\"feat_a\"], [\"feat_b\"], [\"feat_c\"]],\n    )\n    sfs.fit(df, y)\n    assert sfs.fitted\n\n\ndef test_sfs_fit_parsimonious():\n    X = np.array([[1, 2], [3, 4], [5, 6], [7, 8]], dtype=float)\n    y = np.array([1, 2, 3, 4], dtype=float)\n    est = LinearRegression()\n    sfs = SFS(est, k_features=\"parsimonious\", forward=True)\n    sfs.fit(X, y)\n    assert sfs.fitted\n\n\ndef test_sfs_fit_verbose_and_keyboard_interrupt():\n    X = np.array([[1, 2], [3, 4], [5, 6], [7, 8]], dtype=float)\n    y = np.array([1, 2, 3, 4], dtype=float)\n    est = LinearRegression()\n    sfs = SFS(est, k_features=1, forward=True, verbose=2)\n    sfs._TESTING_INTERRUPT_MODE = True\n    sfs.fit(X, y)\n    assert sfs.interrupted_\n    assert not sfs.fitted\n    sfs._TESTING_INTERRUPT_MODE = False\n\n\ndef test_sfs_fit_validation_errors():\n    X = np.array([[1, 2], [3, 4]], dtype=float)\n    y = np.array([1, 2], dtype=float)\n    est = LinearRegression()\n\n    # fixed_features different types\n    with pytest.raises(ValueError, match=\"fixed_features values must have the same type\"):\n        sfs = SFS(est, k_features=1, fixed_features=[0, \"a\"])\n        sfs.fit(X, y)\n\n    # fixed_features string without pandas input\n    with pytest.raises(ValueError, match=\"The input X does not contain name of features\"):\n        sfs = SFS(est, k_features=1, fixed_features=[\"a\"])\n        sfs.fit(X, y)\n\n    # fixed_features out of range\n    with pytest.raises(ValueError, match=\"contains at least one feature that is not in\"):\n        sfs = SFS(est, k_features=1, fixed_features=[5])\n        sfs.fit(X, y)\n\n    # feature_groups empty list\n    with pytest.raises(ValueError, match=\"Each list in the nested lists `features_group` cannot be empty\"):\n        sfs = SFS(est, k_features=1, feature_groups=[[], [0, 1]])\n        sfs.fit(X, y)\n\n    # feature_groups mixed types\n    with pytest.raises(ValueError, match=\"feature_group values must have the same type\"):\n        sfs = SFS(est, k_features=1, feature_groups=[[0], [\"1\"]])\n        sfs.fit(X, y)\n\n    # feature_groups string without dataframe\n    with pytest.raises(ValueError, match=\"The input X does not contain name of features\"):\n        sfs = SFS(est, k_features=1, feature_groups=[[\"a\"], [\"b\"]])\n        sfs.fit(X, y)\n\n    # feature_groups missing features or overlapping\n    with pytest.raises(ValueError, match=\"must contain all features within\"):\n        sfs = SFS(est, k_features=1, feature_groups=[[0], [0]])\n        sfs.fit(X, y)\n\n    # fixed_features group-mates not specified\n    with pytest.raises(ValueError, match=\"For each feature specified in the `fixed feature`\"):\n        sfs = SFS(est, k_features=1, feature_groups=[[0, 1]], fixed_features=[0])\n        sfs.fit(X, y)\n\n    # invalid k_features type\n    with pytest.raises(AttributeError, match=\"k_features must be a positive integer\"):\n        sfs = SFS(est, k_features=3.5)\n        sfs.fit(X, y)\n\n    # invalid k_features int range\n    with pytest.raises(AttributeError):\n        sfs = SFS(est, k_features=5)\n        sfs.fit(X, y)\n\n    # invalid k_features tuple length\n    with pytest.raises(AttributeError, match=\"k_features tuple must consist of 2 elements\"):\n        sfs = SFS(est, k_features=(1,))\n        sfs.fit(X, y)\n\n    # invalid k_features tuple order\n    with pytest.raises(AttributeError, match=\"The min k_features value must be smaller\"):\n        sfs = SFS(est, k_features=(2, 1))\n        sfs.fit(X, y)\n\n    # invalid k_features tuple min range\n    with pytest.raises(AttributeError):\n        sfs = SFS(est, k_features=(-1, 2))\n        sfs.fit(X, y)\n\n    # invalid k_features tuple max range\n    with pytest.raises(AttributeError):\n        sfs = SFS(est, k_features=(1, 5))\n        sfs.fit(X, y)\n\n    # invalid k_features string\n    with pytest.raises(AttributeError, match='If a string argument is provided, it must be \"best\" or \"parsimonious\"'):\n        sfs = SFS(est, k_features=\"invalid\")\n        sfs.fit(X, y)\n",
+          "execution_error": "F\r\n================================== FAILURES ===================================\r\n_______________________ test_sfs_fit_basic_forward[1-2] _______________________\r\n\r\n    def test_sfs_fit_basic_forward():\r\n        X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], dtype=float)\r\n        y = np.array([1, 2, 3, 4], dtype=float)\r\n        est = LinearRegression()\r\n>       sfs = SFS(est, k_features=2, forward=True, floating=False)\r\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n\r\neval\\prompt_optimization_nolever\\runs\\3a5a78e405676b45-af695d60ce49\\validation\\multi-project-validation-batch-56868e5a\\target_workspaces\\8b5fa044ab64_0005\\tmp_test_s4x4sn0s.py:12: \r\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\r\n\r\nself = <[AttributeError(\"'SequentialFeatureSelector' object has no attribute 'feature_groups'\") raised in repr()] SequentialFeatureSelector object at 0x29409d61d00>\r\nestimator = LinearRegression(), k_features = 2, forward = True, floating = False\r\nverbose = 0, scoring = None, cv = 5, n_jobs = 1, pre_dispatch = '2*n_jobs'\r\nclone_estimator = True, fixed_features = None, feature_groups = None\r\n\r\n    def __init__(\r\n        self,\r\n        estimator,\r\n        k_features=1,\r\n        forward=True,\r\n        floating=False,\r\n        verbose=0,\r\n        scoring=None,\r\n        cv=5,\r\n        n_jobs=1,\r\n        pre_dispatch=\"2*n_jobs\",\r\n        clone_estimator=True,\r\n        fixed_features=None,\r\n        feature_groups=None,\r\n    ):\r\n        self.estimator = estimator\r\n        self.k_features = k_features\r\n        self.forward = forward\r\n        self.floating = floating\r\n        self.pre_dispatch = pre_dispatch\r\n        # Want to raise meaningful error message if a\r\n        # cross-validation generator is inputted\r\n        if isinstance(cv, types.GeneratorType):\r\n            err_msg = (\r\n                \"Input cv is a generator object, which is not \"\r\n                \"supported. Instead please input an iterable yielding \"\r\n                \"train, test splits. This can usually be done by \"\r\n                \"passing a cross-validation generator to the \"\r\n                \"built-in list function. I.e. cv=list(<cv-generator>)\"\r\n            )\r\n            raise TypeError(err_msg)\r\n        self.cv = cv\r\n        self.n_jobs = n_jobs\r\n        self.verbose = verbose\r\n    \r\n        self.clone_estimator = clone_estimator\r\n        if self.clone_estimator:\r\n            self.est_ = clone(self.estimator)\r\n        else:\r\n            self.est_ = self.estimator\r\n    \r\n        self.scoring = scoring\r\n        if self.scoring is None:\r\n            if not hasattr(self.est_, \"_estimator_type\"):\r\n>               raise AttributeError(\r\n                    \"Estimator must have an ._estimator_type for infering `scoring`\"\r\n                )\r\nE               AttributeError: Estimator must have an ._estimator_type for infering `scoring`\r\n\r\nsrc\\sample_repo\\mlxtend\\mlxtend\\feature_selection\\sequential_feature_selector.py:229: AttributeError\r\n",
+          "next_component": "error"
+        },
+        {
+          "source_file": "src\\sample_repo\\mlxtend\\mlxtend\\feature_selection\\sequential_feature_selector.py",
+          "symbol": "SequentialFeatureSelector.fit",
+          "name": "fit",
+          "segment": "src\\sample_repo\\mlxtend\\mlxtend\\feature_selection\\sequential_feature_selector.py:304-651",
+          "attempt": 2,
+          "component": "error",
+          "prompt_input": "Executing the test yields an error, shown below.\nModify or rewrite the test to correct it. Return the complete Python test module, not a patch.\nPreserve useful assertions from the previous test and use get_info when more source context is needed.\nRespond only with Python code enclosed in a python markdown code block.\n\nF\r\n================================== FAILURES ===================================\r\n_______________________ test_sfs_fit_basic_forward[1-2] _______________________\r\n\r\n    def test_sfs_fit_basic_forward():\r\n        X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], dtype=float)\r\n        y = np.array([1, 2, 3, 4], dtype=float)\r\n        est = LinearRegression()\r\n>       sfs = SFS(est, k_features=2, forward=True, floating=False)\r\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n\r\neval\\prompt_optimization_nolever\\runs\\3a5a78e405676b45-af695d60ce49\\validation\\multi-project-validation-batch-56868e5a\\target_workspaces\\8b5fa044ab64_0005\\tmp_test_s4x4sn0s.py:12: \r\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\r\n\r\nself = <[AttributeError(\"'SequentialFeatureSelector' object has no attribute 'feature_groups'\") raised in repr()] SequentialFeatureSelector object at 0x29409d61d00>\r\nestimator = LinearRegression(), k_features = 2, forward = True, floating = False\r\nverbose = 0, scoring = None, cv = 5, n_jobs = 1, pre_dispatch = '2*n_jobs'\r\nclone_estimator = True, fixed_features = None, feature_groups = None\r\n\r\n    def __init__(\r\n        self,\r\n        estimator,\r\n        k_features=1,\r\n        forward=True,\r\n        floating=False,\r\n        verbose=0,\r\n        scoring=None,\r\n        cv=5,\r\n        n_jobs=1,\r\n        pre_dispatch=\"2*n_jobs\",\r\n        clone_estimator=True,\r\n        fixed_features=None,\r\n        feature_groups=None,\r\n    ):\r\n        self.estimator = estimator\r\n        self.k_features = k_features\r\n        self.forward = forward\r\n        self.floating = floating\r\n        self.pre_dispatch = pre_dispatch\r\n        # Want to raise meaningful error message if a\r\n        # cross-validation generator is inputted\r\n        if isinstance(cv, types.GeneratorType):\r\n            err_msg = (\r\n                \"Input cv is a generator object, which is not \"\r\n                \"supported. Instead please input an iterable yielding \"\r\n                \"train, test splits. This can usually be done by \"\r\n                \"passing a cross-validation generator to the \"\r\n                \"built-in list function. I.e. cv=list(<cv-generator>)\"\r\n            )\r\n            raise TypeError(err_msg)\r\n        self.cv = cv\r\n        self.n_jobs = n_jobs\r\n        self.verbose = verbose\r\n    \r\n        self.clone_estimator = clone_estimator\r\n        if self.clone_estimator:\r\n            self.est_ = clone(self.estimator)\r\n        else:\r\n            self.est_ = self.estimator\r\n    \r\n        self.scoring = scoring\r\n        if self.scoring is None:\r\n            if not hasattr(self.est_, \"_estimator_type\"):\r\n>               raise AttributeError(\r\n                    \"Estimator must have an ._estimator_type for infering `scoring`\"\r\n                )\r\nE               AttributeError: Estimator must have an ._estimator_type for infering `scoring`\r\n\r\nsrc\\sample_repo\\mlxtend\\mlxtend\\feature_selection\\sequential_feature_selector.py:229: AttributeError\r\n",
+          "outcome": "test_error",
+          "generated_test": "import numpy as np\nimport pandas as pd\nimport pytest\nfrom sklearn.linear_model import LinearRegression\nfrom mlxtend.feature_selection import SequentialFeatureSelector as SFS\n\n\ndef test_sfs_fit_basic_forward():\n    X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], dtype=float)\n    y = np.array([1, 2, 3, 4], dtype=float)\n    est = LinearRegression()\n    est._estimator_type = \"regressor\"\n    sfs = SFS(est, k_features=2, forward=True, floating=False)\n    sfs.fit(X, y)\n    assert sfs.fitted\n    assert len(sfs.k_feature_idx_) == 2\n\n\ndef test_sfs_fit_basic_backward():\n    X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], dtype=float)\n    y = np.array([1, 2, 3, 4], dtype=float)\n    est = LinearRegression()\n    est._estimator_type = \"regressor\"\n    sfs = SFS(est, k_features=2, forward=False, floating=False)\n    sfs.fit(X, y)\n    assert sfs.fitted\n    assert len(sfs.k_feature_idx_) == 2\n\n\ndef test_sfs_fit_floating_forward():\n    X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12], [13, 14, 15]], dtype=float)\n    y = np.array([1, 2, 3, 4, 5], dtype=float)\n    est = LinearRegression()\n    est._estimator_type = \"regressor\"\n    sfs = SFS(est, k_features=2, forward=True, floating=True)\n    sfs.fit(X, y)\n    assert sfs.fitted\n\n\ndef test_sfs_fit_floating_backward():\n    X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12], [13, 14, 15]], dtype=float)\n    y = np.array([1, 2, 3, 4, 5], dtype=float)\n    est = LinearRegression()\n    est._estimator_type = \"regressor\"\n    sfs = SFS(est, k_features=2, forward=False, floating=True)\n    sfs.fit(X, y)\n    assert sfs.fitted\n\n\ndef test_sfs_fit_pandas_dataframe_and_strings():\n    df = pd.DataFrame({\"feat_a\": [1, 2, 3, 4], \"feat_b\": [5, 6, 7, 8], \"feat_c\": [9, 10, 11, 12]})\n    y = pd.Series([1, 2, 3, 4])\n    est = LinearRegression()\n    est._estimator_type = \"regressor\"\n    sfs = SFS(\n        est,\n        k_features=\"best\",\n        forward=True,\n        fixed_features=[\"feat_a\"],\n        feature_groups=[[\"feat_a\"], [\"feat_b\"], [\"feat_c\"]],\n    )\n    sfs.fit(df, y)\n    assert sfs.fitted\n\n\ndef test_sfs_fit_parsimonious():\n    X = np.array([[1, 2], [3, 4], [5, 6], [7, 8]], dtype=float)\n    y = np.array([1, 2, 3, 4], dtype=float)\n    est = LinearRegression()\n    est._estimator_type = \"regressor\"\n    sfs = SFS(est, k_features=\"parsimonious\", forward=True)\n    sfs.fit(X, y)\n    assert sfs.fitted\n\n\ndef test_sfs_fit_verbose_and_keyboard_interrupt():\n    X = np.array([[1, 2], [3, 4], [5, 6], [7, 8]], dtype=float)\n    y = np.array([1, 2, 3, 4], dtype=float)\n    est = LinearRegression()\n    est._estimator_type = \"regressor\"\n    sfs = SFS(est, k_features=1, forward=True, verbose=2)\n    sfs._TESTING_INTERRUPT_MODE = True\n    sfs.fit(X, y)\n    assert sfs.interrupted_\n    assert not sfs.fitted\n    sfs._TESTING_INTERRUPT_MODE = False\n\n\ndef test_sfs_fit_validation_errors():\n    X = np.array([[1, 2], [3, 4]], dtype=float)\n    y = np.array([1, 2], dtype=float)\n    est = LinearRegression()\n    est._estimator_type = \"regressor\"\n\n    # fixed_features different types\n    with pytest.raises(ValueError, match=\"fixed_features values must have the same type\"):\n        sfs = SFS(est, k_features=1, fixed_features=[0, \"a\"])\n        sfs.fit(X, y)\n\n    # fixed_features string without pandas input\n    with pytest.raises(ValueError, match=\"The input X does not contain name of features\"):\n        sfs = SFS(est, k_features=1, fixed_features=[\"a\"])\n        sfs.fit(X, y)\n\n    # fixed_features out of range\n    with pytest.raises(ValueError, match=\"contains at least one feature that is not in\"):\n        sfs = SFS(est, k_features=1, fixed_features=[5])\n        sfs.fit(X, y)\n\n    # feature_groups empty list\n    with pytest.raises(ValueError, match=\"Each list in the nested lists `features_group` cannot be empty\"):\n        sfs = SFS(est, k_features=1, feature_groups=[[], [0, 1]])\n        sfs.fit(X, y)\n\n    # feature_groups mixed types\n    with pytest.raises(ValueError, match=\"feature_group values must have the same type\"):\n        sfs = SFS(est, k_features=1, feature_groups=[[0], [\"1\"]])\n        sfs.fit(X, y)\n\n    # feature_groups string without dataframe\n    with pytest.raises(ValueError, match=\"The input X does not contain name of features\"):\n        sfs = SFS(est, k_features=1, feature_groups=[[\"a\"], [\"b\"]])\n        sfs.fit(X, y)\n\n    # feature_groups missing features or overlapping\n    with pytest.raises(ValueError, match=\"must contain all features within\"):\n        sfs = SFS(est, k_features=1, feature_groups=[[0], [0]])\n        sfs.fit(X, y)\n\n    # fixed_features group-mates not specified\n    with pytest.raises(ValueError, match=\"For each feature specified in the `fixed feature`\"):\n        sfs = SFS(est, k_features=1, feature_groups=[[0, 1]], fixed_features=[0])\n        sfs.fit(X, y)\n\n    # invalid k_features type\n    with pytest.raises(AttributeError, match=\"k_features must be a positive integer\"):\n        sfs = SFS(est, k_features=3.5)\n        sfs.fit(X, y)\n\n    # invalid k_features int range\n    with pytest.raises(AttributeError):\n        sfs = SFS(est, k_features=5)\n        sfs.fit(X, y)\n\n    # invalid k_features tuple length\n    with pytest.raises(AttributeError, match=\"k_features tuple must consist of 2 elements\"):\n        sfs = SFS(est, k_features=(1,))\n        sfs.fit(X, y)\n\n    # invalid k_features tuple order\n    with pytest.raises(AttributeError, match=\"The min k_features value must be smaller\"):\n        sfs = SFS(est, k_features=(2, 1))\n        sfs.fit(X, y)\n\n    # invalid k_features tuple min range\n    with pytest.raises(AttributeError):\n        sfs = SFS(est, k_features=(-1, 2))\n        sfs.fit(X, y)\n\n    # invalid k_features tuple max range\n    with pytest.raises(AttributeError):\n        sfs = SFS(est, k_features=(1, 5))\n        sfs.fit(X, y)\n\n    # invalid k_features string\n    with pytest.raises(AttributeError, match='If a string argument is provided, it must be \"best\" or \"parsimonious\"'):\n        sfs = SFS(est, k_features=\"invalid\")\n        sfs.fit(X, y)\n",
+          "execution_error": "F\r\n================================== FAILURES ===================================\r\n_______________________ test_sfs_fit_basic_forward[1-2] _______________________\r\n\r\n    def test_sfs_fit_basic_forward():\r\n        X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], dtype=float)\r\n        y = np.array([1, 2, 3, 4], dtype=float)\r\n        est = LinearRegression()\r\n        est._estimator_type = \"regressor\"\r\n>       sfs = SFS(est, k_features=2, forward=True, floating=False)\r\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n\r\neval\\prompt_optimization_nolever\\runs\\3a5a78e405676b45-af695d60ce49\\validation\\multi-project-validation-batch-56868e5a\\target_workspaces\\8b5fa044ab64_0005\\tmp_test_j70x1n1u.py:13: \r\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\r\n\r\nself = <[AttributeError(\"'SequentialFeatureSelector' object has no attribute 'feature_groups'\") raised in repr()] SequentialFeatureSelector object at 0x1849d1d6660>\r\nestimator = LinearRegression(), k_features = 2, forward = True, floating = False\r\nverbose = 0, scoring = None, cv = 5, n_jobs = 1, pre_dispatch = '2*n_jobs'\r\nclone_estimator = True, fixed_features = None, feature_groups = None\r\n\r\n    def __init__(\r\n        self,\r\n        estimator,\r\n        k_features=1,\r\n        forward=True,\r\n        floating=False,\r\n        verbose=0,\r\n        scoring=None,\r\n        cv=5,\r\n        n_jobs=1,\r\n        pre_dispatch=\"2*n_jobs\",\r\n        clone_estimator=True,\r\n        fixed_features=None,\r\n        feature_groups=None,\r\n    ):\r\n        self.estimator = estimator\r\n        self.k_features = k_features\r\n        self.forward = forward\r\n        self.floating = floating\r\n        self.pre_dispatch = pre_dispatch\r\n        # Want to raise meaningful error message if a\r\n        # cross-validation generator is inputted\r\n        if isinstance(cv, types.GeneratorType):\r\n            err_msg = (\r\n                \"Input cv is a generator object, which is not \"\r\n                \"supported. Instead please input an iterable yielding \"\r\n                \"train, test splits. This can usually be done by \"\r\n                \"passing a cross-validation generator to the \"\r\n                \"built-in list function. I.e. cv=list(<cv-generator>)\"\r\n            )\r\n            raise TypeError(err_msg)\r\n        self.cv = cv\r\n        self.n_jobs = n_jobs\r\n        self.verbose = verbose\r\n    \r\n        self.clone_estimator = clone_estimator\r\n        if self.clone_estimator:\r\n            self.est_ = clone(self.estimator)\r\n        else:\r\n            self.est_ = self.estimator\r\n    \r\n        self.scoring = scoring\r\n        if self.scoring is None:\r\n            if not hasattr(self.est_, \"_estimator_type\"):\r\n>               raise AttributeError(\r\n                    \"Estimator must have an ._estimator_type for infering `scoring`\"\r\n                )\r\nE               AttributeError: Estimator must have an ._estimator_type for infering `scoring`\r\n\r\nsrc\\sample_repo\\mlxtend\\mlxtend\\feature_selection\\sequential_feature_selector.py:229: AttributeError\r\n",
+          "next_component": "error"
+        },
+        {
+          "source_file": "src\\sample_repo\\mlxtend\\mlxtend\\feature_selection\\sequential_feature_selector.py",
+          "symbol": "SequentialFeatureSelector.fit",
+          "name": "fit",
+          "segment": "src\\sample_repo\\mlxtend\\mlxtend\\feature_selection\\sequential_feature_selector.py:304-651",
+          "attempt": 3,
+          "component": "error",
+          "prompt_input": "Executing the test yields an error, shown below.\nModify or rewrite the test to correct it. Return the complete Python test module, not a patch.\nPreserve useful assertions from the previous test and use get_info when more source context is needed.\nRespond only with Python code enclosed in a python markdown code block.\n\nF\r\n================================== FAILURES ===================================\r\n_______________________ test_sfs_fit_basic_forward[1-2] _______________________\r\n\r\n    def test_sfs_fit_basic_forward():\r\n        X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], dtype=float)\r\n        y = np.array([1, 2, 3, 4], dtype=float)\r\n        est = LinearRegression()\r\n        est._estimator_type = \"regressor\"\r\n>       sfs = SFS(est, k_features=2, forward=True, floating=False)\r\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n\r\neval\\prompt_optimization_nolever\\runs\\3a5a78e405676b45-af695d60ce49\\validation\\multi-project-validation-batch-56868e5a\\target_workspaces\\8b5fa044ab64_0005\\tmp_test_j70x1n1u.py:13: \r\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\r\n\r\nself = <[AttributeError(\"'SequentialFeatureSelector' object has no attribute 'feature_groups'\") raised in repr()] SequentialFeatureSelector object at 0x1849d1d6660>\r\nestimator = LinearRegression(), k_features = 2, forward = True, floating = False\r\nverbose = 0, scoring = None, cv = 5, n_jobs = 1, pre_dispatch = '2*n_jobs'\r\nclone_estimator = True, fixed_features = None, feature_groups = None\r\n\r\n    def __init__(\r\n        self,\r\n        estimator,\r\n        k_features=1,\r\n        forward=True,\r\n        floating=False,\r\n        verbose=0,\r\n        scoring=None,\r\n        cv=5,\r\n        n_jobs=1,\r\n        pre_dispatch=\"2*n_jobs\",\r\n        clone_estimator=True,\r\n        fixed_features=None,\r\n        feature_groups=None,\r\n    ):\r\n        self.estimator = estimator\r\n        self.k_features = k_features\r\n        self.forward = forward\r\n        self.floating = floating\r\n        self.pre_dispatch = pre_dispatch\r\n        # Want to raise meaningful error message if a\r\n        # cross-validation generator is inputted\r\n        if isinstance(cv, types.GeneratorType):\r\n            err_msg = (\r\n                \"Input cv is a generator object, which is not \"\r\n                \"supported. Instead please input an iterable yielding \"\r\n                \"train, test splits. This can usually be done by \"\r\n                \"passing a cross-validation generator to the \"\r\n                \"built-in list function. I.e. cv=list(<cv-generator>)\"\r\n            )\r\n            raise TypeError(err_msg)\r\n        self.cv = cv\r\n        self.n_jobs = n_jobs\r\n        self.verbose = verbose\r\n    \r\n        self.clone_estimator = clone_estimator\r\n        if self.clone_estimator:\r\n            self.est_ = clone(self.estimator)\r\n        else:\r\n            self.est_ = self.estimator\r\n    \r\n        self.scoring = scoring\r\n        if self.scoring is None:\r\n            if not hasattr(self.est_, \"_estimator_type\"):\r\n>               raise AttributeError(\r\n                    \"Estimator must have an ._estimator_type for infering `scoring`\"\r\n                )\r\nE               AttributeError: Estimator must have an ._estimator_type for infering `scoring`\r\n\r\nsrc\\sample_repo\\mlxtend\\mlxtend\\feature_selection\\sequential_feature_selector.py:229: AttributeError\r\n",
+          "outcome": "test_error",
+          "generated_test": "import numpy as np\nimport pandas as pd\nimport pytest\nfrom sklearn.linear_model import LinearRegression\nfrom mlxtend.feature_selection import SequentialFeatureSelector as SFS\n\n\ndef test_sfs_fit_basic_forward():\n    X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], dtype=float)\n    y = np.array([1, 2, 3, 4], dtype=float)\n    est = LinearRegression()\n    sfs = SFS(est, k_features=2, forward=True, floating=False, scoring=\"r2\")\n    sfs.fit(X, y)\n    assert sfs.fitted\n    assert len(sfs.k_feature_idx_) == 2\n\n\ndef test_sfs_fit_basic_backward():\n    X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], dtype=float)\n    y = np.array([1, 2, 3, 4], dtype=float)\n    est = LinearRegression()\n    sfs = SFS(est, k_features=2, forward=False, floating=False, scoring=\"r2\")\n    sfs.fit(X, y)\n    assert sfs.fitted\n    assert len(sfs.k_feature_idx_) == 2\n\n\ndef test_sfs_fit_floating_forward():\n    X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12], [13, 14, 15]], dtype=float)\n    y = np.array([1, 2, 3, 4, 5], dtype=float)\n    est = LinearRegression()\n    sfs = SFS(est, k_features=2, forward=True, floating=True, scoring=\"r2\")\n    sfs.fit(X, y)\n    assert sfs.fitted\n\n\ndef test_sfs_fit_floating_backward():\n    X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12], [13, 14, 15]], dtype=float)\n    y = np.array([1, 2, 3, 4, 5], dtype=float)\n    est = LinearRegression()\n    sfs = SFS(est, k_features=2, forward=False, floating=True, scoring=\"r2\")\n    sfs.fit(X, y)\n    assert sfs.fitted\n\n\ndef test_sfs_fit_pandas_dataframe_and_strings():\n    df = pd.DataFrame({\"feat_a\": [1, 2, 3, 4], \"feat_b\": [5, 6, 7, 8], \"feat_c\": [9, 10, 11, 12]})\n    y = pd.Series([1, 2, 3, 4])\n    est = LinearRegression()\n    sfs = SFS(\n        est,\n        k_features=\"best\",\n        forward=True,\n        fixed_features=[\"feat_a\"],\n        feature_groups=[[\"feat_a\"], [\"feat_b\"], [\"feat_c\"]],\n        scoring=\"r2\",\n    )\n    sfs.fit(df, y)\n    assert sfs.fitted\n\n\ndef test_sfs_fit_parsimonious():\n    X = np.array([[1, 2], [3, 4], [5, 6], [7, 8]], dtype=float)\n    y = np.array([1, 2, 3, 4], dtype=float)\n    est = LinearRegression()\n    sfs = SFS(est, k_features=\"parsimonious\", forward=True, scoring=\"r2\")\n    sfs.fit(X, y)\n    assert sfs.fitted\n\n\ndef test_sfs_fit_verbose_and_keyboard_interrupt():\n    X = np.array([[1, 2], [3, 4], [5, 6], [7, 8]], dtype=float)\n    y = np.array([1, 2, 3, 4], dtype=float)\n    est = LinearRegression()\n    sfs = SFS(est, k_features=1, forward=True, verbose=2, scoring=\"r2\")\n    sfs._TESTING_INTERRUPT_MODE = True\n    sfs.fit(X, y)\n    assert sfs.interrupted_\n    assert not sfs.fitted\n    sfs._TESTING_INTERRUPT_MODE = False\n\n\ndef test_sfs_fit_validation_errors():\n    X = np.array([[1, 2], [3, 4]], dtype=float)\n    y = np.array([1, 2], dtype=float)\n    est = LinearRegression()\n\n    # fixed_features different types\n    with pytest.raises(ValueError, match=\"fixed_features values must have the same type\"):\n        sfs = SFS(est, k_features=1, fixed_features=[0, \"a\"], scoring=\"r2\")\n        sfs.fit(X, y)\n\n    # fixed_features string without pandas input\n    with pytest.raises(ValueError, match=\"The input X does not contain name of features\"):\n        sfs = SFS(est, k_features=1, fixed_features=[\"a\"], scoring=\"r2\")\n        sfs.fit(X, y)\n\n    # fixed_features out of range\n    with pytest.raises(ValueError, match=\"contains at least one feature that is not in\"):\n        sfs = SFS(est, k_features=1, fixed_features=[5], scoring=\"r2\")\n        sfs.fit(X, y)\n\n    # feature_groups empty list\n    with pytest.raises(ValueError, match=\"Each list in the nested lists `features_group` cannot be empty\"):\n        sfs = SFS(est, k_features=1, feature_groups=[[], [0, 1]], scoring=\"r2\")\n        sfs.fit(X, y)\n\n    # feature_groups mixed types\n    with pytest.raises(ValueError, match=\"feature_group values must have the same type\"):\n        sfs = SFS(est, k_features=1, feature_groups=[[0], [\"1\"]], scoring=\"r2\")\n        sfs.fit(X, y)\n\n    # feature_groups string without dataframe\n    with pytest.raises(ValueError, match=\"The input X does not contain name of features\"):\n        sfs = SFS(est, k_features=1, feature_groups=[[\"a\"], [\"b\"]], scoring=\"r2\")\n        sfs.fit(X, y)\n\n    # feature_groups missing features or overlapping\n    with pytest.raises(ValueError, match=\"must contain all features within\"):\n        sfs = SFS(est, k_features=1, feature_groups=[[0], [0]], scoring=\"r2\")\n        sfs.fit(X, y)\n\n    # fixed_features group-mates not specified\n    with pytest.raises(ValueError, match=\"For each feature specified in the `fixed feature`\"):\n        sfs = SFS(est, k_features=1, feature_groups=[[0, 1]], fixed_features=[0], scoring=\"r2\")\n        sfs.fit(X, y)\n\n    # invalid k_features type\n    with pytest.raises(AttributeError, match=\"k_features must be a positive integer\"):\n        sfs = SFS(est, k_features=3.5, scoring=\"r2\")\n        sfs.fit(X, y)\n\n    # invalid k_features int range\n    with pytest.raises(AttributeError):\n        sfs = SFS(est, k_features=5, scoring=\"r2\")\n        sfs.fit(X, y)\n\n    # invalid k_features tuple length\n    with pytest.raises(AttributeError, match=\"k_features tuple must consist of 2 elements\"):\n        sfs = SFS(est, k_features=(1,), scoring=\"r2\")\n        sfs.fit(X, y)\n\n    # invalid k_features tuple order\n    with pytest.raises(AttributeError, match=\"The min k_features value must be smaller\"):\n        sfs = SFS(est, k_features=(2, 1), scoring=\"r2\")\n        sfs.fit(X, y)\n\n    # invalid k_features tuple min range\n    with pytest.raises(AttributeError):\n        sfs = SFS(est, k_features=(-1, 2), scoring=\"r2\")\n        sfs.fit(X, y)\n\n    # invalid k_features tuple max range\n    with pytest.raises(AttributeError):\n        sfs = SFS(est, k_features=(1, 5), scoring=\"r2\")\n        sfs.fit(X, y)\n\n    # invalid k_features string\n    with pytest.raises(AttributeError, match='If a string argument is provided, it must be \"best\" or \"parsimonious\"'):\n        sfs = SFS(est, k_features=\"invalid\", scoring=\"r2\")\n        sfs.fit(X, y)\n",
+          "execution_error": "F\r\n================================== FAILURES ===================================\r\n_______________________ test_sfs_fit_basic_forward[1-2] _______________________\r\n\r\n    def test_sfs_fit_basic_forward():\r\n        X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], dtype=float)\r\n        y = np.array([1, 2, 3, 4], dtype=float)\r\n        est = LinearRegression()\r\n        sfs = SFS(est, k_features=2, forward=True, floating=False, scoring=\"r2\")\r\n>       sfs.fit(X, y)\r\n\r\neval\\prompt_optimization_nolever\\runs\\3a5a78e405676b45-af695d60ce49\\validation\\multi-project-validation-batch-56868e5a\\target_workspaces\\8b5fa044ab64_0005\\tmp_test_5ipvlgy0.py:13: \r\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\r\nsrc\\sample_repo\\mlxtend\\mlxtend\\feature_selection\\sequential_feature_selector.py:543: in fit\r\n    k_idx, k_score, cv_scores = self._feature_selector(\r\nsrc\\sample_repo\\mlxtend\\mlxtend\\feature_selection\\sequential_feature_selector.py:783: in _feature_selector\r\n    work = parallel(\r\n.venv\\Lib\\site-packages\\joblib\\parallel.py:1986: in __call__\r\n    return output if self.return_generator else list(output)\r\n                                                ^^^^^^^^^^^^\r\n.venv\\Lib\\site-packages\\joblib\\parallel.py:1914: in _get_sequential_output\r\n    res = func(*args, **kwargs)\r\n          ^^^^^^^^^^^^^^^^^^^^^\r\nsrc\\sample_repo\\mlxtend\\mlxtend\\feature_selection\\utilities.py:100: in _calc_score\r\n    scores = cross_val_score(\r\n.venv\\Lib\\site-packages\\sklearn\\utils\\_param_validation.py:218: in wrapper\r\n    return func(*args, **kwargs)\r\n           ^^^^^^^^^^^^^^^^^^^^^\r\n.venv\\Lib\\site-packages\\sklearn\\model_selection\\_validation.py:650: in cross_val_score\r\n    cv_results = cross_validate(\r\n.venv\\Lib\\site-packages\\sklearn\\utils\\_param_validation.py:218: in wrapper\r\n    return func(*args, **kwargs)\r\n           ^^^^^^^^^^^^^^^^^^^^^\r\n.venv\\Lib\\site-packages\\sklearn\\model_selection\\_validation.py:372: in cross_validate\r\n    results = parallel(\r\n.venv\\Lib\\site-packages\\sklearn\\utils\\parallel.py:91: in __call__\r\n    return super().__call__(iterable_with_config_and_warning_filters)\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n.venv\\Lib\\site-packages\\joblib\\parallel.py:1986: in __call__\r\n    return output if self.return_generator else list(output)\r\n                                                ^^^^^^^^^^^^\r\n.venv\\Lib\\site-packages\\joblib\\parallel.py:1911: in _get_sequential_output\r\n    for func, args, kwargs in iterable:\r\n                              ^^^^^^^^\r\n.venv\\Lib\\site-packages\\sklearn\\utils\\parallel.py:89: in <genexpr>\r\n    for delayed_func, args, kwargs in iterable\r\n                                      ^^^^^^^^\r\n.venv\\Lib\\site-packages\\sklearn\\model_selection\\_validation.py:389: in <genexpr>\r\n    for train, test in indices\r\n                       ^^^^^^^\r\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\r\n\r\nself = KFold(n_splits=5, random_state=None, shuffle=False)\r\nX = array([[ 1.],\r\n       [ 4.],\r\n       [ 7.],\r\n       [10.]])\r\ny = array([1., 2., 3., 4.]), groups = None\r\n\r\n    def split(self, X, y=None, groups=None):\r\n        \"\"\"Generate indices to split data into training and test set.\r\n    \r\n        Parameters\r\n        ----------\r\n        X : array-like of shape (n_samples, n_features)\r\n            Training data, where `n_samples` is the number of samples\r\n            and `n_features` is the number of features.\r\n    \r\n        y : array-like of shape (n_samples,), default=None\r\n            The target variable for supervised learning problems.\r\n    \r\n        groups : array-like of shape (n_samples,), default=None\r\n            Group labels for the samples used while splitting the dataset into\r\n            train/test set.\r\n    \r\n        Yields\r\n        ------\r\n        train : ndarray\r\n            The training set indices for that split.\r\n    \r\n        test : ndarray\r\n            The testing set indices for that split.\r\n        \"\"\"\r\n        X, y, groups = indexable(X, y, groups)\r\n        n_samples = _num_samples(X)\r\n        if self.n_splits > n_samples:\r\n>           raise ValueError(\r\n                (\r\n                    \"Cannot have number of splits n_splits={0} greater\"\r\n                    \" than the number of samples: n_samples={1}.\"\r\n                ).format(self.n_splits, n_samples)\r\n            )\r\nE           ValueError: Cannot have number of splits n_splits=5 greater than the number of samples: n_samples=4.\r\n\r\n.venv\\Lib\\site-packages\\sklearn\\model_selection\\_split.py:404: ValueError\r\n",
+          "next_component": "error"
+        },
+        {
+          "source_file": "src\\sample_repo\\mlxtend\\mlxtend\\feature_selection\\sequential_feature_selector.py",
+          "symbol": "SequentialFeatureSelector.fit",
+          "name": "fit",
+          "segment": "src\\sample_repo\\mlxtend\\mlxtend\\feature_selection\\sequential_feature_selector.py:304-651",
+          "attempt": 4,
+          "component": "error",
+          "prompt_input": "Executing the test yields an error, shown below.\nModify or rewrite the test to correct it. Return the complete Python test module, not a patch.\nPreserve useful assertions from the previous test and use get_info when more source context is needed.\nRespond only with Python code enclosed in a python markdown code block.\n\nF\r\n================================== FAILURES ===================================\r\n_______________________ test_sfs_fit_basic_forward[1-2] _______________________\r\n\r\n    def test_sfs_fit_basic_forward():\r\n        X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], dtype=float)\r\n        y = np.array([1, 2, 3, 4], dtype=float)\r\n        est = LinearRegression()\r\n        sfs = SFS(est, k_features=2, forward=True, floating=False, scoring=\"r2\")\r\n>       sfs.fit(X, y)\r\n\r\neval\\prompt_optimization_nolever\\runs\\3a5a78e405676b45-af695d60ce49\\validation\\multi-project-validation-batch-56868e5a\\target_workspaces\\8b5fa044ab64_0005\\tmp_test_5ipvlgy0.py:13: \r\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\r\nsrc\\sample_repo\\mlxtend\\mlxtend\\feature_selection\\sequential_feature_selector.py:543: in fit\r\n    k_idx, k_score, cv_scores = self._feature_selector(\r\nsrc\\sample_repo\\mlxtend\\mlxtend\\feature_selection\\sequential_feature_selector.py:783: in _feature_selector\r\n    work = parallel(\r\n.venv\\Lib\\site-packages\\joblib\\parallel.py:1986: in __call__\r\n    return output if self.return_generator else list(output)\r\n                                                ^^^^^^^^^^^^\r\n.venv\\Lib\\site-packages\\joblib\\parallel.py:1914: in _get_sequential_output\r\n    res = func(*args, **kwargs)\r\n          ^^^^^^^^^^^^^^^^^^^^^\r\nsrc\\sample_repo\\mlxtend\\mlxtend\\feature_selection\\utilities.py:100: in _calc_score\r\n    scores = cross_val_score(\r\n.venv\\Lib\\site-packages\\sklearn\\utils\\_param_validation.py:218: in wrapper\r\n    return func(*args, **kwargs)\r\n           ^^^^^^^^^^^^^^^^^^^^^\r\n.venv\\Lib\\site-packages\\sklearn\\model_selection\\_validation.py:650: in cross_val_score\r\n    cv_results = cross_validate(\r\n.venv\\Lib\\site-packages\\sklearn\\utils\\_param_validation.py:218: in wrapper\r\n    return func(*args, **kwargs)\r\n           ^^^^^^^^^^^^^^^^^^^^^\r\n.venv\\Lib\\site-packages\\sklearn\\model_selection\\_validation.py:372: in cross_validate\r\n    results = parallel(\r\n.venv\\Lib\\site-packages\\sklearn\\utils\\parallel.py:91: in __call__\r\n    return super().__call__(iterable_with_config_and_warning_filters)\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n.venv\\Lib\\site-packages\\joblib\\parallel.py:1986: in __call__\r\n    return output if self.return_generator else list(output)\r\n                                                ^^^^^^^^^^^^\r\n.venv\\Lib\\site-packages\\joblib\\parallel.py:1911: in _get_sequential_output\r\n    for func, args, kwargs in iterable:\r\n                              ^^^^^^^^\r\n.venv\\Lib\\site-packages\\sklearn\\utils\\parallel.py:89: in <genexpr>\r\n    for delayed_func, args, kwargs in iterable\r\n                                      ^^^^^^^^\r\n.venv\\Lib\\site-packages\\sklearn\\model_selection\\_validation.py:389: in <genexpr>\r\n    for train, test in indices\r\n                       ^^^^^^^\r\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\r\n\r\nself = KFold(n_splits=5, random_state=None, shuffle=False)\r\nX = array([[ 1.],\r\n       [ 4.],\r\n       [ 7.],\r\n       [10.]])\r\ny = array([1., 2., 3., 4.]), groups = None\r\n\r\n    def split(self, X, y=None, groups=None):\r\n        \"\"\"Generate indices to split data into training and test set.\r\n    \r\n        Parameters\r\n        ----------\r\n        X : array-like of shape (n_samples, n_features)\r\n            Training data, where `n_samples` is the number of samples\r\n            and `n_features` is the number of features.\r\n    \r\n        y : array-like of shape (n_samples,), default=None\r\n            The target variable for supervised learning problems.\r\n    \r\n        groups : array-like of shape (n_samples,), default=None\r\n            Group labels for the samples used while splitting the dataset into\r\n            train/test set.\r\n    \r\n        Yields\r\n        ------\r\n        train : ndarray\r\n            The training set indices for that split.\r\n    \r\n        test : ndarray\r\n            The testing set indices for that split.\r\n        \"\"\"\r\n        X, y, groups = indexable(X, y, groups)\r\n        n_samples = _num_samples(X)\r\n        if self.n_splits > n_samples:\r\n>           raise ValueError(\r\n                (\r\n                    \"Cannot have number of splits n_splits={0} greater\"\r\n                    \" than the number of samples: n_samples={1}.\"\r\n                ).format(self.n_splits, n_samples)\r\n            )\r\nE           ValueError: Cannot have number of splits n_splits=5 greater than the number of samples: n_samples=4.\r\n\r\n.venv\\Lib\\site-packages\\sklearn\\model_selection\\_split.py:404: ValueError\r\n",
+          "outcome": "coverage_gain_saved",
+          "generated_test": "import numpy as np\nimport pandas as pd\nimport pytest\nfrom sklearn.linear_model import LinearRegression\nfrom mlxtend.feature_selection import SequentialFeatureSelector as SFS\n\n\ndef test_sfs_fit_basic_forward():\n    X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12], [13, 14, 15]], dtype=float)\n    y = np.array([1, 2, 3, 4, 5], dtype=float)\n    est = LinearRegression()\n    sfs = SFS(est, k_features=2, forward=True, floating=False, scoring=\"r2\", cv=2)\n    sfs.fit(X, y)\n    assert sfs.fitted\n    assert len(sfs.k_feature_idx_) == 2\n\n\ndef test_sfs_fit_basic_backward():\n    X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12], [13, 14, 15]], dtype=float)\n    y = np.array([1, 2, 3, 4, 5], dtype=float)\n    est = LinearRegression()\n    sfs = SFS(est, k_features=2, forward=False, floating=False, scoring=\"r2\", cv=2)\n    sfs.fit(X, y)\n    assert sfs.fitted\n    assert len(sfs.k_feature_idx_) == 2\n\n\ndef test_sfs_fit_floating_forward():\n    X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12], [13, 14, 15]], dtype=float)\n    y = np.array([1, 2, 3, 4, 5], dtype=float)\n    est = LinearRegression()\n    sfs = SFS(est, k_features=2, forward=True, floating=True, scoring=\"r2\", cv=2)\n    sfs.fit(X, y)\n    assert sfs.fitted\n\n\ndef test_sfs_fit_floating_backward():\n    X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12], [13, 14, 15]], dtype=float)\n    y = np.array([1, 2, 3, 4, 5], dtype=float)\n    est = LinearRegression()\n    sfs = SFS(est, k_features=2, forward=False, floating=True, scoring=\"r2\", cv=2)\n    sfs.fit(X, y)\n    assert sfs.fitted\n\n\ndef test_sfs_fit_pandas_dataframe_and_strings():\n    df = pd.DataFrame({\"feat_a\": [1, 2, 3, 4, 5], \"feat_b\": [5, 6, 7, 8, 9], \"feat_c\": [9, 10, 11, 12, 13]})\n    y = pd.Series([1, 2, 3, 4, 5])\n    est = LinearRegression()\n    sfs = SFS(\n        est,\n        k_features=\"best\",\n        forward=True,\n        fixed_features=[\"feat_a\"],\n        feature_groups=[[\"feat_a\"], [\"feat_b\"], [\"feat_c\"]],\n        scoring=\"r2\",\n        cv=2,\n    )\n    sfs.fit(df, y)\n    assert sfs.fitted\n\n\ndef test_sfs_fit_parsimonious():\n    X = np.array([[1, 2], [3, 4], [5, 6], [7, 8], [9, 10]], dtype=float)\n    y = np.array([1, 2, 3, 4, 5], dtype=float)\n    est = LinearRegression()\n    sfs = SFS(est, k_features=\"parsimonious\", forward=True, scoring=\"r2\", cv=2)\n    sfs.fit(X, y)\n    assert sfs.fitted\n\n\ndef test_sfs_fit_verbose_and_keyboard_interrupt():\n    X = np.array([[1, 2], [3, 4], [5, 6], [7, 8], [9, 10]], dtype=float)\n    y = np.array([1, 2, 3, 4, 5], dtype=float)\n    est = LinearRegression()\n    sfs = SFS(est, k_features=1, forward=True, verbose=2, scoring=\"r2\", cv=2)\n    sfs._TESTING_INTERRUPT_MODE = True\n    sfs.fit(X, y)\n    assert sfs.interrupted_\n    assert not sfs.fitted\n    sfs._TESTING_INTERRUPT_MODE = False\n\n\ndef test_sfs_fit_validation_errors():\n    X = np.array([[1, 2], [3, 4], [5, 6]], dtype=float)\n    y = np.array([1, 2, 3], dtype=float)\n    est = LinearRegression()\n\n    # fixed_features different types\n    with pytest.raises(ValueError, match=\"fixed_features values must have the same type\"):\n        sfs = SFS(est, k_features=1, fixed_features=[0, \"a\"], scoring=\"r2\", cv=2)\n        sfs.fit(X, y)\n\n    # fixed_features string without pandas input\n    with pytest.raises(ValueError, match=\"The input X does not contain name of features\"):\n        sfs = SFS(est, k_features=1, fixed_features=[\"a\"], scoring=\"r2\", cv=2)\n        sfs.fit(X, y)\n\n    # fixed_features out of range\n    with pytest.raises(ValueError, match=\"contains at least one feature that is not in\"):\n        sfs = SFS(est, k_features=1, fixed_features=[5], scoring=\"r2\", cv=2)\n        sfs.fit(X, y)\n\n    # feature_groups empty list\n    with pytest.raises(ValueError, match=\"Each list in the nested lists `features_group` cannot be empty\"):\n        sfs = SFS(est, k_features=1, feature_groups=[[], [0, 1]], scoring=\"r2\", cv=2)\n        sfs.fit(X, y)\n\n    # feature_groups mixed types\n    with pytest.raises(ValueError, match=\"feature_group values must have the same type\"):\n        sfs = SFS(est, k_features=1, feature_groups=[[0], [\"1\"]], scoring=\"r2\", cv=2)\n        sfs.fit(X, y)\n\n    # feature_groups string without dataframe\n    with pytest.raises(ValueError, match=\"The input X does not contain name of features\"):\n        sfs = SFS(est, k_features=1, feature_groups=[[\"a\"], [\"b\"]], scoring=\"r2\", cv=2)\n        sfs.fit(X, y)\n\n    # feature_groups missing features or overlapping\n    with pytest.raises(ValueError, match=\"must contain all features within\"):\n        sfs = SFS(est, k_features=1, feature_groups=[[0], [0]], scoring=\"r2\", cv=2)\n        sfs.fit(X, y)\n\n    # fixed_features group-mates not specified\n    with pytest.raises(ValueError, match=\"For each feature specified in the `fixed feature`\"):\n        sfs = SFS(est, k_features=1, feature_groups=[[0, 1]], fixed_features=[0], scoring=\"r2\", cv=2)\n        sfs.fit(X, y)\n\n    # invalid k_features type\n    with pytest.raises(AttributeError, match=\"k_features must be a positive integer\"):\n        sfs = SFS(est, k_features=3.5, scoring=\"r2\", cv=2)\n        sfs.fit(X, y)\n\n    # invalid k_features int range\n    with pytest.raises(AttributeError):\n        sfs = SFS(est, k_features=5, scoring=\"r2\", cv=2)\n        sfs.fit(X, y)\n\n    # invalid k_features tuple length\n    with pytest.raises(AttributeError, match=\"k_features tuple must consist of 2 elements\"):\n        sfs = SFS(est, k_features=(1,), scoring=\"r2\", cv=2)\n        sfs.fit(X, y)\n\n    # invalid k_features tuple order\n    with pytest.raises(AttributeError, match=\"The min k_features value must be smaller\"):\n        sfs = SFS(est, k_features=(2, 1), scoring=\"r2\", cv=2)\n        sfs.fit(X, y)\n\n    # invalid k_features tuple min range\n    with pytest.raises(AttributeError):\n        sfs = SFS(est, k_features=(-1, 2), scoring=\"r2\", cv=2)\n        sfs.fit(X, y)\n\n    # invalid k_features tuple max range\n    with pytest.raises(AttributeError):\n        sfs = SFS(est, k_features=(1, 5), scoring=\"r2\", cv=2)\n        sfs.fit(X, y)\n\n    # invalid k_features string\n    with pytest.raises(AttributeError, match='If a string argument is provided, it must be \"best\" or \"parsimonious\"'):\n        sfs = SFS(est, k_features=\"invalid\", scoring=\"r2\", cv=2)\n        sfs.fit(X, y)\n",
+          "gained_lines": [
+            304,
+            332,
+            333,
+            334,
+            335,
+            336,
+            337,
+            339,
+            340,
+            342,
+            343,
+            344,
+            345,
+            348,
+            349,
+            350,
+            352,
+            353,
+            354,
+            355,
+            358,
+            359,
+            360,
+            361,
+            365,
+            366,
+            369,
+            370,
+            371,
+            375,
+            376,
+            377,
+            379,
+            380,
+            381,
+            382,
+            385,
+            386,
+            388,
+            389,
+            390,
+            393,
+            394,
+            395,
+            396,
+            402,
+            403,
+            404,
+            405,
+            407,
+            409,
+            410,
+            412,
+            413,
+            418,
+            419,
+            420,
+            421,
+            423,
+            424,
+            426,
+            427,
+            428,
+            430,
+            431,
+            432,
+            437,
+            438,
+            441,
+            442,
+            443,
+            445,
+            446,
+            449,
+            450,
+            451,
+            453,
+            454,
+            456,
+            457,
+            458,
+            459,
+            463,
+            464,
+            465,
+            469,
+            470,
+            471,
+            473,
+            479,
+            480,
+            481,
+            483,
+            489,
+            490,
+            491,
+            492,
+            493,
+            496,
+            497,
+            499,
+            500,
+            501,
+            503,
+            505,
+            506,
+            508,
+            509,
+            510,
+            512,
+            513,
+            515,
+            516,
+            517,
+            518,
+            519,
+            520,
+            521,
+            522,
+            523,
+            524,
+            526,
+            527,
+            528,
+            529,
+            532,
+            533,
+            534,
+            535,
+            536,
+            537,
+            538,
+            540,
+            541,
+            543,
+            544,
+            545,
+            546,
+            547,
+            548,
+            549,
+            550,
+            551,
+            554,
+            556,
+            557,
+            558,
+            559,
+            560,
+            561,
+            564,
+            568,
+            569,
+            570,
+            572,
+            573,
+            575,
+            576,
+            577,
+            623,
+            626,
+            627,
+            628,
+            629,
+            630,
+            631,
+            632,
+            633,
+            637,
+            638,
+            639,
+            641,
+            642,
+            643,
+            645,
+            646,
+            648,
+            649,
+            651
+          ],
+          "gained_branches": [
+            [
+              343,
+              344
+            ],
+            [
+              343,
+              348
+            ],
+            [
+              349,
+              350
+            ],
+            [
+              349,
+              352
+            ],
+            [
+              353,
+              354
+            ],
+            [
+              353,
+              358
+            ],
+            [
+              358,
+              359
+            ],
+            [
+              358,
+              369
+            ],
+            [
+              359,
+              360
+            ],
+            [
+              359,
+              365
+            ],
+            [
+              369,
+              370
+            ],
+            [
+              369,
+              375
+            ],
+            [
+              376,
+              377
+            ],
+            [
+              376,
+              379
+            ],
+            [
+              379,
+              380
+            ],
+            [
+              379,
+              385
+            ],
+            [
+              380,
+              379
+            ],
+            [
+              380,
+              381
+            ],
+            [
+              388,
+              389
+            ],
+            [
+              388,
+              393
+            ],
+            [
+              393,
+              394
+            ],
+            [
+              393,
+              409
+            ],
+            [
+              394,
+              395
+            ],
+            [
+              394,
+              402
+            ],
+            [
+              403,
+              404
+            ],
+            [
+              403,
+              407
+            ],
+            [
+              409,
+              412
+            ],
+            [
+              409,
+              418
+            ],
+            [
+              419,
+              420
+            ],
+            [
+              419,
+              423
+            ],
+            [
+              420,
+              419
+            ],
+            [
+              420,
+              421
+            ],
+            [
+              430,
+              431
+            ],
+            [
+              430,
+              437
+            ],
+            [
+              440,
+              445
+            ],
+            [
+              440,
+              449
+            ],
+            [
+              450,
+              453
+            ],
+            [
+              450,
+              456
+            ],
+            [
+              456,
+              457
+            ],
+            [
+              456,
+              489
+            ],
+            [
+              457,
+              458
+            ],
+            [
+              457,
+              463
+            ],
+            [
+              463,
+              464
+            ],
+            [
+              463,
+              469
+            ],
+            [
+              469,
+              470
+            ],
+            [
+              469,
+              479
+            ],
+            [
+              479,
+              480
+            ],
+            [
+              490,
+              491
+            ],
+            [
+              490,
+              499
+            ],
+            [
+              491,
+              492
+            ],
+            [
+              491,
+              496
+            ],
+            [
+              496,
+              497
+            ],
+            [
+              496,
+              499
+            ],
+            [
+              499,
+              500
+            ],
+            [
+              499,
+              501
+            ],
+            [
+              501,
+              503
+            ],
+            [
+              508,
+              509
+            ],
+            [
+              508,
+              512
+            ],
+            [
+              516,
+              517
+            ],
+            [
+              516,
+              532
+            ],
+            [
+              534,
+              535
+            ],
+            [
+              534,
+              645
+            ],
+            [
+              536,
+              537
+            ],
+            [
+              536,
+              540
+            ],
+            [
+              556,
+              557
+            ],
+            [
+              564,
+              568
+            ],
+            [
+              564,
+              623
+            ],
+            [
+              570,
+              571
+            ],
+            [
+              571,
+              575
+            ],
+            [
+              571,
+              576
+            ],
+            [
+              576,
+              577
+            ],
+            [
+              623,
+              626
+            ],
+            [
+              626,
+              627
+            ],
+            [
+              626,
+              637
+            ],
+            [
+              637,
+              534
+            ],
+            [
+              637,
+              638
+            ],
+            [
+              645,
+              646
+            ],
+            [
+              645,
+              648
+            ]
+          ],
+          "remaining_lines": [
+            579,
+            581,
+            582,
+            585,
+            586,
+            587,
+            590,
+            591,
+            592,
+            593,
+            594,
+            595,
+            596,
+            597,
+            598,
+            599,
+            600,
+            601,
+            602,
+            605,
+            606,
+            611,
+            612,
+            614,
+            615,
+            616,
+            617,
+            618,
+            619,
+            620,
+            624,
+            625
+          ],
+          "remaining_branches": [
+            [
+              479,
+              489
+            ],
+            [
+              501,
+              505
+            ],
+            [
+              556,
+              564
+            ],
+            [
+              570,
+              623
+            ],
+            [
+              576,
+              579
+            ],
+            [
+              579,
+              581
+            ],
+            [
+              579,
+              585
+            ],
+            [
+              605,
+              606
+            ],
+            [
+              605,
+              611
+            ],
+            [
+              611,
+              612
+            ],
+            [
+              611,
+              614
+            ],
+            [
+              623,
+              624
+            ]
+          ],
+          "saved_test": "D:\\VinAI\\P-002\\eval\\prompt_optimization_nolever\\generated_tests\\validation\\tests_candidate_3a5a78e405676b45-af695d60ce49\\mlxtend\\test_opt_8b5fa044ab64_0005_1.py"
+        }
+      ],
+      "replicate_scores": [
+        0.8731002331002331,
+        0.8632245532245532,
+        0.8928515928515928,
+        0.8632245532245532,
+        0.8653224553224552,
+        0.8335975135975136
+      ]
+    },
+    {
+      "prompt_digest": "3a5a78e405676b45",
+      "evaluation_digest": "af695d60ce49",
+      "replicate": 0,
+      "target": {
+        "project": "typesystem",
+        "source_file": "typesystem/base.py",
+        "symbol": "ValidationResult.__iter__",
+        "split": "validation"
+      },
+      "run_id": "multi-project-validation-batch-56868e5a",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 2.0,
+        "num_statements": 2.0,
+        "covered_branches": 0.0,
+        "num_branches": 0.0,
+        "gained_lines": [
+          255,
+          256
+        ],
+        "gained_branches": [],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 1.0000\nStatement gain: 2 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 1:\nScore: 1.0000\nStatement gain: 2 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 2:\nScore: 1.0000\nStatement gain: 2 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 3:\nScore: 1.0000\nStatement gain: 2 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 4:\nScore: 1.0000\nStatement gain: 2 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 5:\nScore: 1.0000\nStatement gain: 2 newly covered; 0 remain.\nBranch gain: 0 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "attempt_traces": [
+        {
+          "source_file": "src\\sample_repo\\typesystem\\typesystem\\base.py",
+          "symbol": "ValidationResult.__iter__",
+          "name": "__iter__",
+          "segment": "src\\sample_repo\\typesystem\\typesystem\\base.py:254-256",
+          "attempt": 1,
+          "component": "initial",
+          "prompt_input": "You are an expert Python test-driven developer.\nThe code below, extracted from typesystem\\base.py, does not achieve full coverage:\nwhen tested, lines 254-256 do not execute.\nCreate new pytest test functions that execute all missing lines and branches. Each test must\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\nPrefer several small, independent test_* functions over one large function with many sequential inline scenarios: an early failure inside a shared function blocks coverage measurement of every later scenario. If a target is best covered by many scenarios, split them into separate test functions so an isolated failure does not discard the rest.\nUse the get_info tool function as necessary. Always return an entire Python test module.\nDo not call pytest.main and do not execute tests at module import time.\nRespond only with Python code enclosed in a python markdown code block.\n\n```python\n            import typing\n            class ValidationResult:\n       254:     def __iter__(self) -> typing.Iterator:\n       255:         yield self.value\n       256:         yield self.error\n\n```\n\n[TARGET CONTRACT]\nSignature: def ValidationResult.__iter__(self) -> typing.Iterator\nEnclosing classes: ValidationResult(object)\n\nUse this repository-local context as guidance only. Do not modify existing tests.\n[END TARGET CONTEXT]",
+          "outcome": "coverage_gain_saved",
+          "generated_test": "import pytest\nfrom typesystem.base import ValidationResult\n\n\ndef test_validation_result_iter_with_value() -> None:\n    result = ValidationResult(value=\"success_value\", error=None)\n    iterator = iter(result)\n    assert next(iterator) == \"success_value\"\n    assert next(iterator) is None\n    with pytest.raises(StopIteration):\n        next(iterator)\n\n\ndef test_validation_result_iter_with_error() -> None:\n    result = ValidationResult(value=None, error=\"error_obj\")\n    value, error = result\n    assert value is None\n    assert error == \"error_obj\"\n\n\ndef test_validation_result_unpacking() -> None:\n    result = ValidationResult(value=123)\n    val, err = result\n    assert val == 123\n    assert err is None\n",
+          "gained_lines": [
+            254,
+            255,
+            256
+          ],
+          "gained_branches": [],
+          "remaining_lines": [],
+          "remaining_branches": [],
+          "saved_test": "D:\\VinAI\\P-002\\eval\\prompt_optimization_nolever\\generated_tests\\validation\\tests_candidate_3a5a78e405676b45-af695d60ce49\\typesystem\\test_opt_b61cab6bab14_0006_1.py"
+        }
+      ],
+      "replicate_scores": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "prompt_digest": "3a5a78e405676b45",
+      "evaluation_digest": "af695d60ce49",
+      "replicate": 0,
+      "target": {
+        "project": "typesystem",
+        "source_file": "typesystem/formats.py",
+        "symbol": "EmailFormat.serialize",
+        "split": "validation"
+      },
+      "run_id": "multi-project-validation-batch-56868e5a",
+      "score": 1.0,
+      "coverage": {
+        "score": 1.0,
+        "statement_gain": 1.0,
+        "branch_gain": 1.0,
+        "statement_coverage": 1.0,
+        "branch_coverage": 1.0,
+        "covered_statements": 3.0,
+        "num_statements": 3.0,
+        "covered_branches": 2.0,
+        "num_branches": 2.0,
+        "gained_lines": [
+          211,
+          212,
+          214
+        ],
+        "gained_branches": [
+          [
+            211,
+            212
+          ],
+          [
+            211,
+            214
+          ]
+        ],
+        "remaining_lines": [],
+        "remaining_branches": [],
+        "valid": true,
+        "generator_exit_code": 0
+      },
+      "feedback": "Replicate 0:\nScore: 1.0000\nStatement gain: 3 newly covered; 0 remain.\nBranch gain: 2 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 1:\nScore: 1.0000\nStatement gain: 3 newly covered; 0 remain.\nBranch gain: 2 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 2:\nScore: 1.0000\nStatement gain: 3 newly covered; 0 remain.\nBranch gain: 2 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 3:\nScore: 1.0000\nStatement gain: 3 newly covered; 0 remain.\nBranch gain: 2 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 4:\nScore: 1.0000\nStatement gain: 3 newly covered; 0 remain.\nBranch gain: 2 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.\n\nReplicate 5:\nScore: 1.0000\nStatement gain: 3 newly covered; 0 remain.\nBranch gain: 2 newly covered; 0 remain.\nRemaining lines: []\nRemaining branches: []\nTarget each remaining branch with a distinct input and a meaningful assertion.",
+      "attempt_traces": [
+        {
+          "source_file": "src\\sample_repo\\typesystem\\typesystem\\formats.py",
+          "symbol": "EmailFormat.serialize",
+          "name": "serialize",
+          "segment": "src\\sample_repo\\typesystem\\typesystem\\formats.py:210-214",
+          "attempt": 1,
+          "component": "initial",
+          "prompt_input": "You are an expert Python test-driven developer.\nThe code below, extracted from typesystem\\formats.py, does not achieve full coverage:\nwhen tested, lines 210-214 do not execute.\nCreate new pytest test functions that execute all missing lines and branches. Each test must\nbe correct, deterministic, contain meaningful assertions, and clean up all modified state.\nPrefer several small, independent test_* functions over one large function with many sequential inline scenarios: an early failure inside a shared function blocks coverage measurement of every later scenario. If a target is best covered by many scenarios, split them into separate test functions so an isolated failure does not discard the rest.\nUse the get_info tool function as necessary. Always return an entire Python test module.\nDo not call pytest.main and do not execute tests at module import time.\nRespond only with Python code enclosed in a python markdown code block.\n\n```python\n            import typing\n            class EmailFormat(BaseFormat):\n       210:     def serialize(self, obj: typing.Optional[str]) -> typing.Optional[str]:\n       211:         if obj is None:\n       212:             return None\n            \n       214:         return obj\n\n```\n\n[TARGET CONTRACT]\nSignature: def EmailFormat.serialize(self, obj: typing.Optional[str]) -> typing.Optional[str]\nEnclosing classes: EmailFormat(BaseFormat)\n\nUse this repository-local context as guidance only. Do not modify existing tests.\n[END TARGET CONTEXT]",
+          "outcome": "coverage_gain_saved",
+          "generated_test": "import pytest\nfrom typesystem.formats import EmailFormat\n\n\ndef test_email_format_serialize_none():\n    \"\"\"Test that EmailFormat.serialize returns None when obj is None.\"\"\"\n    formatter = EmailFormat()\n    result = formatter.serialize(None)\n    assert result is None\n\n\ndef test_email_format_serialize_string():\n    \"\"\"Test that EmailFormat.serialize returns the input string when obj is not None.\"\"\"\n    formatter = EmailFormat()\n    email = \"test@example.com\"\n    result = formatter.serialize(email)\n    assert result == email\n",
+          "gained_lines": [
+            210,
+            211,
+            212,
+            214
+          ],
+          "gained_branches": [
+            [
+              211,
+              212
+            ],
+            [
+              211,
+              214
+            ]
+          ],
+          "remaining_lines": [],
+          "remaining_branches": [],
+          "saved_test": "D:\\VinAI\\P-002\\eval\\prompt_optimization_nolever\\generated_tests\\validation\\tests_candidate_3a5a78e405676b45-af695d60ce49\\typesystem\\test_opt_6c796ff65ff8_0007_1.py"
+        }
+      ],
+      "replicate_scores": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ]
+    }
+  ]
+}

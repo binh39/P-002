@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "status": "one_shot_holdout_frozen",
+  "source_validation_commit": "e658fd1",
+  "note": "Mở holdout test lần đầu (tối đa 1 lần theo Agent.md) sau khi full 8-target validation WIN (aggregate 0.8219, mean pass-rate 93.75%). Lever A+D committed e658fd1.",
+  "dataset": "binh/e70_failure_stratified_32.jsonl",
+  "split": "test",
+  "target_count": 8,
+  "prompt": "cloud/inputs/gpt_v2_baseline.json",
+  "prompt_digest": "3a5a78e405676b45",
+  "coverup_model": "vertex_ai/gemini-3.5-flash-lite",
+  "max_attempts": 5,
+  "repeat_tests": 2,
+  "replicates": 2,
+  "artifacts_dir": "eval/prompt_optimization_leverAD_holdout",
+  "config_flags": [
+    "--target-context", "--failure-context",
+    "--failure-context-max-chars", "4000",
+    "--salvage-failing-tests", "--salvage-max-prunes", "8",
+    "--max-concurrency", "1"
+  ]
+}

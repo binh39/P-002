@@ -32,6 +32,9 @@ dependencies = [
     "jinja2==3.1.6",
     "pyyaml==6.0.3",
     "slipcover>=1.0.18",
+    # isort setuptools_commands target imports setuptools; absent in venv would
+    # make ISortCommand.finalize_options structurally uncoverable (missing_imports).
+    "setuptools>=75.0",
 ]
 
 [dependency-groups]

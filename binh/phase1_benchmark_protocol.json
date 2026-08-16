@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "protocol": "clean_fixed_benchmark_delta",
+  "goal": "achieved +10-15% aggregate coverage vs fixed baseline on same split",
+  "metric_primary": "delta aggregate score (0.3*statement_gain + 0.7*branch_gain) on validation 8-target",
+  "metric_secondary": "delta pass-rate (fraction targets >=0.9) on validation 8-target",
+  "baseline_prompt": "cloud/inputs/gpt_v2_baseline.json",
+  "baseline_digest": "3a5a78e405676b45",
+  "dataset": "binh/e70_failure_stratified_32.jsonl",
+  "split": "validation",
+  "targets_note": "validation 8 targets ONLY (isort, mimesis, mlxtend incl. SFS.fit, typesystem)",
+  "model": "vertex_ai/gemini-3.5-flash-lite",
+  "max_attempts": 5,
+  "repeat_tests": 2,
+  "min_replicates": 2,
+  "weighing": "aggregate = 0.3*stmt_gain + 0.7*branch_gain",
+  "decision_rule": "promote if candidate_mean_aggregate - baseline_mean_aggregate >= +0.10 (10 pts absolute) on same split",
+  "decision_outcome": "REVISED 2026-08-16 - MEASURED with no-lever control x6 vs leverAD x6 (validation 8-target). no-lever mean 0.8754 (sd 0.018), leverAD mean 0.8336 (sd 0.090). Delta = -0.0417 (95% CI -0.115 .. +0.032). Mann-Whitney U1=24 (no separation; leverAD NOT above no-lever). SFS.fit: no-lever 0.865 vs leverAD 0.820 (both high variance). CONCLUSION: levers do NOT raise coverage; aggregate unchanged (~0.83-0.88) and leverAD adds variance without improvement. NOT promotable. +10-15% NOT achieved on validation by lever A+D.",
+  "variance_policy": "SFS.fit has high cross-replicate variance (9-draw hit-rate ~44% at >=0.9); do NOT gate on every-replicate >=0.9. Gate on aggregate mean across replicates. ADDED: due to SFS variance dominating, require >=6 replicates AND compare distributions (CI), not single means.",
+  "cache_policy": "use a fresh artifacts-dir per measurement to avoid cache replay (digest only hashes prompt, not target_context runtime).",
+  "committed_levers": {
+    "leverA_clone_pitfall": "pass scoring=\"<string>\" to avoid _estimator_type clone() discard",
+    "leverD_sfs_branch_completion": "nudge to cover rare SFS branches (k_features best/parsimonious, floating, verbose, error-cases)",
+    "private_test_hook": "warn not to probe private _TESTING_* hooks"
+  },
+  "known_benchmark_artifacts_fixed_since_baseline_digest": {
+    "find_filegroups": "patched sample-repo import from . import find_files -> from .find_files import find_files",
+    "setuptools": "added setuptools dep so ISortCommand.finalize_options imports"
+  },
+  "known_state_from_prior_caches": {
+    "note": "REVISED 2026-08-16: 'baseline' cache eval/prompt_optimization was NOT no-lever; record.json confirms Lever-A prompt was live (SFS attempt2/3 prompt_input has [CLONE/REBUILD PITFALL]). So it is a Lever-A-only run, not no-lever baseline.",
+    "baseline_actually_leverA_live": [0.5414, 0.6696],
+    "leverA_fullval": [0.7046, 0.9173],
+    "leverAD_fullval": [0.7081, 0.9357],
+    "leverA_fullval_mean": 0.811,
+    "leverAD_fullval_mean": 0.8219,
+    "marginal_D_vs_A": 0.0109,
+    "same_leverA_cross_run_spread": 0.2055,
+    "note_cross_run": "Two runs with SAME lever A differ by +0.2055 (~same magnitude as prior '+0.216') -> prior delta was SFS replicate variance, not lever effect",
+    "missing": "no-lever 8-target control cache does NOT exist; need fresh no-lever run at >=6 replicates to measure true lever delta"
+  }
+}
