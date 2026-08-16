@@ -1,30 +1,10 @@
 import json
-import re
 from collections.abc import Callable
 
 import coverup.codeinfo as codeinfo
 
 from ..segment import CodeSegment
 from .prompter import Prompter, mk_message
-
-_STRATEGY_PLAYBOOK = re.compile(
-    r"\n*\[GEPA STRATEGY PLAYBOOK\]\s*(.*?)\s*"
-    r"\[END GEPA STRATEGY PLAYBOOK\]\n*",
-    re.DOTALL,
-)
-_RUNTIME_PLACEHOLDERS = ("filename", "coverage_targets", "source_excerpt", "error")
-
-
-def _runtime_template(template: str) -> str:
-    """Hide optimizer delimiters and prevent playbook fields from expanding twice."""
-
-    def render_playbook(match: re.Match[str]) -> str:
-        playbook = match.group(1).strip()
-        for name in _RUNTIME_PLACEHOLDERS:
-            playbook = playbook.replace(f"{{{name}}}", f"{{{{{name}}}}}")
-        return f"\n\n{playbook}\n"
-
-    return _STRATEGY_PLAYBOOK.sub(render_playbook, template)
 
 
 class GptV2Prompter(Prompter):
@@ -38,7 +18,7 @@ class GptV2Prompter(Prompter):
                 self.templates = json.load(f)
 
     def _render(self, name: str, default: str, **values) -> str:
-        template = _runtime_template(self.templates.get(name, default))
+        template = self.templates.get(name, default)
         return template.format(**values)
 
 

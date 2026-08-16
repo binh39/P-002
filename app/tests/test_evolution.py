@@ -54,7 +54,7 @@ def test_parses_reflective_mutation_and_carries_best_candidate_metrics_forward()
         "Inspect exact signatures and branch predicates.",
         "Iteration 1: New subsample score 1.2237 is better than old score 1.0435. Continue to full eval and add to candidate pool.",
         "Iteration 1: Val aggregate for new program: 0.831",
-        "Iteration 1: Objective aggregate scores for new program: {'statement': 0.81, 'branch': 0.84}",
+        "Iteration 1: Objective aggregate scores for new program: {'statement_coverage': 0.81, 'branch_coverage': 0.84}",
         "Iteration 1: Objective pareto front scores: {'statement': 0.99, 'branch': 0.98}",
         "Iteration 1: Valset pareto front aggregate score: 0.985",
         "Iteration 1: Best program as per aggregate score on valset: 1",
@@ -108,7 +108,7 @@ def test_full_validation_candidate_does_not_replace_metrics_when_not_best():
         "Iteration 1: Selected program 0 score: 0.9",
         "Iteration 1: New subsample score 1.1 is better than old score 1.0. Continue to full eval and add to candidate pool.",
         "Iteration 1: Val aggregate for new program: 0.76",
-        "Iteration 1: Objective aggregate scores for new program: {'statement': 0.2, 'branch': 1.0}",
+        "Iteration 1: Objective aggregate scores for new program: {'statement_coverage': 0.2, 'branch_coverage': 1.0}",
         "Iteration 1: Best program as per aggregate score on valset: 0",
         "Iteration 1: Best score on valset: 0.9",
         "Iteration 1: New program candidate index: 1",
@@ -123,6 +123,25 @@ def test_full_validation_candidate_does_not_replace_metrics_when_not_best():
     assert candidate.best_statement == 0.8
     assert candidate.best_branch == 0.942857
     assert result.metrics[1].score == 0.9
+
+
+def test_legacy_macro_objectives_are_not_shown_as_micro_coverage():
+    messages = [
+        "Iteration 0: Baseline validation aggregate metrics: {'score': 0.5, 'statement': 0.5, 'branch': 0.5}",
+        "Iteration 0: Base program full valset score: 0.5 over 2 / 2 examples",
+        "Iteration 1: Val aggregate for new program: 0.8",
+        "Iteration 1: Objective aggregate scores for new program: {'statement': 0.9, 'branch': 0.9}",
+        "Iteration 1: Best program as per aggregate score on valset: 1",
+        "Iteration 1: Best score on valset: 0.8",
+        "Iteration 1: New program candidate index: 1",
+    ]
+
+    result = parse_evolution_log([CloudLogLine(timestamp=None, text=message) for message in messages])
+
+    candidate = result.iterations[1]
+    assert candidate.best_statement is None
+    assert candidate.best_branch is None
+    assert candidate.best_score == 0.8
 
 
 def test_returns_waiting_state_before_iteration_logs_arrive():

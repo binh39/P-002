@@ -2,21 +2,18 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import tempfile
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
-from types import SimpleNamespace
 
 import dspy
 from dotenv import load_dotenv
 
-from src.optimization.gepa import (
-    STRATEGY_PLAYBOOK_BEGIN,
-    CoverUpPromptAdapter,
-)
+from src.optimization.gepa import CoverUpPromptAdapter
+from src.optimization.models import ExperimentConfig, SymbolTarget
 from src.optimization.prompts import baseline_bundle
+from src.optimization.runner import CoverUpExperimentRunner
 
 
 def main() -> None:
@@ -37,7 +34,7 @@ def main() -> None:
     baseline = baseline_bundle()
     synthetic_episode = {
         "Inputs": {
-            "target": "synthetic.py::target",
+            "target": "pkg/module.py::target",
             "source_context": "1: def target(value):\n2:     return value + 1",
         },
         "Generated Outputs": {
@@ -64,11 +61,28 @@ def main() -> None:
     with tempfile.TemporaryDirectory(
         prefix="native-reflection-smoke-", dir=Path.cwd()
     ) as temporary:
-        candidate_dir = Path(temporary)
+        root = Path(temporary)
+        package_dir = root / "sample_repo" / "pkg"
+        package_dir.mkdir(parents=True)
+        (package_dir / "__init__.py").write_text("", encoding="utf-8")
+        (package_dir / "module.py").write_text(
+            "def target(value):\n    return value + 1\n", encoding="utf-8"
+        )
+        candidate_dir = root / "artifacts" / "candidates"
+        target = SymbolTarget(
+            "project", "pkg/module.py", "target", "train"
+        )
         adapter = CoverUpPromptAdapter(
-            runner=SimpleNamespace(),
+            runner=CoverUpExperimentRunner(ExperimentConfig(
+                project_root=root,
+                package_dir=package_dir,
+                tests_dir=root / "sample_repo" / "tests",
+                artifacts_dir=root / "artifacts",
+                coverup_model="unused-by-reflection-smoke",
+                repeat_tests=1,
+            )),
             candidate_dir=candidate_dir,
-            targets_by_split={},
+            targets_by_split={"train": [target]},
             baseline=baseline,
             reflection_lm=lm,
         )
@@ -87,33 +101,14 @@ def main() -> None:
         )
         if decision["status"] != "accepted" or not decision["changed_components"]:
             raise RuntimeError(f"Native reflection smoke was not accepted: {decision}")
-        missing_playbooks = [
-            component
-            for component in decision["changed_components"]
-            if STRATEGY_PLAYBOOK_BEGIN not in proposals[component]
-        ]
-        if missing_playbooks:
-            raise RuntimeError(
-                f"Managed strategy playbook missing from: {missing_playbooks}"
-            )
-        malformed_numbering = [
-            component
-            for component in decision["changed_components"]
-            if proposals[component].count(STRATEGY_PLAYBOOK_BEGIN) != 1
-            or re.search(r"(?m)^\d+\.\s+\d+[.)]\s+", proposals[component])
-        ]
-        if malformed_numbering:
-            raise RuntimeError(
-                "Strategy playbook was duplicated or double-numbered in: "
-                f"{malformed_numbering}"
-            )
-        strategy_records = [
+        experiment_records = [
             json.loads(line)
-            for line in (candidate_dir / "strategy_playbooks.jsonl")
+            for line in (candidate_dir / "optimizer_test_experiments.jsonl")
             .read_text(encoding="utf-8")
             .splitlines()
         ]
-        latest_strategy = strategy_records[-1]
+        if not any(record["success"] for record in experiment_records):
+            raise RuntimeError("Optimizer did not prove a successful test experiment")
         print(json.dumps({
             "model": model,
             "advertised_function_calling": advertised_function_calling,
@@ -121,14 +116,8 @@ def main() -> None:
             "selection": decision["selection"],
             "changed_components": decision["changed_components"],
             "status": decision["status"],
-            "strategy_delta": decision["strategy_delta"],
-            "playbook_section_counts": {
-                component: {
-                    section: len(items)
-                    for section, items in latest_strategy["playbooks"][component].items()
-                }
-                for component in decision["changed_components"]
-            },
+            "optimizer_calls": decision["optimizer_calls"],
+            "successful_experiment_ids": decision["successful_experiment_ids"],
             "replacement_lengths": {
                 component: len(proposals[component])
                 for component in decision["changed_components"]

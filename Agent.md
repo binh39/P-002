@@ -46,7 +46,7 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
   failure output as GEPA feedback. Collection/internal/usage errors remain
   unmeasurable and invalid.
 - A baseline with zero covered units may enter GEPA as long as every target has valid non-zero statement denominators. Candidate failures are then scored as zero against those fixed reference units.
-- Evaluation cache schema `15` invalidates older caches that discarded zero-test denominators, omitted structured traces, scored a target with another target's tests, stored generated workspaces outside the artifacts tree, ran CoverUp and coverage with different randomized hash ordering, used the slower project-wide CoverUp process and redundant final-suite coverage pass, or sent optimizer-only playbook delimiters and duplicate placeholder payloads to the generation model.
+- Evaluation cache schema `14` invalidates older caches that discarded zero-test denominators, omitted structured traces, scored a target with another target's tests, stored generated workspaces outside the artifacts tree, ran CoverUp and coverage with different randomized hash ordering, or used the slower project-wide CoverUp process and redundant final-suite coverage pass.
 - When reporting repeated evaluation failures, skip wrapper lines such as `Replicate 0:` and show the first substantive feedback line.
 
 ## Cấu hình khuyến nghị
@@ -56,7 +56,7 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
 - `--evaluation-replicates 2`: giảm nhiễu do LLM generation khi đánh giá candidate quan trọng.
 - `--max-concurrency 10`: trần mặc định cho CoverUp; hạ xuống nếu gặp HTTP 429 hoặc giới hạn quota.
 - Budget: `light=120`, `medium=300`, `heavy=600` metric calls.
-- Search dùng Pareto selection, hybrid frontier, reflection minibatch 8, merge candidates và evaluation cache. Khi có failure, selector chuyển cả `initial` và `error`; reflection LM chọn `initial`, `error`, hoặc `all` và trả replacement bằng một native `update_prompt_component` tool call. Reflection tái dựng đầy đủ `failing test -> error -> repaired test -> outcome` và không đưa baseline test vào từng record.
+- Search dùng Pareto selection, hybrid frontier, reflection minibatch tối đa 5 target có coverage dưới 100%, merge candidates và evaluation cache. Target baseline đã đạt 100% không được đưa vào train minibatch; target vừa đạt 100% ở candidate hiện tại cũng không được đưa vào context reflection. Mỗi proposal có tối đa 5 diagnostic experiments cho minibatch. Khi có failure, reflection LM trước tiên phải viết một test chẩn đoán qua `run_test_experiment`; chỉ khi pytest pass và score của chính target tăng, nó mới được rút bài học và gọi `update_prompt_component`. Test chẩn đoán không được chép vào candidate workspace hoặc dùng để chấm GEPA; CoverUp phải sinh test mới từ prompt candidate. Reflection tái dựng đầy đủ `failing test -> error -> repaired test -> outcome`, gồm mọi lời gọi/kết quả `get_info`, và không đưa baseline test vào từng record.
 
 ## Lệnh kiểm tra bắt buộc sau khi sửa
 

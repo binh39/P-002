@@ -305,6 +305,7 @@ args:{args}
         """Chats with the LLM, sending the given messages, handling common failures and returning the response.
            Automatically calls any tool functions requested."""
         func_calls = 0
+        tool_events = []
         while func_calls <= self._max_func_calls_per_chat:
             request = self._request(messages)
             self._log_json(ctx, request)
@@ -324,6 +325,7 @@ args:{args}
                     raise
 
             if response.choices[0].finish_reason != "tool_calls":
+                response_data["_coverup_tool_calls"] = tool_events
                 return response_data
 
             # Keep provider-specific fields such as Gemini thought signatures;
@@ -334,11 +336,18 @@ args:{args}
 
             for call in response.choices[0].message.tool_calls:
                 func_calls += 1
+                arguments = json.loads(call.function.arguments)
+                result = self._call_function(ctx, call)
+                tool_events.append({
+                    "name": call.function.name,
+                    "arguments": arguments,
+                    "result": result,
+                })
                 messages.append({
                     'tool_call_id': call.id,
                     'role': 'tool',
                     'name': call.function.name,
-                    'content': self._call_function(ctx, call)
+                    'content': result,
                 })
 
         self._log_msg(ctx, f"Too many function call requests, giving up")
