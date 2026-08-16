@@ -3375,30 +3375,18 @@ def test_tune_preflights_baseline_but_skips_proposal_when_gepa_keeps_it(
                 best_bundle=baseline,
                 candidates=[baseline],
                 validation_scores=[0.5],
+                rerank={
+                    "selected_digest": bundle_digest(baseline),
+                    "top_k": 1,
+                    "replicates": 3,
+                    "leaderboard": [],
+                },
                 as_dict=lambda: {
                     "best_index": 0,
                     "best_candidate": baseline.as_candidate(),
                     "validation_scores": [0.5],
                     "total_metric_calls": 1,
                     "candidates": [baseline.as_candidate()],
-                },
-            )
-        ),
-    )
-    monkeypatch.setattr(
-        cli,
-        "rerank_prompt_candidates",
-        lambda **kwargs: (
-            events.append("rerank")
-            or SimpleNamespace(
-                selected_bundle=baseline,
-                top_k=1,
-                replicates=3,
-                as_dict=lambda: {
-                    "selected_digest": bundle_digest(baseline),
-                    "top_k": 1,
-                    "replicates": 3,
-                    "leaderboard": [],
                 },
             )
         ),
@@ -3459,7 +3447,7 @@ def test_tune_preflights_baseline_but_skips_proposal_when_gepa_keeps_it(
     assert report["baseline_run_ids"] == ["baseline-preflight"]
     assert len(report["baseline_results"]) == 1
     assert report["candidate_rerank"]["selected_digest"] == bundle_digest(baseline)
-    assert events == ["final baseline preflight", "optimize", "rerank"]
+    assert events == ["final baseline preflight", "optimize"]
     assert baseline_bundle().as_candidate() == json.loads(
         (artifacts / "prompts" / "gepa_optimized.json").read_text(encoding="utf-8")
     )

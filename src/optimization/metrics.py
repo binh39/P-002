@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import math
+import statistics
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 
 from .coveragepy import SymbolCoverage
@@ -144,6 +147,64 @@ def aggregate_coverage_score(
         "num_statements": num_statements,
         "covered_branches": covered_branches,
         "num_branches": num_branches,
+    }
+
+
+def _mean(values: Sequence[float]) -> float:
+    return sum(values) / len(values) if values else 0.0
+
+
+def paired_delta_ci(
+    baseline_scores: Sequence[float],
+    optimized_scores: Sequence[float],
+    *,
+    confidence: float = 0.95,
+) -> dict[str, float | int]:
+    """Compare two replicate distributions with a matched-pair delta and CI.
+
+    Baseline and optimized replicates are matched positionally (each pair is one
+    independent generation draw).  When both sides have the same number of
+    replicates the per-pair deltas (optimized - baseline) are averaged and a
+    normal-approximation confidence interval is reported; otherwise an unpaired
+    mean delta with a normal-approximation CI on the difference of means is used.
+
+    This is the measurement the earlier lever experiments insisted on: a single
+    aggregate from one draw is dominated by generation variance, so compare the
+    distribution, not one mean.
+
+    Returns:
+      baseline_mean, optimized_mean, delta, delta_ci_low, delta_ci_high,
+      n_pairs, promotes (strict CI improvement over the baseline mean).
+    """
+    base = [float(value) for value in baseline_scores]
+    opt = [float(value) for value in optimized_scores]
+    if not base or not opt:
+        raise ValueError("paired_delta_ci requires non-empty replicate sequences")
+
+    base_mean = _mean(base)
+    opt_mean = _mean(opt)
+    if len(base) == len(opt):
+        deltas = [opt[i] - base[i] for i in range(len(base))]
+        delta = _mean(deltas)
+        n = len(deltas)
+        sd = statistics.pstdev(deltas) if n > 1 else 0.0
+        z = 1.96 if confidence >= 0.95 else 1.645
+    else:
+        delta = opt_mean - base_mean
+        n = min(len(base), len(opt))
+        var_base = statistics.pstdev(base) ** 2 if len(base) > 1 else 0.0
+        var_opt = statistics.pstdev(opt) ** 2 if len(opt) > 1 else 0.0
+        sd = math.sqrt(var_base / len(base) + var_opt / len(opt))
+        z = 1.96 if confidence >= 0.95 else 1.645
+    half = z * sd if sd else 0.0
+    return {
+        "baseline_mean": base_mean,
+        "optimized_mean": opt_mean,
+        "delta": delta,
+        "delta_ci_low": delta - half,
+        "delta_ci_high": delta + half,
+        "n_pairs": n,
+        "promotes": delta - half > 0.0,
     }
 
 

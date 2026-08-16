@@ -24,7 +24,7 @@ from .gepa import (
     validate_bundle,
     validate_reference_evaluation,
 )
-from .metrics import aggregate_coverage_score
+from .metrics import aggregate_coverage_score, paired_delta_ci
 from .models import ExperimentConfig, ProjectLayout, SymbolTarget
 from .prompts import PromptBundle, baseline_bundle
 from .runner import CoverUpExperimentRunner
@@ -212,6 +212,15 @@ def parser() -> argparse.ArgumentParser:
         type=int,
         default=8,
         help="Maximum train examples reflected on per GEPA proposal (default: 8)",
+    )
+    tune.add_argument(
+        "--report-splits",
+        default="validation",
+        help=(
+            "Comma-separated splits to report baseline vs optimized at the end "
+            "(e.g. validation,test); the locked test split is never used for "
+            "search (default: validation)"
+        ),
     )
     budget = tune.add_mutually_exclusive_group()
     budget.add_argument(
@@ -463,7 +472,7 @@ def run_live_archive(args: argparse.Namespace) -> None:
     }, indent=2))
 
 
-def _print_coverage_report(report: dict) -> None:
+def _print_coverage_report(report: dict, *, evaluation_replicates: int = 1) -> None:
     """Print a compact per-split, per-prompt coverage summary table."""
     header = f"{'split':<12}{'prompt':<10}{'stmt%':>8}{'branch%':>9}{'score':>8}"
     print(header)
@@ -476,6 +485,23 @@ def _print_coverage_report(report: dict) -> None:
                 f"{row['statement_coverage'] * 100:>7.2f}%"
                 f"{row['branch_coverage'] * 100:>8.2f}%"
                 f"{row['score']:>8.4f}"
+            )
+        base_scores = entries.get("baseline_replicate_scores")
+        opt_scores = entries.get("optimized_replicate_scores")
+        if (
+            evaluation_replicates > 1
+            and base_scores
+            and opt_scores
+            and len(base_scores) > 1
+        ):
+            ci = paired_delta_ci(base_scores, opt_scores)
+            print(
+                f"{split:<12}{'CI':<10}"
+                f"delta={ci['delta']:+.4f} "
+                f"CI[ {ci['delta_ci_low']:+.4f} .. {ci['delta_ci_high']:+.4f} ] "
+                f"{'PROMOTES' if ci['promotes'] else 'no-gain'} "
+                f"(baseline-mean {ci['baseline_mean']:.4f}, "
+                f"optimized-mean {ci['optimized_mean']:.4f}, n={ci['n_pairs']})"
             )
 
 
@@ -830,6 +856,10 @@ def tune(args: argparse.Namespace) -> None:
         temperature=args.reflection_temperature,
     )
 
+    rerank_top_k = int(getattr(args, "rerank_top_k", 0))
+    rerank_replicates = int(getattr(args, "rerank_replicates", 3))
+    if rerank_top_k < 0:
+        raise ValueError("--rerank-top-k cannot be negative")
     optimized = optimize(
         runner=runner, train_targets=train, validation_targets=validation,
         baseline=baseline, reflection_lm=lm, artifacts_dir=artifacts,
@@ -842,6 +872,8 @@ def tune(args: argparse.Namespace) -> None:
         best_candidate_probability=float(
             getattr(args, "best_candidate_probability", 0.7)
         ),
+        rerank_top_k=rerank_top_k,
+        rerank_replicates=rerank_replicates,
     )
     artifacts.mkdir(parents=True, exist_ok=True)
     configured_program_output = getattr(args, "program_output", None)
@@ -863,44 +895,25 @@ def tune(args: argparse.Namespace) -> None:
     assert baseline_results is not None
     assert baseline_aggregate is not None
     assert baseline_mean_score is not None
-    rerank_top_k = int(getattr(args, "rerank_top_k", 0))
-    rerank_replicates = int(getattr(args, "rerank_replicates", 3))
-    rerank_length_penalty = float(
-        getattr(args, "rerank_length_penalty_per_1k", 0.0)
-    )
-    rerank_max_prompt_chars = getattr(args, "rerank_max_prompt_chars", None)
-    if rerank_top_k < 0:
-        raise ValueError("--rerank-top-k cannot be negative")
-    candidate_rerank = None
-    proposed_prompt = optimized.best_bundle
-    if rerank_top_k:
-        reranked = rerank_prompt_candidates(
-            runner=runner,
-            validation_targets=validation,
-            baseline=baseline,
-            candidates=optimized.candidates,
-            validation_scores=optimized.validation_scores,
-            candidate_dir=artifacts / "candidates",
-            top_k=rerank_top_k,
-            replicates=rerank_replicates,
-            split="validation",
-            length_penalty_per_1k=rerank_length_penalty,
-            max_prompt_chars=rerank_max_prompt_chars,
-        )
-        candidate_rerank = reranked.as_dict()
+    # Reranking (when enabled) is performed inside ``optimize`` so that the
+    # selected proposal already reflects the validation-stable rerank winner.
+    # ``optimized.rerank`` carries the leaderboard report; persistence of the
+    # rerank artifacts happens below so the files are always co-located.
+    candidate_rerank = getattr(optimized, "rerank", None)
+    if candidate_rerank is not None:
         (artifacts / "candidate_rerank.json").write_text(
             json.dumps(candidate_rerank, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
-        reranked.selected_bundle.save(
-            artifacts / "prompts" / "gepa_reranked.json"
-        )
-        proposed_prompt = reranked.selected_bundle
+        proposed_prompt = optimized.best_bundle
         print(
             "Reranked "
-            f"{reranked.top_k} finalists over {reranked.replicates} validation "
-            f"replicates; selected {bundle_digest(proposed_prompt)}."
+            f"{candidate_rerank.get('top_k')} finalists over "
+            f"{candidate_rerank.get('replicates')} validation replicates; selected "
+            f"{candidate_rerank.get('selected_digest')}."
         )
+    else:
+        proposed_prompt = optimized.best_bundle
     if error := validate_bundle(proposed_prompt):
         raise ValueError(f"GEPA produced an invalid final prompt bundle: {error}")
     proposed_path = artifacts / "prompts" / "gepa_proposed.json"
@@ -1006,9 +1019,32 @@ def tune(args: argparse.Namespace) -> None:
     else:
         print(f"GEPA proposal did not improve; retained baseline at {final_path}")
 
+    requested_splits = [
+        value.strip()
+        for value in str(getattr(args, "report_splits", "validation")).split(",")
+        if value.strip()
+    ]
+    if not requested_splits:
+        requested_splits = ["validation"]
+    allowed_report_splits = {"train", "validation", final_split}
+    unknown = set(requested_splits) - allowed_report_splits
+    if unknown:
+        raise ValueError(
+            "Unsupported --report-splits value(s) "
+            f"{sorted(unknown)}; allowed for this run: {sorted(allowed_report_splits)}"
+        )
     targets_by_split = {"train": train, "validation": validation}
-    if final_split not in targets_by_split:
-        targets_by_split[final_split] = final_targets
+    for split in requested_splits:
+        if split == "train":
+            targets_by_split[split] = train
+        elif split == "validation":
+            targets_by_split[split] = validation
+        else:
+            targets_by_split[split] = final_targets
+    targets_by_split = {
+        split: value for split, value in targets_by_split.items()
+        if split in requested_splits
+    }
     coverage_report = build_coverage_report(
         runner,
         targets_by_split=targets_by_split,
@@ -1023,7 +1059,7 @@ def tune(args: argparse.Namespace) -> None:
         encoding="utf-8",
     )
     print(f"Saved coverage report to {coverage_report_path}")
-    _print_coverage_report(coverage_report)
+    _print_coverage_report(coverage_report, evaluation_replicates=args.evaluation_replicates)
 
 
 def _target_key(value: SymbolTarget | dict) -> tuple[str, str, str, str]:

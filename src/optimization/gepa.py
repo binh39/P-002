@@ -909,9 +909,46 @@ def build_coverage_report(
             replicates=evaluation_replicates,
             reference_results=baseline_batch["results"],
         )
+        def _split_replicate_scores(
+            batch: dict, *, reference_results: list[dict] | None,
+        ) -> list[float]:
+            """One aggregate score per generation replicate for CI reporting.
+
+            Prefer the per-replicate ``batches`` sub-batches when present
+            (evaluate_bundle_repeated); fall back to a singleton so callers
+            that supply a hand-built batch (e.g. tests) still get a score.
+            """
+            repeated = batch.get("batches")
+            if repeated:
+                return [
+                    float(
+                        aggregate_coverage_score(
+                            sub["results"],
+                            reference_results=reference_results,
+                        )["score"]
+                    )
+                    for sub in repeated
+                ]
+            return [
+                float(
+                    aggregate_coverage_score(
+                        batch["results"],
+                        reference_results=reference_results,
+                    )["score"]
+                )
+            ]
+
+        baseline_replicate_scores = _split_replicate_scores(
+            baseline_batch, reference_results=None
+        )
+        optimized_replicate_scores = _split_replicate_scores(
+            optimized_batch, reference_results=baseline_batch["results"]
+        )
         splits[split] = {
             "baseline": _bundle_split_summary(baseline_batch),
             "optimized": _bundle_split_summary(optimized_batch),
+            "baseline_replicate_scores": baseline_replicate_scores,
+            "optimized_replicate_scores": optimized_replicate_scores,
         }
     return {
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
@@ -1114,6 +1151,8 @@ class PromptOptimizationResult:
     reflection_temperature: float
     best_candidate_probability: float
     max_metric_calls: int
+    baseline_metrics: dict[str, float] | None = None
+    rerank: dict[str, Any] | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -1128,6 +1167,8 @@ class PromptOptimizationResult:
                 "best_candidate_probability": self.best_candidate_probability,
                 "max_metric_calls": self.max_metric_calls,
             },
+            "baseline_metrics": self.baseline_metrics,
+            "rerank": self.rerank,
             "candidates": [candidate.as_candidate() for candidate in self.candidates],
         }
 
@@ -2156,6 +2197,8 @@ def optimize(
     reflection_minibatch_size: int = 8,
     reflection_temperature: float = 0.7,
     best_candidate_probability: float = 0.7,
+    rerank_top_k: int = 0,
+    rerank_replicates: int = 3,
 ) -> PromptOptimizationResult:
     """Optimize the initial and error prompt components."""
     if error := validate_bundle(baseline):
@@ -2268,6 +2311,23 @@ def optimize(
     best_bundle = PromptBundle.from_candidate(result.best_candidate)
     if error := validate_bundle(best_bundle):
         raise ValueError(f"GEPA selected an invalid prompt bundle: {error}")
+    rerank = None
+    if rerank_top_k:
+        rerank = rerank_prompt_candidates(
+            runner=runner,
+            validation_targets=validation_targets,
+            baseline=baseline,
+            candidates=[
+                PromptBundle.from_candidate(value) for value in result.candidates
+            ],
+            validation_scores=[float(value) for value in result.val_aggregate_scores],
+            candidate_dir=artifacts_dir / "candidates",
+            top_k=rerank_top_k,
+            replicates=rerank_replicates,
+            split="validation",
+            length_penalty_per_1k=0.0,
+        )
+        best_bundle = rerank.selected_bundle
     return PromptOptimizationResult(
         best_bundle=best_bundle,
         best_index=result.best_idx,
@@ -2279,4 +2339,6 @@ def optimize(
         reflection_temperature=reflection_temperature,
         best_candidate_probability=best_candidate_probability,
         max_metric_calls=max_metric_calls,
+        baseline_metrics=baseline_metrics,
+        rerank=rerank.as_dict() if rerank is not None else None,
     )
