@@ -1,0 +1,74 @@
+{
+  "generated_at": "2026-08-16T09:01:58+00:00",
+  "baseline_digest": "43e38a9d339ce664",
+  "optimized_digest": "7c55704db94a2dfe",
+  "evaluation_replicates": 1,
+  "splits": {
+    "train": {
+      "baseline": {
+        "num_targets": 50,
+        "score": 0.5801061310119943,
+        "statement_coverage": 0.6040781648258283,
+        "branch_coverage": 0.5698324022346368,
+        "covered_statements": 711,
+        "num_statements": 1177,
+        "covered_branches": 408,
+        "num_branches": 716
+      },
+      "optimized": {
+        "num_targets": 50,
+        "score": 0.6671449523691991,
+        "statement_coverage": 0.6856414613423959,
+        "branch_coverage": 0.659217877094972,
+        "covered_statements": 807,
+        "num_statements": 1177,
+        "covered_branches": 472,
+        "num_branches": 716
+      }
+    },
+    "validation": {
+      "baseline": {
+        "num_targets": 100,
+        "score": 0.6052062613409284,
+        "statement_coverage": 0.6368866328257191,
+        "branch_coverage": 0.5916289592760181,
+        "covered_statements": 1882,
+        "num_statements": 2955,
+        "covered_branches": 1046,
+        "num_branches": 1768
+      },
+      "optimized": {
+        "num_targets": 100,
+        "score": 0.7527260146542022,
+        "statement_coverage": 0.7736040609137056,
+        "branch_coverage": 0.7437782805429864,
+        "covered_statements": 2286,
+        "num_statements": 2955,
+        "covered_branches": 1315,
+        "num_branches": 1768
+      }
+    },
+    "test": {
+      "baseline": {
+        "num_targets": 100,
+        "score": 0.5629377164180059,
+        "statement_coverage": 0.6016052535570959,
+        "branch_coverage": 0.5463659147869674,
+        "covered_statements": 1649,
+        "num_statements": 2741,
+        "covered_branches": 872,
+        "num_branches": 1596
+      },
+      "optimized": {
+        "num_targets": 100,
+        "score": 0.6237643771961827,
+        "statement_coverage": 0.6537759941627144,
+        "branch_coverage": 0.6109022556390977,
+        "covered_statements": 1792,
+        "num_statements": 2741,
+        "covered_branches": 975,
+        "num_branches": 1596
+      }
+    }
+  }
+}

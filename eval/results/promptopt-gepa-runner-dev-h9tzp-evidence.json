@@ -1,0 +1,251 @@
+{
+  "schema_version": 1,
+  "retrieved_on": "2026-08-16",
+  "execution": {
+    "name": "promptopt-gepa-runner-dev-h9tzp",
+    "uid": "eae6ccb1-7c8e-486a-a569-73b7d47c7e04",
+    "job": "promptopt-gepa-runner-dev",
+    "project": "project-7df9f963-9fe0-4b76-b3d",
+    "region": "asia-southeast1",
+    "environment": "dev",
+    "source_commit": "459935e",
+    "image": "asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/gepa-runner-dev@sha256:823ea12750a9ecefecda36cd9a02d2836debd81576cdade9f3392baf17101136",
+    "created_at": "2026-08-16T05:46:18.018944Z",
+    "started_at": "2026-08-16T05:46:21.566571Z",
+    "completed_at": "2026-08-16T09:04:24.981632Z",
+    "duration": "3h18m3.41s",
+    "task_count": 1,
+    "succeeded_count": 1,
+    "completed": true
+  },
+  "configuration": {
+    "coverup_model": "vertex_ai/gemini-3.5-flash-lite",
+    "optimize_model": "vertex_ai/gemini-3.6-flash",
+    "vertexai_project": "vinbuildphase",
+    "vertexai_location": "global",
+    "requested_max_metric_calls": 1500,
+    "actual_metric_calls": 1580,
+    "candidate_count": 13,
+    "best_candidate_index": 6,
+    "evaluation_replicates": 1,
+    "repeat_tests": 5,
+    "max_attempts": 3,
+    "max_concurrency": 10,
+    "reflection_temperature": 0.7
+  },
+  "artifact_prefix": "gs://project-7df9f963-9fe0-4b76-b3d-promptopt-sources/runner-jobs/gepa/fe6137d7645143129477d8faefd4df7f/artifacts",
+  "job_result": {
+    "status": "succeeded",
+    "return_code": 0,
+    "missing_artifacts": [],
+    "protocol_version": 2
+  },
+  "promotion_decision": {
+    "final_split": "test",
+    "used_locked_holdout": true,
+    "final_evaluation_skipped": false,
+    "promoted": true,
+    "baseline_digest": "43e38a9d339ce664",
+    "optimized_digest": "7c55704db94a2dfe",
+    "baseline_score": 0.5629377164180059,
+    "optimized_score": 0.6237643771961827,
+    "absolute_gain": 0.06082666077817678,
+    "relative_gain": 0.10805220365268671,
+    "baseline_statement_coverage": 0.6016052535570959,
+    "optimized_statement_coverage": 0.6537759941627144,
+    "additional_covered_statements": 143,
+    "baseline_branch_coverage": 0.5463659147869674,
+    "optimized_branch_coverage": 0.6109022556390977,
+    "additional_covered_branches": 103
+  },
+  "coverage_by_split": {
+    "train": {
+      "targets": 50,
+      "baseline_score": 0.5801061310119943,
+      "optimized_score": 0.6671449523691991
+    },
+    "validation": {
+      "targets": 100,
+      "baseline_score": 0.6052062613409284,
+      "optimized_score": 0.7527260146542022
+    },
+    "test": {
+      "targets": 100,
+      "baseline_score": 0.5629377164180059,
+      "optimized_score": 0.6237643771961827,
+      "baseline_covered_statements": 1649,
+      "optimized_covered_statements": 1792,
+      "statement_denominator": 2741,
+      "baseline_covered_branches": 872,
+      "optimized_covered_branches": 975,
+      "branch_denominator": 1596
+    }
+  },
+  "locked_test_summary": {
+    "target_count": 100,
+    "projects": {
+      "isort": 20,
+      "mimesis": 11,
+      "mlxtend": 57,
+      "typesystem": 12
+    },
+    "improved_targets": 23,
+    "tied_targets": 65,
+    "regressed_targets": 12,
+    "baseline_valid_targets": 100,
+    "optimized_valid_targets": 100,
+    "baseline_nonzero_generator_exit_codes": 0,
+    "optimized_nonzero_generator_exit_codes": 0
+  },
+  "paired_target_examples": [
+    {
+      "project": "mlxtend",
+      "source_file": "mlxtend/evaluate/ttest.py",
+      "symbol": "paired_ttest_resampled",
+      "baseline_score": 0.0,
+      "optimized_score": 1.0,
+      "baseline_statements": "0/27",
+      "optimized_statements": "27/27",
+      "baseline_branches": "0/12",
+      "optimized_branches": "12/12"
+    },
+    {
+      "project": "isort",
+      "source_file": "isort/api.py",
+      "symbol": "check_stream",
+      "baseline_score": 0.0,
+      "optimized_score": 1.0,
+      "baseline_statements": "0/18",
+      "optimized_statements": "18/18",
+      "baseline_branches": "0/8",
+      "optimized_branches": "8/8"
+    },
+    {
+      "project": "mlxtend",
+      "source_file": "mlxtend/externals/signature_py27.py",
+      "symbol": "_get_user_defined_method",
+      "baseline_score": 0.0,
+      "optimized_score": 1.0,
+      "baseline_statements": "0/10",
+      "optimized_statements": "10/10",
+      "baseline_branches": "0/6",
+      "optimized_branches": "6/6"
+    },
+    {
+      "project": "mlxtend",
+      "source_file": "mlxtend/plotting/plot_linear_regression.py",
+      "symbol": "plot_linear_regression",
+      "baseline_score": 0.0,
+      "optimized_score": 0.95,
+      "baseline_statements": "0/27",
+      "optimized_statements": "27/27",
+      "baseline_branches": "0/14",
+      "optimized_branches": "13/14"
+    },
+    {
+      "project": "mlxtend",
+      "source_file": "mlxtend/text/names.py",
+      "symbol": "generalize_names",
+      "baseline_score": 0.0,
+      "optimized_score": 0.9388888888888888,
+      "baseline_statements": "0/27",
+      "optimized_statements": "26/27",
+      "baseline_branches": "0/14",
+      "optimized_branches": "13/14"
+    },
+    {
+      "project": "mimesis",
+      "source_file": "mimesis/providers/date.py",
+      "symbol": "Datetime.future_datetime",
+      "baseline_score": 0.0,
+      "optimized_score": 0.7749999999999999,
+      "baseline_statements": "0/12",
+      "optimized_statements": "10/12",
+      "baseline_branches": "0/4",
+      "optimized_branches": "3/4"
+    },
+    {
+      "project": "isort",
+      "source_file": "isort/main.py",
+      "symbol": "main",
+      "baseline_score": 0.0,
+      "optimized_score": 0.716726618705036,
+      "baseline_statements": "0/139",
+      "optimized_statements": "112/139",
+      "baseline_branches": "0/84",
+      "optimized_branches": "57/84"
+    },
+    {
+      "project": "typesystem",
+      "source_file": "typesystem/json_schema.py",
+      "symbol": "from_json_schema",
+      "baseline_score": 0.7919354838709677,
+      "optimized_score": 1.0,
+      "baseline_statements": "25/31",
+      "optimized_statements": "31/31",
+      "baseline_branches": "22/28",
+      "optimized_branches": "28/28"
+    },
+    {
+      "project": "mimesis",
+      "source_file": "mimesis/providers/base.py",
+      "symbol": "BaseDataProvider._load_dataset",
+      "baseline_score": 1.0,
+      "optimized_score": 0.0,
+      "baseline_statements": "11/11",
+      "optimized_statements": "0/11",
+      "baseline_branches": "4/4",
+      "optimized_branches": "0/4",
+      "note": "Included to disclose a per-target regression despite positive aggregate promotion."
+    },
+    {
+      "project": "typesystem",
+      "source_file": "typesystem/tokenize/tokenize_yaml.py",
+      "symbol": "tokenize_yaml",
+      "baseline_score": 1.0,
+      "optimized_score": 0.0,
+      "baseline_statements": "31/31",
+      "optimized_statements": "0/31",
+      "baseline_branches": "4/4",
+      "optimized_branches": "0/4",
+      "note": "Included to disclose a per-target regression despite positive aggregate promotion."
+    }
+  ],
+  "artifact_provenance": {
+    "job_result.json": {
+      "generation": "1786870920041087",
+      "size": 99,
+      "md5_base64": "pm6tyOX86PdL8RNbExgDcw=="
+    },
+    "final_validation.json": {
+      "generation": "1786870919842232",
+      "size": 4659876,
+      "md5_base64": "nxsUeXfnj2THNKlbU0zVsQ=="
+    },
+    "coverage_report.json": {
+      "generation": "1786870919937872",
+      "size": 2171,
+      "md5_base64": "1wPFLi+UeiprvpJjB9KFKw=="
+    },
+    "optimized_program.json": {
+      "generation": "1786870919578694",
+      "size": 44972,
+      "md5_base64": "t4BGejuJoJ2g6Yy2q5+tTQ=="
+    },
+    "prompts/gepa_proposed.json": {
+      "generation": "1786870922050515",
+      "size": 3463,
+      "md5_base64": "aMUHXq7+FaG82Y1HO68nFg=="
+    },
+    "prompts/gepa_optimized.json": {
+      "generation": "1786870922119641",
+      "size": 3463,
+      "md5_base64": "aMUHXq7+FaG82Y1HO68nFg=="
+    }
+  },
+  "limitations": [
+    "The final evaluation used one generation replicate, so this is weaker than a multi-replicate quality benchmark.",
+    "The aggregate promotion coexists with 12 per-target regressions; the evidence must not be summarized as every target improving.",
+    "Actual metric calls exceeded the configured budget because stopping is checked between iterations and full evaluations are atomic."
+  ]
+}

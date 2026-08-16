@@ -6,13 +6,68 @@ Snapshot gần nhất: **2026-08-16**.
 
 Repository hiện có cả hai loại evidence:
 
-1. **Live optimizer evidence:** Cloud Run execution `promptopt-gepa-runner-dev-55s8j` hoàn tất thành công và đánh giá paired trên **40 locked-test targets**. Candidate được promote với micro coverage score tăng từ **42.8611% lên 52.5045%**.
+1. **Live optimizer evidence:** Cloud Run execution mới nhất `promptopt-gepa-runner-dev-h9tzp` hoàn tất thành công và đánh giá paired trên **100 locked-test targets**. Candidate được promote với micro coverage score tăng từ **56.2938% lên 62.3764%**.
 2. **Software/API evidence:** 5 local API integration cases với response thực tế, lưu ở [local_api_evidence_2026-08-16.json](local_api_evidence_2026-08-16.json).
 
-Live execution summary có provenance/checksum tại [promptopt-gepa-runner-dev-55s8j-evidence.json](promptopt-gepa-runner-dev-55s8j-evidence.json).
-Nội dung JSON của hai artifact nhỏ được snapshot tại [job result](promptopt-gepa-runner-dev-55s8j-job-result.json) và [coverage report](promptopt-gepa-runner-dev-55s8j-coverage-report.json); full `final_validation.json` 2.97 MB được giữ trong private GCS và nhận diện bằng generation/MD5 trong evidence summary.
+Live execution summary mới nhất có provenance/checksum tại [promptopt-gepa-runner-dev-h9tzp-evidence.json](promptopt-gepa-runner-dev-h9tzp-evidence.json).
+Nội dung JSON của hai artifact nhỏ được snapshot tại [job result](promptopt-gepa-runner-dev-h9tzp-job-result.json) và [coverage report](promptopt-gepa-runner-dev-h9tzp-coverage-report.json); full `final_validation.json` 4.66 MB được giữ trong private GCS và nhận diện bằng generation/MD5 trong evidence summary.
 
-## Live GEPA evidence: `promptopt-gepa-runner-dev-55s8j`
+## Live GEPA evidence: `promptopt-gepa-runner-dev-h9tzp`
+
+### Execution provenance
+
+| Field | Actual value |
+| --- | --- |
+| Cloud project / region | `project-7df9f963-9fe0-4b76-b3d` / `asia-southeast1` |
+| Execution UID | `eae6ccb1-7c8e-486a-a569-73b7d47c7e04` |
+| Source commit | `459935e` |
+| Start / completion | `2026-08-16T05:46:21Z` / `2026-08-16T09:04:24Z` |
+| Duration | `3h18m3.41s` |
+| Cloud Run result | `1/1` task succeeded |
+| Job manifest | `status=succeeded`, return code `0`, no missing artifacts, protocol `2` |
+| GCS run prefix | `runner-jobs/gepa/fe6137d7645143129477d8faefd4df7f/artifacts` |
+
+Execution dùng đúng source commit của nhánh phương pháp mới, CoverUp `vertex_ai/gemini-3.5-flash-lite`, reflection `vertex_ai/gemini-3.6-flash`, budget cấu hình 1,500 metric calls, 1,580 calls thực tế, 13 candidates, repeat-tests 5 và evaluation replicate 1.
+
+### Locked-test result
+
+| Metric | Baseline | Optimized | Gain |
+| --- | ---: | ---: | ---: |
+| Micro score | 56.2938% | **62.3764%** | **+6.0827 pp** / +10.81% relative |
+| Statement coverage | 60.1605% (1649/2741) | **65.3776% (1792/2741)** | **+143 statements** |
+| Branch coverage | 54.6366% (872/1596) | **61.0902% (975/1596)** | **+103 branches** |
+
+`final_validation.json` xác nhận `final_split=test`, `used_locked_holdout=true`, `final_evaluation_skipped=false` và `promoted=true`. Baseline digest là `43e38a9d339ce664`; optimized digest là `7c55704db94a2dfe`. `gepa_proposed.json` và `gepa_optimized.json` có cùng MD5 `aMUHXq7+FaG82Y1HO68nFg==`, xác nhận proposal thắng chính là production decision.
+
+### Test-case evidence
+
+Final split gồm **100 cases**: 20 isort, 11 mimesis, 57 mlxtend và 12 typesystem. Baseline và optimized đều có 100/100 result hợp lệ, không có generator exit code khác 0. Kết quả theo target: **23 tăng, 65 hòa, 12 giảm**.
+
+Một số paired outputs thực tế:
+
+| Project / symbol | Baseline | Optimized | Coverage thay đổi |
+| --- | ---: | ---: | --- |
+| mlxtend `paired_ttest_resampled` | 0.0000 | **1.0000** | statements 0/27 → 27/27; branches 0/12 → 12/12 |
+| isort `check_stream` | 0.0000 | **1.0000** | statements 0/18 → 18/18; branches 0/8 → 8/8 |
+| mlxtend `_get_user_defined_method` | 0.0000 | **1.0000** | statements 0/10 → 10/10; branches 0/6 → 6/6 |
+| mlxtend `plot_linear_regression` | 0.0000 | **0.9500** | statements 0/27 → 27/27; branches 0/14 → 13/14 |
+| mimesis `Datetime.future_datetime` | 0.0000 | **0.7750** | statements 0/12 → 10/12; branches 0/4 → 3/4 |
+| isort `main` | 0.0000 | **0.7167** | statements 0/139 → 112/139; branches 0/84 → 57/84 |
+| typesystem `from_json_schema` | 0.7919 | **1.0000** | statements 25/31 → 31/31; branches 22/28 → 28/28 |
+
+Không che giấu regression: `BaseDataProvider._load_dataset` và `tokenize_yaml` đều giảm từ 1.0 xuống 0.0. Promotion là quyết định theo micro-average locked holdout, không có nghĩa mọi target đều tăng.
+
+### Coverage across splits
+
+| Split | Targets | Baseline score | Optimized score |
+| --- | ---: | ---: | ---: |
+| Train | 50 | 58.0106% | **66.7145%** |
+| Validation | 100 | 60.5206% | **75.2726%** |
+| Locked test | 100 | 56.2938% | **62.3764%** |
+
+Candidate tăng trên cả ba split. Locked test chỉ được dùng một lần ở promotion gate sau khi search kết thúc.
+
+## Earlier live GEPA evidence: `promptopt-gepa-runner-dev-55s8j`
 
 ### Execution provenance
 
@@ -118,9 +173,9 @@ Verification mở rộng cùng ngày:
 
 | Suite/check | Actual result |
 | --- | --- |
-| Backend/API `pytest app/tests -q` | **44 passed** |
-| CoverUp/GEPA/root `pytest tests -q` | **86 passed**, 11 dependency deprecation warnings |
-| Frontend Vitest | **15 files, 35 tests passed** |
+| Backend/API `pytest app/tests -q` | **45 passed** |
+| CoverUp/GEPA/root `pytest tests -q` | **93 passed**, 11 dependency deprecation warnings |
+| Frontend Vitest | **18 files, 38 tests passed** |
 | Frontend ESLint + TypeScript | Pass |
 | Frontend production build | Pass |
 
@@ -141,7 +196,7 @@ Các file này là evidence chẩn đoán lịch sử, không phải benchmark h
 
 ## Giới hạn của live evidence
 
-- Final evaluation chỉ có **1 generation replicate**. Run này chứng minh candidate thắng protocol đã chạy, nhưng độ tin cậy thấp hơn benchmark khuyến nghị 2 replicates.
-- Có 2/40 per-target regressions dù aggregate được promote; không tuyên bố candidate tốt hơn trên mọi symbol.
-- 605 metric calls vượt budget 600 vì stopper chỉ kiểm tra giữa iterations và full evaluation là một khối nguyên tử.
+- Cả hai final evaluation chỉ có **1 generation replicate**. Các run chứng minh candidate thắng protocol đã chạy, nhưng độ tin cậy thấp hơn benchmark khuyến nghị 2 replicates.
+- Run `h9tzp` có 12/100 per-target regressions dù aggregate được promote; run `55s8j` có 2/40 regressions. Không tuyên bố candidate tốt hơn trên mọi symbol.
+- `h9tzp` dùng 1,580 metric calls so với budget cấu hình 1,500; `55s8j` dùng 605 so với 600. Stopper chỉ kiểm tra giữa iterations và full evaluation là một khối nguyên tử.
 - Artifact trong GCS là nguồn đầy đủ; file evidence trong repository là bản tóm tắt sanitize kèm generation, size và MD5 để truy nguyên.
