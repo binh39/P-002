@@ -258,6 +258,12 @@ def build_failure_context(
     clone_pitfall = _clone_pitfall_context(segment, error)
     if clone_pitfall:
         sections.extend(["", "[CLONE/REBUILD PITFALL]", clone_pitfall])
+    private_hook = _private_test_hook_context(error)
+    if private_hook:
+        sections.extend(["", "[PRIVATE TEST HOOK]", private_hook])
+    sfs_branches = _sfs_branch_completion_context(segment, error)
+    if sfs_branches:
+        sections.extend(["", "[SFS BRANCH COMPLETION]", sfs_branches])
     constructor = _enclosing_constructor_context(segment)
     if constructor:
         sections.extend(["", "[ENCLOSING CONSTRUCTOR/PROTOCOL]", constructor])
@@ -380,11 +386,87 @@ def _clone_pitfall_context(segment: CodeSegment, error: str) -> str:
         "same failure will recur on every rewrite.",
     ]
     lines.append(
-        "Do not monkey-patch the instance. Instead pass the parameter through the documented "
-        "constructor kwarg (e.g. `scoring='accuracy'`), use an estimator that already declares "
-        "`_estimator_type` at class scope, or set `clone_estimator=False`."
+        "Do not monkey-patch the instance, and do not rely on the estimator exposing "
+        "`_estimator_type`: in the sklearn version this repo runs, no estimator declares that "
+        "attribute at class scope, so setting it on an instance is both dropped by clone() and "
+        "insufficient. Pass the `scoring` parameter explicitly as a documented string (e.g. "
+        "`scoring='accuracy'` or `scoring='r2'`); a non-None `scoring` skips the "
+        "`_estimator_type` constructor check entirely. Alternatively set `clone_estimator=False`."
     )
     return "\n".join(lines)
+
+
+_PRIVATE_TEST_HOOK_RE = re.compile(r"_TESTING_[A-Za-z_]+")
+
+
+def _private_test_hook_context(error: str) -> str:
+    """Warn when a repair probes a private ``_TESTING_`` hook on the target.
+
+    The failing module often invents a private hook (e.g. ``obj._TESTING_INTERRUPT_MODE = True``)
+    and expects the code to raise. Such attributes are not part of the public API, so the
+    ``pytest.raises(...)`` assertion fails (e.g. "DID NOT RAISE KeyboardInterrupt"); one failing
+    test then rejects the entire module, discarding passing coverage. The error string carries the
+    traceback, which includes the model's own ``_TESTING_*`` reference, so this fires even though
+    the exception itself is unrelated to ``_estimator_type``.
+    """
+
+    if not _PRIVATE_TEST_HOOK_RE.search(error):
+        return ""
+    return (
+        "You probed a private `_TESTING_*` attribute (or expected an interrupt) on the target, "
+        "which is not part of the real public API. Setting `obj._TESTING_* = ...` and expecting "
+        "the code to raise will fail (e.g. 'DID NOT RAISE KeyboardInterrupt'), and that one "
+        "failure rejects the entire module, discarding your passing coverage. Remove the private "
+        "hook; assert observable public behavior instead (e.g. `fitted`, `k_feature_idx_`, "
+        "`subsets_`)."
+    )
+
+
+_SFS_BRANCH_MARKERS = ("k_features", "feature_groups", "floating", "forward")
+_SFS_BRANCH_ERROR_RE = re.compile(r"AttributeError|ValueError")
+
+
+def _sfs_branch_completion_context(segment: CodeSegment, error: str) -> str:
+    """Nudge SFS-style meta-estimator repairs to also cover rare feature-search branches.
+
+    From trace analysis of ``SequentialFeatureSelector.fit``, the remaining gap on this
+    target is overwhelmingly the *rare* branches, not the constructor error: a repair that
+    only fixes the immediate ``ValueError``/``AttributeError`` will restart at the same
+    validation branch and never reach the floating-backward loop nor the string
+    ``k_features`` modes. This hint fires only for a fit-style method whose source carries
+    the SFS kwarg markers and whose error is a validation/attribute failure.
+    """
+
+    if not _SFS_BRANCH_ERROR_RE.search(error):
+        return ""
+    try:
+        source = segment.path.read_text(encoding="utf-8")
+        ast.parse(source, filename=str(segment.path))
+    except (OSError, UnicodeDecodeError, SyntaxError):
+        return ""
+    if not all(marker in source for marker in _SFS_BRANCH_MARKERS):
+        return ""
+    if segment.name not in {"fit", "fit_transform", "fit_predict"}:
+        return ""
+    return (
+        "Do not stop at fixing just this one validation branch. This target's remaining "
+        "coverage is concentrated in rare feature-selection branches, and a repair is more "
+        "robust when it exercises all of them in separate test functions:\n"
+        "- pass `k_features` as a string too (`'best'` and `'parsimonious'`), not only int/tuple; "
+        "`'parsimonious'` flips the internal `is_parsimonious` flag;\n"
+        "- run at least one `forward=True, floating=True` fit so the floating-backward loop "
+        "(subset re-evaluation, break-on-no-improvement, and accept-on-improvement paths) executes. "
+        "The floating *body* is gated: the loop breaks before its body when the current feature "
+        "count is within 2 of the target (e.g. `forward=True`, no fixed features, and "
+        "`k_features <= 2`). To actually reach the floating loops, use enough columns and a "
+        "target that keeps the count above that guard — for example `k_features=3` on an X with "
+        "at least 4 columns (so `len(k_idx) - len(fixed_features) > 2` on the way to the target);\n"
+        "- optionally set `verbose=1`/`verbose>1` to cover the progress-stderr branches;\n"
+        "- cover `fixed_features` and `feature_groups` validation errors (`mixed types`, a name "
+        "mapping without a DataFrame, a group that is not a partition).\n"
+        "Prefer several small independent `test_*` functions so one failing branch does not "
+        "discard coverage from the other branches."
+    )
 
 
 def _enclosing_constructor_context(segment: CodeSegment) -> str:
