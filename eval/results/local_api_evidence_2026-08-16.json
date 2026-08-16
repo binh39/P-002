@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "scope": "local ASGI integration; no live LLM calls",
+  "case_count": 5,
+  "cases": [
+    {
+      "id": "health",
+      "request": "GET /health",
+      "status": 200,
+      "output": {
+        "status": "ok",
+        "service": "promptopt-api",
+        "env": "test"
+      }
+    },
+    {
+      "id": "authentication-required",
+      "request": "GET /api/v1/projects (no bearer token)",
+      "status": 401,
+      "output": {
+        "error": {
+          "code": "AUTHENTICATION_REQUIRED",
+          "message": "A Firebase ID token is required"
+        }
+      }
+    },
+    {
+      "id": "sample-catalog",
+      "request": "GET /api/v1/projects/samples",
+      "status": 200,
+      "output": {
+        "total": 4,
+        "ids": [
+          "sample:isort",
+          "sample:mimesis",
+          "sample:mlxtend",
+          "sample:typesystem"
+        ],
+        "statuses": [
+          "ready",
+          "ready",
+          "ready",
+          "ready"
+        ]
+      }
+    },
+    {
+      "id": "empty-dashboard",
+      "request": "GET /api/v1/dashboard",
+      "status": 200,
+      "output": {
+        "project_name": "Prompt research",
+        "experiments": [],
+        "coverage": [],
+        "first_kpi": {
+          "label": "Total Experiments",
+          "value": "0",
+          "delta": "Owner-scoped records",
+          "trend": "neutral",
+          "icon": "experiments"
+        }
+      }
+    },
+    {
+      "id": "invalid-baseline-prompt",
+      "request": "POST /api/v1/experiments (invalid baseline placeholders)",
+      "status": 422,
+      "output": {
+        "error": {
+          "code": "INVALID_BASELINE_PROMPT",
+          "message": "initial prompt is missing required placeholders"
+        }
+      }
+    }
+  ]
+}

@@ -50,6 +50,8 @@ export class DemoAuthService implements AuthService {
   }
 
   async getIdToken() {
-    return null;
+    // The local FastAPI profile still enforces a bearer header and its
+    // DevelopmentTokenVerifier accepts this explicit, non-production token.
+    return "dev-token";
   }
 }
