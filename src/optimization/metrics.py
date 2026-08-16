@@ -159,7 +159,7 @@ def paired_delta_ci(
     optimized_scores: Sequence[float],
     *,
     confidence: float = 0.95,
-) -> dict[str, float | int]:
+) -> dict[str, float | int | bool | None]:
     """Compare two replicate distributions with a matched-pair delta and CI.
 
     Baseline and optimized replicates are matched positionally (each pair is one
@@ -176,6 +176,9 @@ def paired_delta_ci(
       baseline_mean, optimized_mean, delta, delta_ci_low, delta_ci_high,
       n_pairs, promotes (strict CI improvement over the baseline mean).
     """
+    if not 0.0 < confidence < 1.0:
+        raise ValueError("confidence must be between 0 and 1")
+
     base = [float(value) for value in baseline_scores]
     opt = [float(value) for value in optimized_scores]
     if not base or not opt:
@@ -187,25 +190,84 @@ def paired_delta_ci(
         deltas = [opt[i] - base[i] for i in range(len(base))]
         delta = _mean(deltas)
         n = len(deltas)
-        sd = statistics.pstdev(deltas) if n > 1 else 0.0
-        z = 1.96 if confidence >= 0.95 else 1.645
+        if n < 2:
+            standard_error = math.inf
+            degrees_of_freedom = 0.0
+        else:
+            standard_error = statistics.stdev(deltas) / math.sqrt(n)
+            degrees_of_freedom = float(n - 1)
     else:
         delta = opt_mean - base_mean
         n = min(len(base), len(opt))
-        var_base = statistics.pstdev(base) ** 2 if len(base) > 1 else 0.0
-        var_opt = statistics.pstdev(opt) ** 2 if len(opt) > 1 else 0.0
-        sd = math.sqrt(var_base / len(base) + var_opt / len(opt))
-        z = 1.96 if confidence >= 0.95 else 1.645
-    half = z * sd if sd else 0.0
+        if len(base) < 2 or len(opt) < 2:
+            standard_error = math.inf
+            degrees_of_freedom = 0.0
+        else:
+            base_term = statistics.variance(base) / len(base)
+            opt_term = statistics.variance(opt) / len(opt)
+            standard_error = math.sqrt(base_term + opt_term)
+            denominator = (
+                (base_term**2) / (len(base) - 1)
+                + (opt_term**2) / (len(opt) - 1)
+            )
+            degrees_of_freedom = (
+                ((base_term + opt_term) ** 2) / denominator
+                if denominator
+                else math.inf
+            )
+
+    if math.isinf(standard_error):
+        delta_ci_low = None
+        delta_ci_high = None
+        reported_standard_error = None
+    else:
+        critical = _student_t_critical(confidence, degrees_of_freedom)
+        half = critical * standard_error
+        delta_ci_low = delta - half
+        delta_ci_high = delta + half
+        reported_standard_error = standard_error
     return {
         "baseline_mean": base_mean,
         "optimized_mean": opt_mean,
         "delta": delta,
-        "delta_ci_low": delta - half,
-        "delta_ci_high": delta + half,
+        "delta_ci_low": delta_ci_low,
+        "delta_ci_high": delta_ci_high,
         "n_pairs": n,
-        "promotes": delta - half > 0.0,
+        "confidence": confidence,
+        "standard_error": reported_standard_error,
+        "promotes": delta_ci_low is not None and delta_ci_low > 0.0,
     }
+
+
+def _student_t_critical(confidence: float, degrees_of_freedom: float) -> float:
+    """Return a two-sided Student-t critical value without a SciPy dependency."""
+    if degrees_of_freedom <= 0:
+        return math.inf
+    probability = (1.0 + confidence) / 2.0
+    z = statistics.NormalDist().inv_cdf(probability)
+    if math.isinf(degrees_of_freedom):
+        return z
+    if math.isclose(confidence, 0.95) and degrees_of_freedom.is_integer():
+        critical_95 = (
+            12.706, 4.303, 3.182, 2.776, 2.571, 2.447, 2.365, 2.306,
+            2.262, 2.228, 2.201, 2.179, 2.160, 2.145, 2.131, 2.120,
+            2.110, 2.101, 2.093, 2.086, 2.080, 2.074, 2.069, 2.064,
+            2.060, 2.056, 2.052, 2.048, 2.045, 2.042,
+        )
+        integer_df = int(degrees_of_freedom)
+        if integer_df <= len(critical_95):
+            return critical_95[integer_df - 1]
+    # Cornish-Fisher expansion for the Student-t quantile. It is accurate for
+    # the replicate counts used here and, unlike a normal interval, widens
+    # small-sample comparisons appropriately.
+    df = degrees_of_freedom
+    return (
+        z
+        + (z**3 + z) / (4.0 * df)
+        + (5.0 * z**5 + 16.0 * z**3 + 3.0 * z) / (96.0 * df**2)
+        + (3.0 * z**7 + 19.0 * z**5 + 17.0 * z**3 - 15.0 * z)
+        / (384.0 * df**3)
+    )
 
 
 def build_feedback(result: CoverageScore, *, coverup_exit_code: int = 0) -> str:

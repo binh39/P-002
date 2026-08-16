@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import random
 import sys
@@ -20,6 +21,7 @@ from .gepa import (
     bundle_digest,
     evaluate_bundle_repeated,
     optimize,
+    replicate_aggregate_scores,
     rerank_prompt_candidates,
     validate_bundle,
     validate_reference_evaluation,
@@ -146,6 +148,11 @@ def parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--prompt", type=Path, required=True)
     evaluate.add_argument("--split", default="validation")
     evaluate.add_argument("--evaluation-replicates", type=int, default=1)
+    evaluate.add_argument(
+        "--output",
+        type=Path,
+        help="Optional path for the complete reusable evaluation batch JSON",
+    )
 
     tune = commands.add_parser("optimize", help="Run GEPA using Gemini")
     tune.add_argument("--dataset", type=Path, required=True)
@@ -222,6 +229,17 @@ def parser() -> argparse.ArgumentParser:
             "search (default: validation)"
         ),
     )
+    tune.add_argument(
+        "--min-absolute-gain",
+        type=float,
+        default=0.0,
+        help="Minimum absolute final-split score gain required for promotion",
+    )
+    tune.add_argument(
+        "--require-positive-ci",
+        action="store_true",
+        help="Require the paired 95%% CI lower bound to be above zero",
+    )
     budget = tune.add_mutually_exclusive_group()
     budget.add_argument(
         "--auto",
@@ -244,14 +262,15 @@ def parser() -> argparse.ArgumentParser:
     finalize.add_argument(
         "--reference-cache",
         type=Path,
-        required=True,
         help=(
-            "Saved full-split baseline batch. Invalid rows are regenerated and "
-            "merged; valid rows are reused without rerunning GEPA."
+            "Optional saved full-split baseline batch. If omitted, finalize "
+            "generates the paired baseline on the locked holdout."
         ),
     )
     finalize.add_argument("--holdout-split", default="test")
     finalize.add_argument("--evaluation-replicates", type=int, default=1)
+    finalize.add_argument("--min-absolute-gain", type=float, default=0.0)
+    finalize.add_argument("--require-positive-ci", action="store_true")
 
     rerank = commands.add_parser(
         "rerank",
@@ -358,8 +377,46 @@ def _model_from_env(name: str) -> str:
     return value
 
 
-def should_promote(*, optimized_mean: float, baseline_mean: float) -> bool:
-    return optimized_mean > baseline_mean
+def should_promote(
+    *,
+    optimized_mean: float,
+    baseline_mean: float,
+    min_absolute_gain: float = 0.0,
+    delta_ci_low: float | None = None,
+    require_positive_ci: bool = False,
+) -> bool:
+    if not math.isfinite(min_absolute_gain) or min_absolute_gain < 0:
+        raise ValueError("min_absolute_gain must be a finite non-negative value")
+    gain = optimized_mean - baseline_mean
+    if gain <= 0.0 or gain < min_absolute_gain:
+        return False
+    return not require_positive_ci or (
+        delta_ci_low is not None and delta_ci_low > 0.0
+    )
+
+
+def _validate_promotion_args(args: argparse.Namespace) -> None:
+    minimum = float(getattr(args, "min_absolute_gain", 0.0))
+    if not math.isfinite(minimum) or minimum < 0:
+        raise ValueError("--min-absolute-gain must be a finite non-negative value")
+    if bool(getattr(args, "require_positive_ci", False)) and int(
+        args.evaluation_replicates
+    ) < 2:
+        raise ValueError(
+            "--require-positive-ci needs --evaluation-replicates of at least 2"
+        )
+
+
+def _promotion_comparison(
+    baseline_evaluation: dict,
+    proposed_evaluation: dict,
+) -> dict[str, float | int | bool | None]:
+    baseline_scores = replicate_aggregate_scores(baseline_evaluation)
+    proposed_scores = replicate_aggregate_scores(
+        proposed_evaluation,
+        reference_results=baseline_evaluation["results"],
+    )
+    return paired_delta_ci(baseline_scores, proposed_scores)
 
 
 def build_archive(args: argparse.Namespace) -> None:
@@ -493,6 +550,7 @@ def _print_coverage_report(report: dict, *, evaluation_replicates: int = 1) -> N
             and base_scores
             and opt_scores
             and len(base_scores) > 1
+            and len(opt_scores) > 1
         ):
             ci = paired_delta_ci(base_scores, opt_scores)
             print(
@@ -655,6 +713,13 @@ def evaluate(args: argparse.Namespace) -> None:
         replicates=args.evaluation_replicates,
     )
     aggregate = batch.get("aggregate") or aggregate_coverage_score(batch["results"])
+    if args.output is not None:
+        output_path = _resolve(args.project_root.resolve(), args.output).resolve()
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            json.dumps(batch, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        print(f"Saved evaluation batch to {output_path}")
     print(json.dumps({
         "runs": batch["run_ids"],
         "aggregate_score": aggregate["score"],
@@ -773,6 +838,9 @@ def rerank_saved_program(args: argparse.Namespace) -> None:
 def tune(args: argparse.Namespace) -> None:
     root = args.project_root.resolve()
     load_dotenv(root / ".env")
+    _validate_promotion_args(args)
+    min_absolute_gain = float(getattr(args, "min_absolute_gain", 0.0))
+    require_positive_ci = bool(getattr(args, "require_positive_ci", False))
     search_only = bool(getattr(args, "search_only", False))
     if search_only and int(getattr(args, "rerank_top_k", 0)):
         raise ValueError("--search-only cannot be combined with --rerank-top-k")
@@ -801,54 +869,6 @@ def tune(args: argparse.Namespace) -> None:
     baseline_results = None
     baseline_aggregate = None
     baseline_mean_score = None
-    if not search_only:
-        if args.baseline_tests_dir is not None:
-            baseline_tests_dir = _resolve(root, args.baseline_tests_dir).resolve()
-            if not baseline_tests_dir.is_dir():
-                raise FileNotFoundError(
-                    f"The baseline tests directory does not exist: {baseline_tests_dir}"
-                )
-            baseline_record = runner.evaluate_existing_tests_batch(
-                final_targets,
-                baseline_tests_dir,
-                split=final_split,
-            )
-            historical_results = [
-                {
-                    "target": result.target.__dict__,
-                    "run_id": baseline_record.run_id,
-                    "score": float(result.score["score"]) if result.score else 0.0,
-                    "coverage": result.score,
-                    "feedback": result.feedback,
-                }
-                for result in baseline_record.results
-            ]
-            existing_baseline_reference = {
-                "run_id": baseline_record.run_id,
-                "tests_workspace": baseline_record.tests_workspace,
-                "results": historical_results,
-                "aggregate": aggregate_coverage_score(historical_results),
-            }
-
-        # The final-split baseline is only needed by the promotion gate. Search-only
-        # multi-seed runs must not inspect the locked holdout.
-        baseline_evaluation = evaluate_bundle_repeated(
-            runner,
-            final_targets,
-            baseline,
-            artifacts / "candidates",
-            split=final_split,
-            workspace_kind="baseline",
-            replicates=args.evaluation_replicates,
-        )
-        baseline_results = [
-            dict(result) for result in baseline_evaluation["results"]
-        ]
-        validate_reference_evaluation(
-            baseline_results, split=final_split, expected_targets=final_targets,
-        )
-        baseline_aggregate = baseline_evaluation["aggregate"]
-        baseline_mean_score = float(baseline_aggregate["score"])
 
     lm = dspy.LM(
         _model_from_env("OPTIMIZE_MODEL"),
@@ -874,6 +894,10 @@ def tune(args: argparse.Namespace) -> None:
         ),
         rerank_top_k=rerank_top_k,
         rerank_replicates=rerank_replicates,
+        rerank_length_penalty_per_1k=float(
+            getattr(args, "rerank_length_penalty_per_1k", 0.0)
+        ),
+        rerank_max_prompt_chars=getattr(args, "rerank_max_prompt_chars", None),
     )
     artifacts.mkdir(parents=True, exist_ok=True)
     configured_program_output = getattr(args, "program_output", None)
@@ -891,10 +915,6 @@ def tune(args: argparse.Namespace) -> None:
         print("Locked holdout was not evaluated.")
         return
 
-    assert baseline_evaluation is not None
-    assert baseline_results is not None
-    assert baseline_aggregate is not None
-    assert baseline_mean_score is not None
     # Reranking (when enabled) is performed inside ``optimize`` so that the
     # selected proposal already reflects the validation-stable rerank winner.
     # ``optimized.rerank`` carries the leaderboard report; persistence of the
@@ -924,11 +944,16 @@ def tune(args: argparse.Namespace) -> None:
         baseline.save(final_path)
         report = {
             "mean_score": None,
-            "baseline_mean_score": baseline_mean_score,
+            "baseline_mean_score": None,
             "optimized_mean_score": None,
-            "baseline_aggregate_coverage": baseline_aggregate,
+            "baseline_aggregate_coverage": None,
             "optimized_aggregate_coverage": None,
             "absolute_gain": None,
+            "promotion_comparison": None,
+            "promotion_policy": {
+                "min_absolute_gain": min_absolute_gain,
+                "require_positive_ci": require_positive_ci,
+            },
             "promoted": False,
             "final_evaluation_skipped": True,
             "skip_reason": (
@@ -941,11 +966,11 @@ def tune(args: argparse.Namespace) -> None:
             "prompt": str(proposed_path),
             "production_prompt": str(final_path),
             "baseline_prompt": str(args.prompt.resolve()),
-            "baseline_tests_workspaces": baseline_evaluation["tests_workspaces"],
-            "baseline_run_ids": baseline_evaluation["run_ids"],
+            "baseline_tests_workspaces": [],
+            "baseline_run_ids": [],
             "run_ids": [],
             "tests_workspaces": [],
-            "baseline_results": baseline_results,
+            "baseline_results": [],
             "results": [],
             "existing_baseline_reference": existing_baseline_reference,
             "candidate_rerank": candidate_rerank,
@@ -962,6 +987,53 @@ def tune(args: argparse.Namespace) -> None:
         print(f"Retained baseline at {final_path}")
         return
 
+    # The locked holdout is opened only after search/rerank has selected one
+    # genuinely new proposal. Neither GEPA nor a human-in-the-loop selection can
+    # use these results to choose another candidate.
+    if args.baseline_tests_dir is not None:
+        baseline_tests_dir = _resolve(root, args.baseline_tests_dir).resolve()
+        if not baseline_tests_dir.is_dir():
+            raise FileNotFoundError(
+                f"The baseline tests directory does not exist: {baseline_tests_dir}"
+            )
+        baseline_record = runner.evaluate_existing_tests_batch(
+            final_targets,
+            baseline_tests_dir,
+            split=final_split,
+        )
+        historical_results = [
+            {
+                "target": result.target.__dict__,
+                "run_id": baseline_record.run_id,
+                "score": float(result.score["score"]) if result.score else 0.0,
+                "coverage": result.score,
+                "feedback": result.feedback,
+            }
+            for result in baseline_record.results
+        ]
+        existing_baseline_reference = {
+            "run_id": baseline_record.run_id,
+            "tests_workspace": baseline_record.tests_workspace,
+            "results": historical_results,
+            "aggregate": aggregate_coverage_score(historical_results),
+        }
+
+    baseline_evaluation = evaluate_bundle_repeated(
+        runner,
+        final_targets,
+        baseline,
+        artifacts / "candidates",
+        split=final_split,
+        workspace_kind="baseline",
+        replicates=args.evaluation_replicates,
+    )
+    baseline_results = [dict(result) for result in baseline_evaluation["results"]]
+    validate_reference_evaluation(
+        baseline_results, split=final_split, expected_targets=final_targets,
+    )
+    baseline_aggregate = baseline_evaluation["aggregate"]
+    baseline_mean_score = float(baseline_aggregate["score"])
+
     proposed_evaluation = evaluate_bundle_repeated(
         runner,
         final_targets,
@@ -975,9 +1047,14 @@ def tune(args: argparse.Namespace) -> None:
     validation_results = proposed_evaluation["results"]
     optimized_aggregate = proposed_evaluation["aggregate"]
     mean_score = float(optimized_aggregate["score"])
+    promotion_comparison = _promotion_comparison(
+        baseline_evaluation, proposed_evaluation
+    )
     promoted = should_promote(
-        optimized_mean=mean_score,
-        baseline_mean=baseline_mean_score,
+        optimized_mean=mean_score, baseline_mean=baseline_mean_score,
+        min_absolute_gain=min_absolute_gain,
+        delta_ci_low=promotion_comparison["delta_ci_low"],
+        require_positive_ci=require_positive_ci,
     )
     production_prompt = proposed_prompt if promoted else baseline
     final_path = artifacts / "prompts" / "gepa_optimized.json"
@@ -989,6 +1066,11 @@ def tune(args: argparse.Namespace) -> None:
         "baseline_aggregate_coverage": baseline_aggregate,
         "optimized_aggregate_coverage": optimized_aggregate,
         "absolute_gain": mean_score - baseline_mean_score,
+        "promotion_comparison": promotion_comparison,
+        "promotion_policy": {
+            "min_absolute_gain": min_absolute_gain,
+            "require_positive_ci": require_positive_ci,
+        },
         "promoted": promoted,
         "final_evaluation_skipped": False,
         "skip_reason": None,
@@ -1014,6 +1096,14 @@ def tune(args: argparse.Namespace) -> None:
     print(f"Baseline aggregate score: {baseline_mean_score:.4f}")
     print(f"GEPA proposal aggregate score: {mean_score:.4f}")
     print(f"Absolute gain: {mean_score - baseline_mean_score:.4f}")
+    if promotion_comparison["delta_ci_low"] is None:
+        print("Paired delta 95% CI: unavailable (need at least 2 replicates)")
+    else:
+        print(
+            "Paired delta 95% CI: "
+            f"[{promotion_comparison['delta_ci_low']:+.4f}, "
+            f"{promotion_comparison['delta_ci_high']:+.4f}]"
+        )
     if promoted:
         print(f"Promoted GEPA proposal to {final_path}")
     else:
@@ -1128,11 +1218,18 @@ def _repeat_final_baseline(
 def finalize(args: argparse.Namespace) -> None:
     """Recover the final comparison without rerunning an expensive GEPA search."""
     load_dotenv(args.project_root.resolve() / ".env")
+    _validate_promotion_args(args)
+    min_absolute_gain = float(getattr(args, "min_absolute_gain", 0.0))
+    require_positive_ci = bool(getattr(args, "require_positive_ci", False))
     baseline = PromptBundle.load(args.prompt.resolve())
     proposed = PromptBundle.load(args.proposed_prompt.resolve())
     for label, bundle in (("baseline", baseline), ("proposed", proposed)):
         if error := validate_bundle(bundle):
             raise ValueError(f"Invalid {label} prompt bundle: {error}")
+    if bundle_digest(proposed) == bundle_digest(baseline):
+        raise ValueError(
+            "The proposed prompt is identical to baseline; locked holdout was not opened"
+        )
 
     final_targets = load_targets(args.dataset.resolve(), args.holdout_split)
     if not final_targets:
@@ -1149,51 +1246,77 @@ def finalize(args: argparse.Namespace) -> None:
     artifacts = runner.config.artifacts_dir.resolve()
     artifacts.mkdir(parents=True, exist_ok=True)
 
-    reference = json.loads(args.reference_cache.resolve().read_text(encoding="utf-8"))
-    rows = list(reference.get("results", []))
-    expected = {_target_key(target) for target in final_targets}
-    actual = {_target_key(row["target"]) for row in rows}
-    if actual != expected:
-        raise RuntimeError(
-            "Reference cache target set does not match the requested holdout split."
-        )
-    invalid_keys = {
-        _target_key(row["target"]) for row in rows if not _reference_row_is_valid(row)
-    }
+    reference = None
+    rows: list[dict] = []
+    invalid_keys: set[tuple[str, str, str, str]] = set()
     repaired_run_ids: list[str] = []
     repaired_workspaces: list[str] = []
-    if invalid_keys:
-        invalid_targets = [
-            target for target in final_targets if _target_key(target) in invalid_keys
-        ]
-        repaired = evaluate_bundle_repeated(
+    if args.reference_cache is not None:
+        reference_path = args.reference_cache.resolve()
+        reference = json.loads(reference_path.read_text(encoding="utf-8"))
+        rows = list(reference.get("results", []))
+        expected = {_target_key(target) for target in final_targets}
+        actual = {_target_key(row["target"]) for row in rows}
+        if actual != expected:
+            raise RuntimeError(
+                "Reference cache target set does not match the requested holdout split."
+            )
+        invalid_keys = {
+            _target_key(row["target"])
+            for row in rows
+            if not _reference_row_is_valid(row)
+        }
+        if invalid_keys:
+            invalid_targets = [
+                target
+                for target in final_targets
+                if _target_key(target) in invalid_keys
+            ]
+            repaired = evaluate_bundle_repeated(
+                runner,
+                invalid_targets,
+                baseline,
+                artifacts / "candidates",
+                split=args.holdout_split,
+                workspace_kind="baseline",
+                replicates=args.evaluation_replicates,
+            )
+            replacements = {
+                _target_key(row["target"]): row for row in repaired["results"]
+            }
+            rows = [
+                replacements.get(_target_key(row["target"]), row) for row in rows
+            ]
+            repaired_run_ids = repaired["run_ids"]
+            repaired_workspaces = repaired["tests_workspaces"]
+
+        validate_reference_evaluation(
+            rows, split=args.holdout_split, expected_targets=final_targets,
+        )
+        baseline_evaluation = _repeat_final_baseline(
             runner,
-            invalid_targets,
+            final_targets,
+            baseline,
+            artifacts / "candidates",
+            split=args.holdout_split,
+            replicates=args.evaluation_replicates,
+            reference_rows=rows,
+        )
+    else:
+        baseline_evaluation = evaluate_bundle_repeated(
+            runner,
+            final_targets,
             baseline,
             artifacts / "candidates",
             split=args.holdout_split,
             workspace_kind="baseline",
             replicates=args.evaluation_replicates,
         )
-        replacements = {
-            _target_key(row["target"]): row for row in repaired["results"]
-        }
-        rows = [replacements.get(_target_key(row["target"]), row) for row in rows]
-        repaired_run_ids = repaired["run_ids"]
-        repaired_workspaces = repaired["tests_workspaces"]
-
-    validate_reference_evaluation(
-        rows, split=args.holdout_split, expected_targets=final_targets,
-    )
-    baseline_evaluation = _repeat_final_baseline(
-        runner,
-        final_targets,
-        baseline,
-        artifacts / "candidates",
-        split=args.holdout_split,
-        replicates=args.evaluation_replicates,
-        reference_rows=rows,
-    )
+        validate_reference_evaluation(
+            baseline_evaluation["results"],
+            split=args.holdout_split,
+            expected_targets=final_targets,
+        )
     rows = baseline_evaluation["results"]
     baseline_aggregate = baseline_evaluation["aggregate"]
     proposed_evaluation = evaluate_bundle_repeated(
@@ -1209,8 +1332,14 @@ def finalize(args: argparse.Namespace) -> None:
     proposed_aggregate = proposed_evaluation["aggregate"]
     baseline_score = float(baseline_aggregate["score"])
     proposed_score = float(proposed_aggregate["score"])
+    promotion_comparison = _promotion_comparison(
+        baseline_evaluation, proposed_evaluation
+    )
     promoted = should_promote(
         optimized_mean=proposed_score, baseline_mean=baseline_score,
+        min_absolute_gain=min_absolute_gain,
+        delta_ci_low=promotion_comparison["delta_ci_low"],
+        require_positive_ci=require_positive_ci,
     )
 
     proposed_path = artifacts / "prompts" / "gepa_proposed.json"
@@ -1224,6 +1353,11 @@ def finalize(args: argparse.Namespace) -> None:
         "baseline_aggregate_coverage": baseline_aggregate,
         "optimized_aggregate_coverage": proposed_aggregate,
         "absolute_gain": proposed_score - baseline_score,
+        "promotion_comparison": promotion_comparison,
+        "promotion_policy": {
+            "min_absolute_gain": min_absolute_gain,
+            "require_positive_ci": require_positive_ci,
+        },
         "promoted": promoted,
         "final_evaluation_skipped": False,
         "skip_reason": None,
@@ -1237,14 +1371,17 @@ def finalize(args: argparse.Namespace) -> None:
             *(
                 baseline_evaluation["tests_workspaces"]
                 if args.evaluation_replicates > 1
-                else [*reference.get("tests_workspaces", []), *repaired_workspaces]
+                else [
+                    *((reference or {}).get("tests_workspaces", [])),
+                    *repaired_workspaces,
+                ]
             ),
         ],
         "baseline_run_ids": [
             *(
                 baseline_evaluation["run_ids"]
                 if args.evaluation_replicates > 1
-                else [*reference.get("run_ids", []), *repaired_run_ids]
+                else [*(reference or {}).get("run_ids", []), *repaired_run_ids]
             ),
         ],
         "run_ids": proposed_evaluation["run_ids"],
@@ -1253,7 +1390,11 @@ def finalize(args: argparse.Namespace) -> None:
         "results": proposed_evaluation["results"],
         "existing_baseline_reference": None,
         "recovery": {
-            "source_reference_cache": str(args.reference_cache.resolve()),
+            "source_reference_cache": (
+                str(args.reference_cache.resolve())
+                if args.reference_cache is not None
+                else None
+            ),
             "repaired_targets": ["::".join(key[1:3]) for key in sorted(invalid_keys)],
             "gepa_search_rerun": False,
             "paired_baseline_replicates": args.evaluation_replicates,
@@ -1284,6 +1425,14 @@ def finalize(args: argparse.Namespace) -> None:
     print(f"Baseline aggregate score: {baseline_score:.4f}")
     print(f"GEPA proposal aggregate score: {proposed_score:.4f}")
     print(f"Absolute gain: {proposed_score - baseline_score:.4f}")
+    if promotion_comparison["delta_ci_low"] is None:
+        print("Paired delta 95% CI: unavailable (need at least 2 replicates)")
+    else:
+        print(
+            "Paired delta 95% CI: "
+            f"[{promotion_comparison['delta_ci_low']:+.4f}, "
+            f"{promotion_comparison['delta_ci_high']:+.4f}]"
+        )
     print(f"Promoted: {promoted}")
 
 

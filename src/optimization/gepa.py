@@ -862,6 +862,29 @@ def _bundle_split_summary(batch: dict) -> dict[str, Any]:
     }
 
 
+def replicate_aggregate_scores(
+    batch: dict, *, reference_results: list[dict] | None = None,
+) -> list[float]:
+    """Return one aggregate score for each independent generation replicate."""
+    repeated = batch.get("batches")
+    if repeated:
+        return [
+            float(
+                aggregate_coverage_score(
+                    sub_batch["results"], reference_results=reference_results,
+                )["score"]
+            )
+            for sub_batch in repeated
+        ]
+    return [
+        float(
+            aggregate_coverage_score(
+                batch["results"], reference_results=reference_results,
+            )["score"]
+        )
+    ]
+
+
 def build_coverage_report(
     runner: CoverUpExperimentRunner,
     targets_by_split: dict[str, list[SymbolTarget]],
@@ -909,39 +932,10 @@ def build_coverage_report(
             replicates=evaluation_replicates,
             reference_results=baseline_batch["results"],
         )
-        def _split_replicate_scores(
-            batch: dict, *, reference_results: list[dict] | None,
-        ) -> list[float]:
-            """One aggregate score per generation replicate for CI reporting.
-
-            Prefer the per-replicate ``batches`` sub-batches when present
-            (evaluate_bundle_repeated); fall back to a singleton so callers
-            that supply a hand-built batch (e.g. tests) still get a score.
-            """
-            repeated = batch.get("batches")
-            if repeated:
-                return [
-                    float(
-                        aggregate_coverage_score(
-                            sub["results"],
-                            reference_results=reference_results,
-                        )["score"]
-                    )
-                    for sub in repeated
-                ]
-            return [
-                float(
-                    aggregate_coverage_score(
-                        batch["results"],
-                        reference_results=reference_results,
-                    )["score"]
-                )
-            ]
-
-        baseline_replicate_scores = _split_replicate_scores(
+        baseline_replicate_scores = replicate_aggregate_scores(
             baseline_batch, reference_results=None
         )
-        optimized_replicate_scores = _split_replicate_scores(
+        optimized_replicate_scores = replicate_aggregate_scores(
             optimized_batch, reference_results=baseline_batch["results"]
         )
         splits[split] = {
@@ -2199,6 +2193,8 @@ def optimize(
     best_candidate_probability: float = 0.7,
     rerank_top_k: int = 0,
     rerank_replicates: int = 3,
+    rerank_length_penalty_per_1k: float = 0.0,
+    rerank_max_prompt_chars: int | None = None,
 ) -> PromptOptimizationResult:
     """Optimize the initial and error prompt components."""
     if error := validate_bundle(baseline):
@@ -2325,7 +2321,8 @@ def optimize(
             top_k=rerank_top_k,
             replicates=rerank_replicates,
             split="validation",
-            length_penalty_per_1k=0.0,
+            length_penalty_per_1k=rerank_length_penalty_per_1k,
+            max_prompt_chars=rerank_max_prompt_chars,
         )
         best_bundle = rerank.selected_bundle
     return PromptOptimizationResult(

@@ -4,6 +4,10 @@ from pathlib import Path
 
 import pytest
 
+from scripts.build_my_isort_dataset import (
+    balanced_stratified_split_names,
+    stratified_split_names,
+)
 from src.optimization.dataset import validate_project_stratification
 from src.optimization.dataset_builder import (
     build_dataset,
@@ -21,6 +25,54 @@ def _write_file(root: Path, relative: str, source: str) -> None:
 
 def _symbols(functions) -> list[str]:
     return [info.symbol for info in functions]
+
+
+@pytest.mark.parametrize(
+    ("total", "expected"),
+    [
+        (24, {"train": 5, "validation": 10, "test": 9}),
+        (32, {"train": 6, "validation": 13, "test": 13}),
+        (40, {"train": 8, "validation": 16, "test": 16}),
+    ],
+)
+def test_isort_stratified_split_is_deterministic_and_exact(total, expected):
+    first = stratified_split_names(total, seed=115)
+    second = stratified_split_names(total, seed=115)
+
+    assert first == second
+    assert Counter(first) == expected
+
+
+def test_isort_stratified_split_balances_each_full_difficulty_band():
+    assignments = stratified_split_names(40, seed=115, stratum_size=5)
+
+    for start in range(0, 40, 5):
+        assert Counter(assignments[start : start + 5]) == {
+            "train": 1,
+            "validation": 2,
+            "test": 2,
+        }
+
+
+def test_isort_balanced_stratification_reduces_split_difficulty_skew():
+    branches = [318, 134, 85, 72, 60, 50, 45, 40, 35, 30] * 4
+    statements = [value + index % 7 for index, value in enumerate(branches)]
+
+    assignments = balanced_stratified_split_names(
+        branches, statements, seed=115, stratum_size=5, trials=500
+    )
+    means = {
+        split: sum(
+            value
+            for value, assigned in zip(branches, assignments, strict=True)
+            if assigned == split
+        )
+        / assignments.count(split)
+        for split in ("train", "validation", "test")
+    }
+
+    assert Counter(assignments) == {"train": 8, "validation": 16, "test": 16}
+    assert max(means.values()) - min(means.values()) < 5
 
 
 def test_rank_sorts_by_branch_then_statements_then_lines(tmp_path: Path):

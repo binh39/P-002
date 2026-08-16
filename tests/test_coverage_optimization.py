@@ -42,7 +42,12 @@ from src.optimization.gepa import (
     validate_reference_evaluation,
     validate_template,
 )
-from src.optimization.metrics import aggregate_coverage_score, build_feedback, score_symbol
+from src.optimization.metrics import (
+    aggregate_coverage_score,
+    build_feedback,
+    paired_delta_ci,
+    score_symbol,
+)
 from src.optimization.models import ExperimentConfig, ProjectLayout, SymbolTarget
 from src.optimization.prompts import PromptBundle, baseline_bundle
 from src.optimization.runner import (
@@ -829,6 +834,9 @@ def test_optimization_cli_exposes_gepa_search_controls():
         "0.02",
         "--rerank-max-prompt-chars",
         "4000",
+        "--min-absolute-gain",
+        "0.10",
+        "--require-positive-ci",
     ])
 
     assert args.gepa_seed == 19
@@ -838,6 +846,8 @@ def test_optimization_cli_exposes_gepa_search_controls():
     assert args.rerank_replicates == 3
     assert args.rerank_length_penalty_per_1k == pytest.approx(0.02)
     assert args.rerank_max_prompt_chars == 4_000
+    assert args.min_absolute_gain == pytest.approx(0.10)
+    assert args.require_positive_ci is True
 
 
 def test_optimization_cli_accepts_search_only_and_multiple_programs():
@@ -1470,6 +1480,43 @@ def test_promotion_requires_strict_improvement(optimized, baseline, expected):
     assert should_promote(
         optimized_mean=optimized, baseline_mean=baseline
     ) is expected
+
+
+def test_promotion_can_require_effect_size_and_positive_ci():
+    assert not should_promote(
+        optimized_mean=0.59,
+        baseline_mean=0.50,
+        min_absolute_gain=0.10,
+        delta_ci_low=0.04,
+        require_positive_ci=True,
+    )
+    assert not should_promote(
+        optimized_mean=0.62,
+        baseline_mean=0.50,
+        min_absolute_gain=0.10,
+        delta_ci_low=-0.01,
+        require_positive_ci=True,
+    )
+    assert should_promote(
+        optimized_mean=0.62,
+        baseline_mean=0.50,
+        min_absolute_gain=0.10,
+        delta_ci_low=0.01,
+        require_positive_ci=True,
+    )
+
+
+def test_paired_delta_ci_uses_standard_error_and_rejects_one_draw():
+    stable = paired_delta_ci([0.5, 0.5, 0.5], [0.6, 0.6, 0.6])
+    single = paired_delta_ci([0.5], [0.7])
+
+    assert stable["delta"] == pytest.approx(0.1)
+    assert stable["standard_error"] == pytest.approx(0.0)
+    assert stable["promotes"] is True
+    assert single["delta_ci_low"] is None
+    assert single["delta_ci_high"] is None
+    assert single["standard_error"] is None
+    assert single["promotes"] is False
 
 
 def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypatch):
@@ -3258,6 +3305,7 @@ def test_best_pareto_selector_can_use_pure_pareto():
 def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
     baseline = baseline_bundle()
     captured = {}
+    captured_rerank = {}
 
     def fake_gepa_optimize(**kwargs):
         captured.update(kwargs)
@@ -3271,6 +3319,16 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr("src.optimization.gepa.gepa_core.optimize", fake_gepa_optimize)
+    monkeypatch.setattr(
+        "src.optimization.gepa.rerank_prompt_candidates",
+        lambda **kwargs: (
+            captured_rerank.update(kwargs)
+            or SimpleNamespace(
+                selected_bundle=baseline,
+                as_dict=lambda: {"selected_digest": bundle_digest(baseline)},
+            )
+        ),
+    )
     monkeypatch.setattr(
         "src.optimization.gepa.evaluate_bundle_repeated",
         lambda runner, targets, *args, **kwargs: {
@@ -3314,6 +3372,10 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
         reflection_minibatch_size=3,
         reflection_temperature=0.2,
         best_candidate_probability=0.5,
+        rerank_top_k=2,
+        rerank_replicates=4,
+        rerank_length_penalty_per_1k=0.025,
+        rerank_max_prompt_chars=12_000,
     )
 
     assert captured["seed_candidate"] == baseline.as_candidate()
@@ -3327,6 +3389,10 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
     )
     assert captured["candidate_selection_strategy"].best_probability == 0.5
     assert result.best_bundle == baseline
+    assert captured_rerank["top_k"] == 2
+    assert captured_rerank["replicates"] == 4
+    assert captured_rerank["length_penalty_per_1k"] == 0.025
+    assert captured_rerank["max_prompt_chars"] == 12_000
     assert result.as_dict()["optimizer_config"] == {
         "gepa_seed": 19,
         "reflection_minibatch_size": 3,
@@ -3336,7 +3402,7 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
     }
 
 
-def test_tune_preflights_baseline_but_skips_proposal_when_gepa_keeps_it(
+def test_tune_does_not_open_holdout_when_gepa_keeps_baseline(
     tmp_path, monkeypatch,
 ):
     from src.optimization import cli
@@ -3391,31 +3457,10 @@ def test_tune_preflights_baseline_but_skips_proposal_when_gepa_keeps_it(
             )
         ),
     )
-    baseline_result = {
-        "target": test[0].__dict__,
-        "score": 1.0,
-        "coverage": {
-            "valid": True,
-            "score": 1.0,
-            "covered_statements": 1,
-            "num_statements": 1,
-            "covered_branches": 0,
-            "num_branches": 0,
-        },
-        "feedback": "ok",
-    }
     monkeypatch.setattr(
         cli,
         "evaluate_bundle_repeated",
-        lambda *args, **kwargs: (
-            events.append("final baseline preflight")
-            or {
-                "results": [baseline_result],
-                "aggregate": aggregate_coverage_score([baseline_result]),
-                "run_ids": ["baseline-preflight"],
-                "tests_workspaces": ["baseline-workspace"],
-            }
-        ),
+        lambda *args, **kwargs: pytest.fail("unchanged baseline opened holdout"),
     )
     args = SimpleNamespace(
         project_root=tmp_path,
@@ -3444,10 +3489,10 @@ def test_tune_preflights_baseline_but_skips_proposal_when_gepa_keeps_it(
     assert report["skip_reason"].startswith("GEPA selected the unchanged baseline")
     assert report["final_split"] == "test"
     assert report["run_ids"] == []
-    assert report["baseline_run_ids"] == ["baseline-preflight"]
-    assert len(report["baseline_results"]) == 1
+    assert report["baseline_run_ids"] == []
+    assert report["baseline_results"] == []
     assert report["candidate_rerank"]["selected_digest"] == bundle_digest(baseline)
-    assert events == ["final baseline preflight", "optimize"]
+    assert events == ["optimize"]
     assert baseline_bundle().as_candidate() == json.loads(
         (artifacts / "prompts" / "gepa_optimized.json").read_text(encoding="utf-8")
     )
