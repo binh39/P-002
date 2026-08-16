@@ -5,9 +5,11 @@ import json
 import os
 import re
 import shutil
+import stat
 import sys
 import time
 import uuid
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -203,6 +205,21 @@ class _TargetEvaluationOutcome:
     coverage_after: Path
 
 
+def _on_rm_error(func: Callable[[str], None], path: str, exc_info) -> None:
+    """Handle permission errors raised while pruning coverage dirs.
+
+    On Windows, `shutil.rmtree` can fail with [WinError 5] Access is denied
+    when a subtree contains read-only files (e.g. git loose objects created by
+    a test that runs a local `git init`/`git ls-files`).  Clear the read-only
+    bit and retry the failing operation once before giving up and re-raising.
+    """
+    try:
+        os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+        func(path)
+    except OSError:
+        raise
+
+
 def _prune_run_dir(run_dir: Path) -> None:
     """Keep only record.json in a batch run directory after it is scored.
 
@@ -217,9 +234,13 @@ def _prune_run_dir(run_dir: Path) -> None:
         if stale.name == "record.json":
             continue
         if stale.is_dir():
-            shutil.rmtree(stale)
+            shutil.rmtree(stale, onerror=_on_rm_error)
         else:
-            stale.unlink(missing_ok=True)
+            try:
+                stale.unlink(missing_ok=True)
+            except PermissionError:
+                os.chmod(stale, stat.S_IWRITE | stat.S_IREAD)
+                stale.unlink(missing_ok=True)
 
 
 class CoverUpExperimentRunner:
