@@ -62,6 +62,14 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--validation-limit", type=int, default=300)
     result.add_argument("--test-limit", type=int, default=300)
     result.add_argument(
+        "--global-top",
+        action="store_true",
+        help=(
+            "Select the global top-N branch-ranked functions before project-"
+            "stratified splitting, matching the app's most_branches sampling"
+        ),
+    )
+    result.add_argument(
         "--output",
         type=Path,
         default=ROOT / "eval" / "prompt_optimization" / "datasets" / "data_symbols.jsonl",
@@ -118,6 +126,7 @@ def main() -> int:
         train_limit=args.train_limit,
         validation_limit=args.validation_limit,
         test_limit=args.test_limit,
+        global_top=args.global_top,
         exclude_dirs=exclude_dirs,
     )
 
@@ -171,6 +180,7 @@ def main() -> int:
         "validation_limit": args.validation_limit,
         "test_limit": args.test_limit,
         "selected_total": selected,
+        "global_top": args.global_top,
         "projects": {
             name: {
                 "functions": per_project[name],

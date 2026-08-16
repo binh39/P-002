@@ -93,6 +93,7 @@ interface ApiOptimizationEvolution {
     best_statement: number | null;
     best_branch: number | null;
     best_score: number | null;
+    best_candidate_changed: boolean;
     pareto_changed: boolean;
   }>;
   metrics: Array<{
@@ -225,7 +226,7 @@ function mapOptimizationEvolution(item: ApiOptimizationEvolution): OptimizationE
       bestStatement: iteration.best_statement,
       bestBranch: iteration.best_branch,
       bestScore: iteration.best_score,
-      paretoChanged: iteration.pareto_changed,
+      bestCandidateChanged: iteration.best_candidate_changed,
     })),
     metrics: item.metrics,
   };

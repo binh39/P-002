@@ -1,7 +1,10 @@
 import json
-import typing as T
-from .prompter import *
+from collections.abc import Callable
+
 import coverup.codeinfo as codeinfo
+
+from ..segment import CodeSegment
+from .prompter import Prompter, mk_message
 
 
 class GptV2Prompter(Prompter):
@@ -19,7 +22,7 @@ class GptV2Prompter(Prompter):
         return template.format(**values)
 
 
-    def initial_prompt(self, segment: CodeSegment) -> T.List[dict]:
+    def initial_prompt(self, segment: CodeSegment) -> list[dict]:
         filename = segment.path.relative_to(self.args.src_base_dir)
         if "initial" in self.templates:
             return [mk_message(self._render(
@@ -52,7 +55,7 @@ Respond ONLY with the Python code enclosed in backticks, without any explanation
         ]
 
 
-    def error_prompt(self, segment: CodeSegment, error: str) -> T.List[dict] | None:
+    def error_prompt(self, segment: CodeSegment, error: str) -> list[dict] | None:
         if "error" in self.templates:
             return [mk_message(self._render("error", self.templates["error"], error=error))]
         return [mk_message(f"""\
@@ -88,5 +91,5 @@ Use the get_info tool function as necessary.
         return f"Unable to obtain information on {name}."
 
 
-    def get_functions(self) -> T.List[T.Callable]:
+    def get_functions(self) -> list[Callable]:
         return [self.get_info]

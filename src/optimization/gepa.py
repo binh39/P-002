@@ -3,6 +3,8 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import os
+import random
 import re
 import threading
 from collections.abc import Mapping, Sequence
@@ -12,8 +14,16 @@ from pathlib import Path
 from typing import Any
 
 import gepa as gepa_core
+from gepa.strategies.candidate_selector import (
+    CurrentBestCandidateSelector,
+    ParetoCandidateSelector,
+)
 
-from .metrics import aggregate_coverage_score
+from .metrics import (
+    BRANCH_SCORE_WEIGHT,
+    STATEMENT_SCORE_WEIGHT,
+    aggregate_coverage_score,
+)
 from .models import SymbolTarget
 from .prompts import PromptBundle
 from .runner import CoverUpExperimentRunner
@@ -25,16 +35,25 @@ COMPONENT_PLACEHOLDERS = {
     "error": ERROR_PLACEHOLDERS,
 }
 COMPONENT_ROLES = {
-    "initial": "Generate the first complete pytest module from source and missing coverage.",
-    "error": "Repair a complete pytest module after an execution or collection error.",
+    "initial": (
+        "Generate the first complete pytest module from source and missing coverage "
+        "using an explicit Reflexion-style observe-plan-act-check procedure."
+    ),
+    "error": (
+        "Reflect on execution or collection feedback, identify the concrete failed "
+        "assumption, and repair the complete pytest module without losing useful behavior."
+    ),
 }
+MIN_COMPONENT_CHAR_BUDGET = {"initial": 2_400, "error": 1_600}
 UPDATE_PROMPT_COMPONENT_TOOL = {
     "type": "function",
     "function": {
         "name": "update_prompt_component",
         "description": (
             "Select initial, error, or all and return complete replacement "
-            "templates in the same call. The all selection is always allowed."
+            "templates in the same call. Replacements must give a less-capable "
+            "test model a detailed Reflexion procedure and an unambiguous reflection/code "
+            "output contract. The all selection is always allowed."
         ),
         "parameters": {
             "type": "object",
@@ -57,8 +76,48 @@ UPDATE_PROMPT_COMPONENT_TOOL = {
                     "items": {"type": "string"},
                     "minItems": 1,
                 },
+                "successful_experiment_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                },
             },
-            "required": ["component", "replacements", "diagnosis", "evidence"],
+            "required": [
+                "component",
+                "replacements",
+                "diagnosis",
+                "evidence",
+                "successful_experiment_ids",
+            ],
+            "additionalProperties": False,
+        },
+    },
+}
+RUN_TEST_EXPERIMENT_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "run_test_experiment",
+        "description": (
+            "Run one complete optimizer-authored pytest module against a failed "
+            "coverage case. The module is diagnostic teacher evidence only."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "case_id": {"type": "string"},
+                "test_module": {
+                    "type": "string",
+                    "description": "A complete executable pytest module.",
+                },
+                "hypothesis": {
+                    "type": "string",
+                    "description": (
+                        "The concrete causal change this test makes relative to "
+                        "the failed generated test."
+                    ),
+                },
+            },
+            "required": ["case_id", "test_module", "hypothesis"],
             "additionalProperties": False,
         },
     },
@@ -66,9 +125,39 @@ UPDATE_PROMPT_COMPONENT_TOOL = {
 AUTO_METRIC_BUDGETS = {"light": 120, "medium": 300, "heavy": 600}
 REFLECTION_REQUEST_BEGIN = "PROMPTOPT_REFLECTION_REQUEST_BEGIN"
 REFLECTION_REQUEST_END = "PROMPTOPT_REFLECTION_REQUEST_END"
+FULL_LOG_BEGIN = "PROMPTOPT_DEV_FULL_LOG_BEGIN"
+FULL_LOG_END = "PROMPTOPT_DEV_FULL_LOG_END"
+MAX_OPTIMIZER_TEST_EXPERIMENTS = 5
+REFLECTION_MINIBATCH_SIZE = 5
+PERFECT_COVERAGE_THRESHOLD = 1.0 - 1e-6
 
 _DIGEST_LOCKS: dict[str, threading.Lock] = {}
 _DIGEST_LOCKS_GUARD = threading.Lock()
+
+
+class BestParetoCandidateSelector:
+    """Select the aggregate best candidate 70% of the time, Pareto otherwise."""
+
+    def __init__(
+        self,
+        *,
+        best_probability: float = 0.7,
+        rng: random.Random | None = None,
+    ) -> None:
+        if not 0.0 <= best_probability <= 1.0:
+            raise ValueError("best_probability must be between 0 and 1")
+        self.best_probability = best_probability
+        self.rng = rng or random.Random(0)
+        self.best_selector = CurrentBestCandidateSelector()
+        self.pareto_selector = ParetoCandidateSelector(self.rng)
+
+    def select_candidate_idx(self, state: Any) -> int:
+        selector = (
+            self.best_selector
+            if self.rng.random() < self.best_probability
+            else self.pareto_selector
+        )
+        return selector.select_candidate_idx(state)
 
 
 def log_reflection_request(request: Mapping[str, Any]) -> None:
@@ -76,6 +165,46 @@ def log_reflection_request(request: Mapping[str, Any]) -> None:
     print(REFLECTION_REQUEST_BEGIN, flush=True)
     print(json.dumps(request, indent=2, ensure_ascii=False), flush=True)
     print(REFLECTION_REQUEST_END, flush=True)
+
+
+def _full_reflection_logs_enabled() -> bool:
+    return os.environ.get("PROMPTOPT_FULL_REFLECTION_LOGS", "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
+def _log_value(value: Any) -> Any:
+    """Convert SDK response objects to JSON-compatible diagnostic output."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Mapping):
+        return {str(key): _log_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_log_value(item) for item in value]
+    for method_name in ("model_dump", "to_dict"):
+        method = getattr(value, method_name, None)
+        if callable(method):
+            try:
+                return _log_value(method())
+            except (TypeError, ValueError):
+                pass
+    attributes = getattr(value, "__dict__", None)
+    if isinstance(attributes, dict):
+        return _log_value(attributes)
+    return str(value)
+
+
+def log_full_reflection_event(event: str, payload: Any) -> None:
+    """Emit full dev diagnostics to stdout; Cloud Logging captures the stream."""
+    if not _full_reflection_logs_enabled():
+        return
+    print(FULL_LOG_BEGIN, flush=True)
+    print(json.dumps({
+        "timestamp": datetime.now(UTC).isoformat(),
+        "event": event,
+        "payload": _log_value(payload),
+    }, indent=2, ensure_ascii=False, default=str), flush=True)
+    print(FULL_LOG_END, flush=True)
 
 
 def _digest_lock(key: str) -> threading.Lock:
@@ -344,6 +473,20 @@ def _mean(values: Sequence[float]) -> float:
     return sum(values) / len(values) if values else 0.0
 
 
+def _has_incomplete_coverage(record: Mapping[str, Any]) -> bool:
+    """Return whether a measured target still has any uncovered behavior."""
+    score = record.get("candidate_score", record.get("score"))
+    if isinstance(score, (int, float)):
+        return float(score) < PERFECT_COVERAGE_THRESHOLD
+    coverage = record.get("coverage")
+    if isinstance(coverage, Mapping):
+        coverage_score = coverage.get("score")
+        if isinstance(coverage_score, (int, float)):
+            return float(coverage_score) < PERFECT_COVERAGE_THRESHOLD
+    # Missing measurements must remain eligible so failures are not hidden.
+    return True
+
+
 def _clip_text(value: Any, limit: int, *, keep_tail: bool = False) -> str:
     text = str(value or "")
     if len(text) <= limit:
@@ -370,6 +513,10 @@ def _compact_attempt(attempt: Mapping[str, Any]) -> dict[str, Any]:
         )
     if "generated_test" in attempt:
         row["generated_test"] = _clip_text(attempt["generated_test"], 10_000)
+    if "model_reflection" in attempt:
+        row["model_reflection"] = _clip_text(
+            attempt["model_reflection"], 3_000
+        )
     if "execution_error" in attempt:
         row["execution_error"] = _clip_text(
             attempt["execution_error"], 6_000, keep_tail=True
@@ -378,6 +525,19 @@ def _compact_attempt(attempt: Mapping[str, Any]) -> dict[str, Any]:
         row["assistant_response"] = _clip_text(
             attempt["assistant_response"], 3_000
         )
+    get_info_calls = attempt.get("get_info_calls", [])
+    if isinstance(get_info_calls, Sequence) and not isinstance(
+        get_info_calls, (str, bytes)
+    ):
+        row["get_info_calls"] = [
+            {
+                "name": str(call.get("name", "get_info")),
+                "arguments": call.get("arguments", {}),
+                "result": _clip_text(call.get("result", ""), 6_000),
+            }
+            for call in get_info_calls
+            if isinstance(call, Mapping)
+        ]
     return row
 
 
@@ -425,7 +585,13 @@ def _build_execution_episodes(
                     "repaired_test": _clip_text(
                         attempt.get("generated_test", ""), 10_000
                     ),
+                    "model_reflection": _clip_text(
+                        attempt.get("model_reflection", ""), 3_000
+                    ),
                     "outcome": attempt.get("outcome", "unknown"),
+                    "get_info_calls": _compact_attempt(attempt).get(
+                        "get_info_calls", []
+                    ),
                 }
                 for key in (
                     "execution_error", "finish_reason", "missing_imports",
@@ -820,6 +986,8 @@ class CausalReflectionComponentSelector:
         evidence = {component: 0 for component in candidate}
 
         for trajectory in trajectories:
+            if not _has_incomplete_coverage(trajectory):
+                continue
             target_score = min(1.0, max(0.0, float(trajectory.get("score", 0.0))))
             target_gap = max(0.05, 1.0 - target_score)
             attempts = list(trajectory.get("attempt_traces", []))
@@ -875,7 +1043,8 @@ class LLMReflectionComponentSelector:
     ) -> list[str]:
         del state, subsample_scores, candidate_idx
         has_failure = any(
-            str(attempt.get("component", "")) in candidate
+            _has_incomplete_coverage(trajectory)
+            and str(attempt.get("component", "")) in candidate
             and _attempt_failure_severity(attempt) > 0
             for trajectory in trajectories
             for attempt in trajectory.get("attempt_traces", [])
@@ -923,7 +1092,7 @@ class CoverUpPromptAdapter:
         self.evaluation_replicates = evaluation_replicates
         self.reference_units: dict[tuple[str, str, str, str], tuple[int, int]] = {}
         self.max_component_chars = {
-            name: max(600, len(text) * 3)
+            name: max(MIN_COMPONENT_CHAR_BUDGET[name], len(text) * 3)
             for name, text in baseline.as_candidate().items()
         }
         self.candidate_lineage: dict[str, dict[str, Any]] = {}
@@ -939,12 +1108,13 @@ class CoverUpPromptAdapter:
                     int(coverage["num_statements"]), int(coverage["num_branches"])
                 )
 
-    def _weighted_score(
+    def _micro_coverage_components(
         self,
         result: dict,
         evaluated_results: list[dict],
         reference_targets: list[SymbolTarget],
-    ) -> float:
+    ) -> tuple[float, float, bool]:
+        """Return per-target contributions whose mean is split micro coverage."""
         self._remember_reference_units(evaluated_results)
         reference_identities = [
             _target_identity(target) for target in reference_targets
@@ -971,14 +1141,30 @@ class CoverUpPromptAdapter:
         covered_branches = int(coverage["covered_branches"]) if valid else 0
         count = len(identities)
         statement = (
-            count * 0.4 * covered_statements / total_statements
-            if total_statements else 0.4
+            count * covered_statements / total_statements
+            if total_statements else 1.0
         )
         branch = (
-            count * 0.6 * covered_branches / total_branches
-            if total_branches else 0.6
+            count * covered_branches / total_branches
+            if total_branches else 1.0
         )
-        return statement + branch
+        return statement, branch, bool(total_branches)
+
+    def _weighted_score(
+        self,
+        result: dict,
+        evaluated_results: list[dict],
+        reference_targets: list[SymbolTarget],
+    ) -> float:
+        statement, branch, has_branches = self._micro_coverage_components(
+            result, evaluated_results, reference_targets
+        )
+        if not has_branches:
+            return statement
+        return (
+            STATEMENT_SCORE_WEIGHT * statement
+            + BRANCH_SCORE_WEIGHT * branch
+        )
 
     def _evaluate_replicates(
         self,
@@ -1099,15 +1285,21 @@ class CoverUpPromptAdapter:
         for target in batch:
             identity = _target_identity(target)
             samples = [lookup[identity] for lookup in lookups]
-            weighted_scores = [
-                self._weighted_score(
+            micro_coverage_samples = [
+                self._micro_coverage_components(
                     sample, record["results"], reference_targets
                 )
                 for sample, record in zip(samples, repeated_batches, strict=True)
             ]
+            weighted_scores = [
+                (
+                    STATEMENT_SCORE_WEIGHT * statement
+                    + BRANCH_SCORE_WEIGHT * branch
+                    if has_branches else statement
+                )
+                for statement, branch, has_branches in micro_coverage_samples
+            ]
             raw_scores = [float(sample["score"]) for sample in samples]
-            coverage_samples = [sample.get("coverage") for sample in samples]
-            valid_coverage = [coverage for coverage in coverage_samples if coverage]
             score = _mean(weighted_scores)
             raw_score = _mean(raw_scores)
             output = {
@@ -1119,13 +1311,14 @@ class CoverUpPromptAdapter:
             outputs.append(output)
             scores.append(score)
             objectives.append({
-                "statement": _mean([
-                    float(coverage.get("statement_gain", 0.0))
-                    for coverage in valid_coverage
+                # GEPA macro-averages objective values over validation targets.
+                # These scaled contributions therefore aggregate back to the
+                # same micro coverage components used by the weighted score.
+                "statement_coverage": _mean([
+                    statement for statement, _, _ in micro_coverage_samples
                 ]),
-                "branch": _mean([
-                    float(coverage.get("branch_gain", 0.0))
-                    for coverage in valid_coverage
+                "branch_coverage": _mean([
+                    branch for _, branch, _ in micro_coverage_samples
                 ]),
             })
             if trajectories is not None:
@@ -1201,6 +1394,10 @@ class CoverUpPromptAdapter:
         trajectories = eval_batch.trajectories
         if trajectories is None:
             raise ValueError("GEPA reflection requires captured CoverUp trajectories")
+        trajectories = [
+            trajectory for trajectory in trajectories
+            if _has_incomplete_coverage(trajectory)
+        ]
         result: dict[str, list[dict[str, Any]]] = {}
         for component in components_to_update:
             placeholders = COMPONENT_PLACEHOLDERS[component]
@@ -1322,7 +1519,9 @@ class CoverUpPromptAdapter:
         return value.get(name) if isinstance(value, Mapping) else getattr(value, name, None)
 
     @classmethod
-    def _extract_component_update(cls, response: Any) -> dict[str, Any] | None:
+    def _extract_function_call(
+        cls, response: Any, expected_name: str,
+    ) -> dict[str, Any] | None:
         if isinstance(response, (str, bytes)) or not isinstance(response, Sequence):
             return None
         if len(response) != 1:
@@ -1333,7 +1532,7 @@ class CoverUpPromptAdapter:
         function = cls._member(tool_calls[0], "function")
         if function is None:
             return None
-        if cls._member(function, "name") != "update_prompt_component":
+        if cls._member(function, "name") != expected_name:
             return None
         arguments = cls._member(function, "arguments")
         if isinstance(arguments, str):
@@ -1343,7 +1542,34 @@ class CoverUpPromptAdapter:
                 return None
         if not isinstance(arguments, dict):
             return None
-        required = {"component", "replacements", "diagnosis", "evidence"}
+        return arguments
+
+    @classmethod
+    def _extract_test_experiment(cls, response: Any) -> dict[str, str] | None:
+        arguments = cls._extract_function_call(response, "run_test_experiment")
+        if arguments is None or set(arguments) != {
+            "case_id", "test_module", "hypothesis",
+        }:
+            return None
+        if not all(
+            isinstance(arguments[name], str) and arguments[name].strip()
+            for name in ("case_id", "test_module", "hypothesis")
+        ):
+            return None
+        return arguments
+
+    @classmethod
+    def _extract_component_update(cls, response: Any) -> dict[str, Any] | None:
+        arguments = cls._extract_function_call(response, "update_prompt_component")
+        if arguments is None:
+            return None
+        required = {
+            "component",
+            "replacements",
+            "diagnosis",
+            "evidence",
+            "successful_experiment_ids",
+        }
         if not required.issubset(arguments):
             return None
         if not isinstance(arguments["replacements"], dict):
@@ -1359,7 +1585,189 @@ class CoverUpPromptAdapter:
             )
         ):
             return None
+        if (
+            not isinstance(arguments["successful_experiment_ids"], list)
+            or not arguments["successful_experiment_ids"]
+            or not all(
+                isinstance(item, str) and item.strip()
+                for item in arguments["successful_experiment_ids"]
+            )
+        ):
+            return None
         return arguments
+
+    def _optimizer_experiment_cases(
+        self,
+        evidence: Mapping[str, Sequence[Mapping[str, Any]]],
+    ) -> tuple[list[dict[str, Any]], dict[str, SymbolTarget]]:
+        targets = {
+            f"{target.source_file}::{target.symbol}": target
+            for split_targets in self.targets_by_split.values()
+            for target in split_targets
+        }
+        cases: list[dict[str, Any]] = []
+        case_targets: dict[str, SymbolTarget] = {}
+        seen: set[tuple[str, str]] = set()
+        for component, records in evidence.items():
+            for record in records:
+                inputs = record.get("Inputs", {})
+                outputs = record.get("Generated Outputs", {})
+                label = str(inputs.get("target", ""))
+                target = targets.get(label)
+                if target is None or (component, label) in seen:
+                    continue
+                baseline_score = float(
+                    outputs.get("candidate_score", outputs.get("symbol_score", 0.0))
+                )
+                if not _has_incomplete_coverage({"score": baseline_score}):
+                    continue
+                seen.add((component, label))
+                case_id = "case-" + hashlib.sha256(
+                    f"{component}\0{label}".encode()
+                ).hexdigest()[:10]
+                case_targets[case_id] = target
+                cases.append({
+                    "case_id": case_id,
+                    "component": component,
+                    "target": label,
+                    "baseline_score": baseline_score,
+                    "source_context": _clip_text(
+                        inputs.get("source_context", ""), 12_000
+                    ),
+                    "failed_test": _clip_text(
+                        outputs.get("candidate_test", ""), 12_000
+                    ),
+                    "execution_episodes": outputs.get("execution_episodes", []),
+                    "feedback": _clip_text(
+                        record.get("Feedback", ""), 6_000, keep_tail=True
+                    ),
+                })
+        return cases, case_targets
+
+    def _record_optimizer_experiment(self, payload: Mapping[str, Any]) -> None:
+        path = self.candidate_dir / "optimizer_test_experiments.jsonl"
+        with _digest_lock(f"optimizer-experiments:{path.resolve()}"):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as output:
+                output.write(
+                    json.dumps(payload, ensure_ascii=False, default=str) + "\n"
+                )
+
+    def _run_optimizer_test_experiments(
+        self,
+        candidate: dict[str, str],
+        cases: list[dict[str, Any]],
+        case_targets: Mapping[str, SymbolTarget],
+    ) -> list[dict[str, Any]]:
+        history: list[dict[str, Any]] = []
+        visible_cases = cases[:REFLECTION_MINIBATCH_SIZE]
+        for attempt in range(1, MAX_OPTIMIZER_TEST_EXPERIMENTS + 1):
+            prompt = f"""
+You are the diagnostic teacher for a reusable pytest-generation prompt. Do not rewrite the prompt yet. First prove a concrete strategy by repairing one failed case with an executable test.
+
+Current prompt templates:
+<templates>{json.dumps(candidate, indent=2, ensure_ascii=False)}</templates>
+
+Runnable failed cases:
+<cases>{json.dumps(visible_cases, indent=2, ensure_ascii=False)}</cases>
+
+Previous diagnostic experiments:
+<experiment_history>{json.dumps(history, indent=2, ensure_ascii=False)}</experiment_history>
+
+Choose one case. Infer a concrete causal defect in the failed test, then call run_test_experiment with a complete pytest module implementing the correction. You may revise a failed experiment on the next turn. Do not give generic advice and do not update the production prompt in this call.
+"""
+            request = {
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "Find an executable counterexample before distilling a "
+                            "prompt lesson. Call run_test_experiment exactly once."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                "tools": [RUN_TEST_EXPERIMENT_TOOL],
+                "tool_choice": {
+                    "type": "function",
+                    "function": {"name": "run_test_experiment"},
+                },
+            }
+            log_reflection_request(request)
+            try:
+                response = self.reflection_lm(**request)
+                log_full_reflection_event(
+                    "optimizer_test_model_response",
+                    {"attempt": attempt, "response": response},
+                )
+                proposed = self._extract_test_experiment(
+                    response
+                )
+            except (TypeError, ValueError) as exc:
+                log_full_reflection_event(
+                    "optimizer_test_response_error",
+                    {"attempt": attempt, "error": repr(exc)},
+                )
+                proposed = None
+            if proposed is None or proposed["case_id"] not in case_targets:
+                invalid = {
+                    "attempt": attempt,
+                    "success": False,
+                    "validation_error": "Invalid run_test_experiment tool call.",
+                }
+                history.append(invalid)
+                log_full_reflection_event("optimizer_test_invalid_tool_call", invalid)
+                continue
+            case = next(
+                value for value in visible_cases
+                if value["case_id"] == proposed["case_id"]
+            )
+            experiment_id = (
+                f"{bundle_digest(PromptBundle.from_candidate(candidate))}-"
+                f"{proposed['case_id']}-a{attempt}-{datetime.now(UTC).strftime('%H%M%S%f')}"
+            )
+            try:
+                result = self.runner.evaluate_optimizer_test(
+                    case_targets[proposed["case_id"]],
+                    proposed["test_module"],
+                    experiment_id=experiment_id,
+                )
+            except (OSError, RuntimeError, ValueError) as exc:
+                result = {
+                    "experiment_id": experiment_id,
+                    "pytest_passed": False,
+                    "score": 0.0,
+                    "validation_error": str(exc),
+                    "stdout": "",
+                }
+            improved = (
+                bool(result.get("pytest_passed"))
+                and float(result.get("score", 0.0))
+                > float(case["baseline_score"]) + 1e-9
+            )
+            experiment = {
+                "attempt": attempt,
+                "case_id": proposed["case_id"],
+                "target": case["target"],
+                "baseline_score": case["baseline_score"],
+                "hypothesis": proposed["hypothesis"],
+                "test_module": proposed["test_module"],
+                "success": improved,
+                "result": result,
+            }
+            history.append(experiment)
+            log_full_reflection_event("optimizer_test_execution", experiment)
+            self._record_optimizer_experiment({
+                "schema_version": 1,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "candidate_digest": bundle_digest(
+                    PromptBundle.from_candidate(candidate)
+                ),
+                **experiment,
+            })
+            if improved:
+                break
+        return history
 
     def _log_reflection_decision(
         self,
@@ -1370,23 +1778,28 @@ class CoverUpPromptAdapter:
         selection: str | None = None,
         changed_components: Sequence[str] = (),
         detail: str | None = None,
+        experiment_ids: Sequence[str] = (),
+        optimizer_calls: int = 0,
     ) -> None:
         payload = {
             "schema_version": 1,
             "timestamp": datetime.now(UTC).isoformat(),
             "candidate_digest": bundle_digest(PromptBundle.from_candidate(candidate)),
-            "one_call": True,
+            "experiment_first": True,
+            "optimizer_calls": optimizer_calls,
             "offered_components": list(components),
             "selection": selection,
             "changed_components": list(changed_components),
             "status": status,
             "detail": detail,
+            "successful_experiment_ids": list(experiment_ids),
         }
         path = self.candidate_dir / "reflection_decisions.jsonl"
         with _digest_lock(f"reflection-decisions:{path.resolve()}"):
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("a", encoding="utf-8") as output:
                 output.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        log_full_reflection_event("reflection_decision", payload)
         changed = ",".join(changed_components) or "none"
         print(
             "Reflection function call: "
@@ -1420,6 +1833,37 @@ class CoverUpPromptAdapter:
             }
             for component in evidence
         }
+        cases, case_targets = self._optimizer_experiment_cases(evidence)
+        log_full_reflection_event(
+            "optimizer_experiment_cases",
+            {
+                "candidate": candidate,
+                "components_to_update": components_to_update,
+                "cases": cases,
+            },
+        )
+        if not cases:
+            self._log_reflection_decision(
+                candidate,
+                components_to_update,
+                status="no_runnable_experiment_case",
+            )
+            return proposals
+        experiments = self._run_optimizer_test_experiments(
+            candidate, cases, case_targets
+        )
+        successful = [item for item in experiments if item.get("success")]
+        if not successful:
+            self._log_reflection_decision(
+                candidate,
+                components_to_update,
+                status="no_successful_test_experiment",
+                optimizer_calls=len(experiments),
+            )
+            return proposals
+        successful_ids = {
+            str(item["result"]["experiment_id"]) for item in successful
+        }
         prompt = f"""
 You are optimizing a reusable two-stage CoverUp pytest-generation system. The stages are `initial` test generation and conditional `error` repair.
 
@@ -1432,16 +1876,33 @@ Eligible component contracts:
 Labelled end-to-end execution evidence by component:
 <evidence>{json.dumps(evidence, indent=2, ensure_ascii=False)}</evidence>
 
+Optimizer-authored test experiments:
+<test_experiments>{json.dumps(experiments, indent=2, ensure_ascii=False)}</test_experiments>
+
 In one decision, choose `initial`, `error`, or `all`, then call `update_prompt_component` exactly once with every complete revised template selected. `all` is always allowed, even when direct evidence exists for only one stage. When selecting `all`, provide both `initial` and `error` replacements and change both; the update is rejected atomically otherwise. For a single component, provide only that component's replacement.
 
-Use the full initial -> failing test -> error -> repaired test -> outcome episodes for causal attribution. Make conservative operational changes. Preserve useful instructions and required literal placeholders. Do not add target-specific file names, symbols, line numbers, repository facts, or literal values. Keep every replacement within its component's maximum length. Include a concise reusable diagnosis with its regression guard and at least one evidence observation in the function arguments. Do not answer with JSON or prose outside the function call.
+The successful diagnostic test is teacher evidence, not part of the candidate and not part of GEPA's score. Compare it with the failed generated test, identify the reusable causal lesson that made the experiment pass and cover more of the target, and turn that lesson into a detailed operational procedure suitable for a less-capable test-generation model. Do not compress away necessary intermediate checks merely to make the prompt short, and do not pad it with unrelated advice.
+
+Use one strategy consistently: Reflexion. The revised templates must explicitly tell the test model how to:
+1. OBSERVE the target source, requested missing lines/branches, dependencies, and (for `error`) the latest execution feedback.
+2. REFLECT by naming the concrete branch preconditions or failed assumption and deciding what evidence is still missing; call `get_info` for that evidence rather than guessing APIs.
+3. PLAN exact inputs, state setup, mocks/monkeypatch boundaries, invocation, and meaningful postconditions for each intended path.
+4. ACT by writing a complete deterministic pytest module, then CHECK imports, reachability, assertions, cleanup, and preservation of already-valid behavior before answering.
+
+Every instruction learned from evidence must have a concrete trigger, action, and verification criterion. Avoid unsupported generic advice such as "analyze carefully", "be robust", "handle edge cases", or "use appropriate mocks". Spell out the decision procedure; assume the downstream model will not infer omitted steps.
+
+The template must also define an output protocol that CoverUp can parse safely: an optional concise reflection summary goes only inside `<REFLECTION>...</REFLECTION>` and contains no Python test code; the complete executable test module goes in exactly one fenced `python` block. No Python outside that block and no second `python` block. This reflection is a concise plan/root-cause summary, not a request to reveal private token-by-token chain-of-thought. The `error` replacement must apply the same protocol while explicitly comparing the failing behavior with the proposed repair.
+
+Preserve useful instructions and required literal placeholders. Do not copy target-specific file names, symbols, line numbers, repository facts, assertions, constructor arguments, or literal values from the diagnostic test. Keep every replacement within its component's maximum length. Cite only successful experiment ids in successful_experiment_ids and explain the observed failed-to-successful behavior change in diagnosis and evidence. Do not answer with JSON or prose outside the function call.
 """
         messages = [
             {
                 "role": "system",
                 "content": (
-                    "You optimize reusable CoverUp prompt components. "
-                    "Finish by calling update_prompt_component exactly once."
+                        "You optimize reusable CoverUp prompt components for a less-capable "
+                        "test model. Distill execution-proven behavior into a detailed "
+                        "Reflexion procedure with a strict reflection-versus-Python output "
+                        "contract, then call update_prompt_component once."
                 ),
             },
             {"role": "user", "content": prompt},
@@ -1458,14 +1919,35 @@ Use the full initial -> failing test -> error -> repaired test -> outcome episod
         }
         log_reflection_request(request)
         try:
-            update = self._extract_component_update(
-                self.reflection_lm(**request)
+            response = self.reflection_lm(**request)
+            log_full_reflection_event(
+                "prompt_update_model_response", response
             )
-        except (TypeError, ValueError):
+            update = self._extract_component_update(
+                response
+            )
+        except (TypeError, ValueError) as exc:
+            log_full_reflection_event(
+                "prompt_update_response_error", {"error": repr(exc)}
+            )
             update = None
         if update is None:
             self._log_reflection_decision(
-                candidate, components_to_update, status="invalid_function_call"
+                candidate,
+                components_to_update,
+                status="invalid_function_call",
+                optimizer_calls=len(experiments) + 1,
+            )
+            return proposals
+
+        cited_experiments = set(update["successful_experiment_ids"])
+        if not cited_experiments or not cited_experiments.issubset(successful_ids):
+            self._log_reflection_decision(
+                candidate,
+                components_to_update,
+                status="unverified_experiment_evidence",
+                experiment_ids=sorted(cited_experiments),
+                optimizer_calls=len(experiments) + 1,
             )
             return proposals
 
@@ -1506,6 +1988,21 @@ Use the full initial -> failing test -> error -> repaired test -> outcome episod
                     selection=selection, detail=f"{component}: {error}",
                 )
                 return proposals
+            leaked_targets = [
+                item["target"] for item in successful
+                if str(item["target"]).lower() in replacement.lower()
+            ]
+            if leaked_targets:
+                self._log_reflection_decision(
+                    candidate,
+                    components_to_update,
+                    status="target_specific_replacement",
+                    selection=selection,
+                    detail=", ".join(leaked_targets),
+                    experiment_ids=sorted(cited_experiments),
+                    optimizer_calls=len(experiments) + 1,
+                )
+                return proposals
             if len(replacement) > self.max_component_chars[component]:
                 self._log_reflection_decision(
                     candidate, components_to_update, status="template_too_long",
@@ -1533,10 +2030,42 @@ Use the full initial -> failing test -> error -> repaired test -> outcome episod
             ] = {
                 "parent_candidate": dict(candidate),
                 "changed_components": changed_components,
+                "successful_experiment_ids": sorted(cited_experiments),
+                "diagnosis": update["diagnosis"],
             }
+            lesson_path = self.candidate_dir / "experiment_lessons.jsonl"
+            lesson_payload = {
+                "schema_version": 1,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "parent_digest": bundle_digest(PromptBundle.from_candidate(candidate)),
+                "candidate_digest": bundle_digest(
+                    PromptBundle.from_candidate(proposed_candidate)
+                ),
+                "changed_components": changed_components,
+                "successful_experiment_ids": sorted(cited_experiments),
+                "diagnosis": update["diagnosis"],
+                "evidence": update["evidence"],
+            }
+            log_full_reflection_event(
+                "accepted_prompt_update",
+                {
+                    **lesson_payload,
+                    "parent_candidate": candidate,
+                    "proposed_candidate": proposed_candidate,
+                    "model_update": update,
+                },
+            )
+            with _digest_lock(f"experiment-lessons:{lesson_path.resolve()}"):
+                lesson_path.parent.mkdir(parents=True, exist_ok=True)
+                with lesson_path.open("a", encoding="utf-8") as output:
+                    output.write(
+                        json.dumps(lesson_payload, ensure_ascii=False) + "\n"
+                    )
         self._log_reflection_decision(
             candidate, components_to_update, status="accepted",
             selection=selection, changed_components=changed_components,
+            experiment_ids=sorted(cited_experiments),
+            optimizer_calls=len(experiments) + 1,
         )
         return proposals
 
@@ -1549,7 +2078,7 @@ def _optimization_run_digest(
     evaluation_replicates: int,
 ) -> str:
     payload = {
-        "optimizer_schema": 11,
+        "optimizer_schema": 14,
         "baseline": baseline.as_candidate(),
         "train": [_target_identity(target) for target in train_targets],
         "validation": [_target_identity(target) for target in validation_targets],
@@ -1644,6 +2173,8 @@ def optimize(
         reflection_lm=reflection_lm,
         evaluation_replicates=evaluation_replicates,
     )
+    validation_baseline_aggregate: dict[str, Any] | None = None
+    reflection_train_targets = list(train_targets)
     for preflight_split, preflight_targets in (
         ("train", train_targets),
         ("validation", validation_targets),
@@ -1663,19 +2194,64 @@ def optimize(
             expected_targets=preflight_targets,
         )
         adapter._remember_reference_units(baseline_preflight["results"])
+        if preflight_split == "train":
+            incomplete = {
+                _result_identity(result)
+                for result in baseline_preflight["results"]
+                if _has_incomplete_coverage(result)
+            }
+            reflection_train_targets = [
+                target for target in train_targets
+                if _target_identity(target) in incomplete
+            ]
+        if preflight_split == "validation":
+            validation_baseline_aggregate = baseline_preflight.get("aggregate") or (
+                aggregate_coverage_score(baseline_preflight["results"])
+            )
+    assert validation_baseline_aggregate is not None
+    baseline_metrics = {
+        "score": float(validation_baseline_aggregate.get("score", 0.0)),
+        "statement": float(
+            validation_baseline_aggregate.get("statement_coverage", 0.0)
+        ),
+        "branch": float(validation_baseline_aggregate.get("branch_coverage", 0.0)),
+    }
+    print(
+        f"Iteration 0: Baseline validation aggregate metrics: {baseline_metrics}",
+        flush=True,
+    )
+    print(
+        "Reflection train targets below 100% coverage: "
+        f"{len(reflection_train_targets)}/{len(train_targets)}",
+        flush=True,
+    )
+    adapter.targets_by_split["train"] = reflection_train_targets
+    if not reflection_train_targets:
+        return PromptOptimizationResult(
+            best_bundle=baseline,
+            best_index=0,
+            candidates=[baseline],
+            validation_scores=[baseline_metrics["score"]],
+            total_metric_calls=0,
+        )
     run_digest = _optimization_run_digest(
         runner, baseline, train_targets, validation_targets, evaluation_replicates
     )
     result = gepa_core.optimize(
         seed_candidate=baseline.as_candidate(),
-        trainset=train_targets,
+        trainset=reflection_train_targets,
         valset=validation_targets,
         adapter=adapter,
         reflection_lm=None,
-        candidate_selection_strategy="pareto",
+        candidate_selection_strategy=BestParetoCandidateSelector(
+            best_probability=0.7,
+            rng=random.Random(7),
+        ),
         frontier_type="hybrid",
         skip_perfect_score=False,
-        reflection_minibatch_size=min(8, len(train_targets)),
+        reflection_minibatch_size=min(
+            REFLECTION_MINIBATCH_SIZE, len(reflection_train_targets)
+        ),
         module_selector=LLMReflectionComponentSelector(),
         use_merge=True,
         max_merge_invocations=5,

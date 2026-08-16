@@ -69,7 +69,7 @@ export default function ProjectDetail() {
   const isSample = project.id.startsWith("sample:");
 
   return (
-    <div className="platform-page">
+    <div className="platform-page project-detail-page">
       <button className="back-link" onClick={() => navigate("/projects")}>
         ← All projects
       </button>
@@ -129,36 +129,16 @@ export default function ProjectDetail() {
       {tab === "overview" && (
         <>
           <div className="platform-stats-grid">
-            <StatCard
-              label="Python files"
-              value={project.files}
-              detail={`${project.sourceDir} source root`}
-            />
-            <StatCard
-              label="Functions"
-              value={project.functions}
-              detail="7 warnings excluded"
-              tone="violet"
-            />
-            <StatCard
-              label="Statements"
-              value={project.statements.toLocaleString()}
-              detail="Static executable lines"
-              tone="green"
-            />
-            <StatCard
-              label="Branches"
-              value={project.branches.toLocaleString()}
-              detail="Decision outcomes"
-              tone="orange"
-            />
+            <StatCard label="Python files" value={project.files} />
+            <StatCard label="Functions" value={project.functions} tone="violet" />
+            <StatCard label="Statements" value={project.statements.toLocaleString()} tone="green" />
+            <StatCard label="Branches" value={project.branches.toLocaleString()} tone="orange" />
           </div>
           <div className="platform-two-column">
             <section className="platform-card">
               <div className="card-heading">
                 <div>
                   <h2>Configuration health</h2>
-                  <p>Latest validation for this project version.</p>
                 </div>
                 <StatusBadge tone="success">5/5 checks</StatusBadge>
               </div>
@@ -180,7 +160,6 @@ export default function ProjectDetail() {
               <div className="card-heading">
                 <div>
                   <h2>Project snapshot</h2>
-                  <p>Inputs recorded for reproducible runs.</p>
                 </div>
               </div>
               <dl className="definition-list">

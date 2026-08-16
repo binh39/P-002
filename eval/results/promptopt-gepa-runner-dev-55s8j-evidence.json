@@ -1,0 +1,227 @@
+{
+  "schema_version": 1,
+  "retrieved_on": "2026-08-16",
+  "execution": {
+    "name": "promptopt-gepa-runner-dev-55s8j",
+    "uid": "9ac15423-d2b6-4879-bd61-7b5361031dd0",
+    "job": "promptopt-gepa-runner-dev",
+    "project": "project-7df9f963-9fe0-4b76-b3d",
+    "region": "asia-southeast1",
+    "environment": "dev",
+    "source_commit": "459935e",
+    "image": "asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/gepa-runner-dev@sha256:823ea12750a9ecefecda36cd9a02d2836debd81576cdade9f3392baf17101136",
+    "created_at": "2026-08-15T17:16:15.002376Z",
+    "started_at": "2026-08-15T17:16:18.864251Z",
+    "completed_at": "2026-08-15T19:52:00.987070Z",
+    "duration": "2h35m42.12s",
+    "task_count": 1,
+    "succeeded_count": 1,
+    "completed": true
+  },
+  "configuration": {
+    "coverup_model": "vertex_ai/gemini-3.5-flash-lite",
+    "optimize_model": "vertex_ai/gemini-3.6-flash",
+    "vertexai_project": "vinbuildphase",
+    "vertexai_location": "global",
+    "requested_max_metric_calls": 600,
+    "actual_metric_calls": 605,
+    "candidate_count": 7,
+    "best_candidate_index": 4,
+    "evaluation_replicates": 1,
+    "repeat_tests": 5,
+    "max_attempts": 3,
+    "max_concurrency": 10,
+    "reflection_temperature": 0.7
+  },
+  "artifact_prefix": "gs://project-7df9f963-9fe0-4b76-b3d-promptopt-sources/runner-jobs/gepa/5cb215d2fbae4ce4a9ec50ac9bac7a5f/artifacts",
+  "job_result": {
+    "status": "succeeded",
+    "return_code": 0,
+    "missing_artifacts": [],
+    "protocol_version": 2
+  },
+  "promotion_decision": {
+    "final_split": "test",
+    "used_locked_holdout": true,
+    "final_evaluation_skipped": false,
+    "promoted": true,
+    "baseline_digest": "43e38a9d339ce664",
+    "optimized_digest": "31da49166afd20d5",
+    "baseline_score": 0.4286105526466643,
+    "optimized_score": 0.5250453247611707,
+    "absolute_gain": 0.0964347721145064,
+    "relative_gain": 0.2249939286819305,
+    "baseline_statement_coverage": 0.44426494345718903,
+    "optimized_statement_coverage": 0.5498115239633818,
+    "additional_covered_statements": 196,
+    "baseline_branch_coverage": 0.4219015280135823,
+    "optimized_branch_coverage": 0.5144312393887945,
+    "additional_covered_branches": 109
+  },
+  "coverage_by_split": {
+    "train": {
+      "targets": 20,
+      "baseline_score": 0.4353902577980344,
+      "optimized_score": 0.37715603190428715
+    },
+    "validation": {
+      "targets": 40,
+      "baseline_score": 0.6108216809851846,
+      "optimized_score": 0.7333405337203422
+    },
+    "test": {
+      "targets": 40,
+      "baseline_score": 0.4286105526466643,
+      "optimized_score": 0.5250453247611707,
+      "baseline_covered_statements": 825,
+      "optimized_covered_statements": 1021,
+      "statement_denominator": 1857,
+      "baseline_covered_branches": 497,
+      "optimized_covered_branches": 606,
+      "branch_denominator": 1178
+    }
+  },
+  "locked_test_summary": {
+    "target_count": 40,
+    "projects": {
+      "isort": 9,
+      "mlxtend": 27,
+      "typesystem": 4
+    },
+    "improved_targets": 9,
+    "tied_targets": 29,
+    "regressed_targets": 2,
+    "baseline_valid_targets": 40,
+    "optimized_valid_targets": 40,
+    "baseline_nonzero_generator_exit_codes": 0,
+    "optimized_nonzero_generator_exit_codes": 0
+  },
+  "paired_target_examples": [
+    {
+      "project": "isort",
+      "source_file": "isort/files.py",
+      "symbol": "find",
+      "baseline_score": 0.95625,
+      "optimized_score": 1.0,
+      "baseline_statements": "21/21",
+      "optimized_statements": "21/21",
+      "baseline_branches": "15/16",
+      "optimized_branches": "16/16"
+    },
+    {
+      "project": "isort",
+      "source_file": "isort/main.py",
+      "symbol": "main",
+      "baseline_score": 0.0,
+      "optimized_score": 0.9268585131894485,
+      "baseline_statements": "0/139",
+      "optimized_statements": "136/139",
+      "baseline_branches": "0/84",
+      "optimized_branches": "76/84"
+    },
+    {
+      "project": "mlxtend",
+      "source_file": "mlxtend/frequent_patterns/fpgrowth.py",
+      "symbol": "fpg_step",
+      "baseline_score": 0.9649999999999999,
+      "optimized_score": 1.0,
+      "baseline_statements": "23/23",
+      "optimized_statements": "23/23",
+      "baseline_branches": "19/20",
+      "optimized_branches": "20/20"
+    },
+    {
+      "project": "mlxtend",
+      "source_file": "mlxtend/externals/signature_py27.py",
+      "symbol": "signature",
+      "baseline_score": 0.0,
+      "optimized_score": 0.8781876138433515,
+      "baseline_statements": "0/61",
+      "optimized_statements": "56/61",
+      "baseline_branches": "0/36",
+      "optimized_branches": "31/36"
+    },
+    {
+      "project": "mlxtend",
+      "source_file": "mlxtend/externals/adjust_text.py",
+      "symbol": "repel_text_from_axes",
+      "baseline_score": 0.9188888888888889,
+      "optimized_score": 1.0,
+      "baseline_statements": "26/27",
+      "optimized_statements": "27/27",
+      "baseline_branches": "18/20",
+      "optimized_branches": "20/20"
+    },
+    {
+      "project": "mlxtend",
+      "source_file": "mlxtend/plotting/plot_linear_regression.py",
+      "symbol": "plot_linear_regression",
+      "baseline_score": 0.0,
+      "optimized_score": 0.95,
+      "baseline_statements": "0/27",
+      "optimized_statements": "27/27",
+      "baseline_branches": "0/14",
+      "optimized_branches": "13/14"
+    },
+    {
+      "project": "mlxtend",
+      "source_file": "mlxtend/evaluate/permutation.py",
+      "symbol": "permutation_test",
+      "baseline_score": 0.9581818181818182,
+      "optimized_score": 0.9631818181818181,
+      "baseline_statements": "58/60",
+      "optimized_statements": "59/60",
+      "baseline_branches": "42/44",
+      "optimized_branches": "42/44"
+    },
+    {
+      "project": "mlxtend",
+      "source_file": "mlxtend/preprocessing/scaling.py",
+      "symbol": "standardize",
+      "baseline_score": 0.910222222222222,
+      "optimized_score": 0.0,
+      "baseline_statements": "24/25",
+      "optimized_statements": "0/25",
+      "baseline_branches": "16/18",
+      "optimized_branches": "0/18",
+      "note": "Included to disclose a per-target regression despite positive aggregate promotion."
+    }
+  ],
+  "artifact_provenance": {
+    "job_result.json": {
+      "generation": "1786823458987867",
+      "size": 99,
+      "md5_base64": "pm6tyOX86PdL8RNbExgDcw=="
+    },
+    "final_validation.json": {
+      "generation": "1786823458788275",
+      "size": 2970027,
+      "md5_base64": "0odp/cOq98YwoedvDb4tyw=="
+    },
+    "coverage_report.json": {
+      "generation": "1786823458917319",
+      "size": 2166,
+      "md5_base64": "KHsgPLmLXh29F9ePXQ8fhw=="
+    },
+    "optimized_program.json": {
+      "generation": "1786823458663565",
+      "size": 25949,
+      "md5_base64": "ftjjwiEqdE3KkwS+ndgpxQ=="
+    },
+    "prompts/gepa_proposed.json": {
+      "generation": "1786823460454790",
+      "size": 3545,
+      "md5_base64": "z7m2x6COJj5fMkd0k6psmA=="
+    },
+    "prompts/gepa_optimized.json": {
+      "generation": "1786823460525996",
+      "size": 3545,
+      "md5_base64": "z7m2x6COJj5fMkd0k6psmA=="
+    }
+  },
+  "limitations": [
+    "The final evaluation used one generation replicate, so this is weaker than a multi-replicate quality benchmark.",
+    "The aggregate promotion coexists with two per-target regressions; the evidence must not be summarized as every target improving.",
+    "The optimized train score was lower than baseline, while validation and locked test scores were higher."
+  ]
+}

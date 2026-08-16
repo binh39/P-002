@@ -97,7 +97,7 @@ export interface EvolutionIteration {
   bestStatement: number | null;
   bestBranch: number | null;
   bestScore: number | null;
-  paretoChanged: boolean;
+  bestCandidateChanged: boolean;
 }
 
 export interface EvolutionMetricPoint {

@@ -19,7 +19,6 @@ vi.mock("@/auth/AuthProvider", () => ({
 
 vi.mock("@/components/Sidebar", () => ({ default: () => <aside>Sidebar</aside> }));
 vi.mock("@/components/TopNav", () => ({ default: () => <header>Top navigation</header> }));
-vi.mock("@/components/AppFooter", () => ({ default: () => <footer>Footer</footer> }));
 
 describe("AppLayout", () => {
   it("returns the content area to the top after route navigation", () => {
@@ -33,6 +32,7 @@ describe("AppLayout", () => {
     );
 
     const projectsContent = screen.getByRole("main");
+    expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
     projectsContent.scrollTop = 640;
     projectsContent.scrollLeft = 20;
     routerState.location = "/experiments";

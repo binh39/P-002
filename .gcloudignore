@@ -13,6 +13,15 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
+.pytest-tmp*/
+.test-tmp*/
+CheckOutput/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+**/node_modules/
+**/dist/
+app/.smoke-results/
 .ai-log/
 # Root-local data only (docker-compose volume). A bare `data/` would also
 # exclude nested dirs such as src/sample_repo/mlxtend/mlxtend/data, silently

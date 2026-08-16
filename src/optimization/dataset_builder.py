@@ -280,6 +280,7 @@ def build_dataset(
     train_limit: int,
     validation_limit: int,
     test_limit: int,
+    global_top: bool = False,
     exclude_dirs: frozenset[str] = _DEFAULT_EXCLUDED_DIRS,
 ) -> tuple[list[dict], list[FunctionInfo]]:
     """Rank functions and assign project-stratified requested splits.
@@ -299,8 +300,12 @@ def build_dataset(
             f"Only {len(ranked)} functions found but {requested} were requested "
             "(train_limit + validation_limit + test_limit)"
         )
+    # Cloud's ``most_branches`` sampling selects the global top-N pool first,
+    # then stratifies that fixed pool across splits.  Keep the historical
+    # project-quota behavior as the default for existing benchmark datasets.
+    assignment_pool = ranked[:requested] if global_top else ranked
     targets = assign_splits(
-        ranked,
+        assignment_pool,
         train_limit=train_limit,
         validation_limit=validation_limit,
         test_limit=test_limit,

@@ -91,7 +91,7 @@ describe("optimization run", () => {
           bestStatement: null,
           bestBranch: null,
           bestScore: 0.2599,
-          paretoChanged: true,
+          bestCandidateChanged: true,
         },
         {
           iteration: 2,
@@ -107,7 +107,7 @@ describe("optimization run", () => {
           bestStatement: 0.8198,
           bestBranch: 0.7707,
           bestScore: 0.8319,
-          paretoChanged: false,
+          bestCandidateChanged: false,
         },
       ],
       metrics: [
@@ -136,6 +136,12 @@ describe("optimization run", () => {
     expect(screen.getAllByText("Iteration 2")).toHaveLength(2);
     expect(screen.getByText("Repair the failing test.")).toBeInTheDocument();
     expect(screen.getByText("Parent minibatch sum")).toBeInTheDocument();
+    expect(screen.getByText("Best validation candidate")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /micro-averaged over executable units for the same aggregate-best candidate/i,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("shows the baseline as the final prompt when the proposal is not promoted", async () => {

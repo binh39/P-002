@@ -1,4 +1,5 @@
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 
@@ -231,11 +232,7 @@ export default function CreateExperiment() {
       <button className="back-link" onClick={() => navigate("/experiments")}>
         ← All experiments
       </button>
-      <PageHeader
-        eyebrow="New experiment"
-        title="Configure prompt optimization"
-        description="Build a reproducible multi-project dataset, then configure CoverUp and GEPA."
-      />
+      <PageHeader eyebrow="New experiment" title="Configure prompt optimization" />
 
       <ol className="wizard-steps experiment-wizard-steps">
         {steps.map((item, index) => (
@@ -336,7 +333,7 @@ export default function CreateExperiment() {
           disabled={step === 0 || startOptimization.isPending}
           onClick={() => setStep((value) => Math.max(0, value - 1))}
         >
-          Back
+          <ArrowLeft size={15} /> Back
         </button>
         <span>
           Step {step + 1} of {steps.length}
@@ -347,7 +344,7 @@ export default function CreateExperiment() {
             disabled={!canContinue}
             onClick={() => setStep((value) => value + 1)}
           >
-            Continue →
+            Continue <ArrowRight size={15} />
           </button>
         ) : (
           <button
@@ -999,9 +996,14 @@ function SettingsStep({
         </div>
         <div className="protocol-grid">
           <div>
+            <span>Candidate selection</span>
+            <strong>70% best · 30% Pareto</strong>
+            <small>Exploit the aggregate best while preserving frontier diversity</small>
+          </div>
+          <div>
             <span>Target metric</span>
             <strong>Coverage score</strong>
-            <small>40% statement + 60% branch</small>
+            <small>30% statement + 70% branch</small>
           </div>
           <div>
             <span>Holdout</span>

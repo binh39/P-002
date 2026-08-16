@@ -165,9 +165,9 @@ function IterationFlow({ iteration }: { iteration: EvolutionIteration }) {
           </dd>
         </div>
         <div>
-          <dt>Best Pareto metrics</dt>
+          <dt>Best validation candidate</dt>
           <dd>
-            <FlowValue>{iteration.paretoChanged ? "Updated" : "Unchanged"}</FlowValue>
+            <FlowValue>{iteration.bestCandidateChanged ? "Updated" : "Unchanged"}</FlowValue>
             <small>
               Statement {metric(iteration.bestStatement)} · Branch {metric(iteration.bestBranch)} ·
               Score {metric(iteration.bestScore)}
@@ -191,7 +191,7 @@ function EvolutionPanel({ evolution }: { evolution: OptimizationEvolution }) {
       <div className="card-heading evolution-heading">
         <div>
           <h2>Live GEPA evolution</h2>
-          <p>Iteration history and best validation metrics parsed from Cloud Run stdout.</p>
+          <p>Iteration history and metrics for the aggregate-best validation candidate.</p>
         </div>
         <StatusBadge tone={evolution.available ? "success" : "neutral"}>
           {evolution.available ? `${evolution.iterations.length} iterations` : "Waiting for logs"}
@@ -236,6 +236,10 @@ function EvolutionPanel({ evolution }: { evolution: OptimizationEvolution }) {
 
             <div className="evolution-chart-panel">
               <div className="evolution-panel-label">Best validation metrics</div>
+              <p className="evolution-chart-description">
+                Statement and branch are micro-averaged over executable units for the same
+                aggregate-best candidate as score, not separate Pareto-front maxima.
+              </p>
               <div
                 className="evolution-chart"
                 aria-label="Statement, branch and score by iteration"
@@ -391,7 +395,6 @@ export default function OptimizationRun() {
       <PageHeader
         eyebrow={`Optimization run · ${run.id.slice(0, 8)}`}
         title={experiment?.name ?? "Prompt optimization"}
-        description="GEPA candidate search and validation results from the production pipeline."
         actions={
           <StatusBadge tone={statusTone(run.status)}>
             {statusLabels[run.status] ?? run.status.replace(/_/g, " ")}
@@ -465,7 +468,6 @@ export default function OptimizationRun() {
         <div className="card-heading optimization-results-heading">
           <div>
             <h2>Evaluation results</h2>
-            <p>Validation performance and the final locked-test decision.</p>
           </div>
           {run.finalComparison && (
             <StatusBadge tone={run.finalComparison.promoted ? "success" : "warning"}>
@@ -477,7 +479,6 @@ export default function OptimizationRun() {
         <div className="optimization-result-section">
           <div className="optimization-result-heading">
             <h3>Validation</h3>
-            <p>Best scores from the GEPA search.</p>
           </div>
           <div className="platform-stats-grid baseline-metrics-grid">
             <StatCard
@@ -510,7 +511,6 @@ export default function OptimizationRun() {
           <div className="optimization-result-section is-final">
             <div className="optimization-result-heading">
               <h3>Final locked test</h3>
-              <p>Baseline and optimized prompt on the same held-out targets.</p>
             </div>
             <div className="platform-stats-grid baseline-metrics-grid">
               <StatCard
@@ -573,7 +573,6 @@ export default function OptimizationRun() {
           <div className="card-heading">
             <div>
               <h2>Prompt lineage</h2>
-              <p>Digests identify the immutable parent and selected candidate.</p>
             </div>
           </div>
           <dl className="definition-list">
@@ -608,7 +607,6 @@ export default function OptimizationRun() {
           <div className="card-heading">
             <div>
               <h2>Optimization artifacts</h2>
-              <p>Authenticated candidate and GEPA result downloads.</p>
             </div>
             <StatusBadge tone={run.artifacts.length > 0 ? "success" : "neutral"}>
               {run.artifacts.length} files

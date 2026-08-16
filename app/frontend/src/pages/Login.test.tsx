@@ -17,18 +17,18 @@ function createProps() {
 }
 
 describe("Login", () => {
-  it("signs in with an email and password", async () => {
+  it("prefills and signs in with the demo account", async () => {
     const user = userEvent.setup();
     const props = createProps();
     render(<Login {...props} />);
 
     expect(screen.getByRole("heading", { name: "Login" })).toBeInTheDocument();
-    await user.type(screen.getByLabelText("Email address"), "alex@example.com");
-    await user.type(screen.getByLabelText("Password"), "password123");
+    expect(screen.getByLabelText("Email address")).toHaveValue("admin@gmail.com");
+    expect(screen.getByLabelText("Password")).toHaveValue("88888888");
     await user.click(screen.getByRole("button", { name: "Login" }));
 
     await waitFor(() =>
-      expect(props.onEmailSignIn).toHaveBeenCalledWith("alex@example.com", "password123"),
+      expect(props.onEmailSignIn).toHaveBeenCalledWith("admin@gmail.com", "88888888"),
     );
   });
 
@@ -41,6 +41,7 @@ describe("Login", () => {
     expect(screen.getByRole("heading", { name: "Register" })).toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Full name"), "Alex Morgan");
+    await user.clear(screen.getByLabelText("Email address"));
     await user.type(screen.getByLabelText("Email address"), "alex@example.com");
     await user.type(screen.getByLabelText("Password"), "password123");
     await user.type(screen.getByLabelText("Confirm password"), "different123");
@@ -67,6 +68,7 @@ describe("Login", () => {
     const props = createProps();
     render(<Login {...props} />);
 
+    await user.clear(screen.getByLabelText("Email address"));
     await user.type(screen.getByLabelText("Email address"), "alex@example.com");
     await user.click(screen.getByRole("button", { name: "Forgot password?" }));
 

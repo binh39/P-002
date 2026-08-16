@@ -10,11 +10,13 @@ npm ci
 npm run dev
 ```
 
-The default `VITE_AUTH_MODE=demo` uses an explicit demo session. Set it to `firebase` for Firebase Google Sign-In plus Email/Password login, registration and password reset.
+The checked-in example is a working full-local profile: `VITE_AUTH_MODE=demo` returns the backend's explicit `dev-token`, `VITE_DATA_MODE=connected` uses HTTP repositories, and `VITE_API_PROXY_TARGET=http://127.0.0.1:8000` sends `/api` to the local FastAPI process. This token is accepted only when the backend uses `AUTH_MODE=disabled`.
+
+Set `VITE_AUTH_MODE=firebase` and fill the public Firebase Web App identifiers for Firebase Google Sign-In, Email/Password login, registration and password reset. Production builds must use Firebase mode; never put a service-account credential in a `VITE_*` variable.
 
 The connected Firebase project is `project-7df9f963-9fe0-4b76-b3d`, with production at `https://project-7df9f963-9fe0-4b76-b3d.web.app`. Feature branches are tested with `npm run dev`; no public preview channel is kept. Local Firebase values belong in the ignored `.env.local`; start from `.env.example` on a new machine.
 
-Projects, experiment creation, GEPA optimization runs and paired comparisons always use authenticated HTTP repositories and never fall back to fixture data. GEPA treats the baseline prompt as candidate zero; there is no separate baseline run. `VITE_DATA_MODE=demo` keeps unfinished dashboard, dataset and review screens in demo mode, so the UI displays a `hybrid data` badge until those slices are connected.
+Projects, experiment creation, GEPA optimization runs and paired comparisons always use authenticated HTTP repositories and never fall back to fixture data. GEPA treats the baseline prompt as candidate zero; there is no separate baseline run. `VITE_DATA_MODE=demo` only keeps the dashboard on fixture data, so use `connected` when verifying the full local API path.
 
 ## Quality checks
 

@@ -23,7 +23,6 @@ const navItems = [
   { id: "dashboard" as NavigationId, label: "Dashboard", Icon: IC.Dashboard },
   { id: "projects" as NavigationId, label: "Projects", Icon: IC.Code },
   { id: "experiments" as NavigationId, label: "Experiments", Icon: IC.Flask },
-  { id: "coverage" as NavigationId, label: "Coverage Guide", Icon: IC.Code },
   { id: "registry" as NavigationId, label: "Prompt Registry", Icon: IC.CheckSquare },
 ];
 
@@ -47,7 +46,7 @@ export default function Sidebar({
         <Brand />
       </div>
 
-      <nav className="sidebar-navigation">
+      <nav className="sidebar-navigation" aria-label="Workspace navigation">
         <p className="sidebar-label">Workspace</p>
         {navItems.map(({ id, label, Icon }) => (
           <button
@@ -61,8 +60,19 @@ export default function Sidebar({
             <span>{label}</span>
           </button>
         ))}
+      </nav>
 
-        <p className="sidebar-label sidebar-system-label">System</p>
+      <nav className="sidebar-system-navigation" aria-label="System navigation">
+        <p className="sidebar-label">System</p>
+        <button
+          type="button"
+          className={currentPage === "coverage" ? "is-active" : ""}
+          onClick={() => onNavigate("coverage")}
+          aria-current={currentPage === "coverage" ? "page" : undefined}
+        >
+          <IC.Code />
+          <span>Docs</span>
+        </button>
         <button
           type="button"
           className={currentPage === "settings" ? "is-active" : ""}

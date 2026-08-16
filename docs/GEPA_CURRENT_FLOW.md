@@ -78,9 +78,9 @@ Environment
                 +-----------------------------------------+
                 | GEPA search                             |
                 | seed candidate = baseline               |
-                | Pareto + hybrid frontier                |
+                | 70% best / 30% Pareto + hybrid frontier|
                 | causal selector: initial or error       |
-                | reflection minibatch <= 8 examples      |
+                | reflection <= 5 incomplete examples     |
                 | merge enabled                           |
                 +-------------------+---------------------+
                                     |
@@ -142,7 +142,7 @@ adapter.evaluate(batch=[example A, example B, ...], candidate=C)
 
 `batch` co the la:
 
-- reflection minibatch nho, toi da 8 example theo cau hinh hien tai;
+- reflection minibatch nho, toi da 5 example co coverage duoi 100% theo cau hinh hien tai;
 - mot tap example train/validation ma GEPA can cham;
 - khong nhat thiet la toan bo split.
 
@@ -277,16 +277,19 @@ Test suite goc khong duoc copy vao generated workspace.
 Raw symbol score:
 
 ```text
-raw = 0.4 * statement_coverage + 0.6 * branch_coverage
+raw = 0.3 * statement_coverage + 0.7 * branch_coverage
 ```
+
+Neu toan bo target/split khong co executable branch, trong so duoc chuan hoa ve
+100% statement de khong tao 0.7 diem ao cho target khong cover duoc statement nao.
 
 GEPA khong nhan raw score truc tiep. Adapter scale moi example de trung binh score
 GEPA bang micro-average cua ca split:
 
 ```text
 weighted(example i) =
-    N * 0.4 * covered_statements_i / total_reference_statements
-  + N * 0.6 * covered_branches_i   / total_reference_branches
+    N * 0.3 * covered_statements_i / total_reference_statements
+  + N * 0.7 * covered_branches_i   / total_reference_branches
 
 mean_i(weighted(example i)) = micro-average coverage cua split
 ```
@@ -331,23 +334,40 @@ Compact evidence
     +-- failing test / repair / traceback / remaining coverage
           |
           v
-Run structured JSON diagnosis for the selected component
+OPTIMIZE_MODEL writes a diagnostic pytest for one weak target
           |
           v
-OPTIMIZE_MODEL proposes one complete revised template
+Run the test in an isolated teacher experiment workspace
+          |
+          +-- pytest fails: record result and try another experiment
+          +-- target score does not improve: record result and try another experiment
+          +-- at most 5 experiments without success: keep prompt unchanged
+          |
+          v
+Keep only experiments whose test passes and target score beats baseline
+          |
+          v
+OPTIMIZE_MODEL extracts a reusable lesson and proposes one complete revised template
           |
           v
 Validate
     +-- required placeholders are preserved
     +-- no unsupported placeholders
+    +-- cited experiment IDs are real successful experiments
+    +-- no target-specific file/symbol/line leakage
     +-- component length <= max(600, 3 * baseline length)
           |
-          +-- invalid: retry reflection once
-          +-- still invalid: fail optimization
+          +-- invalid or generic: keep prompt unchanged
           |
           v
 Create candidate digest and evaluate candidate
 ```
+
+Diagnostic tests are teacher-side evidence only. They are saved under
+`optimizer_experiments/`, never copied into the candidate test workspace, and never
+counted as GEPA coverage. The candidate must improve only when CoverUp independently
+generates a new test from the revised prompt. Successful experiment lessons and prompt
+lineage are persisted for audit.
 
 Neu `initial` hoac `error` khong co trace thuc su trong trajectory, reflection dataset
 cua component do rong va adapter giu nguyen text; model reflection khong duoc goi.
@@ -358,10 +378,12 @@ Cau hinh hien tai:
 
 ```text
 seed_candidate              = exact baseline bundle
-candidate_selection_strategy = pareto
+candidate_selection_strategy = 70% current aggregate best + 30% Pareto
 frontier_type               = hybrid
 module_selector             = causal(initial or exercised error)
-reflection_minibatch_size   = min(8, number_of_train_targets)
+reflection_minibatch_size   = min(5, number_of_incomplete_train_targets)
+reflection_trainset        = baseline train targets with coverage < 100%
+reflection_context         = current candidate targets with coverage < 100%
 use_merge                   = true
 max_merge_invocations       = 5
 skip_perfect_score          = false
@@ -481,5 +503,5 @@ Promotion                : false
 ```
 
 Day la artifact cu voi dataset 25/20/20. Run moi se dung dataset 50/30/30,
-reflection minibatch 8, causal selection `initial/error`, va neu `best_index=0` thi dung
+reflection minibatch 5, causal selection `initial/error`, va neu `best_index=0` thi dung
 ngay sau GEPA search ma khong tao run test.

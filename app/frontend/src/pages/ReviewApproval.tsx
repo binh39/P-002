@@ -115,7 +115,7 @@ export default function ReviewApproval() {
   }
   if (!selected) {
     return (
-      <div className="platform-page">
+      <div className="platform-page review-page">
         <PageHeader
           eyebrow="Prompt registry"
           title="Review & Approval"
@@ -131,7 +131,7 @@ export default function ReviewApproval() {
   const comparison = comparisonQuery.data;
   const canReview = selected.status === "in_review" && !review.isPending;
   return (
-    <div className="platform-page">
+    <div className="platform-page review-page">
       <PageHeader
         eyebrow="Prompt registry"
         title="Review & Approval"
@@ -231,7 +231,6 @@ export default function ReviewApproval() {
         <div className="card-heading">
           <div>
             <h2>Prompt comparison</h2>
-            <p>Compare the immutable baseline and candidate by prompt component.</p>
           </div>
         </div>
         <div className="review-prompt-comparison">
@@ -256,7 +255,6 @@ export default function ReviewApproval() {
         <div className="card-heading">
           <div>
             <h2>Prompt lineage</h2>
-            <p>Digests identify the immutable prompt pair.</p>
           </div>
         </div>
         <dl className="definition-list comparison-definition-list">

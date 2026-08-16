@@ -9,6 +9,7 @@ export default defineConfig({
     env: {
       VITE_AUTH_MODE: "demo",
       VITE_DATA_MODE: "demo",
+      VITE_API_BASE_URL: "/api/v1",
     },
     setupFiles: ["./src/test/setup.ts"],
   },

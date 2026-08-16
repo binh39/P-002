@@ -1,201 +1,195 @@
-# 🤖 AI20K Agent Template
+# PromptOpt
 
-Template chính thức cho học viên **VinUni AI20K Build Phase** — cung cấp sẵn cấu trúc dự án, code mẫu, và hướng dẫn kỹ thuật chi tiết để xây dựng AI Agent đạt điểm cao (35+/50).
+PromptOpt là nền tảng tối ưu prompt sinh Python unit test. Hệ thống phân tích source code, tạo dataset theo symbol, dùng CoverUp để sinh test và DSPy/GEPA để đề xuất prompt mới. Candidate chỉ được đưa vào review khi tốt hơn baseline trên locked holdout theo phép so sánh paired.
 
-> 📖 **Technical Guidebook:** [phoenix.note.transformerlabs.ai/technical-book](https://phoenix.note.transformerlabs.ai/technical-book)
+- Production UI: <https://project-7df9f963-9fe0-4b76-b3d.web.app>
+- API docs khi chạy local: <http://127.0.0.1:8000/docs>
+- Sơ đồ components/dataflow: [docs/architecture_diagram.md](docs/architecture_diagram.md)
+- Evaluation evidence: [eval/results/report.md](eval/results/report.md)
 
-## 🎯 Template này dùng để làm gì?
+## Luồng chính
 
-Khi tham gia AI20K Build Phase, mỗi đội cần xây dựng một AI Agent hoàn chỉnh — từ kiến trúc, code, test, đến deploy. Thay vì bắt đầu từ con số không, template này cung cấp:
+1. Đăng nhập và chọn một bundled sample (`isort`, `mimesis`, `mlxtend`, `typesystem`) hoặc upload ZIP Python để phân tích.
+2. Chọn function/symbol và tạo train/validation/test split. Test split bị khóa trong lúc GEPA search.
+3. Chạy CoverUp + GEPA. Baseline prompt luôn là candidate số 0 và là fallback.
+4. So sánh paired baseline/proposal trên locked holdout. Chỉ candidate **strictly better** mới được tạo prompt version `in_review`.
+5. Reviewer approve/reject; quyết định và artifact được lưu để audit.
 
-- **Cấu trúc thư mục chuẩn** — đã được thiết kế theo best practices (separation of concerns)
-- **Code mẫu** cho các phần cốt lõi: LangGraph agent, FastAPI API, config, schemas
-- **Docker + CI/CD sẵn** — Dockerfile multi-stage, GitHub Actions workflow
-- **Hướng dẫn kỹ thuật 10 chương** — từ clone template đến nộp bài Demo Day
-- **Checklist 10 deliverables** — đảm bảo không bỏ sót yêu cầu BTC
-- **AI Usage Logging tự động** — Pre-configured hooks cho Claude Code, Cursor, Codex, Gemini CLI, Antigravity, và GitHub Copilot
+Không có LangGraph agent, vector database hay PostgreSQL trong application hiện tại. Frontend là React/Vite; backend là FastAPI; production dùng Firebase Auth, Firestore, GCS, Cloud Tasks, Cloud Run và Vertex AI.
 
-## ⚡ Quick Start
+## Yêu cầu
 
-### Bước 1: Fork hoặc Clone
+- Python 3.12
+- [uv](https://docs.astral.sh/uv/) để tạo môi trường Python từ `uv.lock`
+- Node.js >= 22.12 và npm
+- PowerShell cho các lệnh bên dưới (có thể đổi sang cú pháp shell tương đương)
+- Google Cloud ADC chỉ cần khi chạy workflow cloud/LLM thật
 
-```bash
-# Clone template
-git clone https://github.com/AI20K-Build-Cohort-2/starter-code-template.git team-YOUR_TEAM_NAME
-cd team-YOUR_TEAM_NAME
+## Setup local đầy đủ
 
-# Xóa git history cũ và khởi tạo lại
-rm -rf .git
-git init
-git add .
-git commit -m "feat: khởi tạo dự án từ template"
+### 1. Python dependencies
+
+Từ repository root:
+
+```powershell
+uv sync --frozen --group dev
+uv pip install --python .\.venv\Scripts\python.exe -r app\requirements-dev.txt
 ```
 
-### Bước 2: Setup môi trường
+Lệnh đầu cài CoverUp/GEPA và test tools theo lockfile; lệnh sau bổ sung dependencies của FastAPI/Firebase/Google Cloud backend.
 
-```bash
-# Tạo virtual environment
-python3.11 -m venv .venv
-source .venv/bin/activate
+### 2. Backend
 
-# Cài dependencies
-pip install -e ".[dev]"
-
-# Cấu hình API keys
-cp .env.example .env
-# Mở .env và thêm OPENAI_API_KEY của bạn
-# Đồng thời cập nhật AI_LOG_API_KEY bằng key riêng từ link mời của BTC
-# (giá trị trong .env.example chỉ là placeholder)
+```powershell
+Copy-Item app\.env.example app\.env
+Set-Location app
+$env:PYTHONPATH = (Resolve-Path .).Path
+..\.venv\Scripts\python.exe -m uvicorn backend.main:app --reload --port 8000
 ```
 
-### Bước 3: Cài AI Logging Hooks
+Profile mặc định trong `app/.env.example` là local-safe:
 
-```bash
-# Linux / macOS / Git Bash
-bash scripts/setup_hooks.sh
+- `AUTH_MODE=disabled`: API chấp nhận `Bearer dev-token`;
+- metadata dùng repository in-memory;
+- upload/artifact nằm dưới `app/data/uploads`;
+- project analysis chạy inline;
+- không gọi Cloud Run Job hoặc Vertex AI.
 
-# Windows PowerShell
-# powershell -ExecutionPolicy Bypass -File scripts\setup_hooks.ps1
+Kiểm tra:
+
+```powershell
+curl.exe -s http://127.0.0.1:8000/health
 ```
 
-Hooks tự động log mọi AI prompt khi dùng Claude Code, Cursor, Codex, Gemini CLI, Antigravity, hoặc GitHub Copilot. Không cần thao tác thủ công.
+Output mong đợi:
 
-### Bước 4: Chạy server
-
-```bash
-# Chạy FastAPI backend
-uvicorn src.main:app --reload --port 8000
-
-# Mở Swagger UI
-# http://localhost:8000/docs
+```json
+{"status":"ok","service":"promptopt-api","env":"development"}
 ```
 
-### Bước 5: Đọc hướng dẫn
+### 3. Frontend
 
-📖 Mở **[Technical Guidebook](https://phoenix.note.transformerlabs.ai/technical-book)** và làm theo từng chương.
+Mở terminal khác từ repository root:
 
-## 📁 Cấu trúc dự án
-
-```
-├── src/
-│   ├── agents/           # 🧠 LangGraph Agent
-│   │   ├── graph.py      #    State graph (nodes + edges)
-│   │   ├── state.py      #    State schema (TypedDict)
-│   │   ├── nodes/        #    Node functions
-│   │   └── tools/        #    Agent tools (@tool)
-│   ├── api/              # 🌐 FastAPI Backend
-│   │   └── routes.py     #    API endpoints
-│   ├── models/           # 📋 Pydantic schemas
-│   ├── services/         # 🔧 Business logic (LLM, etc.)
-│   ├── config.py         # ⚙️ Pydantic Settings
-│   └── main.py           # 🚀 App entry point
-├── tests/                # 🧪 pytest suite
-│   ├── test_agents/      #    Agent/graph tests
-│   └── test_api/         #    API endpoint tests
-├── scripts/              # 🔌 AI Logging Hooks
-│   ├── log_hook.py       #    Auto-log cho Claude/Cursor/Codex/Gemini/Copilot
-│   ├── log_antigravity.py#    Antigravity IDE prompt scanner
-│   ├── log_manual.py     #    Manual log cho ChatGPT / web tools
-│   ├── submit_log.py     #    Submit logs on git push
-│   └── setup_hooks.sh    #    One-time hook installer
-├── .claude/ .codex/ .cursor/ .gemini/  # Per-tool hook configs
-├── .agents/              # Antigravity rules + workflows
-├── .ai-log/              # 📊 AI usage logs (auto-generated)
-├── docs/
-│   ├── guide/            # 📖 Technical Guidebook (10 chapters)
-│   └── architecture_diagram.md
-├── eval/                 # 📊 Evaluation results
-├── presentation/         # 🎤 Demo Day slides
-├── .github/workflows/    # ⚡ CI/CD (GitHub Actions)
-├── .github/hooks/        # 🪝 Copilot hook config
-├── Dockerfile            # 🐳 Multi-stage build
-├── docker-compose.yml    # 🐙 Full stack orchestration
-└── README_boilerplate.md # 📝 README template cho đội của bạn
+```powershell
+Copy-Item app\frontend\.env.example app\frontend\.env.local
+Set-Location app\frontend
+npm ci
+npm run dev
 ```
 
-## 📚 Technical Guidebook — 10 Chương
+Mở <http://127.0.0.1:5173>. Profile mặc định dùng demo login, gửi `dev-token`, và Vite proxy `/api` tới backend local ở port 8000. Firebase values chỉ cần cho connected/production mode.
 
-| Chương | Nội dung | Thời gian |
-|---------|----------|-----------|
-| 1 | Lời mở đầu — Mục tiêu, cách sử dụng | 15 phút |
-| 2 | Khởi tạo dự án — Clone, setup, git workflow | 4 giờ |
-| 3 | Thiết kế kiến trúc — 3-tier, diagrams, ADR | 6 giờ |
-| 4 | **LangGraph Agent** — State, nodes, edges, tools, RAG | 8 giờ |
-| 5 | FastAPI — Routes, validation, error handling, streaming | 6 giờ |
-| 6 | Giao diện — Next.js + Streamlit quickstart | 6 giờ |
-| 7 | DevOps — Docker, CI/CD, deploy, logging | 6 giờ |
-| 8 | Kiểm thử — Unit test, integration test, RAGAS | 4 giờ |
-| 9 | Demo Day — 10 deliverables, checklist, tips | 2 giờ |
-| 10 | Tài nguyên — Khóa học, docs, BMAD method | tham khảo |
+## Environment variables
 
-📖 **Đọc online:** [phoenix.note.transformerlabs.ai/technical-book](https://phoenix.note.transformerlabs.ai/technical-book)
+Ba file có phạm vi khác nhau; không gộp chúng thành một `.env`:
 
-## 📋 10 Deliverables cho Demo Day
+| File | Dùng bởi | Nội dung |
+| --- | --- | --- |
+| `app/.env` | FastAPI | auth, repository/storage backend, Cloud Tasks/Run, giới hạn GEPA |
+| `app/frontend/.env.local` | Vite | auth/data mode, API base URL, Firebase web config, dev proxy |
+| `.env` ở root | CoverUp/GEPA CLI hoặc deploy script | model IDs và Vertex AI project/location |
 
-| # | Deliverable | File vị trí | Template có sẵn |
-|---|-------------|-------------|:---:|
-| 1 | Source Code | `src/` | ✅ |
-| 2 | README.md | `README_boilerplate.md` → copy thành `README.md` | ✅ |
-| 3 | Architecture Diagram | `docs/architecture_diagram.md` | ✅ |
-| 4 | AI Logs | LangSmith (3 env vars) + Auto AI Usage Logging | ✅ |
-| 5 | Live URL | Deploy lên Render/Vercel | ⚡ CI/CD sẵn |
-| 6 | Video Demo | `presentation/` | 📝 |
-| 7 | Pitch Deck | `presentation/` | 📝 |
-| 8 | Development Journal | `JOURNAL.md` | ✅ |
-| 9 | Worklog | `WORKLOG.md` | ✅ |
-| 10 | Evaluation Evidence | `eval/` | 📝 |
+Tạo từ các file `.env.example` tương ứng. Không commit token, Firebase ID token, ADC/service-account JSON, signed URL hoặc raw production smoke output.
 
-## 🛠 Tech Stack
+Các biến backend production bắt buộc:
 
-| Layer | Technology | Version |
-|-------|-----------|---------|
-| AI Agent | LangGraph + LangChain | Latest |
-| Backend | FastAPI + Uvicorn | 0.100+ |
-| LLM | OpenAI GPT-4o-mini | API |
-| Frontend | Next.js / Streamlit | 14+ / 1.30+ |
-| Database | SQLite (dev) / PostgreSQL (prod) | — |
-| DevOps | Docker + GitHub Actions | — |
-| Testing | pytest + pytest-asyncio | 8+ |
-
-## 📊 AI Usage Logging
-
-Template đã tích hợp sẵn auto-logging hooks cho 6 AI tools:
-
-| Tool | Cơ chế | Config |
-|------|--------|--------|
-| Claude Code | `.claude/settings.json` hooks | Tự động |
-| Cursor | `.cursor/hooks.json` | Tự động |
-| OpenAI Codex CLI | `.codex/hooks.json` | Tự động |
-| Gemini CLI | `.gemini/settings.json` | Tự động |
-| GitHub Copilot | `.github/hooks/hooks.json` | Tự động |
-| Antigravity IDE | Pre-push scan transcript | Tự động trên `git push` |
-
-Tất cả prompts và tool calls được log vào `.ai-log/session.jsonl` và tự động submit lên grading server mỗi khi `git push`.
-
-**ChatGPT / web tools khác** — log thủ công:
-```bash
-bash scripts/_pyrun.sh scripts/log_manual.py --tool chatgpt --prompt "What you asked"
+```dotenv
+APP_ENV=production
+AUTH_MODE=firebase
+REPOSITORY_BACKEND=firestore
+STORAGE_BACKEND=gcs
+ANALYSIS_DISPATCHER=cloud_tasks
+EXPERIMENT_DISPATCHER=cloud_tasks
+OPTIMIZATION_EXECUTION_BACKEND=cloud_run_job
+GCP_SERVICE_ACCOUNT_EMAIL=...
+GCS_BUCKET=...
+ANALYSIS_WORKER_URL=...
+ANALYSIS_TASK_AUDIENCE=...
+EXPERIMENT_WORKER_URL=...
+EXPERIMENT_TASK_AUDIENCE=...
 ```
 
-> ⚠️ Chạy `bash scripts/setup_hooks.sh` một lần sau khi clone để cài pre-push hook.
+Model cho mỗi experiment nằm trong request snapshot (`settings.coverup_model`, `settings.optimize_model`). Cloud Run Job nhận chúng thành `COVERUP_MODEL` và `OPTIMIZE_MODEL`; model calls dùng `VERTEXAI_PROJECT`, không dùng project triển khai API để tính billing/quota.
 
-## 📖 Đọc Technical Guidebook
+## Sample API queries
 
-**Online (khuyến nghị):** [phoenix.note.transformerlabs.ai/technical-book](https://phoenix.note.transformerlabs.ai/technical-book)
+Các lệnh sau giả định backend local đang chạy. Trong production, thay base URL và dùng Firebase ID token thật.
 
-Đăng nhập bằng GitHub (cùng account đã được BTC mời vào org `AI20K-Build-Cohort-2`)
-→ chọn tab **Technical Book** ở sidebar trái → đọc 10 chương + topic sections,
-có table of contents bên phải, hỗ trợ light/dark/cyberpunk theme.
+```powershell
+$api = "http://127.0.0.1:8000/api/v1"
+$headers = @{ Authorization = "Bearer dev-token" }
 
-**Offline:** mọi chương đều ở thư mục `docs/guide/` trong template này — mở bằng
-bất kỳ markdown viewer/editor nào (VS Code, Obsidian, GitHub UI, …).
+# 1. Liệt kê bundled samples
+Invoke-RestMethod "$api/projects/samples" -Headers $headers
 
-## 🔗 Liên kết
+# 2. Liệt kê symbols có thể chọn của isort
+$functions = Invoke-RestMethod "$api/projects/sample:isort/functions" -Headers $headers
+$functions.items | Select-Object -First 5 file, qualified_name, statements, branches
 
-- 📖 **Technical Guidebook:** [phoenix.note.transformerlabs.ai/technical-book](https://phoenix.note.transformerlabs.ai/technical-book)
-- 🏫 **AI20K Program:** VinUni AI20K Build Phase
-- 👨‍🏫 **Mentor:** Đặng Hải Lộc
+# 3. Tạo experiment 5 targets (dataset split được snapshot ngay khi tạo)
+$body = @{
+  project_ids = @("sample:isort")
+  name = "isort local sample"
+  max_targets = 5
+  random_seed = 7
+  split_percentages = @{ train = 20; validation = 40; test = 40 }
+} | ConvertTo-Json -Depth 5
+$experiment = Invoke-RestMethod "$api/experiments" -Method Post -Headers $headers -ContentType "application/json" -Body $body
+$experiment | Select-Object id, status, optimization_eligible, dataset_splits
 
-## 📄 License
+# 4. Đọc lại experiment
+Invoke-RestMethod "$api/experiments/$($experiment.id)" -Headers $headers
+```
 
-MIT — Sử dụng tự do cho mục đích giáo dục.
+Không chạy `POST /experiments/{id}/optimize` bằng local-safe profile: endpoint đó cần GCS, Cloud Tasks, Cloud Run Job, Vertex AI credentials và phát sinh chi phí model. Dùng production profile đã provision hoặc CLI benchmark có chủ đích.
+
+## Kiểm tra
+
+Backend/API:
+
+```powershell
+Set-Location app
+$env:PYTHONPATH = (Resolve-Path .).Path
+..\.venv\Scripts\python.exe -m ruff check backend tests
+..\.venv\Scripts\python.exe -m pytest tests -q
+```
+
+Frontend:
+
+```powershell
+Set-Location app\frontend
+npm run format:check
+npm run lint
+npm run typecheck
+npm run test
+npm run build
+```
+
+CoverUp/GEPA invariants (từ root):
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests -q
+.\.venv\Scripts\ruff.exe check src\optimization tests\test_coverage_optimization.py
+.\.venv\Scripts\python.exe -m py_compile src\coverup\coverup.py src\optimization\gepa.py src\optimization\metrics.py src\optimization\cli.py src\optimization\runner.py src\optimization\prompts.py src\optimization\subprocesses.py
+git diff --check
+```
+
+Unit/integration tests không chứng minh prompt mới thắng benchmark. Quyết định promotion phải dùng artifact directory mới, cùng model/config/replicate protocol và locked holdout.
+
+## Repository map
+
+```text
+app/frontend/       React 19 + TypeScript + Vite UI
+app/backend/        FastAPI API, services, repositories và dispatchers
+app/infra/          GCP runtime/provisioning configuration
+cloud/run_job.py    Cloud Run Job wrapper cho GEPA
+src/coverup/        Engine sinh/repair Python tests
+src/optimization/   Dataset evaluation, DSPy/GEPA search, cache, promotion gate
+src/sample_repo/    Bundled snapshots: isort/mimesis/mlxtend/typesystem
+tests/              CoverUp/GEPA invariant tests
+app/tests/          Backend/API tests
+eval/results/       Evaluation evidence và output đã sanitize
+```
+
+Xem [app/Readme.md](app/Readme.md) cho handoff production và [AGENTS.md](AGENTS.md) trước khi sửa optimizer.

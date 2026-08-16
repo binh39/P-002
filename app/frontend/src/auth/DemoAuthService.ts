@@ -3,8 +3,8 @@ import type { AuthService, AuthStateListener, AuthUser } from "@/auth/AuthServic
 const DEMO_SESSION_KEY = "promptopt-demo-session";
 const demoUser: AuthUser = {
   id: "demo-user",
-  name: "Alex Morgan",
-  email: "alex.morgan@company.com",
+  name: "Administrator",
+  email: "admin@gmail.com",
   photoUrl: null,
   role: "Senior Engineer",
 };
@@ -50,6 +50,8 @@ export class DemoAuthService implements AuthService {
   }
 
   async getIdToken() {
-    return null;
+    // The local FastAPI profile still enforces a bearer header and its
+    // DevelopmentTokenVerifier accepts this explicit, non-production token.
+    return "dev-token";
   }
 }

@@ -7,11 +7,10 @@ const tabs = ["General", "AI & Optimization", "Evaluation", "Execution & Securit
 export default function Settings() {
   const [tab, setTab] = useState(tabs[0]);
   return (
-    <div className="platform-page">
+    <div className="platform-page settings-page">
       <PageHeader
         eyebrow="Workspace defaults"
         title="Tool Settings"
-        description="Global defaults inherited by projects and experiments."
         actions={<button className="primary-button">Save changes</button>}
       />
       <div className="settings-layout tool-settings-layout">
