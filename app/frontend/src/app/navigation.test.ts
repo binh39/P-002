@@ -8,7 +8,6 @@ describe("sidebar navigation mapping", () => {
     "/experiments/new",
     "/optimization-runs/run-active",
     "/optimization-runs/run-completed",
-    "/comparison-runs/comparison-1",
     "/runs/legacy-run",
   ])("keeps Experiments active for %s", (pathname) => {
     expect(currentNavigationId(pathname)).toBe("experiments");

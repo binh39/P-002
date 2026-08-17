@@ -167,12 +167,7 @@ export default function Experiments() {
                             Open experiment
                           </button>
                         ) : item.comparisonRunId ? (
-                          <button
-                            className="table-action"
-                            onClick={() => navigate(`/comparison-runs/${item.comparisonRunId}`)}
-                          >
-                            Open comparison
-                          </button>
+                          <span className="muted-cell">Completed</span>
                         ) : (
                           <span className="muted-cell">Draft</span>
                         )}

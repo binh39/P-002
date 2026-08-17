@@ -10,14 +10,12 @@ import Login from "@/pages/Login";
 import NotFound from "@/pages/NotFound";
 import { ThemeProvider } from "@/theme/ThemeProvider";
 
-const Comparison = lazy(() => import("@/pages/Comparison"));
 const CoverageGuide = lazy(() => import("@/pages/CoverageGuide"));
 const CreateExperiment = lazy(() => import("@/pages/CreateExperiment"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Experiments = lazy(() => import("@/pages/Experiments"));
 const OptimizationRun = lazy(() => import("@/pages/OptimizationRun"));
 const Registry = lazy(() => import("@/pages/Registry"));
-const ReviewApproval = lazy(() => import("@/pages/ReviewApproval"));
 const ProjectDetail = lazy(() => import("@/pages/ProjectDetail"));
 const Projects = lazy(() => import("@/pages/Projects"));
 const Settings = lazy(() => import("@/pages/Settings"));
@@ -26,8 +24,6 @@ const legacyPagePaths = {
   dashboard: "/dashboard",
   experiments: "/experiments/new",
   optimization: "/experiments",
-  comparison: "/experiments",
-  review: "/review",
   registry: "/prompts",
   settings: "/settings",
 } as const;
@@ -114,14 +110,8 @@ function RoutedApplication() {
           <Route path="/docs/coverage">
             <CoverageGuide />
           </Route>
-          <Route path="/comparison-runs/:runId">
-            <Comparison />
-          </Route>
           <Route path="/optimization-runs/:runId">
             <OptimizationRun />
-          </Route>
-          <Route path="/review">
-            <ReviewApproval />
           </Route>
           <Route path="/prompts">
             <Registry />

@@ -11,6 +11,8 @@ describe("coverage guide", () => {
 
     expect(screen.getByRole("heading", { name: "Statement coverage" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Branch coverage" })).toBeInTheDocument();
+    expect(screen.getByText("30% + 70%")).toBeInTheDocument();
+    expect(screen.getByText("Score = 0.3 × SC + 0.7 × BC")).toBeInTheDocument();
     expect(screen.getByText("50%", { selector: ".branch-ring strong" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Both tests" }));

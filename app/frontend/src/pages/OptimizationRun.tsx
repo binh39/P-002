@@ -452,12 +452,7 @@ export default function OptimizationRun() {
             </p>
           </div>
           {experiment?.comparisonRunId ? (
-            <button
-              className="primary-button"
-              onClick={() => navigate(`/comparison-runs/${experiment.comparisonRunId}`)}
-            >
-              Open paired results
-            </button>
+            <StatusBadge tone="success">Paired evaluation complete</StatusBadge>
           ) : (
             <StatusBadge tone="info">Finalizing paired result…</StatusBadge>
           )}

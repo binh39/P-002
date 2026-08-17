@@ -55,4 +55,18 @@ describe("experiments list", () => {
 
     expect(mocks.navigate).toHaveBeenCalledWith("/optimization-runs/optimization-1");
   });
+
+  it("does not link comparison-only experiments to the removed results page", async () => {
+    mocks.experiments.list.mockResolvedValueOnce([
+      {
+        ...(await mocks.experiments.list())[0],
+        optimizationRunId: null,
+      },
+    ]);
+
+    render(<Experiments />, { wrapper: Wrapper });
+
+    expect(await screen.findByText("Completed")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open comparison" })).not.toBeInTheDocument();
+  });
 });
