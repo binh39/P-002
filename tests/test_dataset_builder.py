@@ -30,9 +30,9 @@ def _symbols(functions) -> list[str]:
 @pytest.mark.parametrize(
     ("total", "expected"),
     [
-        (24, {"train": 5, "validation": 10, "test": 9}),
-        (32, {"train": 6, "validation": 13, "test": 13}),
-        (40, {"train": 8, "validation": 16, "test": 16}),
+        (24, {"train": 12, "validation": 6, "test": 6}),
+        (32, {"train": 16, "validation": 8, "test": 8}),
+        (40, {"train": 20, "validation": 10, "test": 10}),
     ],
 )
 def test_isort_stratified_split_is_deterministic_and_exact(total, expected):
@@ -44,13 +44,13 @@ def test_isort_stratified_split_is_deterministic_and_exact(total, expected):
 
 
 def test_isort_stratified_split_balances_each_full_difficulty_band():
-    assignments = stratified_split_names(40, seed=115, stratum_size=5)
+    assignments = stratified_split_names(40, seed=115, stratum_size=4)
 
-    for start in range(0, 40, 5):
-        assert Counter(assignments[start : start + 5]) == {
-            "train": 1,
-            "validation": 2,
-            "test": 2,
+    for start in range(0, 40, 4):
+        assert Counter(assignments[start : start + 4]) == {
+            "train": 2,
+            "validation": 1,
+            "test": 1,
         }
 
 
@@ -59,7 +59,7 @@ def test_isort_balanced_stratification_reduces_split_difficulty_skew():
     statements = [value + index % 7 for index, value in enumerate(branches)]
 
     assignments = balanced_stratified_split_names(
-        branches, statements, seed=115, stratum_size=5, trials=500
+        branches, statements, seed=115, stratum_size=4, trials=500
     )
     means = {
         split: sum(
@@ -71,7 +71,7 @@ def test_isort_balanced_stratification_reduces_split_difficulty_skew():
         for split in ("train", "validation", "test")
     }
 
-    assert Counter(assignments) == {"train": 8, "validation": 16, "test": 16}
+    assert Counter(assignments) == {"train": 20, "validation": 10, "test": 10}
     assert max(means.values()) - min(means.values()) < 5
 
 

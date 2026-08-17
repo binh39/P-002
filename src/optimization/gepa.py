@@ -186,9 +186,12 @@ class BestParetoCandidateSelector:
 
 
 def log_reflection_request(request: Mapping[str, Any]) -> None:
-    """Print the exact native-tool request sent to the optimization model."""
+    """Print the exact request using an encoding-safe JSON representation."""
     print(REFLECTION_REQUEST_BEGIN, flush=True)
-    print(json.dumps(request, indent=2, ensure_ascii=False), flush=True)
+    # Windows PowerShell may expose stdout as cp1252 when output is piped through
+    # Tee-Object. JSON escapes preserve the exact payload after decoding while
+    # preventing an unrelated Unicode character from aborting GEPA reflection.
+    print(json.dumps(request, indent=2, ensure_ascii=True), flush=True)
     print(REFLECTION_REQUEST_END, flush=True)
 
 
@@ -240,6 +243,23 @@ def _compile_strategy_playbook(template: str, playbook: Mapping[str, list[str]])
             sections.append(f"{prefix} {normalized}")
     sections.append(f"\n{STRATEGY_PLAYBOOK_END}")
     return f"{base}\n\n" + "\n".join(sections)
+
+
+def _normalize_proposed_template(template: str) -> str:
+    """Repair a complete template that was escaped a second time by the LM.
+
+    Some tool-capable models return a function argument whose newlines are still
+    represented by literal ``\\n`` sequences.  JSON decoding has already happened
+    by this point, so a replacement containing no real newlines and several
+    escaped ones is unambiguously a double-escaped multiline template.  Keep
+    isolated escape sequences intact because they may be intentional examples.
+    """
+    normalized = template.strip()
+    if "\n" not in normalized and normalized.count("\\n") >= 2:
+        normalized = normalized.replace("\\r\\n", "\n")
+        normalized = normalized.replace("\\n", "\n")
+        normalized = normalized.replace("\\t", "\t")
+    return normalized
 
 
 def _digest_lock(key: str) -> threading.Lock:
@@ -1145,6 +1165,7 @@ class PromptOptimizationResult:
     reflection_temperature: float
     best_candidate_probability: float
     max_metric_calls: int
+    proposal_max_prompt_chars: int | None
     baseline_metrics: dict[str, float] | None = None
     rerank: dict[str, Any] | None = None
 
@@ -1160,6 +1181,7 @@ class PromptOptimizationResult:
                 "reflection_temperature": self.reflection_temperature,
                 "best_candidate_probability": self.best_candidate_probability,
                 "max_metric_calls": self.max_metric_calls,
+                "proposal_max_prompt_chars": self.proposal_max_prompt_chars,
             },
             "baseline_metrics": self.baseline_metrics,
             "rerank": self.rerank,
@@ -1175,6 +1197,7 @@ class PromptRerankResult:
     replicates: int
     length_penalty_per_1k: float
     max_prompt_chars: int | None
+    max_target_regression: float | None
     filtered_candidates: list[dict[str, Any]]
 
     def as_dict(self) -> dict[str, Any]:
@@ -1185,6 +1208,7 @@ class PromptRerankResult:
             "replicates": self.replicates,
             "length_penalty_per_1k": self.length_penalty_per_1k,
             "max_prompt_chars": self.max_prompt_chars,
+            "max_target_regression": self.max_target_regression,
             "filtered_candidates": self.filtered_candidates,
             "leaderboard": self.leaderboard,
         }
@@ -1203,6 +1227,7 @@ def rerank_prompt_candidates(
     split: str = "validation",
     length_penalty_per_1k: float = 0.0,
     max_prompt_chars: int | None = None,
+    max_target_regression: float | None = None,
 ) -> PromptRerankResult:
     """Rerank noisy GEPA finalists without consulting the locked holdout."""
     if split != "validation":
@@ -1217,6 +1242,14 @@ def rerank_prompt_candidates(
         raise ValueError("length_penalty_per_1k must be a finite non-negative value")
     if max_prompt_chars is not None and max_prompt_chars < 1:
         raise ValueError("max_prompt_chars must be positive when configured")
+    if (
+        max_target_regression is not None
+        and (
+            not math.isfinite(max_target_regression)
+            or not 0.0 <= max_target_regression <= 1.0
+        )
+    ):
+        raise ValueError("max_target_regression must be between 0 and 1")
     if len(candidates) != len(validation_scores):
         raise ValueError("Candidate and validation score counts must match")
     if error := validate_bundle(baseline):
@@ -1292,6 +1325,10 @@ def rerank_prompt_candidates(
         expected_targets=validation_targets,
     )
     reference_results = baseline_evaluation["results"]
+    baseline_target_scores = {
+        _result_identity(row): float(row.get("score", 0.0))
+        for row in reference_results
+    }
 
     bundles_by_digest = {digest: bundle for digest, bundle, _ in pool}
     leaderboard: list[dict[str, Any]] = []
@@ -1329,6 +1366,33 @@ def rerank_prompt_candidates(
             or row.get("coverage", {}).get("valid") is False
             for row in raw_rows
         )
+        target_regressions = []
+        for row in evaluation["results"]:
+            identity = _result_identity(row)
+            if identity not in baseline_target_scores:
+                continue
+            target_regressions.append({
+                "project": identity[0],
+                "source_file": identity[1],
+                "symbol": identity[2],
+                "baseline_score": baseline_target_scores[identity],
+                "candidate_score": float(row.get("score", 0.0)),
+                "delta": float(row.get("score", 0.0))
+                - baseline_target_scores[identity],
+            })
+        worst_target = min(
+            target_regressions,
+            key=lambda value: value["delta"],
+            default=None,
+        )
+        worst_target_delta = (
+            float(worst_target["delta"]) if worst_target is not None else 0.0
+        )
+        regression_guard_passed = (
+            digest == baseline_digest
+            or max_target_regression is None
+            or worst_target_delta >= -max_target_regression
+        )
         leaderboard.append({
             "digest": digest,
             "is_baseline": digest == baseline_digest,
@@ -1340,6 +1404,9 @@ def rerank_prompt_candidates(
             "replicate_scores": replicate_scores,
             "run_ids": evaluation["run_ids"],
             "tests_workspaces": evaluation["tests_workspaces"],
+            "worst_target": worst_target,
+            "worst_target_delta": worst_target_delta,
+            "regression_guard_passed": regression_guard_passed,
         })
 
     for row in leaderboard:
@@ -1348,6 +1415,7 @@ def rerank_prompt_candidates(
         row["selection_score"] = row["mean_score"] - row["length_penalty"]
 
     leaderboard.sort(key=lambda row: (
+        not row["regression_guard_passed"],
         -round(row["selection_score"], 12),
         round(row["failure_rate"], 12),
         round(row["score_stddev"], 12),
@@ -1365,6 +1433,7 @@ def rerank_prompt_candidates(
         replicates=replicates,
         length_penalty_per_1k=length_penalty_per_1k,
         max_prompt_chars=max_prompt_chars,
+        max_target_regression=max_target_regression,
         filtered_candidates=filtered_candidates,
     )
 
@@ -1381,6 +1450,7 @@ class CoverUpPromptAdapter:
         baseline: PromptBundle,
         reflection_lm: Any,
         evaluation_replicates: int = 1,
+        max_bundle_chars: int | None = None,
     ) -> None:
         self.runner = runner
         self.candidate_dir = candidate_dir
@@ -1389,6 +1459,12 @@ class CoverUpPromptAdapter:
         self.baseline_digest = bundle_digest(baseline)
         self.reflection_lm = reflection_lm
         self.evaluation_replicates = evaluation_replicates
+        baseline_chars = len(baseline.initial) + len(baseline.error or "")
+        if max_bundle_chars is not None and max_bundle_chars < baseline_chars:
+            raise ValueError(
+                "max_bundle_chars cannot be smaller than the baseline prompt"
+            )
+        self.max_bundle_chars = max_bundle_chars
         self.reference_units: dict[tuple[str, str, str, str], tuple[int, int]] = {}
         self.max_component_chars = {
             name: max(4_000, len(text) * 6)
@@ -1921,7 +1997,18 @@ class CoverUpPromptAdapter:
             component: {
                 "role": COMPONENT_ROLES[component],
                 "required_literal_placeholders": list(COMPONENT_PLACEHOLDERS[component]),
-                "maximum_characters": self.max_component_chars[component],
+                "maximum_characters": min(
+                    self.max_component_chars[component],
+                    (
+                        self.max_bundle_chars
+                        - sum(
+                            len(text) for name, text in candidate.items()
+                            if name != component
+                        )
+                        if self.max_bundle_chars is not None
+                        else self.max_component_chars[component]
+                    ),
+                ),
             }
             for component in evidence
         }
@@ -1947,6 +2034,8 @@ Labelled end-to-end execution evidence by component:
 In one decision, choose `initial`, `error`, or `all`, then call `update_prompt_component` exactly once with every complete revised template selected. `all` is always allowed, even when direct evidence exists for only one stage. When selecting `all`, provide both `initial` and `error` replacements and change both; the update is rejected atomically otherwise. For a single component, provide only that component's replacement.
 
 Use the full initial -> failing test -> error -> repaired test -> outcome episodes for causal attribution. Induce a reusable strategy playbook rather than making a narrow textual patch. For every selected component, return a FULL consolidated playbook containing key observations, a concrete multi-step decision procedure, failure modes, and regression guards. Preserve inherited strategies supported by positive or tied evidence; refine or prune one only when contrastive evidence justifies it. Describe the changes in strategy_delta.
+
+Prefer a small causal change supported by repeated or contrastive evidence. Do not turn a single target-specific failure into a universal rule, do not restate instructions already present in the operational template, and do not add generic advice that cannot change test-generation behavior. When evidence conflicts, preserve the baseline behavior and change only the demonstrated weakness.
 
 Start diagnosis from the structured `failure_stage`, `failure_type`, `actionable_frame`, and inherited root failure on exhausted repairs. Use the clipped raw traceback only as supporting detail. Distinguish generation, collection, execution, assertion, repair, and coverage failures instead of treating every zero score as the same problem.
 
@@ -2021,6 +2110,7 @@ The replacement is the complete operational template excluding the managed playb
                     selection=selection, detail=component,
                 )
                 return proposals
+            replacement = _normalize_proposed_template(replacement)
             replacement = _compile_strategy_playbook(
                 replacement, playbooks[component]
             )
@@ -2050,6 +2140,22 @@ The replacement is the complete operational template excluding the managed playb
             return proposals
         proposals.update(replacements)
         proposed_candidate = {**candidate, **proposals}
+        proposed_chars = sum(len(text) for text in proposed_candidate.values())
+        if (
+            self.max_bundle_chars is not None
+            and proposed_chars > self.max_bundle_chars
+        ):
+            self._log_reflection_decision(
+                candidate,
+                components_to_update,
+                status="candidate_too_long",
+                selection=selection,
+                detail=f"{proposed_chars}>{self.max_bundle_chars}",
+            )
+            return {
+                component: candidate[component]
+                for component in components_to_update
+            }
         changed_components = [
             component for component in components_to_update
             if proposed_candidate[component] != candidate[component]
@@ -2106,9 +2212,10 @@ def _optimization_run_digest(
     reflection_temperature: float,
     best_candidate_probability: float,
     max_metric_calls: int,
+    proposal_max_prompt_chars: int | None,
 ) -> str:
     payload = {
-        "optimizer_schema": 16,
+        "optimizer_schema": 17,
         "baseline": baseline.as_candidate(),
         "train": [_target_identity(target) for target in train_targets],
         "validation": [_target_identity(target) for target in validation_targets],
@@ -2118,6 +2225,7 @@ def _optimization_run_digest(
         "reflection_temperature": reflection_temperature,
         "best_candidate_probability": best_candidate_probability,
         "max_metric_calls": max_metric_calls,
+        "proposal_max_prompt_chars": proposal_max_prompt_chars,
         "train_evaluation": _evaluation_digest(runner, train_targets),
         "validation_evaluation": _evaluation_digest(runner, validation_targets),
     }
@@ -2195,6 +2303,8 @@ def optimize(
     rerank_replicates: int = 3,
     rerank_length_penalty_per_1k: float = 0.0,
     rerank_max_prompt_chars: int | None = None,
+    rerank_max_target_regression: float | None = None,
+    proposal_max_prompt_chars: int | None = None,
 ) -> PromptOptimizationResult:
     """Optimize the initial and error prompt components."""
     if error := validate_bundle(baseline):
@@ -2229,6 +2339,7 @@ def optimize(
         baseline=baseline,
         reflection_lm=reflection_lm,
         evaluation_replicates=evaluation_replicates,
+        max_bundle_chars=proposal_max_prompt_chars,
     )
     validation_baseline_aggregate: dict[str, Any] | None = None
     for preflight_split, preflight_targets in (
@@ -2277,6 +2388,7 @@ def optimize(
         reflection_temperature,
         best_candidate_probability,
         max_metric_calls,
+        proposal_max_prompt_chars,
     )
     result = gepa_core.optimize(
         seed_candidate=baseline.as_candidate(),
@@ -2323,6 +2435,7 @@ def optimize(
             split="validation",
             length_penalty_per_1k=rerank_length_penalty_per_1k,
             max_prompt_chars=rerank_max_prompt_chars,
+            max_target_regression=rerank_max_target_regression,
         )
         best_bundle = rerank.selected_bundle
     return PromptOptimizationResult(
@@ -2336,6 +2449,7 @@ def optimize(
         reflection_temperature=reflection_temperature,
         best_candidate_probability=best_candidate_probability,
         max_metric_calls=max_metric_calls,
+        proposal_max_prompt_chars=proposal_max_prompt_chars,
         baseline_metrics=baseline_metrics,
         rerank=rerank.as_dict() if rerank is not None else None,
     )

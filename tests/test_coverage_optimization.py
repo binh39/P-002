@@ -31,6 +31,7 @@ from src.optimization.gepa import (
     CoverUpPromptAdapter,
     LLMReflectionComponentSelector,
     _evaluation_digest,
+    _normalize_proposed_template,
     build_coverage_report,
     bundle_digest,
     evaluate_bundle_batch_cached,
@@ -1042,6 +1043,93 @@ def test_rerank_rejects_locked_test_split():
         )
 
 
+def test_rerank_regression_guard_rejects_catastrophic_target_drop(
+    tmp_path, monkeypatch,
+):
+    baseline = baseline_bundle()
+    candidate = PromptBundle(
+        initial=baseline.initial + " Candidate strategy.", error=baseline.error,
+    )
+    targets = [
+        SymbolTarget("project", "pkg/module.py", "first", "validation"),
+        SymbolTarget("project", "pkg/module.py", "second", "validation"),
+    ]
+    scores = {
+        bundle_digest(baseline): [0.40, 0.40],
+        bundle_digest(candidate): [1.00, 0.00],
+    }
+
+    def fake_repeated(
+        runner,
+        batch_targets,
+        bundle,
+        candidate_dir,
+        *,
+        split,
+        workspace_kind,
+        replicates,
+        reference_results=None,
+    ):
+        del runner, candidate_dir, split, workspace_kind, reference_results
+        values = scores[bundle_digest(bundle)]
+        rows = []
+        for target, value in zip(batch_targets, values, strict=True):
+            rows.append({
+                "target": target.__dict__,
+                "score": value,
+                "coverage": {
+                    "valid": True,
+                    "covered_statements": int(value * 100),
+                    "num_statements": 100,
+                    "covered_branches": 0,
+                    "num_branches": 0,
+                },
+                "feedback": "ok",
+            })
+        batches = [{"results": rows} for _ in range(replicates)]
+        return {
+            "results": rows,
+            "aggregate": aggregate_coverage_score(rows),
+            "batches": batches,
+            "run_ids": [],
+            "tests_workspaces": [],
+        }
+
+    monkeypatch.setattr(
+        "src.optimization.gepa.evaluate_bundle_repeated", fake_repeated,
+    )
+    result = rerank_prompt_candidates(
+        runner=None,
+        validation_targets=targets,
+        baseline=baseline,
+        candidates=[baseline, candidate],
+        validation_scores=[0.40, 0.50],
+        candidate_dir=tmp_path / "candidates",
+        top_k=2,
+        replicates=3,
+        max_target_regression=0.30,
+    )
+
+    assert result.selected_bundle == baseline
+    candidate_row = next(
+        row for row in result.leaderboard if not row["is_baseline"]
+    )
+    assert candidate_row["mean_score"] == pytest.approx(0.50)
+    assert candidate_row["regression_guard_passed"] is False
+    assert candidate_row["worst_target_delta"] == pytest.approx(-0.40)
+    assert candidate_row["worst_target"]["symbol"] == "second"
+
+
+def test_normalize_proposed_template_repairs_double_escaped_multiline_text():
+    original = "First line.\nSecond line.\nThird line with {filename}."
+    double_escaped = original.replace("\n", "\\n")
+
+    assert _normalize_proposed_template(double_escaped) == original
+    assert _normalize_proposed_template(
+        'Keep the literal "\\n" example.\nContinue here.'
+    ) == 'Keep the literal "\\n" example.\nContinue here.'
+
+
 def test_rerank_length_objective_can_select_baseline_or_filter_bloat(
     tmp_path, monkeypatch,
 ):
@@ -1282,7 +1370,10 @@ def test_reflection_request_log_contains_exact_model_payload(capsys):
     request = {
         "messages": [
             {"role": "system", "content": "system instructions"},
-            {"role": "user", "content": "full evidence\nwith newline"},
+            {
+                "role": "user",
+                "content": "full evidence\nwith Unicode: → tiếng Việt",
+            },
         ],
         "tools": [{"type": "function", "function": {"name": "update"}}],
         "tool_choice": {"type": "function", "function": {"name": "update"}},
@@ -1296,6 +1387,7 @@ def test_reflection_request_log_contains_exact_model_payload(capsys):
     payload = output.removeprefix(
         "PROMPTOPT_REFLECTION_REQUEST_BEGIN\n"
     ).removesuffix("PROMPTOPT_REFLECTION_REQUEST_END\n")
+    assert "\\u2192" in payload
     assert json.loads(payload) == request
 
 
@@ -3376,6 +3468,8 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
         rerank_replicates=4,
         rerank_length_penalty_per_1k=0.025,
         rerank_max_prompt_chars=12_000,
+        rerank_max_target_regression=0.30,
+        proposal_max_prompt_chars=3_000,
     )
 
     assert captured["seed_candidate"] == baseline.as_candidate()
@@ -3393,12 +3487,14 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
     assert captured_rerank["replicates"] == 4
     assert captured_rerank["length_penalty_per_1k"] == 0.025
     assert captured_rerank["max_prompt_chars"] == 12_000
+    assert captured_rerank["max_target_regression"] == 0.30
     assert result.as_dict()["optimizer_config"] == {
         "gepa_seed": 19,
         "reflection_minibatch_size": 3,
         "reflection_temperature": 0.2,
         "best_candidate_probability": 0.5,
         "max_metric_calls": 2,
+        "proposal_max_prompt_chars": 3_000,
     }
 
 

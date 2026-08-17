@@ -1,8 +1,9 @@
 """Build a branch-ranked isort dataset split by a deterministic seed.
 
 Selected ``--functions`` most-branch-heavy isort functions are allocated in
-seeded difficulty strata and split into train / validation / test at 20 / 40 /
-40. This keeps branch-heavy and easier targets represented in every split.
+seeded difficulty strata and split into train / validation / test at 50 / 25 /
+25. The larger train split gives GEPA enough contrasting failures to reflect
+on, while the smaller validation split makes each search proposal affordable.
 This is the dataset the ``optimize`` experiment reads:
 
     python scripts/build_my_isort_dataset.py --functions 160
@@ -31,9 +32,9 @@ from src.optimization.dataset_builder import (  # noqa: E402
 )
 
 ISORT_PACKAGE = ROOT / "src" / "sample_repo" / "isort" / "isort"
-TRAIN_RATIO = 0.20
-VALIDATION_RATIO = 0.40
-TEST_RATIO = 0.40
+TRAIN_RATIO = 0.50
+VALIDATION_RATIO = 0.25
+TEST_RATIO = 0.25
 SPLITS = ("train", "validation", "test")
 
 
@@ -62,10 +63,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument(
         "--stratum-size",
         type=int,
-        default=5,
+        default=4,
         help=(
             "Adjacent difficulty-ranked targets per allocation stratum "
-            "(default: 5, matching the 20/40/40 ratio)"
+            "(default: 4, matching the 50/25/25 ratio)"
         ),
     )
     return result
@@ -74,15 +75,24 @@ def parser() -> argparse.ArgumentParser:
 def _split_counts(total: int) -> dict[str, int]:
     train = round(total * TRAIN_RATIO)
     validation = round(total * VALIDATION_RATIO)
-    return {
+    counts = {
         "train": train,
         "validation": validation,
         "test": total - train - validation,
     }
+    # Preserve the public contract that every valid dataset has all three
+    # splits, including the smallest supported total of three targets.
+    for split in SPLITS:
+        if counts[split] > 0:
+            continue
+        donor = max(SPLITS, key=lambda name: counts[name])
+        counts[donor] -= 1
+        counts[split] += 1
+    return counts
 
 
 def stratified_split_names(
-    total: int, *, seed: int, stratum_size: int = 5,
+    total: int, *, seed: int, stratum_size: int = 4,
 ) -> list[str]:
     """Allocate adjacent difficulty ranks proportionally across every split."""
     if total < 3:
@@ -135,7 +145,7 @@ def balanced_stratified_split_names(
     statements: list[int],
     *,
     seed: int,
-    stratum_size: int = 5,
+    stratum_size: int = 4,
     trials: int = 2_000,
 ) -> list[str]:
     """Choose a seeded stratified allocation with balanced per-target difficulty."""

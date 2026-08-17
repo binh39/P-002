@@ -189,6 +189,19 @@ def parser() -> argparse.ArgumentParser:
         help="Discard non-baseline rerank candidates above this total char cap",
     )
     tune.add_argument(
+        "--proposal-max-prompt-chars",
+        type=int,
+        help="Reject GEPA proposals above this total prompt character cap",
+    )
+    tune.add_argument(
+        "--rerank-max-target-regression",
+        type=float,
+        help=(
+            "Disqualify a rerank candidate when its mean score on any validation "
+            "target drops by more than this amount versus baseline"
+        ),
+    )
+    tune.add_argument(
         "--search-only",
         action="store_true",
         help="Save GEPA candidates without evaluating or opening the final holdout",
@@ -290,6 +303,14 @@ def parser() -> argparse.ArgumentParser:
     rerank.add_argument("--replicates", type=int, default=3)
     rerank.add_argument("--length-penalty-per-1k", type=float, default=0.0)
     rerank.add_argument("--max-prompt-chars", type=int)
+    rerank.add_argument(
+        "--max-target-regression",
+        type=float,
+        help=(
+            "Disqualify a candidate when any validation target regresses by more "
+            "than this amount versus baseline"
+        ),
+    )
     rerank.add_argument("--report-output", type=Path)
     rerank.add_argument("--output-prompt", type=Path)
 
@@ -801,6 +822,7 @@ def rerank_saved_program(args: argparse.Namespace) -> None:
             getattr(args, "length_penalty_per_1k", 0.0)
         ),
         max_prompt_chars=getattr(args, "max_prompt_chars", None),
+        max_target_regression=getattr(args, "max_target_regression", None),
     )
     artifacts.mkdir(parents=True, exist_ok=True)
     configured_report_output = getattr(args, "report_output", None)
@@ -831,7 +853,8 @@ def rerank_saved_program(args: argparse.Namespace) -> None:
         print(
             f"  #{row['rank']} {row['digest']} mean={row['mean_score']:.4f} "
             f"selection={row['selection_score']:.4f} "
-            f"std={row['score_stddev']:.4f} failures={row['failure_rate']:.2%}"
+            f"std={row['score_stddev']:.4f} failures={row['failure_rate']:.2%} "
+            f"regression_guard={'pass' if row['regression_guard_passed'] else 'fail'}"
         )
 
 
@@ -898,6 +921,12 @@ def tune(args: argparse.Namespace) -> None:
             getattr(args, "rerank_length_penalty_per_1k", 0.0)
         ),
         rerank_max_prompt_chars=getattr(args, "rerank_max_prompt_chars", None),
+        rerank_max_target_regression=getattr(
+            args, "rerank_max_target_regression", None
+        ),
+        proposal_max_prompt_chars=getattr(
+            args, "proposal_max_prompt_chars", None
+        ),
     )
     artifacts.mkdir(parents=True, exist_ok=True)
     configured_program_output = getattr(args, "program_output", None)
@@ -1440,7 +1469,12 @@ def main() -> None:
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is not None:
-            reconfigure(line_buffering=True, write_through=True)
+            reconfigure(
+                encoding="utf-8",
+                errors="backslashreplace",
+                line_buffering=True,
+                write_through=True,
+            )
     # Load model defaults before argparse evaluates environment-backed options.
     load_dotenv(Path.cwd() / ".env")
     args = parser().parse_args()
