@@ -23,12 +23,7 @@ import {
 import { useRepositories } from "@/app/providers";
 import type { ExperimentStatus, Kpi } from "@/domain/dashboard";
 
-type Page =
-  | "dashboard"
-  | "experiments"
-  | "optimization"
-  | "registry"
-  | "settings";
+type Page = "dashboard" | "experiments" | "optimization" | "registry" | "settings";
 
 interface Props {
   onNavigate: (page: Page) => void;
