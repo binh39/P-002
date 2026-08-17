@@ -135,7 +135,7 @@ export default function CoverageGuide() {
         </div>
         <div className="coverage-score-preview" aria-label="Coverage score formula">
           <span>PromptOpt evaluation score</span>
-          <strong>40% + 60%</strong>
+          <strong>30% + 70%</strong>
           <div>
             <i className="statement-dot" /> Statement
             <i className="branch-dot" /> Branch
@@ -326,7 +326,7 @@ export default function CoverageGuide() {
         </div>
         <div className="score-equation" aria-label="Project evaluation score formula">
           <span>Evaluation score</span>
-          <strong>Score = 0.4 × SC + 0.6 × BC</strong>
+          <strong>Score = 0.3 × SC + 0.7 × BC</strong>
           <small>
             Branch coverage has more weight because it reflects execution-path diversity.
           </small>

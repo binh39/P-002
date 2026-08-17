@@ -137,6 +137,7 @@ describe("optimization run", () => {
     expect(screen.getByText("Repair the failing test.")).toBeInTheDocument();
     expect(screen.getByText("Parent minibatch sum")).toBeInTheDocument();
     expect(screen.getByText("Best validation candidate")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open paired results" })).not.toBeInTheDocument();
     expect(
       screen.getByText(
         /micro-averaged over executable units for the same aggregate-best candidate/i,

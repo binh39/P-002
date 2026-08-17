@@ -27,8 +27,6 @@ type Page =
   | "dashboard"
   | "experiments"
   | "optimization"
-  | "comparison"
-  | "review"
   | "registry"
   | "settings";
 

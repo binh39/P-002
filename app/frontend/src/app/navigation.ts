@@ -14,8 +14,7 @@ export function currentNavigationId(pathname: string): NavigationId {
   if (
     pathname.startsWith("/experiments") ||
     pathname.startsWith("/runs") ||
-    pathname.startsWith("/optimization-runs") ||
-    pathname.startsWith("/comparison-runs")
+    pathname.startsWith("/optimization-runs")
   ) {
     return "experiments";
   }
