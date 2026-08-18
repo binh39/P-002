@@ -50,6 +50,32 @@ load_dotenv()
 load_dotenv(find_dotenv('.env.coverup'), override=False)
 
 
+def _coverage_for_segment(coverage: dict, seg: object) -> dict | None:
+    """Find a segment's file even when the coverage tool changes path style.
+
+    SlipCover can emit a path relative to the working directory for sources
+    inside it, but an absolute path for an uploaded source staged elsewhere.
+    The initial suite and the generated-test subprocess do not necessarily
+    choose the same representation, so matching only the original JSON key
+    incorrectly reports a valid generated test as having no coverage gain.
+    """
+    files = coverage.get('files', {})
+    if result := files.get(str(seg.filename)):
+        return result
+
+    wanted = seg.path.resolve()
+    for filename, result in files.items():
+        candidate = Path(filename)
+        if not candidate.is_absolute():
+            candidate = Path.cwd() / candidate
+        try:
+            if candidate.resolve() == wanted:
+                return result
+        except OSError:
+            continue
+    return None
+
+
 def parse_args(args=None):
     ap = argparse.ArgumentParser(prog='CoverUp',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -843,7 +869,7 @@ async def improve_coverage(
             component = "error"
             continue
 
-        result = coverage['files'].get(seg.filename, None)
+        result = _coverage_for_segment(coverage, seg)
         new_lines = set(result['executed_lines']) if result else set()
         new_branches = set(tuple(b) for b in result['executed_branches']) if (result and \
                                                                               'executed_branches' in result) \

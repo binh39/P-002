@@ -23,11 +23,12 @@ from src.optimization.project_setup import prepare_project
 MAX_ARCHIVE_ENTRIES = 20_000
 MAX_UNCOMPRESSED_BYTES = 250 * 1024 * 1024
 MAX_FILE_BYTES = 25 * 1024 * 1024
-RUNTIME_PROTOCOL_VERSION = 5
+RUNTIME_PROTOCOL_VERSION = 6
 RUNTIME_TOOL_PACKAGES = (
     "pytest==9.1.1",
     "pytest-asyncio==1.4.0",
     "pytest-repeat==0.9.4",
+    "pytest-timeout==2.4.0",
     "coverage==7.15.2",
     "slipcover==1.0.18",
 )
@@ -186,6 +187,28 @@ def detect_layout(root: Path, configured_source: str = "src", configured_tests: 
     return source, tests
 
 
+def _runtime_test_directory(root: Path, tests: Path) -> Path:
+    """Choose a bounded unit-test target for runtime admission.
+
+    Large repositories often keep executable integration harnesses below a
+    singular ``test/`` directory. Importing those files with plain pytest can
+    execute command-line entry points during collection. Prefer an explicit
+    unit-test subtree and represent integration-only/no-test projects with an
+    empty directory instead of ever collecting the repository root.
+    """
+    if tests.is_dir():
+        for name in ("units", "unit"):
+            unit_tests = tests / name
+            if unit_tests.is_dir():
+                return unit_tests
+        if not (tests / "integration").is_dir():
+            return tests
+
+    empty_tests = root / ".promptopt-empty-tests"
+    empty_tests.mkdir(parents=True, exist_ok=True)
+    return empty_tests
+
+
 def _detect_source(root: Path) -> Path:
     # Python projects commonly place import packages under src/ or lib/.
     # Treat these as generic source containers rather than assuming src/ only.
@@ -261,6 +284,7 @@ def prepare_environment(
             safe_extract_zip(spec.archive, extracted)
             root = find_project_root(extracted).resolve()
             source, test_dir = detect_layout(root, spec.configured_source, spec.configured_tests)
+            test_dir = _runtime_test_directory(root, test_dir)
             dependency_files = [name for name in DEPENDENCY_FILES if (root / name).is_file()]
             roots[spec.project_id] = root
             sources[spec.project_id] = source
@@ -374,7 +398,7 @@ def prepare_environment(
 
         for project_id in roots:
             project_result = result.projects[project_id]
-            pytest_target = tests[project_id] if tests[project_id].is_dir() else roots[project_id]
+            pytest_target = tests[project_id]
             collect = _run(
                 result,
                 f"collect tests for {project_id}",

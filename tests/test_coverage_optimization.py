@@ -3113,6 +3113,31 @@ def test_coverup_trace_preserves_component_level_attempt_history(tmp_path, monke
     assert seen_pytest_args == ["--count 2", "--count 2"]
 
 
+def test_coverup_matches_absolute_generated_coverage_to_relative_segment(tmp_path, monkeypatch):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    coverup_module = importlib.import_module("coverup.coverup")
+    source = tmp_path / "outside-workdir" / "pkg" / "a.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("def target():\n    return 1\n", encoding="utf-8")
+    segment = SimpleNamespace(filename="pkg/a.py", path=source)
+
+    result = coverup_module._coverage_for_segment(
+        {
+            "files": {
+                str(source.resolve()): {
+                    "executed_lines": [1, 2],
+                    "executed_branches": [],
+                }
+            }
+        },
+        segment,
+    )
+
+    assert result == {"executed_lines": [1, 2], "executed_branches": []}
+
+
 def test_coverup_stops_after_no_gain_without_a_third_prompt_component(
     tmp_path,
     monkeypatch,
