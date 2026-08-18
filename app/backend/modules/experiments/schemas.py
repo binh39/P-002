@@ -120,6 +120,7 @@ class ProjectSnapshot(StrictModel):
     runtime_artifact_prefix: str | None = None
     runtime_environment_id: str | None = None
     runtime_bundle_object: str | None = None
+    runtime_protocol_version: int = 1
 
 
 class CreateExperimentRequest(StrictModel):

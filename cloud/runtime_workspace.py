@@ -20,8 +20,22 @@ from pathlib import Path, PurePosixPath
 MAX_ARCHIVE_ENTRIES = 20_000
 MAX_UNCOMPRESSED_BYTES = 250 * 1024 * 1024
 MAX_FILE_BYTES = 25 * 1024 * 1024
-RUNTIME_PROTOCOL_VERSION = 2
+# Bump whenever the reusable virtual environment gains a runner dependency.
+# Existing bundles are immutable and must be rebuilt under the new protocol.
+RUNTIME_PROTOCOL_VERSION = 3
 _PACKAGE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+RUNTIME_TOOL_REQUIREMENTS = (
+    "pytest==9.1.1",
+    "pytest-repeat==0.9.4",
+    "coverage==7.15.2",
+    "slipcover==1.0.18",
+)
+PROJECT_DEPENDENCY_FILES = (
+    "requirements.txt",
+    "requirements-dev.txt",
+    "requirements-test.txt",
+    "test-requirements.txt",
+)
 
 
 @dataclass(slots=True)
@@ -221,7 +235,7 @@ def prepare_environment(
             source, test_dir = detect_layout(root, spec.configured_source, spec.configured_tests)
             dependency_files = [
                 name
-                for name in ("uv.lock", "pyproject.toml", "requirements.txt", "setup.py", "setup.cfg")
+                for name in ("uv.lock", "pyproject.toml", *PROJECT_DEPENDENCY_FILES, "setup.py", "setup.cfg")
                 if (root / name).is_file()
             ]
             roots[spec.project_id] = root
@@ -266,7 +280,6 @@ def prepare_environment(
                         uv,
                         "export",
                         "--frozen",
-                        "--no-dev",
                         "--no-emit-project",
                         "--format",
                         "requirements-txt",
@@ -278,8 +291,8 @@ def prepare_environment(
                     maximum_output_bytes,
                 )
                 requirements.append(exported)
-            elif (root / "requirements.txt").is_file():
-                requirements.append(root / "requirements.txt")
+            else:
+                requirements.extend(root / name for name in PROJECT_DEPENDENCY_FILES if (root / name).is_file())
             if any((root / name).is_file() for name in ("pyproject.toml", "setup.py", "setup.cfg")):
                 installable_roots.append(root)
 
@@ -292,7 +305,7 @@ def prepare_environment(
             for requirement in requirements:
                 command.extend(["-r", str(requirement)])
             if uv:
-                command.extend(["pytest==9.1.1", "coverage==7.15.2", "slipcover==1.0.18"])
+                command.extend(RUNTIME_TOOL_REQUIREMENTS)
             command.extend(str(root) for root in installable_roots)
             _run(result, "resolve shared dependencies", command, workspace, deadline, maximum_output_bytes)
             check = [uv, "pip", "check", "--python", str(python)] if uv else [str(python), "-m", "pip", "check"]
