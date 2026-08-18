@@ -70,30 +70,31 @@ function MetricPanel({
     <section className={`prompt-registry-metric-panel is-${tone}`}>
       <h2>{title}</h2>
       <div className="prompt-registry-primary-score">
-        <span>
-          Score <MetricDelta value={metrics.score} baseline={comparison?.score} />
+        <span>Score</span>
+        <span className="prompt-registry-metric-value">
+          <MetricDelta value={metrics.score} baseline={comparison?.score} />
+          <strong>{percentage(metrics.score)}</strong>
         </span>
-        <strong>{percentage(metrics.score)}</strong>
       </div>
       <MetricBar value={metrics.score} tone={tone} />
       <div className="prompt-registry-coverage-list">
         <div>
-          <span>
-            Statement coverage{" "}
+          <span>Statement coverage</span>
+          <span className="prompt-registry-metric-value">
             <MetricDelta
               value={metrics.statementCoverage}
               baseline={comparison?.statementCoverage}
             />
+            <strong>{percentage(metrics.statementCoverage)}</strong>
           </span>
-          <strong>{percentage(metrics.statementCoverage)}</strong>
           <MetricBar value={metrics.statementCoverage} tone="statement" />
         </div>
         <div>
-          <span>
-            Branch coverage{" "}
+          <span>Branch coverage</span>
+          <span className="prompt-registry-metric-value">
             <MetricDelta value={metrics.branchCoverage} baseline={comparison?.branchCoverage} />
+            <strong>{percentage(metrics.branchCoverage)}</strong>
           </span>
-          <strong>{percentage(metrics.branchCoverage)}</strong>
           <MetricBar value={metrics.branchCoverage} tone="branch" />
         </div>
       </div>
