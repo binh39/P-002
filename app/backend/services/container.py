@@ -232,9 +232,7 @@ def build_services(settings: Settings) -> ServiceContainer:
     else:
         experiments.set_optimization_dispatcher(InlineOptimizationDispatcher(experiments.execute_optimization))
         experiments.set_comparison_dispatcher(InlineComparisonDispatcher(experiments.execute_comparison))
-        experiments.set_test_generation_dispatcher(
-            InlineTestGenerationDispatcher(experiments.execute_test_generation)
-        )
+        experiments.set_test_generation_dispatcher(InlineTestGenerationDispatcher(experiments.execute_test_generation))
     return ServiceContainer(
         token_verifier=token_verifier,
         internal_token_verifier=internal_token_verifier,

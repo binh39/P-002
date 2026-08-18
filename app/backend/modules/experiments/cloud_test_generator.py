@@ -38,7 +38,9 @@ class CloudRunJobTestGenerator:
         prompt_object = f"{prefix}/inputs/prompt.json"
         targets_object = f"{prefix}/inputs/targets.json"
         await self.storage.write(prompt_object, json.dumps(prompt, separators=(",", ":")).encode(), "application/json")
-        await self.storage.write(targets_object, json.dumps(targets, separators=(",", ":")).encode(), "application/json")
+        await self.storage.write(
+            targets_object, json.dumps(targets, separators=(",", ":")).encode(), "application/json"
+        )
 
         project_manifest_object = None
         if projects:
@@ -111,7 +113,9 @@ class CloudRunJobTestGenerator:
             environment.append(
                 {
                     "name": name,
-                    "value_source": {"secret_key_ref": {"secret": reference["secret"], "version": reference["version"]}},
+                    "value_source": {
+                        "secret_key_ref": {"secret": reference["secret"], "version": reference["version"]}
+                    },
                 }
             )
         request = {

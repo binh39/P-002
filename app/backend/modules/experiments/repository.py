@@ -35,9 +35,7 @@ class ExperimentRepository(Protocol):
         self, version_id: str, decision: str, reviewer_id: str, comment: str, reviewed_at: datetime
     ) -> PromptVersionRecord | None: ...
     async def create_prompt_snapshot(self, item: PromptSnapshotRecord) -> PromptSnapshotRecord: ...
-    async def get_prompt_snapshot(
-        self, experiment_id: str, role: PromptRole
-    ) -> PromptSnapshotRecord | None: ...
+    async def get_prompt_snapshot(self, experiment_id: str, role: PromptRole) -> PromptSnapshotRecord | None: ...
     async def list_prompt_snapshots(self, experiment_id: str) -> list[PromptSnapshotRecord]: ...
     async def create_test_generation_run(self, item: TestGenerationRunRecord) -> TestGenerationRunRecord: ...
     async def get_test_generation_run(self, run_id: str) -> TestGenerationRunRecord | None: ...
@@ -329,9 +327,7 @@ class FirestoreExperimentRepository:
     async def list_prompt_snapshots(self, experiment_id):
         from google.cloud.firestore_v1.base_query import FieldFilter
 
-        snapshots = self._prompt_snapshots().where(
-            filter=FieldFilter("experiment_id", "==", experiment_id)
-        ).stream()
+        snapshots = self._prompt_snapshots().where(filter=FieldFilter("experiment_id", "==", experiment_id)).stream()
         return sorted(
             [PromptSnapshotRecord.model_validate(snapshot.to_dict()) async for snapshot in snapshots],
             key=lambda item: item.created_at,
@@ -352,9 +348,7 @@ class FirestoreExperimentRepository:
     async def list_test_generation_runs_for_owner(self, owner_id):
         from google.cloud.firestore_v1.base_query import FieldFilter
 
-        snapshots = self._test_generation_runs().where(
-            filter=FieldFilter("owner_id", "==", owner_id)
-        ).stream()
+        snapshots = self._test_generation_runs().where(filter=FieldFilter("owner_id", "==", owner_id)).stream()
         return sorted(
             [TestGenerationRunRecord.model_validate(snapshot.to_dict()) async for snapshot in snapshots],
             key=lambda item: item.created_at,
