@@ -6,6 +6,7 @@ import warnings
 import textwrap
 import json
 import traceback
+from uuid import uuid4
 from aiolimiter import AsyncLimiter
 
 with warnings.catch_warnings():
@@ -109,6 +110,7 @@ class Chatter:
         self._add_cost = lambda cost: None
         self._log_msg = lambda ctx, msg: None
         self._log_json = lambda ctx, j: None
+        self._log_usage = lambda ctx, event: None
         self._signal_retry = lambda: None
         self._functions: dict[str, dict[str, T.Any]] = dict()
         self._max_func_calls_per_chat = 50
@@ -172,6 +174,10 @@ class Chatter:
     def set_log_json(self, log_json: T.Callable[[str, dict], None]) -> None:
         """Sets up a callback to write a json exchange to the log."""
         self._log_json = log_json
+
+    def set_log_usage(self, log_usage: T.Callable[[str, dict], None]) -> None:
+        """Emit one redacted, structured usage/cost event per provider response."""
+        self._log_usage = log_usage
 
     def set_signal_retry(self, signal_retry: T.Callable) -> None:
         """Sets up a callback to indicate a retry."""
@@ -315,14 +321,31 @@ args:{args}
 
             response_data = response.model_dump(warnings=False)
             self._log_json(ctx, response_data)
+            response_cost = None
             try:
-                self._add_cost(litellm.completion_cost(response))
+                response_cost = litellm.completion_cost(response)
+                self._add_cost(response_cost)
             except Exception as e:
                 # Model not mapped in litellm's cost calculator - ignore cost calculation
                 if "isn't mapped yet" in str(e) or "model_cost" in str(e):
                     pass
                 else:
                     raise
+            try:
+                from src.optimization.costs import usage_event
+
+                self._log_usage(
+                    ctx,
+                    usage_event(
+                        self._model,
+                        getattr(response, "usage", {}),
+                        response_cost=response_cost,
+                        event_id=str(uuid4()),
+                    ),
+                )
+            except Exception:
+                # Accounting cannot be allowed to affect a generated test.
+                pass
 
             if response.choices[0].finish_reason != "tool_calls":
                 response_data["_coverup_tool_calls"] = tool_events

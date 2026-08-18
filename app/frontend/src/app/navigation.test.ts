@@ -17,4 +17,8 @@ describe("sidebar navigation mapping", () => {
     expect(currentNavigationId("/dashboard")).toBe("dashboard");
     expect(currentNavigationId("/unknown")).toBe("dashboard");
   });
+
+  it("marks the Final Test Cases route as active", () => {
+    expect(currentNavigationId("/test-cases")).toBe("testCases");
+  });
 });

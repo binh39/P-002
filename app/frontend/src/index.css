@@ -6579,74 +6579,211 @@ textarea {
   margin-bottom: 24px;
 }
 
-.registry-filters,
-.registry-table-card {
-  width: 100%;
+.registry-filters {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
 }
 
-.registry-table-card {
-  overflow-x: auto;
+.registry-search-field {
+  position: relative;
+  display: flex;
+  flex: 1 1 260px;
+  align-items: center;
+}
+
+.registry-search-field svg {
+  position: absolute;
+  left: 11px;
+  width: 16px;
+  color: var(--muted, #7b8499);
+}
+
+.registry-search-field input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 12px 8px 34px;
+}
+
+.registry-model-filter {
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+  font-size: 12px;
+  color: var(--muted, #667085);
+}
+
+.registry-model-filter select {
+  min-height: 38px;
+}
+
+.registry-result-count {
+  padding-bottom: 10px;
+  color: var(--muted, #667085);
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 .registry-table {
-  width: 100%;
-  min-width: 1380px;
-  border-collapse: collapse;
-  table-layout: fixed;
+  min-width: 1100px;
 }
 
-.registry-table th,
 .registry-table td {
   vertical-align: middle;
 }
 
-.registry-col-id {
-  width: 90px;
+.registry-table td > strong,
+.registry-table td > small,
+.registry-table td > code {
+  display: block;
 }
 
-.registry-col-name {
-  width: 220px;
+.registry-table td > small {
+  margin-top: 3px;
+  color: var(--muted, #667085);
+  font-size: 11.5px;
 }
 
-.registry-col-model {
-  width: 160px;
+.registry-table td > .status-badge {
+  display: inline-flex;
+  margin-top: 7px;
 }
 
-.registry-col-version {
-  width: 90px;
+.registry-row {
+  cursor: pointer;
 }
 
-.registry-col-coverage {
-  width: 150px;
+.registry-row:hover td,
+.registry-row:focus-visible td {
+  background: color-mix(in srgb, var(--primary, #4f6ef7) 6%, transparent);
 }
 
-.registry-col-cost,
-.registry-col-latency,
-.registry-col-actions {
-  width: 90px;
+.registry-row:focus-visible {
+  outline: none;
 }
 
-.registry-col-status {
-  width: 120px;
+.registry-row:focus-visible td:first-child {
+  box-shadow: inset 3px 0 var(--primary, #4f6ef7);
 }
 
-.registry-col-created {
-  width: 130px;
+.metric-positive {
+  color: #07845c;
 }
 
-.registry-id-cell {
-  white-space: nowrap;
+.metric-negative {
+  color: #c03b3b;
 }
 
-.registry-name-cell > div:first-child,
-.registry-model-chip {
-  line-height: 1.45;
+.prompt-registry-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.registry-model-chip {
-  display: inline-block;
-  max-width: 100%;
+.prompt-registry-generation-notice {
+  margin: 0 0 18px;
+  padding: 11px 13px;
+  border: 1px solid color-mix(in srgb, var(--primary, #4f6ef7) 34%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--primary, #4f6ef7) 7%, transparent);
+  color: var(--text, #1d2939);
+}
+
+.prompt-registry-generation-notice.is-error {
+  border-color: color-mix(in srgb, #c03b3b 44%, transparent);
+  background: color-mix(in srgb, #c03b3b 8%, transparent);
+  color: #9b2020;
+}
+
+.prompt-registry-summary {
+  padding: 18px;
+}
+
+.prompt-registry-summary .card-heading p {
+  margin: 3px 0 0;
+}
+
+.prompt-registry-view-controls {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.prompt-registry-view-controls [role="group"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.prompt-registry-view-controls button {
+  border: 1px solid var(--border, #dce1ec);
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: var(--surface, #fff);
+  color: var(--muted, #667085);
+  cursor: pointer;
+}
+
+.prompt-registry-view-controls button.is-selected {
+  border-color: var(--primary, #4f6ef7);
+  background: color-mix(in srgb, var(--primary, #4f6ef7) 10%, transparent);
+  color: var(--primary, #4f6ef7);
+}
+
+.prompt-registry-prompt-grid {
+  align-items: start;
+}
+
+.prompt-registry-prompt-card,
+.prompt-registry-diff-card {
+  min-width: 0;
+}
+
+.prompt-registry-code {
+  max-height: 520px;
+  overflow: auto;
+  margin: 0;
+  padding: 14px;
+  border-radius: 10px;
+  background: #111827;
+  color: #e5e7eb;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.prompt-registry-unified-diff {
+  color: #d8e1f1;
+}
+
+.prompt-registry-metadata {
+  margin: 0;
+}
+
+.prompt-registry-updated {
+  display: block;
+  margin-top: 14px;
+  color: var(--muted, #667085);
+}
+
+@media (max-width: 700px) {
+  .registry-filters,
+  .prompt-registry-view-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .registry-model-filter {
+    min-width: 0;
+  }
+
+  .registry-result-count {
+    padding-bottom: 0;
+  }
 }
 
 /* Compact workspace density: keep overview pages within a useful viewport

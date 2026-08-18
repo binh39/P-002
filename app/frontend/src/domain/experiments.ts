@@ -172,6 +172,122 @@ export interface PromptVersionList {
   limit: number;
 }
 
+export type PromptRole = "baseline" | "optimized";
+export type PromptSnapshotOrigin = "initial_baseline" | "optimized_candidate" | "baseline_retained";
+
+export interface PromptCoverageMetrics {
+  score: number | null;
+  statementCoverage: number | null;
+  branchCoverage: number | null;
+  passRate: number | null;
+}
+
+export interface PromptSnapshot {
+  id: string;
+  experimentId: string;
+  role: PromptRole;
+  origin: PromptSnapshotOrigin;
+  promptDigest: string;
+  prompt: PromptBundle;
+  sourceSnapshotDigest: string;
+  datasetDigest: string;
+  splitSeed: number;
+  runnerProtocolVersion: number;
+  coverupModel: string;
+  optimizeModel: string;
+  metrics: PromptCoverageMetrics;
+  estimatedCostUsd: number | null;
+  createdAt: string;
+}
+
+export interface PromptRegistryEntry {
+  experimentId: string;
+  experimentName: string;
+  projectIds: string[];
+  projectNames: string[];
+  status: ExperimentStatus;
+  baseline: PromptSnapshot;
+  optimized: PromptSnapshot | null;
+  baselineMetrics: PromptCoverageMetrics;
+  optimizedMetrics: PromptCoverageMetrics;
+  absoluteGain: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PromptRegistryList {
+  items: PromptRegistryEntry[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export type TestGenerationStatus =
+  | "queued"
+  | "preparing"
+  | "generating"
+  | "running_tests"
+  | "completed"
+  | "partial"
+  | "failed"
+  | "cancelled"
+  | "timed_out";
+
+export interface TestGenerationMetrics {
+  testFileCount: number;
+  testCount: number;
+  passed: number | null;
+  failed: number | null;
+  skipped: number | null;
+  projectStatementCoverage: number | null;
+  projectBranchCoverage: number | null;
+  targetStatementCoverage: number | null;
+  targetBranchCoverage: number | null;
+  targetScore: number | null;
+  targetCount: number;
+  completedTargetCount: number;
+  failedTargetCount: number;
+}
+
+export interface TestGenerationRun {
+  id: string;
+  experimentId: string;
+  promptSnapshotId: string;
+  promptDigest: string;
+  promptRole: PromptRole;
+  status: TestGenerationStatus;
+  projectIds: string[];
+  sourceSnapshotDigest: string;
+  datasetDigest: string;
+  scope: "project" | "modules" | "functions";
+  sourceFiles: string[];
+  functionIds: string[];
+  targetIds: string[];
+  model: string;
+  randomSeed: number;
+  repeatTests: number;
+  maxAttempts: number;
+  maxConcurrency: number;
+  rateLimit: number | null;
+  costCeilingUsd: number | null;
+  runnerProtocolVersion: number;
+  metrics: TestGenerationMetrics;
+  estimatedCostUsd: number;
+  tokenUsage: Record<string, number>;
+  artifactObjects: Record<string, string>;
+  errorMessage: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+export interface TestGenerationRunList {
+  items: TestGenerationRun[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
 export const optimizationRunIsActive = (status: ExperimentStatus) =>
   status === "optimization_queued" || status === "optimizing" || status === "candidate_evaluating";
 

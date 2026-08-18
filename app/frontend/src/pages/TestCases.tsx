@@ -1,0 +1,222 @@
+import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useLocation } from "wouter";
+
+import { useRepositories } from "@/app/providers";
+import { IC } from "@/components/Icons";
+import { PageHeader, StatusBadge } from "@/components/PlatformUI";
+import type { TestGenerationRun, TestGenerationStatus } from "@/domain/experiments";
+
+const activeStatuses: TestGenerationStatus[] = [
+  "queued",
+  "preparing",
+  "generating",
+  "running_tests",
+];
+
+function percentage(value: number | null) {
+  return value === null ? "—" : `${(value * 100).toFixed(1)}%`;
+}
+
+function formatStatus(status: TestGenerationStatus) {
+  return status.replace(/_/g, " ").replace(/^./, (character) => character.toUpperCase());
+}
+
+function statusTone(status: TestGenerationStatus) {
+  if (status === "completed") return "success" as const;
+  if (["failed", "cancelled", "timed_out"].includes(status)) return "danger" as const;
+  if (status === "partial") return "warning" as const;
+  return "info" as const;
+}
+
+function timestamp(value: string) {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
+    new Date(value),
+  );
+}
+
+function runMatchesSearch(run: TestGenerationRun, value: string) {
+  return [run.id, run.experimentId, run.projectIds.join(" "), run.model]
+    .join(" ")
+    .toLowerCase()
+    .includes(value);
+}
+
+export default function TestCases() {
+  const [, navigate] = useLocation();
+  const { testGeneration } = useRepositories();
+  const [search, setSearch] = useState("");
+  const [role, setRole] = useState<"all" | TestGenerationRun["promptRole"]>("all");
+  const [status, setStatus] = useState<"all" | TestGenerationStatus>("all");
+  const query = useQuery({
+    queryKey: ["test-generation-runs"],
+    queryFn: ({ signal }) => testGeneration.list(signal),
+    refetchInterval: (current) =>
+      current.state.data?.items.some((run) => activeStatuses.includes(run.status)) ? 3_000 : false,
+  });
+  const items = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+    return (query.data?.items ?? []).filter(
+      (run) =>
+        (!normalizedSearch || runMatchesSearch(run, normalizedSearch)) &&
+        (role === "all" || run.promptRole === role) &&
+        (status === "all" || run.status === status),
+    );
+  }, [query.data?.items, role, search, status]);
+
+  if (query.isPending) {
+    return (
+      <div className="page-state" role="status">
+        Loading final test runs…
+      </div>
+    );
+  }
+  if (query.isError) {
+    return (
+      <div className="page-state page-state-error" role="alert">
+        <h2>Test Cases are unavailable</h2>
+        <p>
+          {query.error instanceof Error ? query.error.message : "An unexpected error occurred."}
+        </p>
+        <button onClick={() => query.refetch()}>Try again</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="platform-page test-cases-page">
+      <PageHeader
+        eyebrow="Generated final suites"
+        title="Test Cases"
+        description="Only user-requested test suites generated from immutable prompt snapshots are shown here."
+      />
+      <section className="platform-card registry-filters">
+        <label className="registry-search-field">
+          <IC.Search />
+          <input
+            aria-label="Search test runs"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search run, experiment, project, or model…"
+          />
+        </label>
+        <label className="registry-model-filter">
+          <span>Prompt</span>
+          <select value={role} onChange={(event) => setRole(event.target.value as typeof role)}>
+            <option value="all">All prompts</option>
+            <option value="baseline">Baseline</option>
+            <option value="optimized">Final</option>
+          </select>
+        </label>
+        <label className="registry-model-filter">
+          <span>Status</span>
+          <select
+            value={status}
+            onChange={(event) => setStatus(event.target.value as typeof status)}
+          >
+            <option value="all">All statuses</option>
+            {(
+              [
+                "queued",
+                "preparing",
+                "generating",
+                "running_tests",
+                "completed",
+                "partial",
+                "failed",
+                "cancelled",
+                "timed_out",
+              ] as const
+            ).map((item) => (
+              <option key={item} value={item}>
+                {formatStatus(item)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="registry-result-count">{items.length} results</span>
+      </section>
+      <section className="platform-card table-card">
+        {items.length === 0 ? (
+          <div className="empty-state">
+            {query.data.total === 0
+              ? "No final test suites yet. Open a completed Prompt Registry entry to generate one."
+              : "No test runs match the selected filters."}
+          </div>
+        ) : (
+          <div className="table-scroll">
+            <table className="platform-table">
+              <thead>
+                <tr>
+                  <th>Run</th>
+                  <th>Prompt</th>
+                  <th>Model</th>
+                  <th>Tests</th>
+                  <th>Project coverage</th>
+                  <th>Target coverage</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((run) => (
+                  <tr
+                    key={run.id}
+                    className="registry-row"
+                    tabIndex={0}
+                    onClick={() => navigate(`/test-cases/${run.id}`)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        navigate(`/test-cases/${run.id}`);
+                      }
+                    }}
+                  >
+                    <td>
+                      <strong>{run.experimentId}</strong>
+                      <small>{run.projectIds.join(", ")}</small>
+                      <small>{run.id}</small>
+                    </td>
+                    <td>{run.promptRole === "baseline" ? "Baseline" : "Final"}</td>
+                    <td>
+                      <code>{run.model}</code>
+                    </td>
+                    <td>
+                      <strong>{run.metrics.testCount}</strong>
+                      <small>
+                        {run.metrics.testFileCount} files · {run.metrics.targetCount} targets
+                      </small>
+                      <small>
+                        {run.metrics.passed ?? "—"} passed · {run.metrics.failed ?? "—"} failed
+                      </small>
+                    </td>
+                    <td>
+                      <strong>{percentage(run.metrics.projectStatementCoverage)}</strong>
+                      <small>Branch {percentage(run.metrics.projectBranchCoverage)}</small>
+                    </td>
+                    <td>
+                      <strong>{percentage(run.metrics.targetStatementCoverage)}</strong>
+                      <small>Branch {percentage(run.metrics.targetBranchCoverage)}</small>
+                    </td>
+                    <td>
+                      <StatusBadge tone={statusTone(run.status)}>
+                        {formatStatus(run.status)}
+                      </StatusBadge>
+                      {run.errorMessage && (
+                        <small className="table-error">{run.errorMessage}</small>
+                      )}
+                    </td>
+                    <td>{timestamp(run.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+      <button className="secondary-button" onClick={() => navigate("/prompts")}>
+        Open Prompt Registry
+      </button>
+    </div>
+  );
+}

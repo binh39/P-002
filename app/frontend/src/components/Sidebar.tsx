@@ -9,6 +9,7 @@ export type NavigationId =
   | "experiments"
   | "coverage"
   | "registry"
+  | "testCases"
   | "settings";
 
 interface SidebarProps {
@@ -24,6 +25,7 @@ const navItems = [
   { id: "projects" as NavigationId, label: "Projects", Icon: IC.Code },
   { id: "experiments" as NavigationId, label: "Experiments", Icon: IC.Flask },
   { id: "registry" as NavigationId, label: "Prompt Registry", Icon: IC.CheckSquare },
+  { id: "testCases" as NavigationId, label: "Test Cases", Icon: IC.Database },
 ];
 
 export default function Sidebar({

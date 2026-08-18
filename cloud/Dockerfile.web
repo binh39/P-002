@@ -17,7 +17,7 @@ RUN useradd --create-home appuser
 COPY src/coverup ./src/coverup
 COPY src/optimization ./src/optimization
 COPY src/sample_repo ./sample_repo
-COPY cloud/run_job.py cloud/prepare_runtime.py cloud/runtime_workspace.py ./cloud/
+COPY cloud/run_job.py cloud/run_test_generation.py cloud/prepare_runtime.py cloud/runtime_workspace.py ./cloud/
 RUN test -d /app/sample_repo/isort/isort \
     && test -d /app/sample_repo/mimesis/mimesis \
     && test -d /app/sample_repo/mlxtend/mlxtend \

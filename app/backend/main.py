@@ -16,6 +16,7 @@ from backend.modules.analysis.router import internal_router
 from backend.modules.experiments.router import (
     comparison_internal_router,
     optimization_internal_router,
+    test_generation_internal_router,
 )
 from backend.services.container import build_services
 
@@ -103,6 +104,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(internal_router)
     application.include_router(optimization_internal_router)
     application.include_router(comparison_internal_router)
+    application.include_router(test_generation_internal_router)
 
     async def health():
         return {"status": "ok", "service": "promptopt-api", "env": settings.app_env}

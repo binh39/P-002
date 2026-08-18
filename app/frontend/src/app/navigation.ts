@@ -6,6 +6,7 @@ export const pathByNavigationId: Record<NavigationId, string> = {
   experiments: "/experiments",
   coverage: "/docs/coverage",
   registry: "/prompts",
+  testCases: "/test-cases",
   settings: "/settings",
 };
 
@@ -20,6 +21,7 @@ export function currentNavigationId(pathname: string): NavigationId {
   }
   if (pathname.startsWith("/docs/coverage")) return "coverage";
   if (pathname.startsWith("/prompts")) return "registry";
+  if (pathname.startsWith("/test-cases")) return "testCases";
   if (pathname.startsWith("/settings")) return "settings";
   return "dashboard";
 }

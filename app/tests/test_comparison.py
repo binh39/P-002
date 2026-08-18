@@ -11,6 +11,8 @@ from backend.modules.experiments.schemas import (
     ExperimentRecord,
     ExperimentStatus,
     OptimizationRunRecord,
+    PromptRole,
+    PromptSnapshotOrigin,
     PromptVersionStatus,
 )
 from backend.modules.experiments.service import ExperimentService
@@ -76,6 +78,13 @@ async def test_cloud_final_validation_creates_reviewable_version_and_review_is_i
     assert comparison.status == ExperimentStatus.IN_REVIEW
     assert comparison.promotion_eligible is True
     assert comparison.prompt_version_id
+    baseline_snapshot = await repository.get_prompt_snapshot(experiment.id, PromptRole.BASELINE)
+    optimized_snapshot = await repository.get_prompt_snapshot(experiment.id, PromptRole.OPTIMIZED)
+    assert baseline_snapshot is not None
+    assert optimized_snapshot is not None
+    assert baseline_snapshot.prompt_digest == baseline.digest()
+    assert optimized_snapshot.prompt_digest == candidate.digest()
+    assert optimized_snapshot.origin == PromptSnapshotOrigin.OPTIMIZED_CANDIDATE
     artifact = json.loads(storage.objects[comparison.artifact_objects["final_validation.json"]][0])
     assert artifact["promoted"] is True
     approved = await service.review_prompt_version(
@@ -89,3 +98,55 @@ async def test_cloud_final_validation_creates_reviewable_version_and_review_is_i
         await service.review_prompt_version(
             comparison.prompt_version_id, experiment.owner_id, PromptVersionStatus.REJECTED, "changed mind"
         )
+
+
+@pytest.mark.asyncio
+async def test_prompt_registry_keeps_baseline_as_final_prompt_when_candidate_loses():
+    repository = InMemoryExperimentRepository()
+    now = datetime.now(UTC)
+    baseline = baseline_prompt()
+    candidate = candidate_prompt()
+    experiment = ExperimentRecord(
+        id="retained-baseline-experiment",
+        owner_id="owner-1",
+        project_id="project-1",
+        name="Baseline retention",
+        target_function_ids=["train_fn", "validation_fn", "test_fn"],
+        dataset_splits={"train": ["train_fn"], "validation": ["validation_fn"], "test": ["test_fn"]},
+        optimization_eligible=True,
+        status=ExperimentStatus.OPTIMIZATION_SUCCEEDED,
+        optimization_run_id="retained-baseline-optimization",
+        baseline_prompt=baseline.as_candidate(),
+        created_at=now,
+        updated_at=now,
+    )
+    await repository.create(experiment)
+    await repository.create_optimization_run(
+        OptimizationRunRecord(
+            id="retained-baseline-optimization",
+            experiment_id=experiment.id,
+            status=ExperimentStatus.OPTIMIZATION_SUCCEEDED,
+            parent_prompt_digest=baseline.digest(),
+            candidate_prompt=candidate.as_candidate(),
+            candidate_prompt_digest=candidate.digest(),
+            final_validation={
+                "promoted": False,
+                "absolute_gain": -0.1,
+                "baseline_aggregate_coverage": {"score": 0.8},
+                "optimized_aggregate_coverage": {"score": 0.7},
+            },
+            created_at=now,
+            finished_at=now,
+        )
+    )
+    service = ExperimentService(repository, object(), object(), FakeStorage())
+    service.set_comparison_dispatcher(InlineComparisonDispatcher(service.execute_comparison))
+
+    await service.request_comparison(experiment.id, experiment.owner_id)
+    entry = await service.get_prompt_registry_entry(experiment.id, experiment.owner_id)
+
+    assert entry.optimized is not None
+    assert entry.optimized.origin == PromptSnapshotOrigin.BASELINE_RETAINED
+    assert entry.optimized.prompt_digest == baseline.digest()
+    assert entry.baseline_metrics.score == 0.8
+    assert entry.optimized_metrics.score == 0.8

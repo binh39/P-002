@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import hashlib
 import json
 import re
 from datetime import UTC, datetime, timedelta
@@ -11,7 +14,7 @@ from backend.modules.projects.schemas import MINIMUM_RUNTIME_PROTOCOL_VERSION, R
 from backend.modules.projects.service import ProjectService
 
 from .dataset import select_targets, split_targets, validate_manual_splits
-from .dispatcher import ComparisonDispatcher, OptimizationDispatcher
+from .dispatcher import ComparisonDispatcher, OptimizationDispatcher, TestGenerationDispatcher
 from .optimizer import OptimizationTarget
 from .prompts import PromptBundle, baseline_prompt
 from .repository import ExperimentRepository
@@ -19,6 +22,7 @@ from .schemas import (
     ComparisonRunRecord,
     ComparisonRunResponse,
     CreateExperimentRequest,
+    CreateTestGenerationRequest,
     EvolutionResponse,
     ExperimentListResponse,
     ExperimentRecord,
@@ -27,16 +31,31 @@ from .schemas import (
     OptimizationRunRecord,
     OptimizationRunResponse,
     ProjectSnapshot,
+    PromptCoverageMetrics,
+    PromptRegistryEntryResponse,
+    PromptRegistryListResponse,
+    PromptRole,
+    PromptSnapshotOrigin,
+    PromptSnapshotRecord,
+    PromptSnapshotResponse,
     PromptVersionListResponse,
     PromptVersionRecord,
     PromptVersionResponse,
     PromptVersionStatus,
     SamplingMethod,
     TargetReference,
+    TestGenerationMetrics,
+    TestGenerationRunListResponse,
+    TestGenerationRunRecord,
+    TestGenerationRunResponse,
+    TestGenerationScope,
+    TestGenerationStatus,
     new_id,
 )
 
 STANDARD_MAX_METRIC_CALLS = 2200
+MAX_TEST_GENERATION_MANIFEST_BYTES = 1_000_000
+MAX_TEST_GENERATION_ARTIFACT_FILES = 1_000
 
 _FINAL_VALIDATION_SCALAR_FIELDS = (
     "mean_score",
@@ -79,6 +98,56 @@ def _compact_final_validation(report: dict) -> dict:
     return compact
 
 
+def _redact_artifact_value(value):
+    """Remove credential-shaped fields before returning a JSON artifact to a browser."""
+    if isinstance(value, list):
+        return [_redact_artifact_value(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    redacted = {}
+    for key, item in value.items():
+        normalized = str(key).lower()
+        if any(marker in normalized for marker in ("api_key", "token", "secret", "credential", "authorization")):
+            redacted[key] = "[redacted]"
+        else:
+            redacted[key] = _redact_artifact_value(item)
+    return redacted
+
+
+def _validated_final_test_artifact_objects(prefix: str, artifacts: dict) -> dict[str, str]:
+    """Map the runner's constrained artifact index to owner-scoped object aliases."""
+    objects = {
+        "manifest": f"{prefix}/{artifacts.get('manifest', 'test_generation_result.json')}",
+        "suite_zip": f"{prefix}/{artifacts.get('suite_zip', 'generated_tests.zip')}",
+    }
+    files = artifacts.get("files")
+    if not isinstance(files, list):
+        return objects
+    for entry in files[:MAX_TEST_GENERATION_ARTIFACT_FILES]:
+        if not isinstance(entry, dict):
+            continue
+        artifact_id, kind, relative_path = entry.get("id"), entry.get("kind"), entry.get("path")
+        if not all(isinstance(value, str) for value in (artifact_id, kind, relative_path)):
+            continue
+        if not re.fullmatch(r"[a-z0-9-]{1,80}", artifact_id):
+            continue
+        if kind == "generated_test":
+            expected_prefix, expected_suffix = "generated_tests/", ".py"
+        elif kind == "coverage":
+            expected_prefix, expected_suffix = "coverage/", ".json"
+        else:
+            continue
+        normalized_path = relative_path.replace("\\", "/")
+        if (
+            not normalized_path.startswith(expected_prefix)
+            or not normalized_path.endswith(expected_suffix)
+            or ".." in normalized_path.split("/")
+        ):
+            continue
+        objects[f"file-{artifact_id}"] = f"{prefix}/{normalized_path}"
+    return objects
+
+
 class ExperimentService:
     def __init__(
         self,
@@ -87,6 +156,7 @@ class ExperimentService:
         functions: FunctionRepository,
         storage: ObjectStorage,
         cloud_optimizer=None,
+        cloud_test_generator=None,
         samples: SampleProjectCatalog | None = None,
         admin_vertexai_project: str = "",
         provider_credentials=None,
@@ -95,12 +165,14 @@ class ExperimentService:
         self.repository, self.projects, self.functions = repository, projects, functions
         self.storage = storage
         self.cloud_optimizer = cloud_optimizer
+        self.cloud_test_generator = cloud_test_generator
         self.samples = samples
         self.admin_vertexai_project = admin_vertexai_project.strip()
         self.provider_credentials = provider_credentials
         self.runtime_bundle_protocol_version = runtime_bundle_protocol_version
         self.optimization_dispatcher: OptimizationDispatcher | None = None
         self.comparison_dispatcher: ComparisonDispatcher | None = None
+        self.test_generation_dispatcher: TestGenerationDispatcher | None = None
 
     def set_optimization_dispatcher(self, dispatcher: OptimizationDispatcher) -> None:
         self.optimization_dispatcher = dispatcher
@@ -108,12 +180,133 @@ class ExperimentService:
     def set_comparison_dispatcher(self, dispatcher: ComparisonDispatcher) -> None:
         self.comparison_dispatcher = dispatcher
 
+    def set_test_generation_dispatcher(self, dispatcher: TestGenerationDispatcher) -> None:
+        self.test_generation_dispatcher = dispatcher
+
     @staticmethod
     def _baseline_for(item: ExperimentRecord) -> PromptBundle:
         candidate = item.baseline_prompt
         prompt = PromptBundle.from_candidate(candidate) if candidate is not None else baseline_prompt()
         prompt.validate()
         return prompt
+
+    @staticmethod
+    def _stable_digest(payload: object) -> str:
+        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        return hashlib.sha256(encoded).hexdigest()[:32]
+
+    @classmethod
+    def _source_snapshot_digest(cls, item: ExperimentRecord) -> str:
+        projects = [snapshot.model_dump(mode="json") for snapshot in item.project_snapshots]
+        return cls._stable_digest({"project_ids": item.project_ids, "projects": projects})
+
+    @classmethod
+    def _dataset_digest(cls, item: ExperimentRecord) -> str:
+        targets = [target.model_dump(mode="json") for target in item.targets]
+        return cls._stable_digest(
+            {
+                "targets": targets,
+                "splits": item.dataset_splits,
+                "seed": item.split_seed,
+                "sampling_method": item.sampling_method.value,
+            }
+        )
+
+    @staticmethod
+    def _coverage_metrics(raw: dict | None) -> PromptCoverageMetrics:
+        raw = raw or {}
+        return PromptCoverageMetrics(
+            score=raw.get("score"),
+            statement_coverage=raw.get("statement_coverage"),
+            branch_coverage=raw.get("branch_coverage"),
+            pass_rate=raw.get("pass_rate"),
+        )
+
+    @staticmethod
+    def _runner_protocol_version(item: ExperimentRecord) -> int:
+        return max((snapshot.runtime_protocol_version for snapshot in item.project_snapshots), default=1)
+
+    def _new_prompt_snapshot(
+        self,
+        item: ExperimentRecord,
+        *,
+        role: PromptRole,
+        origin: PromptSnapshotOrigin,
+        prompt: PromptBundle,
+        metrics: PromptCoverageMetrics | None = None,
+        created_at: datetime | None = None,
+    ) -> PromptSnapshotRecord:
+        return PromptSnapshotRecord(
+            id=f"{item.id}:{role.value}",
+            owner_id=item.owner_id,
+            experiment_id=item.id,
+            project_ids=list(item.project_ids),
+            role=role,
+            origin=origin,
+            prompt_digest=prompt.digest(),
+            prompt=prompt.as_candidate(),
+            source_snapshot_digest=self._source_snapshot_digest(item),
+            dataset_digest=self._dataset_digest(item),
+            split_seed=item.split_seed,
+            runner_protocol_version=self._runner_protocol_version(item),
+            coverup_model=item.settings.coverup_model,
+            optimize_model=item.settings.optimize_model,
+            metrics=metrics or PromptCoverageMetrics(),
+            created_at=created_at or datetime.now(UTC),
+        )
+
+    async def _ensure_baseline_prompt_snapshot(self, item: ExperimentRecord) -> PromptSnapshotRecord:
+        existing = await self.repository.get_prompt_snapshot(item.id, PromptRole.BASELINE)
+        if existing is not None:
+            return existing
+        snapshot = self._new_prompt_snapshot(
+            item,
+            role=PromptRole.BASELINE,
+            origin=PromptSnapshotOrigin.INITIAL_BASELINE,
+            prompt=self._baseline_for(item),
+            created_at=item.created_at,
+        )
+        await self.repository.create_prompt_snapshot(snapshot)
+        return snapshot
+
+    async def _ensure_optimized_prompt_snapshot(
+        self, item: ExperimentRecord, comparison: ComparisonRunRecord | None = None
+    ) -> PromptSnapshotRecord | None:
+        existing = await self.repository.get_prompt_snapshot(item.id, PromptRole.OPTIMIZED)
+        if existing is not None:
+            return existing
+        comparison = comparison or (
+            await self.repository.get_comparison_run(item.comparison_run_id) if item.comparison_run_id else None
+        )
+        if comparison is None or comparison.status not in {
+            ExperimentStatus.COMPARISON_SUCCEEDED,
+            ExperimentStatus.IN_REVIEW,
+        }:
+            return None
+
+        prompt = self._baseline_for(item)
+        origin = PromptSnapshotOrigin.BASELINE_RETAINED
+        metrics = self._coverage_metrics(comparison.baseline_metrics)
+        if comparison.promotion_eligible:
+            optimization = await self.repository.get_optimization_run(comparison.optimization_run_id)
+            if optimization is None or not optimization.candidate_prompt:
+                return None
+            candidate = PromptBundle.from_candidate(optimization.candidate_prompt)
+            if candidate.digest() != comparison.candidate_prompt_digest:
+                return None
+            prompt = candidate
+            origin = PromptSnapshotOrigin.OPTIMIZED_CANDIDATE
+            metrics = self._coverage_metrics(comparison.candidate_metrics)
+        snapshot = self._new_prompt_snapshot(
+            item,
+            role=PromptRole.OPTIMIZED,
+            origin=origin,
+            prompt=prompt,
+            metrics=metrics,
+            created_at=comparison.finished_at or comparison.created_at,
+        )
+        await self.repository.create_prompt_snapshot(snapshot)
+        return snapshot
 
     async def create(
         self,
@@ -248,6 +441,7 @@ class ExperimentService:
             updated_at=now,
         )
         await self.repository.create(item)
+        await self._ensure_baseline_prompt_snapshot(item)
         return ExperimentResponse.model_validate(item)
 
     async def get(self, experiment_id: str, owner_id: str) -> ExperimentResponse:
@@ -550,6 +744,10 @@ class ExperimentService:
                     json.dumps(result.gepa_result, ensure_ascii=False, indent=2, default=str).encode(),
                     "application/json",
                 ),
+                "cost_report.json": (
+                    json.dumps(result.gepa_result.get("cost_report", {}), ensure_ascii=False, indent=2).encode(),
+                    "application/json",
+                ),
             }
             if run.cloud_artifact_prefix and hasattr(self.cloud_optimizer, "evolution"):
                 evolution = await self.cloud_optimizer.evolution(
@@ -574,6 +772,15 @@ class ExperimentService:
             run.candidate_count = result.candidate_count
             run.metric_calls = result.metric_calls
             run.final_validation = _compact_final_validation(result.gepa_result.get("final_validation", {}))
+            run.cost_report = result.gepa_result.get("cost_report", {})
+            total_cost = (run.cost_report.get("total") or {}).get("estimated_cost_usd", 0.0)
+            run.estimated_cost_usd = float(total_cost or 0.0)
+            raw_usage = (run.cost_report.get("total") or {}).get("token_usage", {})
+            run.token_usage = {
+                str(key): int(value)
+                for key, value in raw_usage.items()
+                if isinstance(value, int | float) and value >= 0
+            }
             run.artifact_objects = artifact_objects
             run.finished_at = datetime.now(UTC)
             item.status = ExperimentStatus.OPTIMIZATION_SUCCEEDED
@@ -773,6 +980,8 @@ class ExperimentService:
                 run.status = ExperimentStatus.COMPARISON_SUCCEEDED
                 item.status = ExperimentStatus.OPTIMIZATION_SUCCEEDED
             item.updated_at = run.finished_at
+            await self._ensure_baseline_prompt_snapshot(item)
+            await self._ensure_optimized_prompt_snapshot(item, run)
         except Exception as exc:
             run.status = ExperimentStatus.FAILED
             run.error_message = str(exc)[-4000:]
@@ -821,6 +1030,324 @@ class ExperimentService:
             offset=offset,
             limit=limit,
         )
+
+    async def get_prompt_registry_entry(self, experiment_id: str, owner_id: str) -> PromptRegistryEntryResponse:
+        item = await self._owned(experiment_id, owner_id)
+        return await self._prompt_registry_entry(item)
+
+    async def list_prompt_registry(self, owner_id: str, offset: int = 0, limit: int = 50) -> PromptRegistryListResponse:
+        experiments = await self.repository.list_for_owner(owner_id)
+        total = len(experiments)
+        page = experiments[offset : offset + limit]
+        return PromptRegistryListResponse(
+            items=[await self._prompt_registry_entry(item) for item in page],
+            total=total,
+            offset=offset,
+            limit=limit,
+        )
+
+    async def _prompt_registry_entry(self, item: ExperimentRecord) -> PromptRegistryEntryResponse:
+        """Materialize immutable prompt snapshots for historical experiment records on read."""
+        baseline = await self._ensure_baseline_prompt_snapshot(item)
+        optimized = await self._ensure_optimized_prompt_snapshot(item)
+        comparison = (
+            await self.repository.get_comparison_run(item.comparison_run_id) if item.comparison_run_id else None
+        )
+        optimization = (
+            await self.repository.get_optimization_run(item.optimization_run_id) if item.optimization_run_id else None
+        )
+        cost_report = optimization.cost_report if optimization else {}
+        per_prompt_cost = cost_report.get("coverup_by_prompt") or {}
+        baseline_cost = float((per_prompt_cost.get(baseline.prompt_digest) or {}).get("estimated_cost_usd") or 0.0)
+        optimized_cost = float(optimization.estimated_cost_usd) if optimization else 0.0
+        baseline_response = PromptSnapshotResponse.model_validate(baseline).model_copy(
+            update={"estimated_cost_usd": baseline_cost}
+        )
+        optimized_response = (
+            PromptSnapshotResponse.model_validate(optimized).model_copy(update={"estimated_cost_usd": optimized_cost})
+            if optimized
+            else None
+        )
+        project_names = [snapshot.name for snapshot in item.project_snapshots] or list(item.project_ids)
+        return PromptRegistryEntryResponse(
+            experiment_id=item.id,
+            experiment_name=item.name,
+            project_ids=list(item.project_ids),
+            project_names=project_names,
+            status=item.status,
+            baseline=baseline_response,
+            optimized=optimized_response,
+            baseline_metrics=self._coverage_metrics(comparison.baseline_metrics if comparison else None),
+            optimized_metrics=optimized.metrics if optimized else PromptCoverageMetrics(),
+            absolute_gain=comparison.absolute_gain if comparison else None,
+            created_at=item.created_at,
+            updated_at=item.updated_at,
+        )
+
+    @staticmethod
+    def _test_generation_settings(item: ExperimentRecord, payload: CreateTestGenerationRequest) -> dict:
+        """Freeze the effective CoverUp settings into the immutable run document."""
+        return {
+            "max_attempts": payload.max_attempts or item.settings.max_attempts,
+            "repeat_tests": item.settings.repeat_tests if payload.repeat_tests is None else payload.repeat_tests,
+            "max_concurrency": payload.max_concurrency or item.settings.max_concurrency,
+            "rate_limit": payload.rate_limit if payload.rate_limit is not None else item.settings.rate_limit,
+            "pytest_args": item.settings.pytest_args,
+            "random_seed": payload.random_seed,
+        }
+
+    @staticmethod
+    def _select_test_generation_targets(
+        item: ExperimentRecord, payload: CreateTestGenerationRequest
+    ) -> list[TargetReference]:
+        if payload.scope == TestGenerationScope.PROJECT:
+            selected = list(item.targets)
+        elif payload.scope == TestGenerationScope.MODULES:
+            wanted = set(payload.source_files)
+            selected = [target for target in item.targets if target.source_file in wanted]
+        else:
+            wanted = set(payload.function_ids)
+            selected = [target for target in item.targets if target.function_id in wanted]
+        if not selected:
+            raise AppError(422, "TEST_GENERATION_SCOPE_EMPTY", "The selected test-generation scope has no targets")
+        selected_keys = {target.key for target in selected}
+        if len(selected_keys) != len(selected):
+            raise AppError(409, "TARGET_SNAPSHOT_INVALID", "The experiment contains duplicate immutable targets")
+        return selected
+
+    async def _require_test_generation_projects(self, item: ExperimentRecord, owner_id: str) -> None:
+        """Confirm the immutable project snapshots still have executable source/runtime inputs."""
+        for snapshot in item.project_snapshots:
+            project = await self.projects.require_owned(snapshot.project_id, owner_id)
+            if self.projects.is_sample(project.id):
+                continue
+            if not snapshot.archive_object or not snapshot.runtime_bundle_object:
+                raise AppError(
+                    409,
+                    "TEST_GENERATION_RUNTIME_UNAVAILABLE",
+                    "The uploaded project snapshot has no prepared runtime bundle",
+                )
+
+    async def request_test_generation(
+        self,
+        experiment_id: str,
+        owner_id: str,
+        payload: CreateTestGenerationRequest,
+    ) -> TestGenerationRunResponse:
+        item = await self._owned(experiment_id, owner_id)
+        await self._require_test_generation_projects(item, owner_id)
+        snapshot = await self.repository.get_prompt_snapshot(item.id, payload.prompt_role)
+        if snapshot is None:
+            if payload.prompt_role == PromptRole.BASELINE:
+                snapshot = await self._ensure_baseline_prompt_snapshot(item)
+            else:
+                snapshot = await self._ensure_optimized_prompt_snapshot(item)
+        if snapshot is None:
+            raise AppError(
+                409,
+                "OPTIMIZED_PROMPT_NOT_READY",
+                "An optimized prompt is available only after the experiment final comparison finishes",
+            )
+        targets = self._select_test_generation_targets(item, payload)
+        settings = self._test_generation_settings(item, payload)
+        model = payload.model or snapshot.coverup_model
+        if self.test_generation_dispatcher is None:
+            raise RuntimeError("Test-generation dispatcher is not configured")
+        # An idempotency key protects a browser retry/double-click while preserving
+        # the separate immutable history of deliberate regenerate requests.
+        if payload.idempotency_key:
+            for existing in await self.repository.list_test_generation_runs_for_owner(owner_id):
+                if existing.idempotency_key == payload.idempotency_key:
+                    if existing.experiment_id != item.id or existing.prompt_digest != snapshot.prompt_digest:
+                        raise AppError(409, "IDEMPOTENCY_KEY_REUSED", "Idempotency key belongs to a different request")
+                    return TestGenerationRunResponse.model_validate(existing)
+        provider_secret_refs = {}
+        if self.provider_credentials is not None:
+            provider_secret_refs = await self.provider_credentials.resolve_for_models(owner_id, [model])
+        now = datetime.now(UTC)
+        run = TestGenerationRunRecord(
+            id=new_id(),
+            owner_id=owner_id,
+            experiment_id=item.id,
+            prompt_snapshot_id=snapshot.id,
+            prompt_digest=snapshot.prompt_digest,
+            prompt_role=snapshot.role,
+            status=TestGenerationStatus.QUEUED,
+            project_ids=list(snapshot.project_ids),
+            source_snapshot_digest=snapshot.source_snapshot_digest,
+            dataset_digest=snapshot.dataset_digest,
+            scope=payload.scope,
+            source_files=list(payload.source_files),
+            function_ids=list(payload.function_ids),
+            target_ids=[target.key for target in targets],
+            model=model,
+            random_seed=settings["random_seed"],
+            repeat_tests=settings["repeat_tests"],
+            max_attempts=settings["max_attempts"],
+            max_concurrency=settings["max_concurrency"],
+            rate_limit=settings["rate_limit"],
+            cost_ceiling_usd=payload.cost_ceiling_usd,
+            runner_protocol_version=snapshot.runner_protocol_version,
+            idempotency_key=payload.idempotency_key,
+            provider_secret_refs={
+                environment: {"secret": reference.secret, "version": reference.version}
+                for environment, reference in provider_secret_refs.items()
+            },
+            created_at=now,
+        )
+        await self.repository.create_test_generation_run(run)
+        try:
+            await self.test_generation_dispatcher.dispatch(run.id)
+        except Exception as exc:
+            run.status = TestGenerationStatus.FAILED
+            run.error_message = "Test-generation job could not be queued"
+            run.finished_at = datetime.now(UTC)
+            await self.repository.save_test_generation_run(run)
+            raise AppError(503, "TEST_GENERATION_QUEUE_UNAVAILABLE", "Test generation could not be queued") from exc
+        stored = await self.repository.get_test_generation_run(run.id)
+        return TestGenerationRunResponse.model_validate(stored or run)
+
+    async def get_test_generation_run(self, run_id: str, owner_id: str) -> TestGenerationRunResponse:
+        run = await self.repository.get_test_generation_run(run_id)
+        if run is None or run.owner_id != owner_id:
+            raise AppError(404, "TEST_GENERATION_RUN_NOT_FOUND", "Test generation run was not found")
+        return TestGenerationRunResponse.model_validate(run)
+
+    async def list_test_generation_runs(
+        self, owner_id: str, offset: int = 0, limit: int = 50
+    ) -> TestGenerationRunListResponse:
+        runs = await self.repository.list_test_generation_runs_for_owner(owner_id)
+        return TestGenerationRunListResponse(
+            items=[TestGenerationRunResponse.model_validate(run) for run in runs[offset : offset + limit]],
+            total=len(runs),
+            offset=offset,
+            limit=limit,
+        )
+
+    async def get_test_generation_artifact(self, run_id: str, artifact_name: str, owner_id: str) -> bytes:
+        run = await self.repository.get_test_generation_run(run_id)
+        if run is None or run.owner_id != owner_id:
+            raise AppError(404, "TEST_GENERATION_RUN_NOT_FOUND", "Test generation run was not found")
+        object_name = run.artifact_objects.get(artifact_name)
+        if object_name is None:
+            raise AppError(404, "ARTIFACT_NOT_FOUND", "Artifact was not found in this final test-generation run")
+        return await self.storage.read(object_name)
+
+    async def get_test_generation_manifest(self, run_id: str, owner_id: str) -> dict:
+        """Return the small, redacted result manifest for the run detail viewer.
+
+        This deliberately does not turn arbitrary storage paths into browser-viewable files.
+        Individual source and generated test files will require a validated artifact index.
+        """
+        content = await self.get_test_generation_artifact(run_id, "manifest", owner_id)
+        if len(content) > MAX_TEST_GENERATION_MANIFEST_BYTES:
+            raise AppError(413, "ARTIFACT_TOO_LARGE", "Test-generation manifest is too large to view")
+        try:
+            manifest = json.loads(content.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise AppError(422, "INVALID_ARTIFACT", "Test-generation manifest is not valid JSON") from exc
+        if not isinstance(manifest, dict):
+            raise AppError(422, "INVALID_ARTIFACT", "Test-generation manifest must be a JSON object")
+        return _redact_artifact_value(manifest)
+
+    async def get_test_generation_text_artifact(self, run_id: str, artifact_name: str, owner_id: str) -> dict[str, str]:
+        """Return an indexed generated test or coverage report as bounded UTF-8 text."""
+        if not re.fullmatch(r"file-(generated-test|coverage)-[1-9][0-9]*", artifact_name):
+            raise AppError(404, "ARTIFACT_NOT_FOUND", "Text artifact was not found in this final test-generation run")
+        content = await self.get_test_generation_artifact(run_id, artifact_name, owner_id)
+        if len(content) > MAX_TEST_GENERATION_MANIFEST_BYTES:
+            raise AppError(413, "ARTIFACT_TOO_LARGE", "Text artifact is too large to view")
+        try:
+            text = content.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise AppError(422, "INVALID_ARTIFACT", "Text artifact is not valid UTF-8") from exc
+        return {"artifact_name": artifact_name, "content": text}
+
+    async def execute_test_generation(self, run_id: str) -> None:
+        run = await self.repository.get_test_generation_run(run_id)
+        if run is None:
+            return
+        polling_cloud_job = run.status == TestGenerationStatus.GENERATING and run.cloud_artifact_prefix is not None
+        if run.status != TestGenerationStatus.QUEUED and not polling_cloud_job:
+            return
+        if not polling_cloud_job:
+            run.status = TestGenerationStatus.PREPARING
+            run.started_at = datetime.now(UTC)
+            await self.repository.save_test_generation_run(run)
+        try:
+            item = await self.repository.get(run.experiment_id)
+            if item is None or item.owner_id != run.owner_id:
+                raise RuntimeError("Experiment is unavailable")
+            snapshot = await self.repository.get_prompt_snapshot(item.id, run.prompt_role)
+            if snapshot is None or snapshot.id != run.prompt_snapshot_id or snapshot.prompt_digest != run.prompt_digest:
+                raise RuntimeError("Immutable prompt snapshot is unavailable")
+            targets_by_id = {target.key: target for target in item.targets}
+            targets = [targets_by_id[target_id] for target_id in run.target_ids if target_id in targets_by_id]
+            if len(targets) != len(run.target_ids):
+                raise RuntimeError("The immutable target snapshot is incomplete")
+            if self.cloud_test_generator is None:
+                raise RuntimeError("Cloud Run final test generator is not configured")
+            if polling_cloud_job:
+                result = await self.cloud_test_generator.collect(run.cloud_artifact_prefix)
+                if result is None:
+                    if run.cloud_deadline_at and datetime.now(UTC) >= run.cloud_deadline_at:
+                        run.status = TestGenerationStatus.TIMED_OUT
+                        run.error_message = "Cloud Run final test-generation job timed out"
+                        run.finished_at = datetime.now(UTC)
+                        await self.repository.save_test_generation_run(run)
+                        return
+                    assert self.test_generation_dispatcher is not None
+                    await self.test_generation_dispatcher.dispatch(run.id, delay_seconds=30)
+                    return
+            else:
+                run.status = TestGenerationStatus.GENERATING
+                await self.repository.save_test_generation_run(run)
+                run.cloud_artifact_prefix = await self.cloud_test_generator.start(
+                    prompt=snapshot.prompt,
+                    targets=[
+                        {"project": target.project, "source_file": target.source_file, "symbol": target.symbol}
+                        for target in targets
+                    ],
+                    model=run.model,
+                    settings={
+                        "max_attempts": run.max_attempts,
+                        "repeat_tests": run.repeat_tests,
+                        "max_concurrency": run.max_concurrency,
+                        "rate_limit": run.rate_limit,
+                        "pytest_args": item.settings.pytest_args,
+                        "random_seed": run.random_seed,
+                    },
+                    projects=item.project_snapshots
+                    if any(snapshot.archive_object for snapshot in item.project_snapshots)
+                    else None,
+                    provider_secret_refs=run.provider_secret_refs,
+                )
+                run.cloud_deadline_at = datetime.now(UTC) + timedelta(seconds=self.cloud_test_generator.timeout_seconds)
+                await self.repository.save_test_generation_run(run)
+                assert self.test_generation_dispatcher is not None
+                await self.test_generation_dispatcher.dispatch(run.id, delay_seconds=30)
+                return
+            metrics = TestGenerationMetrics.model_validate(result.get("metrics") or {})
+            artifacts = result.get("artifacts") or {}
+            prefix = run.cloud_artifact_prefix.rstrip("/")
+            run.metrics = metrics
+            run.estimated_cost_usd = float(result.get("estimated_cost_usd") or 0.0)
+            raw_usage = result.get("token_usage") or {}
+            run.token_usage = {
+                str(key): int(value)
+                for key, value in raw_usage.items()
+                if isinstance(value, int | float) and value >= 0
+            }
+            run.artifact_objects = _validated_final_test_artifact_objects(prefix, artifacts)
+            run.status = (
+                TestGenerationStatus.PARTIAL if result.get("status") == "partial" else TestGenerationStatus.COMPLETED
+            )
+            run.finished_at = datetime.now(UTC)
+        except Exception as exc:
+            run.status = TestGenerationStatus.FAILED
+            run.error_message = str(exc)[-4000:]
+            run.finished_at = datetime.now(UTC)
+        await self.repository.save_test_generation_run(run)
 
     async def review_prompt_version(
         self, version_id: str, owner_id: str, decision: PromptVersionStatus, comment: str

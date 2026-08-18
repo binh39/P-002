@@ -244,6 +244,11 @@ class CloudRunJobGepaOptimizer:
         best_index = int(program.get("best_index", 0))
         score = scores[best_index] if 0 <= best_index < len(scores) else 0.0
         baseline_score = scores[0] if scores else 0.0
+        try:
+            cost_report = json.loads((await self.storage.read(f"{artifacts_prefix}/cost_report.json")).decode())
+        except Exception:
+            # Older jobs did not emit an accounting artifact and intentionally remain $0.
+            cost_report = {"schema_version": 0, "total": {"estimated_cost_usd": 0.0}}
         return OptimizationResult(
             candidate=candidate,
             score=score,
@@ -255,6 +260,7 @@ class CloudRunJobGepaOptimizer:
                 "optimized_program": program,
                 "final_validation": final_validation,
                 "artifact_prefix": artifacts_prefix,
+                "cost_report": cost_report,
             },
         )
 
