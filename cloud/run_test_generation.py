@@ -162,13 +162,27 @@ def _workspaces_for_targets(targets: list[SymbolTarget], tests_workspace: str) -
     return {project_id: root_workspace / project_id for project_id in project_ids}
 
 
-def _stage_projects(args, root: Path) -> tuple[Path, dict[str, ProjectLayout]]:
+def _stage_projects(args, root: Path, project_names: list[str] | None = None) -> tuple[Path, dict[str, ProjectLayout]]:
     """Return bundled sample root or an isolated uploaded-project layout map."""
     sample_repos = Path(args.sample_repos_dir).resolve()
     layouts: dict[str, ProjectLayout] = {}
     if not args.project_manifest_object:
         if not sample_repos.is_dir():
             raise RuntimeError(f"Bundled sample repository directory is missing: {sample_repos}")
+        for project in project_names or []:
+            repository_name = project.split(":", 1)[1] if project.startswith("sample:") else project
+            repository_root = (sample_repos / repository_name).resolve()
+            if not repository_root.is_dir() or sample_repos not in repository_root.parents:
+                raise RuntimeError(f"Bundled sample repository is missing: {repository_name}")
+            package_dir = repository_root / repository_name
+            if not package_dir.is_dir():
+                raise RuntimeError(f"Bundled sample repository has no package directory: {repository_name}")
+            tests_dir = repository_root / "tests"
+            layouts[project] = ProjectLayout(
+                package_dir=package_dir,
+                tests_dir=tests_dir,
+                import_root=package_dir.parent,
+            )
         return sample_repos, layouts
 
     manifest_path = root / "projects.json"
@@ -228,7 +242,8 @@ def _run(args, artifacts: Path) -> dict:
         )
         for target in raw_targets
     ]
-    sample_repos, layouts = _stage_projects(args, scratch)
+    project_names = sorted({str(target.project) for target in targets})
+    sample_repos, layouts = _stage_projects(args, scratch, project_names)
     package_dir = sample_repos / "isort" / "isort"
     tests_dir = sample_repos / "isort" / "tests"
     if layouts:

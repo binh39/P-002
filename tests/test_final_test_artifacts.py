@@ -1,6 +1,7 @@
 import hashlib
+from types import SimpleNamespace
 
-from cloud.run_test_generation import _artifact_index, _workspaces_for_targets
+from cloud.run_test_generation import _artifact_index, _stage_projects, _workspaces_for_targets
 from src.optimization.models import SymbolTarget
 
 
@@ -51,3 +52,21 @@ def test_final_test_workspaces_are_derived_from_symbol_targets(tmp_path):
 
     assert single == {"isort": workspace}
     assert multiple == {"isort": workspace / "isort", "mimesis": workspace / "mimesis"}
+
+
+def test_bundled_sample_projects_get_independent_layouts(tmp_path):
+    sample_repos = tmp_path / "sample_repo"
+    for project in ("isort", "mlxtend", "typesystem"):
+        (sample_repos / project / project).mkdir(parents=True)
+        (sample_repos / project / "tests").mkdir()
+
+    staged_root, layouts = _stage_projects(
+        SimpleNamespace(sample_repos_dir=str(sample_repos), project_manifest_object=None),
+        tmp_path / "scratch",
+        ["isort", "mlxtend", "typesystem"],
+    )
+
+    assert staged_root == sample_repos.resolve()
+    assert set(layouts) == {"isort", "mlxtend", "typesystem"}
+    assert layouts["mlxtend"].package_dir == (sample_repos / "mlxtend" / "mlxtend").resolve()
+    assert layouts["typesystem"].tests_dir == (sample_repos / "typesystem" / "tests").resolve()
