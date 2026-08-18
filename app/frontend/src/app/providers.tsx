@@ -9,12 +9,14 @@ import type { ProjectRepository } from "@/repositories/contracts/ProjectReposito
 import type { PromptVersionRepository } from "@/repositories/contracts/PromptVersionRepository";
 import type { PromptRegistryRepository } from "@/repositories/contracts/PromptRegistryRepository";
 import type { ProviderCredentialRepository } from "@/repositories/contracts/ProviderCredentialRepository";
+import type { TestGenerationRepository } from "@/repositories/contracts/TestGenerationRepository";
 import { HttpDashboardRepository } from "@/repositories/http/HttpDashboardRepository";
 import { HttpExperimentRepository } from "@/repositories/http/HttpExperimentRepository";
 import { HttpProjectRepository } from "@/repositories/http/HttpProjectRepository";
 import { HttpPromptVersionRepository } from "@/repositories/http/HttpPromptVersionRepository";
 import { HttpPromptRegistryRepository } from "@/repositories/http/HttpPromptRegistryRepository";
 import { HttpProviderCredentialRepository } from "@/repositories/http/HttpProviderCredentialRepository";
+import { HttpTestGenerationRepository } from "@/repositories/http/HttpTestGenerationRepository";
 import { MockDashboardRepository } from "@/repositories/mock/MockDashboardRepository";
 
 interface Repositories {
@@ -23,6 +25,7 @@ interface Repositories {
   experiments: ExperimentRepository;
   promptVersions: PromptVersionRepository;
   promptRegistry: PromptRegistryRepository;
+  testGeneration: TestGenerationRepository;
   providerCredentials: ProviderCredentialRepository;
 }
 const RepositoryContext = createContext<Repositories | null>(null);
@@ -35,6 +38,7 @@ function createRepositories(): Repositories {
     experiments: new HttpExperimentRepository(),
     promptVersions: new HttpPromptVersionRepository(),
     promptRegistry: new HttpPromptRegistryRepository(),
+    testGeneration: new HttpTestGenerationRepository(),
     providerCredentials: new HttpProviderCredentialRepository(),
   };
 }

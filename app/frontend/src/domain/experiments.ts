@@ -222,6 +222,49 @@ export interface PromptRegistryList {
   limit: number;
 }
 
+export type TestGenerationStatus =
+  | "queued"
+  | "preparing"
+  | "generating"
+  | "running_tests"
+  | "completed"
+  | "partial"
+  | "failed"
+  | "cancelled"
+  | "timed_out";
+
+export interface TestGenerationMetrics {
+  testFileCount: number;
+  testCount: number;
+  passed: number | null;
+  failed: number | null;
+  skipped: number | null;
+  projectStatementCoverage: number | null;
+  projectBranchCoverage: number | null;
+  targetStatementCoverage: number | null;
+  targetBranchCoverage: number | null;
+  targetScore: number | null;
+  targetCount: number;
+  completedTargetCount: number;
+  failedTargetCount: number;
+}
+
+export interface TestGenerationRun {
+  id: string;
+  experimentId: string;
+  promptSnapshotId: string;
+  promptDigest: string;
+  promptRole: PromptRole;
+  status: TestGenerationStatus;
+  projectIds: string[];
+  scope: "project" | "modules" | "functions";
+  model: string;
+  metrics: TestGenerationMetrics;
+  estimatedCostUsd: number;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
 export const optimizationRunIsActive = (status: ExperimentStatus) =>
   status === "optimization_queued" || status === "optimizing" || status === "candidate_evaluating";
 

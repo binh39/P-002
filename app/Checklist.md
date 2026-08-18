@@ -741,7 +741,7 @@ Create experiment
 - [X]  Click row mở trang chi tiết experiment/prompt riêng, không nhồi toàn bộ nội dung vào table.
 - [X]  Trang chi tiết hiển thị hai cột Baseline Prompt và Optimized Prompt cùng metrics/cost/model tương ứng.
 - [X]  Thêm chế độ side-by-side, unified diff, chỉ xem `initial` và chỉ xem `error`.
-- [ ]  Thêm nút `Generate Test Cases` riêng cho baseline và optimized prompt.
+- [X]  Thêm nút `Generate Test Cases` riêng cho baseline và optimized prompt.
 - [ ]  Thêm nút `Compare baseline vs optimized` để tạo paired generation với cùng project snapshot,
   targets, model, seed và runner config.
 - [ ]  Có loading, empty, error, retry, forbidden, expired-session và trạng thái experiment chưa có optimized prompt.

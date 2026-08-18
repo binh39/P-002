@@ -6682,6 +6682,21 @@ textarea {
   gap: 8px;
 }
 
+.prompt-registry-generation-notice {
+  margin: 0 0 18px;
+  padding: 11px 13px;
+  border: 1px solid color-mix(in srgb, var(--primary, #4f6ef7) 34%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--primary, #4f6ef7) 7%, transparent);
+  color: var(--text, #1d2939);
+}
+
+.prompt-registry-generation-notice.is-error {
+  border-color: color-mix(in srgb, #c03b3b 44%, transparent);
+  background: color-mix(in srgb, #c03b3b 8%, transparent);
+  color: #9b2020;
+}
+
 .prompt-registry-summary {
   padding: 18px;
 }
