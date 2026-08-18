@@ -54,6 +54,7 @@ from .schemas import (
 )
 
 STANDARD_MAX_METRIC_CALLS = 2200
+MAX_TEST_GENERATION_MANIFEST_BYTES = 1_000_000
 
 _FINAL_VALIDATION_SCALAR_FIELDS = (
     "mean_score",
@@ -94,6 +95,22 @@ def _compact_final_validation(report: dict) -> dict:
                 field: aggregate[field] for field in _FINAL_VALIDATION_METRIC_FIELDS if field in aggregate
             }
     return compact
+
+
+def _redact_artifact_value(value):
+    """Remove credential-shaped fields before returning a JSON artifact to a browser."""
+    if isinstance(value, list):
+        return [_redact_artifact_value(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    redacted = {}
+    for key, item in value.items():
+        normalized = str(key).lower()
+        if any(marker in normalized for marker in ("api_key", "token", "secret", "credential", "authorization")):
+            redacted[key] = "[redacted]"
+        else:
+            redacted[key] = _redact_artifact_value(item)
+    return redacted
 
 
 class ExperimentService:
@@ -1192,6 +1209,23 @@ class ExperimentService:
         if object_name is None:
             raise AppError(404, "ARTIFACT_NOT_FOUND", "Artifact was not found in this final test-generation run")
         return await self.storage.read(object_name)
+
+    async def get_test_generation_manifest(self, run_id: str, owner_id: str) -> dict:
+        """Return the small, redacted result manifest for the run detail viewer.
+
+        This deliberately does not turn arbitrary storage paths into browser-viewable files.
+        Individual source and generated test files will require a validated artifact index.
+        """
+        content = await self.get_test_generation_artifact(run_id, "manifest", owner_id)
+        if len(content) > MAX_TEST_GENERATION_MANIFEST_BYTES:
+            raise AppError(413, "ARTIFACT_TOO_LARGE", "Test-generation manifest is too large to view")
+        try:
+            manifest = json.loads(content.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise AppError(422, "INVALID_ARTIFACT", "Test-generation manifest is not valid JSON") from exc
+        if not isinstance(manifest, dict):
+            raise AppError(422, "INVALID_ARTIFACT", "Test-generation manifest must be a JSON object")
+        return _redact_artifact_value(manifest)
 
     async def execute_test_generation(self, run_id: str) -> None:
         run = await self.repository.get_test_generation_run(run_id)

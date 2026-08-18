@@ -778,7 +778,7 @@ Create experiment
 - [ ]  Private GCS lưu generated `.py`, source excerpts/snapshot references, pytest output, coverage JSON/HTML,
   target coverage, generation log, manifest và downloadable ZIP.
 - [ ]  Artifact manifest có schema version, checksum, size, content type, prompt/source digest và retention deadline.
-- [ ]  Tạo API owner-scoped để list artifact, xem text/code an toàn và cấp signed download ngắn hạn.
+- [ ]  Tạo API owner-scoped để list artifact, xem text/code an toàn và cấp signed download ngắn hạn. (Đã có manifest JSON viewer và download owner-scoped; còn artifact index/text source-test và signed URL.)
 - [ ]  Không lưu API key, credential, Firebase token hoặc signed URL lâu dài trong run/manifest/log.
 - [ ]  Thiết kế retention và cascade delete cho test run mà không xóa nhầm experiment, prompt hoặc project source.
 

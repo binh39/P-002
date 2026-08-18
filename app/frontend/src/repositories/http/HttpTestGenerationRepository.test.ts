@@ -170,4 +170,24 @@ describe("HttpTestGenerationRepository", () => {
       expect.objectContaining({ headers: expect.objectContaining({ Accept: "application/json" }) }),
     );
   });
+
+  it("requests the manifest viewer through the dedicated owner-scoped endpoint", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ metrics: { test_count: 2 } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    const manifest = await new HttpTestGenerationRepository().getManifest("test-run-1");
+
+    expect(manifest).toEqual({ metrics: { test_count: 2 } });
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/test-generation-runs/test-run-1/artifacts/manifest/content",
+      expect.objectContaining({ headers: expect.objectContaining({ Accept: "application/json" }) }),
+    );
+  });
 });

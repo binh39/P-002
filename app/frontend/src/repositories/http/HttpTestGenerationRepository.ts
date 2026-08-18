@@ -130,6 +130,13 @@ export class HttpTestGenerationRepository implements TestGenerationRepository {
     );
   }
 
+  async getManifest(runId: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+    return apiRequest<Record<string, unknown>>(
+      `/test-generation-runs/${runId}/artifacts/manifest/content`,
+      { signal },
+    );
+  }
+
   async downloadArtifact(runId: string, artifactName: string): Promise<Blob> {
     return apiDownload(`/test-generation-runs/${runId}/artifacts/${artifactName}`);
   }

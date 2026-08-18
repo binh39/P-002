@@ -467,6 +467,32 @@ async def test_final_test_generation_is_owner_scoped_and_idempotent(client, app)
     assert foreign.status_code == 404
     assert foreign.json()["error"]["code"] == "TEST_GENERATION_RUN_NOT_FOUND"
 
+    manifest_object = f"artifacts/local-user/final-test-runs/{run['id']}/test_generation_result.json"
+    owned_record = await app.state.services.experiments.repository.get_test_generation_run(run["id"])
+    assert owned_record is not None
+    owned_record.artifact_objects = {"manifest": manifest_object}
+    await app.state.services.experiments.repository.save_test_generation_run(owned_record)
+    await app.state.services.experiments.storage.write(
+        manifest_object,
+        b'{"metrics":{"test_count":2},"api_key":"must-not-leak","nested":{"token":"hidden"}}',
+        "application/json",
+    )
+    manifest = await client.get(
+        f"/api/v1/test-generation-runs/{run['id']}/artifacts/manifest/content",
+        headers=AUTH_HEADERS,
+    )
+    foreign_manifest = await client.get(
+        "/api/v1/test-generation-runs/foreign-final-suite/artifacts/manifest/content",
+        headers=AUTH_HEADERS,
+    )
+    assert manifest.status_code == 200
+    assert manifest.json() == {
+        "metrics": {"test_count": 2},
+        "api_key": "[redacted]",
+        "nested": {"token": "[redacted]"},
+    }
+    assert foreign_manifest.status_code == 404
+
 
 @pytest.mark.asyncio
 async def test_final_test_generation_rejects_optimized_prompt_before_comparison(client):

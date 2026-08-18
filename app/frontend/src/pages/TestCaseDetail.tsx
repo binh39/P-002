@@ -1,4 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { useLocation, useRoute } from "wouter";
 
 import { useRepositories } from "@/app/providers";
@@ -36,6 +37,7 @@ export default function TestCaseDetail() {
   const [, navigate] = useLocation();
   const { testGeneration } = useRepositories();
   const runId = params?.runId ?? "";
+  const [manifestVisible, setManifestVisible] = useState(false);
   const query = useQuery({
     queryKey: ["test-generation-runs", runId],
     queryFn: ({ signal }) => testGeneration.get(runId, signal),
@@ -57,6 +59,12 @@ export default function TestCaseDetail() {
       anchor.click();
       URL.revokeObjectURL(url);
     },
+  });
+  const manifestQuery = useQuery({
+    queryKey: ["test-generation-runs", runId, "manifest"],
+    queryFn: ({ signal }) => testGeneration.getManifest(runId, signal),
+    enabled: manifestVisible && runId !== "",
+    retry: 1,
   });
 
   if (query.isPending) {
@@ -236,6 +244,14 @@ export default function TestCaseDetail() {
           <div className="empty-state">Artifacts appear when the runner completes.</div>
         ) : (
           <div className="prompt-registry-header-actions">
+            {run.artifactObjects.manifest && (
+              <button
+                className="secondary-button"
+                onClick={() => setManifestVisible((visible) => !visible)}
+              >
+                {manifestVisible ? "Hide manifest" : "View manifest"}
+              </button>
+            )}
             {artifacts.map((artifactName) => (
               <button
                 key={artifactName}
@@ -256,6 +272,19 @@ export default function TestCaseDetail() {
           <p className="inline-validation-error" role="alert">
             {download.error instanceof Error ? download.error.message : "Artifact download failed."}
           </p>
+        )}
+        {manifestVisible && manifestQuery.isPending && <p role="status">Loading manifest…</p>}
+        {manifestVisible && manifestQuery.isError && (
+          <p className="inline-validation-error" role="alert">
+            {manifestQuery.error instanceof Error
+              ? manifestQuery.error.message
+              : "Manifest could not be displayed."}
+          </p>
+        )}
+        {manifestVisible && manifestQuery.data && (
+          <pre className="prompt-registry-code test-generation-manifest">
+            <code>{JSON.stringify(manifestQuery.data, null, 2)}</code>
+          </pre>
         )}
       </section>
     </div>
