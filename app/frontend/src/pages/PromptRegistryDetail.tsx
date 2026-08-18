@@ -70,31 +70,30 @@ function MetricPanel({
     <section className={`prompt-registry-metric-panel is-${tone}`}>
       <h2>{title}</h2>
       <div className="prompt-registry-primary-score">
-        <span>Score</span>
-        <strong>
-          {percentage(metrics.score)}
-          <MetricDelta value={metrics.score} baseline={comparison?.score} />
-        </strong>
+        <span>
+          Score <MetricDelta value={metrics.score} baseline={comparison?.score} />
+        </span>
+        <strong>{percentage(metrics.score)}</strong>
       </div>
       <MetricBar value={metrics.score} tone={tone} />
       <div className="prompt-registry-coverage-list">
         <div>
-          <span>Statement coverage</span>
-          <strong>
-            {percentage(metrics.statementCoverage)}
+          <span>
+            Statement coverage{" "}
             <MetricDelta
               value={metrics.statementCoverage}
               baseline={comparison?.statementCoverage}
             />
-          </strong>
+          </span>
+          <strong>{percentage(metrics.statementCoverage)}</strong>
           <MetricBar value={metrics.statementCoverage} tone="statement" />
         </div>
         <div>
-          <span>Branch coverage</span>
-          <strong>
-            {percentage(metrics.branchCoverage)}
+          <span>
+            Branch coverage{" "}
             <MetricDelta value={metrics.branchCoverage} baseline={comparison?.branchCoverage} />
-          </strong>
+          </span>
+          <strong>{percentage(metrics.branchCoverage)}</strong>
           <MetricBar value={metrics.branchCoverage} tone="branch" />
         </div>
       </div>

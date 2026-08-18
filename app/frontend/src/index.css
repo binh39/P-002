@@ -6992,11 +6992,6 @@ textarea {
 }
 
 .prompt-registry-primary-score strong {
-  display: inline-flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 7px;
   color: var(--text, #1d2939);
   font-size: 22px;
 }
@@ -7017,10 +7012,6 @@ textarea {
 }
 
 .prompt-registry-coverage-list strong {
-  display: inline-flex;
-  align-items: baseline;
-  justify-content: flex-end;
-  gap: 6px;
   color: var(--text, #1d2939);
 }
 
