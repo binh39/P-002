@@ -5,6 +5,9 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 SUPPORTED_MODELS = (
+    "gemini/gemini-2.5-flash",
+    "gemini/gemini-2.5-flash-lite",
+    "gemini/gemini-2.5-pro",
     "vertex_ai/gemini-2.5-flash",
     "vertex_ai/gemini-2.5-flash-lite",
     "vertex_ai/gemini-2.5-pro",
@@ -225,6 +228,7 @@ class OptimizationRunRecord(OptimizationRunResponse):
     # Internal routing metadata. This is persisted with the run but intentionally
     # omitted from OptimizationRunResponse so clients cannot choose a billing project.
     vertexai_project: str | None = None
+    provider_secret_refs: dict[str, dict[str, str]] = Field(default_factory=dict)
 
 
 class EvolutionIteration(StrictModel):

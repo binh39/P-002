@@ -88,12 +88,14 @@ class ExperimentService:
         cloud_optimizer=None,
         samples: SampleProjectCatalog | None = None,
         admin_vertexai_project: str = "",
+        provider_credentials=None,
     ):
         self.repository, self.projects, self.functions = repository, projects, functions
         self.storage = storage
         self.cloud_optimizer = cloud_optimizer
         self.samples = samples
         self.admin_vertexai_project = admin_vertexai_project.strip()
+        self.provider_credentials = provider_credentials
         self.optimization_dispatcher: OptimizationDispatcher | None = None
         self.comparison_dispatcher: ComparisonDispatcher | None = None
 
@@ -262,6 +264,12 @@ class ExperimentService:
         if self.optimization_dispatcher is None:
             raise RuntimeError("Optimization dispatcher is not configured")
         parent = self._baseline_for(item)
+        provider_secret_refs = {}
+        if self.provider_credentials is not None:
+            provider_secret_refs = await self.provider_credentials.resolve_for_models(
+                owner_id,
+                [item.settings.coverup_model, item.settings.optimize_model],
+            )
 
         now = datetime.now(UTC)
         run = OptimizationRunRecord(
@@ -270,6 +278,10 @@ class ExperimentService:
             status=ExperimentStatus.OPTIMIZATION_QUEUED,
             parent_prompt_digest=parent.digest(),
             vertexai_project=self.admin_vertexai_project if full_access else None,
+            provider_secret_refs={
+                environment: {"secret": reference.secret, "version": reference.version}
+                for environment, reference in provider_secret_refs.items()
+            },
             created_at=now,
         )
         await self.repository.create_optimization_run(run)
