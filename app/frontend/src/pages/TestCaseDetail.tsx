@@ -100,6 +100,11 @@ function progressWidth(value: number | null) {
   return `${Math.round(Math.max(0, Math.min(1, value ?? 0)) * 100)}%`;
 }
 
+function combinedCoverageScore(statement: number | null, branch: number | null) {
+  if (statement === null || branch === null) return null;
+  return (statement + branch) / 2;
+}
+
 function MetricBar({
   value,
   tone,
@@ -116,33 +121,58 @@ function MetricBar({
 
 function TestSuiteMetrics({
   targetScore,
-  statementCoverage,
-  branchCoverage,
+  projectStatementCoverage,
+  projectBranchCoverage,
+  targetStatementCoverage,
+  targetBranchCoverage,
 }: {
   targetScore: number | null;
-  statementCoverage: number | null;
-  branchCoverage: number | null;
+  projectStatementCoverage: number | null;
+  projectBranchCoverage: number | null;
+  targetStatementCoverage: number | null;
+  targetBranchCoverage: number | null;
 }) {
+  const projectScore = combinedCoverageScore(projectStatementCoverage, projectBranchCoverage);
   return (
     <section className="platform-card prompt-registry-summary test-suite-summary">
       <div className="prompt-registry-metric-comparison">
         <section className="prompt-registry-metric-panel is-final">
-          <h2>Coverage result</h2>
+          <h2>Project Coverage</h2>
           <div className="prompt-registry-primary-score">
-            <span>Target score</span>
+            <span>Score</span>
+            <strong>{percentage(projectScore)}</strong>
+          </div>
+          <MetricBar value={projectScore} tone="final" />
+          <div className="prompt-registry-coverage-list">
+            <div>
+              <span>Statement coverage</span>
+              <strong>{percentage(projectStatementCoverage)}</strong>
+              <MetricBar value={projectStatementCoverage} tone="statement" />
+            </div>
+            <div>
+              <span>Branch coverage</span>
+              <strong>{percentage(projectBranchCoverage)}</strong>
+              <MetricBar value={projectBranchCoverage} tone="branch" />
+            </div>
+          </div>
+        </section>
+        <section className="prompt-registry-metric-panel is-final">
+          <h2>Target Coverage</h2>
+          <div className="prompt-registry-primary-score">
+            <span>Score</span>
             <strong>{percentage(targetScore)}</strong>
           </div>
           <MetricBar value={targetScore} tone="final" />
           <div className="prompt-registry-coverage-list">
             <div>
-              <span>Project statement</span>
-              <strong>{percentage(statementCoverage)}</strong>
-              <MetricBar value={statementCoverage} tone="statement" />
+              <span>Statement coverage</span>
+              <strong>{percentage(targetStatementCoverage)}</strong>
+              <MetricBar value={targetStatementCoverage} tone="statement" />
             </div>
             <div>
-              <span>Project branch</span>
-              <strong>{percentage(branchCoverage)}</strong>
-              <MetricBar value={branchCoverage} tone="branch" />
+              <span>Branch coverage</span>
+              <strong>{percentage(targetBranchCoverage)}</strong>
+              <MetricBar value={targetBranchCoverage} tone="branch" />
             </div>
           </div>
         </section>
@@ -326,8 +356,10 @@ export default function TestCaseDetail() {
       )}
       <TestSuiteMetrics
         targetScore={run.metrics.targetScore}
-        statementCoverage={run.metrics.projectStatementCoverage}
-        branchCoverage={run.metrics.projectBranchCoverage}
+        projectStatementCoverage={run.metrics.projectStatementCoverage}
+        projectBranchCoverage={run.metrics.projectBranchCoverage}
+        targetStatementCoverage={run.metrics.targetStatementCoverage}
+        targetBranchCoverage={run.metrics.targetBranchCoverage}
       />
       <div className="platform-stats-grid test-suite-run-stats">
         <StatCard
