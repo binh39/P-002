@@ -7,6 +7,7 @@ from backend.infrastructure.storage import ObjectStorage
 from backend.modules.analysis.repository import FunctionRepository
 from backend.modules.analysis.schemas import is_valid_optimization_function
 from backend.modules.projects.samples import SampleProjectCatalog
+from backend.modules.projects.schemas import RuntimeStatus
 from backend.modules.projects.service import ProjectService
 
 from .dataset import select_targets, split_targets, validate_manual_splits
@@ -138,8 +139,23 @@ class ExperimentService:
         except (KeyError, ValueError) as exc:
             raise AppError(422, "INVALID_BASELINE_PROMPT", str(exc)) from exc
         projects = [await self.projects.require_owned(project_id, owner_id) for project_id in payload.project_ids]
+        if self.projects.runtime:
+            projects = [
+                project if self.projects.is_sample(project.id) else await self.projects.runtime.refresh(project)
+                for project in projects
+            ]
         if any(project.status not in {"ready", "warning"} for project in projects):
             raise AppError(409, "ANALYSIS_NOT_READY", "Every project must finish analysis first")
+        uploaded = [project for project in projects if not self.projects.is_sample(project.id)]
+        environment_ids = {project.runtime_environment_id for project in projects}
+        if len(environment_ids) != 1:
+            raise AppError(
+                422,
+                "RUNTIME_ENVIRONMENT_MISMATCH",
+                "Every project in an experiment must belong to the same runtime environment",
+            )
+        if any(project.runtime_status != RuntimeStatus.READY for project in uploaded):
+            raise AppError(409, "RUNTIME_NOT_READY", "Every uploaded project must pass runtime preparation")
         snapshots = []
         available: dict[str, TargetReference] = {}
         used_runner_names: set[str] = set()
@@ -154,6 +170,10 @@ class ExperimentService:
                     source_directory=project.settings.runtime.source_directory,
                     test_directory=project.settings.tests.test_directory,
                     runner_project=runner_project,
+                    archive_object=None if self.projects.is_sample(project.id) else project.object_name,
+                    runtime_artifact_prefix=project.runtime_artifact_prefix,
+                    runtime_environment_id=project.runtime_environment_id,
+                    runtime_bundle_object=project.runtime_bundle_object,
                 )
             )
             for function in await self._list_functions(project.id):
@@ -163,7 +183,7 @@ class ExperimentService:
                     project_id=project.id,
                     function_id=function.id,
                     project=runner_project,
-                    source_file=function.file,
+                    source_file=self._runner_source_file(project, function.file),
                     symbol=function.qualified_name,
                     statements=function.statements,
                     branches=function.branches,
@@ -201,8 +221,9 @@ class ExperimentService:
             split_seed=payload.random_seed,
             settings=payload.settings,
             baseline_prompt=parent.as_candidate(),
-            optimization_eligible=(
-                self.samples is not None and all(self.samples.contains(project.id) for project in projects)
+            optimization_eligible=all(
+                self.projects.is_sample(project.id) or project.runtime_status == RuntimeStatus.READY
+                for project in projects
             ),
             status=ExperimentStatus.DRAFT,
             created_at=now,
@@ -247,14 +268,6 @@ class ExperimentService:
         previous_status = item.status
         if previous_status != ExperimentStatus.DRAFT:
             raise AppError(409, "OPTIMIZATION_ALREADY_REQUESTED", "Optimization has already been requested")
-        if self.samples is None or any(
-            not self.samples.contains(snapshot.project_id) for snapshot in item.project_snapshots
-        ):
-            raise AppError(
-                409,
-                "BUNDLED_SAMPLE_REQUIRED",
-                "Optimization runs only against projects bundled in sample_repo",
-            )
         if not item.optimization_eligible:
             raise AppError(
                 409,
@@ -480,6 +493,9 @@ class ExperimentService:
                     for target_key in item.dataset_splits["test"]
                 ]
                 if hasattr(self.cloud_optimizer, "start"):
+                    start_options = {}
+                    if any(snapshot.archive_object for snapshot in item.project_snapshots):
+                        start_options["projects"] = item.project_snapshots
                     run.cloud_artifact_prefix = await self.cloud_optimizer.start(
                         baseline=parent,
                         train=targets["train"],
@@ -487,6 +503,7 @@ class ExperimentService:
                         holdout=holdout,
                         settings=item.settings,
                         vertexai_project=run.vertexai_project,
+                        **start_options,
                     )
                     run.cloud_deadline_at = datetime.now(UTC) + timedelta(seconds=self.cloud_optimizer.timeout_seconds)
                     await self.repository.save_optimization_run(run)
@@ -833,6 +850,14 @@ class ExperimentService:
             candidate = f"{base}-{suffix}"
             suffix += 1
         return candidate
+
+    def _runner_source_file(self, project, source_file: str) -> str:
+        if self.projects.is_sample(project.id):
+            return source_file
+        source = project.settings.runtime.source_directory.replace("\\", "/").strip("./")
+        normalized = source_file.replace("\\", "/").lstrip("./")
+        prefix = f"{source}/" if source else ""
+        return normalized[len(prefix) :] if prefix and normalized.startswith(prefix) else normalized
 
     @staticmethod
     def _comparison_metrics(coverage: dict | None) -> dict:

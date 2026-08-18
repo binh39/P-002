@@ -31,6 +31,11 @@ async def get_project(project_id: str, user: CurrentUser, request: Request):
     return await request.app.state.services.projects.get(project_id, user.uid)
 
 
+@router.post("/{project_id}/prepare-runtime", response_model=ProjectResponse, status_code=status.HTTP_202_ACCEPTED)
+async def prepare_project_runtime(project_id: str, user: CurrentUser, request: Request):
+    return await request.app.state.services.projects.prepare_runtime(project_id, user.uid)
+
+
 @router.patch("/{project_id}/settings", response_model=ProjectResponse)
 async def update_project_settings(
     project_id: str,

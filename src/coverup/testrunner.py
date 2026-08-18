@@ -9,6 +9,11 @@ import os
 from .utils import subprocess_run
 
 
+def _test_python() -> str:
+    """Use the prepared project runtime when Cloud Run supplied one."""
+    return os.environ.get("TESTGEN_PYTHON", sys.executable)
+
+
 def _unsupported_isolate_option(output: bytes | None) -> bool:
     return bool(output and b'unrecognized arguments: --isolate' in output)
 
@@ -25,7 +30,7 @@ async def measure_test_coverage(*, test: str, tests_dir: Path, pytest_args='',
         with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as j:
             try:
                 # -qq to cut down on tokens
-                command = [sys.executable, '-X', 'utf8', '-m', 'slipcover',  *(('--branch',) if branch_coverage else ()),
+                command = [_test_python(), '-X', 'utf8', '-m', 'slipcover',  *(('--branch',) if branch_coverage else ()),
                            '--json', '--out', j.name,
                            '-m', 'pytest', *pytest_args.split(),
                            '-qq', '-x', '--disable-warnings', test_name]
@@ -58,7 +63,7 @@ def measure_suite_coverage(*, tests_dir: Path, source_dir: T.Optional[Path], pyt
 
     with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as j:
         try:
-            command = [sys.executable,
+            command = [_test_python(),
                      '-X', 'utf8',
                      '-m', 'slipcover',
                          *(('--source', source_dir) if source_dir else ()),

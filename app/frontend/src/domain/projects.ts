@@ -1,4 +1,20 @@
 export type ProjectStatus = "ready" | "warning" | "analyzing" | "failed";
+export type RuntimeStatus =
+  | "not_requested"
+  | "runtime_queued"
+  | "runtime_preparing"
+  | "runtime_ready"
+  | "runtime_failed";
+
+export interface RuntimeReport {
+  dependencyFiles: string[];
+  installStrategy: string;
+  collectedTests: number;
+  statementCoverage: number | null;
+  branchCoverage: number | null;
+  error: string | null;
+  dependencyFingerprint?: string | null;
+}
 
 export interface PythonProject {
   id: string;
@@ -16,6 +32,12 @@ export interface PythonProject {
   testCommand: string;
   sourceDir: string;
   testDir: string;
+  runtimeStatus?: RuntimeStatus;
+  runtimeReport?: RuntimeReport | null;
+  runtimeEnvironmentId?: string | null;
+  runtimeEnvironmentName?: string | null;
+  runtimeBundleObject?: string | null;
+  runtimeDependencyFingerprint?: string | null;
 }
 
 export interface ProjectFunction {
@@ -37,4 +59,6 @@ export interface CreateProjectInput {
   branch: string;
   commit?: string;
   file: File;
+  runtimeEnvironmentId?: string;
+  runtimeEnvironmentName?: string;
 }

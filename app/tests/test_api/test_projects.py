@@ -113,7 +113,7 @@ async def test_upload_and_project_lifecycle(client):
     assert create_response.status_code == 201
     project = create_response.json()
     assert project["status"] == "uploaded"
-    assert project["settings"]["runtime"]["python_version"] == "3.11"
+    assert project["settings"]["runtime"]["python_version"] == "3.12"
 
     list_response = await client.get("/api/v1/projects", headers=AUTH_HEADERS)
     assert list_response.status_code == 200

@@ -82,3 +82,25 @@ def test_project_setup_rejects_missing_dependency_before_model_execution(tmp_pat
 
     with pytest.raises(RuntimeError, match="Project environment preflight failed"):
         prepare_project(project, package)
+
+
+def test_project_setup_validates_with_selected_runtime_interpreter(tmp_path: Path, monkeypatch):
+    project = tmp_path / "example"
+    package = project / "example"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    observed = {}
+
+    def fake_run(command, **kwargs):
+        observed["command"] = command
+        return subprocess.CompletedProcess(command, 0, stdout="")
+
+    monkeypatch.setattr("src.optimization.project_setup.subprocess.run", fake_run)
+
+    prepare_project(
+        project,
+        package,
+        environment={"TESTGEN_PYTHON": "prepared-python"},
+    )
+
+    assert observed["command"][0] == "prepared-python"

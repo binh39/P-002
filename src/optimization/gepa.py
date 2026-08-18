@@ -175,11 +175,11 @@ def _full_reflection_logs_enabled() -> bool:
 
 def _log_value(value: Any) -> Any:
     """Convert SDK response objects to JSON-compatible diagnostic output."""
-    if value is None or isinstance(value, (str, int, float, bool)):
+    if value is None or isinstance(value, str | int | float | bool):
         return value
     if isinstance(value, Mapping):
         return {str(key): _log_value(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, list | tuple):
         return [_log_value(item) for item in value]
     for method_name in ("model_dump", "to_dict"):
         method = getattr(value, method_name, None)
@@ -278,6 +278,7 @@ def _evaluation_digest(
             source = Path(target.source_file)
             candidates = (
                 package_dir.parent / source,
+                package_dir / source,
                 project_root / source,
                 package_dir / source.name,
             )
@@ -476,12 +477,12 @@ def _mean(values: Sequence[float]) -> float:
 def _has_incomplete_coverage(record: Mapping[str, Any]) -> bool:
     """Return whether a measured target still has any uncovered behavior."""
     score = record.get("candidate_score", record.get("score"))
-    if isinstance(score, (int, float)):
+    if isinstance(score, int | float):
         return float(score) < PERFECT_COVERAGE_THRESHOLD
     coverage = record.get("coverage")
     if isinstance(coverage, Mapping):
         coverage_score = coverage.get("score")
-        if isinstance(coverage_score, (int, float)):
+        if isinstance(coverage_score, int | float):
             return float(coverage_score) < PERFECT_COVERAGE_THRESHOLD
     # Missing measurements must remain eligible so failures are not hidden.
     return True
@@ -527,7 +528,7 @@ def _compact_attempt(attempt: Mapping[str, Any]) -> dict[str, Any]:
         )
     get_info_calls = attempt.get("get_info_calls", [])
     if isinstance(get_info_calls, Sequence) and not isinstance(
-        get_info_calls, (str, bytes)
+        get_info_calls, str | bytes
     ):
         row["get_info_calls"] = [
             {
@@ -736,7 +737,7 @@ def evaluate_bundle_repeated(
     ]
     aggregate_keys = {
         key for row in aggregate_rows for key, value in row.items()
-        if isinstance(value, (int, float))
+        if isinstance(value, int | float)
     }
     aggregate = {
         key: _mean([float(row[key]) for row in aggregate_rows if key in row])
@@ -878,6 +879,7 @@ def _find_source_path(runner: CoverUpExperimentRunner, target: SymbolTarget) -> 
         package_dir = Path(runner.config.package_dir).resolve()
     candidates = (
         package_dir.parent / source,
+        package_dir / source,
         runner.config.project_root.resolve() / source,
         package_dir / source.name,
     )
@@ -894,7 +896,7 @@ def _definition_lines(source: str, symbol: str) -> set[int]:
 
     def visit(body: list[ast.stmt], scope: list[str]) -> None:
         for node in body:
-            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            if isinstance(node, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
                 qualified = [*scope, node.name]
                 if qualified == wanted or node.name == symbol:
                     matches.append(node)
@@ -1522,7 +1524,7 @@ class CoverUpPromptAdapter:
     def _extract_function_call(
         cls, response: Any, expected_name: str,
     ) -> dict[str, Any] | None:
-        if isinstance(response, (str, bytes)) or not isinstance(response, Sequence):
+        if isinstance(response, str | bytes) or not isinstance(response, Sequence):
             return None
         if len(response) != 1:
             return None

@@ -48,6 +48,7 @@ class CloudRunJobGepaOptimizer:
         holdout: list[OptimizationTarget] | None,
         settings: ExperimentSettings,
         vertexai_project: str | None = None,
+        projects: list | None = None,
         provider_secret_refs: dict[str, dict[str, str]] | None = None,
     ) -> OptimizationResult:
         artifacts_prefix = await self.start(
@@ -57,6 +58,7 @@ class CloudRunJobGepaOptimizer:
             holdout=holdout,
             settings=settings,
             vertexai_project=vertexai_project,
+            projects=projects,
             provider_secret_refs=provider_secret_refs,
         )
         result = await self.collect(artifacts_prefix)
@@ -73,6 +75,7 @@ class CloudRunJobGepaOptimizer:
         holdout: list[OptimizationTarget] | None,
         settings: ExperimentSettings,
         vertexai_project: str | None = None,
+        projects: list | None = None,
         provider_secret_refs: dict[str, dict[str, str]] | None = None,
     ) -> str:
         """Upload immutable inputs and trigger the job without waiting for completion."""
@@ -103,6 +106,44 @@ class CloudRunJobGepaOptimizer:
         await self.storage.write(dataset_object, dataset, "application/x-ndjson")
         await self.storage.write(prompt_object, baseline.as_json().encode(), "application/json")
 
+        project_manifest_object = None
+        if projects:
+            manifest_projects = []
+            bundle_objects = {snapshot.runtime_bundle_object for snapshot in projects if snapshot.archive_object}
+            if len(bundle_objects) != 1 or None in bundle_objects:
+                raise ValueError("Uploaded projects must share one prepared runtime bundle")
+            source_bundle = bundle_objects.pop()
+            copied_bundle = f"{prefix}/inputs/runtime.tar.gz"
+            await self.storage.write(
+                copied_bundle,
+                await self.storage.read(source_bundle),
+                "application/gzip",
+            )
+            for snapshot in projects:
+                if not snapshot.archive_object:
+                    continue
+                copied_archive = f"{prefix}/inputs/projects/{snapshot.runner_project}.zip"
+                archive = await self.storage.read(snapshot.archive_object)
+                await self.storage.write(copied_archive, archive, "application/zip")
+                manifest_projects.append(
+                    {
+                        "project": snapshot.runner_project,
+                        "archive_object": copied_archive,
+                        "source_directory": snapshot.source_directory,
+                        "test_directory": snapshot.test_directory,
+                    }
+                )
+            if manifest_projects:
+                project_manifest_object = f"{prefix}/inputs/projects.json"
+                await self.storage.write(
+                    project_manifest_object,
+                    json.dumps(
+                        {"projects": manifest_projects, "runtime_bundle_object": copied_bundle},
+                        separators=(",", ":"),
+                    ).encode(),
+                    "application/json",
+                )
+
         args = [
             "-m",
             "cloud.run_job",
@@ -127,6 +168,8 @@ class CloudRunJobGepaOptimizer:
             "--reflection-temperature",
             str(settings.reflection_temperature),
         ]
+        if project_manifest_object:
+            args.extend(["--project-manifest-object", project_manifest_object])
         if settings.rate_limit:
             args.extend(["--rate-limit", str(settings.rate_limit)])
         if settings.pytest_args:
@@ -178,10 +221,13 @@ class CloudRunJobGepaOptimizer:
         if manifest.get("status") != "succeeded":
             missing = ", ".join(manifest.get("missing_artifacts", []))
             return_code = manifest.get("return_code", "unknown")
+            detail = str(manifest.get("error") or "").strip()
             raise RuntimeError(
-                f"Cloud Run GEPA job failed with exit code {return_code}; missing artifacts: {missing or 'none'}"[
-                    -4000:
-                ]
+                (
+                    f"Cloud Run GEPA job failed with exit code {return_code}; "
+                    f"missing artifacts: {missing or 'none'}"
+                    f"{f'; {detail}' if detail else ''}"
+                )[-4000:]
             )
 
         program = json.loads((await self.storage.read(f"{artifacts_prefix}/optimized_program.json")).decode())

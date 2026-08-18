@@ -22,6 +22,11 @@ def normalize_path(value: str | Path) -> str:
     return str(value).replace("\\", "/").lower().lstrip("./")
 
 
+def _test_python(environment: dict[str, str]) -> str:
+    """Return the interpreter that owns the selected project environment."""
+    return environment.get("TESTGEN_PYTHON", sys.executable)
+
+
 @dataclass(frozen=True)
 class SymbolCoverage:
     source_file: str
@@ -100,6 +105,7 @@ def run_coverage(
     # Concurrent target scorers may execute the same generated module. Avoid
     # cross-process races and leftover artifacts in a shared __pycache__.
     run_env["PYTHONDONTWRITEBYTECODE"] = "1"
+    test_python = _test_python(run_env)
     selected_tests = (
         [str(path.resolve()) for path in test_paths]
         if test_paths is not None
@@ -112,7 +118,7 @@ def run_coverage(
         resolved_basetemp = pytest_basetemp.resolve()
         resolved_basetemp.parent.mkdir(parents=True, exist_ok=True)
     run_cmd = [
-        sys.executable, "-m", "coverage", "run", "--branch",
+        test_python, "-m", "coverage", "run", "--branch",
         f"--source={package_dir.resolve()}", "-m", "pytest", *selected_tests,
         "--disable-warnings", "-q", "-p", "no:cacheprovider",
         *(
@@ -135,7 +141,7 @@ def run_coverage(
     # Compact JSON (no --pretty-print): the report is only used to score the
     # batch and is deleted afterwards, so pretty-printing just wastes disk.
     report = run_streamed(
-        [sys.executable, "-m", "coverage", "json", "-o", str(output.resolve())],
+        [test_python, "-m", "coverage", "json", "-o", str(output.resolve())],
         cwd=project_root, env=run_env, label="coverage json", echo=False,
     )
     if report.returncode:

@@ -931,11 +931,141 @@ body {
 .add-project-drawer {
   width: min(560px, 94vw);
 }
+.project-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.project-section + .project-section {
+  margin-top: 28px;
+}
+.project-section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+.project-section-heading h2 {
+  margin: 5px 0 0;
+  color: #202939;
+  font-size: 19px;
+}
+.project-section-heading > span {
+  color: #8b95a7;
+  font-size: 11px;
+  font-weight: 700;
+}
+.project-empty-state {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.project-empty-state strong {
+  color: #374151;
+}
+.project-empty-state span {
+  color: #8b95a7;
+}
+.project-import-dialog {
+  width: min(650px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  padding: 26px;
+  border: 1px solid #e1e6ef;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(29, 36, 50, 0.22);
+}
+.project-import-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+.project-import-heading h2 {
+  margin: 6px 0;
+  color: #202939;
+  font-size: 21px;
+}
+.project-import-heading p {
+  margin: 0;
+  color: #7b8499;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.project-import-heading > button {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border: 1px solid #e1e6ef;
+  border-radius: 9px;
+  background: #fafbff;
+  color: #697386;
+  font-size: 20px;
+  cursor: pointer;
+}
 .add-project-form {
   display: flex;
   flex-direction: column;
   gap: 16px;
   margin-top: 26px;
+}
+.project-advanced-details {
+  overflow: hidden;
+  border: 1px solid #e1e6ef;
+  border-radius: 10px;
+  background: #fafbff;
+}
+.project-advanced-details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 15px;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.project-advanced-details summary::-webkit-details-marker {
+  display: none;
+}
+.project-advanced-details summary::after {
+  margin-left: auto;
+  color: #8b95a7;
+  content: "+";
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1;
+}
+.project-advanced-details[open] summary::after {
+  content: "−";
+}
+.project-advanced-details summary small {
+  order: 2;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #edf1f7;
+  color: #7b8499;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.project-advanced-details summary::after {
+  order: 3;
+  margin-left: 0;
+}
+.project-advanced-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  padding: 2px 15px 15px;
+  border-top: 1px solid #e8ebf2;
+}
+.project-advanced-fields > .form-grid {
+  padding-top: 15px;
 }
 .upload-field {
   padding: 16px;
@@ -946,6 +1076,18 @@ body {
 .upload-field input[type="file"] {
   padding: 8px;
   background: #fff;
+}
+.upload-field > span {
+  display: block;
+  margin-top: 8px;
+  color: #697386;
+  font-size: 11px;
+}
+.project-import-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding-top: 4px;
 }
 .settings-actions {
   display: flex;
@@ -6012,11 +6154,50 @@ textarea {
     .evolution-flow,
     .evolution-chart-panel,
     .delete-experiment-dialog,
+    .project-import-dialog,
     .source-drawer
   ) {
   border-color: var(--po-line);
   color: var(--po-copy);
   background: var(--po-surface);
+}
+
+:root[data-theme="dark"] .project-section-heading h2,
+:root[data-theme="dark"] .project-empty-state strong,
+:root[data-theme="dark"] .project-import-heading h2 {
+  color: var(--po-ink);
+}
+
+:root[data-theme="dark"] .project-section-heading > span,
+:root[data-theme="dark"] .project-empty-state span,
+:root[data-theme="dark"] .project-import-heading p,
+:root[data-theme="dark"] .upload-field > span {
+  color: var(--po-muted);
+}
+
+:root[data-theme="dark"] .upload-field,
+:root[data-theme="dark"] .project-import-heading > button {
+  border-color: var(--po-line);
+  background: #111b2b;
+  color: var(--po-copy);
+}
+:root[data-theme="dark"] .project-advanced-details {
+  border-color: var(--dark-border);
+  background: #111a2b;
+}
+:root[data-theme="dark"] .project-advanced-details summary {
+  color: #cbd5e1;
+}
+:root[data-theme="dark"] .project-advanced-details summary small {
+  background: #202b3f;
+  color: #9aa8bd;
+}
+:root[data-theme="dark"] .project-advanced-fields {
+  border-top-color: var(--dark-border);
+}
+
+:root[data-theme="dark"] .upload-field input[type="file"] {
+  background: #111b2b;
 }
 
 :root[data-theme="dark"] :where(.platform-tabs button.active, .settings-nav button.active) {

@@ -84,6 +84,12 @@ class AnalysisService:
             project.analyzed_at = datetime.now(UTC)
             project.updated_at = project.analyzed_at
             await self.projects.save(project)
+            if self.project_service.runtime is not None and self.project_service.runtime.runner is not None:
+                # Runtime admission is the second half of an upload. It builds a
+                # candidate bundle from the current READY environment members and
+                # only swaps the environment to that bundle after every dependency,
+                # test collection, and baseline coverage check succeeds.
+                await self.project_service.runtime.request(project)
         except Exception:
             project.status = ProjectStatus.FAILED
             project.updated_at = datetime.now(UTC)

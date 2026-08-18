@@ -116,6 +116,10 @@ class ProjectSnapshot(StrictModel):
     source_directory: str
     test_directory: str
     runner_project: str
+    archive_object: str | None = None
+    runtime_artifact_prefix: str | None = None
+    runtime_environment_id: str | None = None
+    runtime_bundle_object: str | None = None
 
 
 class CreateExperimentRequest(StrictModel):

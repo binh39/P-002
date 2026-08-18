@@ -15,10 +15,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+from cloud.runtime_workspace import detect_layout, find_project_root, safe_extract_runtime_bundle, safe_extract_zip
 
 
 def _upload_dir(bucket: str, prefix: str, local_dir: Path) -> None:
@@ -50,6 +54,7 @@ def main() -> int:
     parser.add_argument("--local-root", default="/app/artifacts")
     parser.add_argument("--dataset-object")
     parser.add_argument("--prompt-object")
+    parser.add_argument("--project-manifest-object")
     parser.add_argument("--sample-repos-dir", default="/app/sample_repo")
     parser.add_argument("--metric-calls", type=int, default=30)
     parser.add_argument("--evaluation-replicates", type=int, default=1)
@@ -74,21 +79,64 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="promptopt-gepa-job-") as temporary:
         temporary_root = Path(temporary).resolve()
         local_dir = (
-            temporary_root / "artifacts"
-            if dynamic_mode
-            else (Path(args.local_root) / args.artifacts_name).resolve()
+            temporary_root / "artifacts" if dynamic_mode else (Path(args.local_root) / args.artifacts_name).resolve()
         )
         print(f"==> Artifacts will be written to {local_dir} (local disk)", flush=True)
         print(f"==> Upload target: gs://{args.bucket}/{args.artifacts_name}/", flush=True)
 
         if dynamic_mode:
             sample_repos = Path(args.sample_repos_dir).resolve()
-            if not sample_repos.is_dir():
-                raise RuntimeError(f"Bundled sample repository directory is missing: {sample_repos}")
             dataset = temporary_root / "dataset.jsonl"
             prompt = temporary_root / "prompt.json"
             _download_object(args.bucket, args.dataset_object, dataset)
             _download_object(args.bucket, args.prompt_object, prompt)
+            cli_python = Path(sys.executable)
+            if args.project_manifest_object:
+                manifest_path = temporary_root / "projects.json"
+                _download_object(args.bucket, args.project_manifest_object, manifest_path)
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                projects = manifest.get("projects", [])
+                if not projects or not manifest.get("runtime_bundle_object"):
+                    raise RuntimeError("Uploaded-project GEPA requires projects and a prepared runtime bundle")
+                bundle = temporary_root / "runtime.tar.gz"
+                _download_object(args.bucket, manifest["runtime_bundle_object"], bundle)
+                runtime_root = Path(os.environ.get("PROMPTOPT_RUNTIME_ROOT", "/tmp/promptopt-runtime"))
+                if runtime_root.exists():
+                    shutil.rmtree(runtime_root)
+                runtime_python = safe_extract_runtime_bundle(bundle, runtime_root)
+                sample_repos = temporary_root / "sample_repos"
+                project_layouts: dict[str, dict[str, str]] = {}
+                for project in projects:
+                    name = project["project"]
+                    archive = temporary_root / f"{name}.zip"
+                    _download_object(args.bucket, project["archive_object"], archive)
+                    extracted = temporary_root / "projects" / name
+                    safe_extract_zip(archive, extracted)
+                    project_root = find_project_root(extracted)
+                    source, tests = detect_layout(
+                        project_root,
+                        project.get("source_directory", "src"),
+                        project.get("test_directory", "tests"),
+                    )
+                    destination = sample_repos / name
+                    shutil.copytree(project_root, destination)
+                    staged_source = destination / source.relative_to(project_root)
+                    staged_tests = destination / tests.relative_to(project_root)
+                    project_layouts[name] = {
+                        "package_dir": str(staged_source),
+                        "tests_dir": str(staged_tests),
+                        "import_root": str(
+                            staged_source.parent if (staged_source / "__init__.py").is_file() else staged_source
+                        ),
+                    }
+                layouts_path = temporary_root / "project-layouts.json"
+                layouts_path.write_text(
+                    json.dumps(project_layouts, indent=2),
+                    encoding="utf-8",
+                )
+                os.environ["TESTGEN_PYTHON"] = str(runtime_python)
+            elif not sample_repos.is_dir():
+                raise RuntimeError(f"Bundled sample repository directory is missing: {sample_repos}")
             cli_args = [
                 "--project-root",
                 "/app",
@@ -105,6 +153,8 @@ def main() -> int:
                 "--repeat-tests",
                 str(args.repeat_tests),
             ]
+            if args.project_manifest_object:
+                cli_args.extend(["--project-layouts-file", str(layouts_path)])
             if args.rate_limit:
                 cli_args.extend(["--rate-limit", str(args.rate_limit)])
             if args.pytest_args:
@@ -126,7 +176,7 @@ def main() -> int:
             )
 
         command = [
-            sys.executable,
+            str(cli_python) if dynamic_mode else sys.executable,
             "-u",
             "-m",
             "src.optimization.cli",

@@ -314,6 +314,30 @@ def test_run_coverage_collects_only_explicit_target_test_paths(tmp_path, monkeyp
     )
 
 
+def test_run_coverage_uses_selected_runtime_interpreter(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        return SimpleNamespace(args=command, returncode=0, stdout="", stderr=None)
+
+    monkeypatch.setattr("src.optimization.coveragepy.run_streamed", fake_run)
+    package_dir = tmp_path / "pkg"
+    tests_dir = tmp_path / "tests"
+    package_dir.mkdir()
+    tests_dir.mkdir()
+
+    run_coverage(
+        project_root=tmp_path,
+        package_dir=package_dir,
+        tests_dir=tests_dir,
+        output=tmp_path / "coverage.json",
+        env={"TESTGEN_PYTHON": "prepared-python"},
+    )
+
+    assert [command[0] for command in calls] == ["prepared-python", "prepared-python"]
+
+
 def test_parallel_coverage_subprocesses_use_isolated_pytest_state(tmp_path):
     package_dir = tmp_path / "pkg"
     tests_dir = tmp_path / "shared-tests"
@@ -3325,6 +3349,37 @@ def test_resolve_project_layouts_fails_when_package_missing(tmp_path):
 
     with pytest.raises(FileNotFoundError, match="isort"):
         _resolve_project_layouts(tmp_path, targets, Path("src/sample_repo"))
+
+
+def test_resolve_project_layouts_accepts_uploaded_project_manifest(tmp_path):
+    source = tmp_path / "workspace" / "src" / "actual_package"
+    tests = tmp_path / "workspace" / "project_tests"
+    source.mkdir(parents=True)
+    tests.mkdir(parents=True)
+    manifest = tmp_path / "project-layouts.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "friendly-project-slug": {
+                    "package_dir": str(source),
+                    "tests_dir": str(tests),
+                    "import_root": str(source.parent),
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    layouts = _resolve_project_layouts(
+        tmp_path,
+        [SymbolTarget("friendly-project-slug", "module.py", "work", "train")],
+        Path("unused"),
+        manifest,
+    )
+
+    assert layouts["friendly-project-slug"].package_dir == source
+    assert layouts["friendly-project-slug"].tests_dir == tests
+    assert layouts["friendly-project-slug"].import_root == source.parent
 
 
 def _fake_batch(targets, *, workspace_kind):

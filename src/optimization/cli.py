@@ -47,6 +47,15 @@ def parser() -> argparse.ArgumentParser:
             "per-project package/tests layouts for multi-project datasets"
         ),
     )
+    result.add_argument(
+        "--project-layouts-file",
+        type=Path,
+        help=(
+            "Optional JSON map of dataset project names to explicit package_dir/tests_dir paths. "
+            "Cloud runs use this for uploaded repositories whose import package name differs "
+            "from the PromptOpt project slug."
+        ),
+    )
     result.add_argument("--artifacts-dir", type=Path, default=Path("eval/prompt_optimization"))
     result.add_argument("--max-attempts", type=int, default=3)
     result.add_argument(
@@ -190,6 +199,7 @@ def _resolve_project_layouts(
     root: Path,
     targets: list[SymbolTarget],
     sample_repos_dir: Path,
+    project_layouts_file: Path | None = None,
 ) -> dict[str, ProjectLayout] | None:
     """Resolve bundled source packages for every dataset project.
 
@@ -198,6 +208,45 @@ def _resolve_project_layouts(
     metadata only and must not be required for prompt optimization.
     """
     projects = sorted({target.project for target in targets})
+    if project_layouts_file is not None:
+        manifest_path = _resolve(root, project_layouts_file).resolve()
+        value = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            raise ValueError("Project layouts file must contain a JSON object")
+        missing = sorted(set(projects) - set(value))
+        extra = sorted(set(value) - set(projects))
+        if missing or extra:
+            raise ValueError(
+                "Project layouts must match dataset projects exactly; "
+                f"missing={missing}, extra={extra}"
+            )
+        layouts: dict[str, ProjectLayout] = {}
+        for project in projects:
+            item = value[project]
+            if not isinstance(item, dict):
+                raise ValueError(f"Project layout for {project!r} must be an object")
+            try:
+                package_value = Path(item["package_dir"])
+                tests_value = Path(item["tests_dir"])
+            except (KeyError, TypeError) as exc:
+                raise ValueError(
+                    f"Project layout for {project!r} requires package_dir and tests_dir"
+                ) from exc
+            package = _resolve(manifest_path.parent, package_value).resolve()
+            tests = _resolve(manifest_path.parent, tests_value).resolve()
+            import_root_value = Path(item.get("import_root", package.parent))
+            import_root = _resolve(manifest_path.parent, import_root_value).resolve()
+            if not package.is_dir():
+                raise FileNotFoundError(f"Package directory does not exist: {package}")
+            if not import_root.is_dir():
+                raise FileNotFoundError(f"Import root does not exist: {import_root}")
+            layouts[project] = ProjectLayout(
+                package_dir=package,
+                tests_dir=tests,
+                import_root=import_root,
+            )
+        return layouts
+
     repos = _resolve(root, sample_repos_dir)
     layouts: dict[str, ProjectLayout] = {}
     for project in projects:
@@ -213,6 +262,10 @@ def _resolve_project_layouts(
 
 def _sample_repos_dir(args: argparse.Namespace) -> Path:
     return getattr(args, "sample_repos_dir", Path("src/sample_repo"))
+
+
+def _project_layouts_file(args: argparse.Namespace) -> Path | None:
+    return getattr(args, "project_layouts_file", None)
 
 
 def make_runner(
@@ -273,7 +326,10 @@ def evaluate(args: argparse.Namespace) -> None:
     if not targets:
         raise ValueError(f"No targets found for split {args.split!r}")
     projects = _resolve_project_layouts(
-        args.project_root.resolve(), targets, _sample_repos_dir(args)
+        args.project_root.resolve(),
+        targets,
+        _sample_repos_dir(args),
+        _project_layouts_file(args),
     )
     runner = make_runner(args, projects=projects)
     batch = evaluate_bundle_repeated(
@@ -303,6 +359,7 @@ def tune(args: argparse.Namespace) -> None:
         args.project_root.resolve(),
         [*train, *validation, *holdout],
         _sample_repos_dir(args),
+        _project_layouts_file(args),
     )
     runner = make_runner(args, projects=projects)
     final_targets = holdout or validation
@@ -557,7 +614,10 @@ def finalize(args: argparse.Namespace) -> None:
         args.holdout_split: final_targets,
     })
     projects = _resolve_project_layouts(
-        args.project_root.resolve(), final_targets, _sample_repos_dir(args)
+        args.project_root.resolve(),
+        final_targets,
+        _sample_repos_dir(args),
+        _project_layouts_file(args),
     )
     runner = make_runner(args, projects=projects)
     artifacts = runner.config.artifacts_dir.resolve()

@@ -24,6 +24,7 @@ class ProjectLayout:
 
     package_dir: Path
     tests_dir: Path
+    import_root: Path | None = None
 
 
 @dataclass
@@ -60,6 +61,13 @@ class ExperimentConfig:
         if self.projects and project in self.projects:
             return self.projects[project].tests_dir
         return self.tests_dir
+
+    def import_root_for(self, project: str) -> Path:
+        """Return the PYTHONPATH root for the selected project layout."""
+        if self.projects and project in self.projects:
+            layout = self.projects[project]
+            return layout.import_root or layout.package_dir.parent
+        return self.package_dir.parent
 
 
 @dataclass

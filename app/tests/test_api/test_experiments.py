@@ -22,6 +22,29 @@ class AdminTokenVerifier:
 
 
 @pytest.mark.asyncio
+async def test_experiment_rejects_projects_from_different_runtime_environments(client):
+    uploaded_id = await create_project(client, python_archive())
+    analyzed = await client.post(
+        f"/api/v1/projects/{uploaded_id}/analyze",
+        headers=AUTH_HEADERS,
+    )
+    assert analyzed.status_code == 202
+
+    response = await client.post(
+        "/api/v1/experiments",
+        headers=AUTH_HEADERS,
+        json={
+            "project_ids": ["sample:isort", uploaded_id],
+            "name": "Invalid cross-environment run",
+            "max_targets": 3,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "RUNTIME_ENVIRONMENT_MISMATCH"
+
+
+@pytest.mark.asyncio
 async def test_only_full_access_account_can_exceed_metric_budget(client, app):
     payload = {
         "project_ids": ["sample:isort"],
@@ -45,7 +68,7 @@ async def test_only_full_access_account_can_exceed_metric_budget(client, app):
 
 
 @pytest.mark.asyncio
-async def test_create_experiment_and_reject_unbundled_optimization(client):
+async def test_uploaded_project_requires_runtime_before_experiment(client):
     project_id = await create_project(client, python_archive())
     await client.post(f"/api/v1/projects/{project_id}/analyze", headers=AUTH_HEADERS)
 
@@ -77,27 +100,8 @@ async def test_create_experiment_and_reject_unbundled_optimization(client):
             },
         },
     )
-    assert created.status_code == 201
-    experiment = created.json()
-    assert experiment["status"] == "draft"
-    assert experiment["split_seed"] == 91
-    assert experiment["split_percentages"] == {"train": 34, "validation": 33, "test": 33}
-    assert experiment["settings"]["coverup_model"] == "vertex_ai/gemini-2.5-flash-lite"
-    assert experiment["settings"]["optimize_model"] == "vertex_ai/gemini-3.5-flash"
-    assert experiment["baseline_prompt"] == custom_prompt
-
-    listed = await client.get("/api/v1/experiments", headers=AUTH_HEADERS)
-    assert listed.status_code == 200
-    assert listed.json()["total"] == 1
-    assert listed.json()["items"][0]["id"] == experiment["id"]
-
-    premature_optimization = await client.post(f"/api/v1/experiments/{experiment['id']}/optimize", headers=AUTH_HEADERS)
-    assert premature_optimization.status_code == 409
-    assert premature_optimization.json()["error"]["code"] == "BUNDLED_SAMPLE_REQUIRED"
-
-    premature_comparison = await client.post(f"/api/v1/experiments/{experiment['id']}/compare", headers=AUTH_HEADERS)
-    assert premature_comparison.status_code == 409
-    assert premature_comparison.json()["error"]["code"] == "OPTIMIZATION_NOT_READY"
+    assert created.status_code == 409
+    assert created.json()["error"]["code"] == "RUNTIME_NOT_READY"
 
 
 @pytest.mark.asyncio
