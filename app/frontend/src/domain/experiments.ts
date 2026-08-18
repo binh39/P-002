@@ -172,6 +172,56 @@ export interface PromptVersionList {
   limit: number;
 }
 
+export type PromptRole = "baseline" | "optimized";
+export type PromptSnapshotOrigin = "initial_baseline" | "optimized_candidate" | "baseline_retained";
+
+export interface PromptCoverageMetrics {
+  score: number | null;
+  statementCoverage: number | null;
+  branchCoverage: number | null;
+  passRate: number | null;
+}
+
+export interface PromptSnapshot {
+  id: string;
+  experimentId: string;
+  role: PromptRole;
+  origin: PromptSnapshotOrigin;
+  promptDigest: string;
+  prompt: PromptBundle;
+  sourceSnapshotDigest: string;
+  datasetDigest: string;
+  splitSeed: number;
+  runnerProtocolVersion: number;
+  coverupModel: string;
+  optimizeModel: string;
+  metrics: PromptCoverageMetrics;
+  estimatedCostUsd: number | null;
+  createdAt: string;
+}
+
+export interface PromptRegistryEntry {
+  experimentId: string;
+  experimentName: string;
+  projectIds: string[];
+  projectNames: string[];
+  status: ExperimentStatus;
+  baseline: PromptSnapshot;
+  optimized: PromptSnapshot | null;
+  baselineMetrics: PromptCoverageMetrics;
+  optimizedMetrics: PromptCoverageMetrics;
+  absoluteGain: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PromptRegistryList {
+  items: PromptRegistryEntry[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
 export const optimizationRunIsActive = (status: ExperimentStatus) =>
   status === "optimization_queued" || status === "optimizing" || status === "candidate_evaluating";
 

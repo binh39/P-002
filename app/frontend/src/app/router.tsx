@@ -16,6 +16,7 @@ const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Experiments = lazy(() => import("@/pages/Experiments"));
 const OptimizationRun = lazy(() => import("@/pages/OptimizationRun"));
 const Registry = lazy(() => import("@/pages/Registry"));
+const PromptRegistryDetail = lazy(() => import("@/pages/PromptRegistryDetail"));
 const ProjectDetail = lazy(() => import("@/pages/ProjectDetail"));
 const Projects = lazy(() => import("@/pages/Projects"));
 const Settings = lazy(() => import("@/pages/Settings"));
@@ -115,6 +116,9 @@ function RoutedApplication() {
           </Route>
           <Route path="/prompts">
             <Registry />
+          </Route>
+          <Route path="/prompts/:experimentId">
+            <PromptRegistryDetail />
           </Route>
           <Route path="/settings">
             <Settings />

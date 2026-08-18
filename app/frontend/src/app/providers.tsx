@@ -7,11 +7,13 @@ import type { DashboardRepository } from "@/repositories/contracts/DashboardRepo
 import type { ExperimentRepository } from "@/repositories/contracts/ExperimentRepository";
 import type { ProjectRepository } from "@/repositories/contracts/ProjectRepository";
 import type { PromptVersionRepository } from "@/repositories/contracts/PromptVersionRepository";
+import type { PromptRegistryRepository } from "@/repositories/contracts/PromptRegistryRepository";
 import type { ProviderCredentialRepository } from "@/repositories/contracts/ProviderCredentialRepository";
 import { HttpDashboardRepository } from "@/repositories/http/HttpDashboardRepository";
 import { HttpExperimentRepository } from "@/repositories/http/HttpExperimentRepository";
 import { HttpProjectRepository } from "@/repositories/http/HttpProjectRepository";
 import { HttpPromptVersionRepository } from "@/repositories/http/HttpPromptVersionRepository";
+import { HttpPromptRegistryRepository } from "@/repositories/http/HttpPromptRegistryRepository";
 import { HttpProviderCredentialRepository } from "@/repositories/http/HttpProviderCredentialRepository";
 import { MockDashboardRepository } from "@/repositories/mock/MockDashboardRepository";
 
@@ -20,6 +22,7 @@ interface Repositories {
   projects: ProjectRepository;
   experiments: ExperimentRepository;
   promptVersions: PromptVersionRepository;
+  promptRegistry: PromptRegistryRepository;
   providerCredentials: ProviderCredentialRepository;
 }
 const RepositoryContext = createContext<Repositories | null>(null);
@@ -31,6 +34,7 @@ function createRepositories(): Repositories {
     projects: new HttpProjectRepository(),
     experiments: new HttpExperimentRepository(),
     promptVersions: new HttpPromptVersionRepository(),
+    promptRegistry: new HttpPromptRegistryRepository(),
     providerCredentials: new HttpProviderCredentialRepository(),
   };
 }
