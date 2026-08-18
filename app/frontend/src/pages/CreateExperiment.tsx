@@ -32,6 +32,12 @@ const geminiModels = [
   "vertex_ai/gemini-3.5-flash",
   "vertex_ai/gemini-3.5-flash-lite",
   "vertex_ai/gemini-3.6-flash",
+  "openai/gpt-4.1-mini",
+  "openai/gpt-4.1",
+  "openai/gpt-5-mini",
+  "openai/gpt-5",
+  "deepseek/deepseek-chat",
+  "deepseek/deepseek-reasoner",
 ] as const;
 const sparseBaselinePrompt: PromptBundle = {
   initial: `Write pytest tests for {filename} that cover {coverage_targets}.
