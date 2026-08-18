@@ -7,6 +7,8 @@ import zipfile
 from pathlib import Path
 
 from cloud.runtime_workspace import (
+    RUNTIME_PROTOCOL_VERSION,
+    RUNTIME_TOOL_PACKAGES,
     RuntimeProjectSpec,
     create_runtime_bundle,
     prepare_environment,
@@ -36,6 +38,11 @@ def test_safe_extract_rejects_path_traversal(tmp_path):
         raise AssertionError("path traversal must be rejected")
 
 
+def test_runtime_bundle_contains_every_pytest_plugin_used_by_gepa():
+    assert RUNTIME_PROTOCOL_VERSION == 3
+    assert "pytest-repeat==0.9.4" in RUNTIME_TOOL_PACKAGES
+
+
 def test_prepare_runtime_collects_tests_and_baseline_coverage(tmp_path):
     archive = tmp_path / "project.zip"
     write_zip(
@@ -59,6 +66,27 @@ def test_prepare_runtime_collects_tests_and_baseline_coverage(tmp_path):
     assert result.collected_tests == 1
     assert result.statement_coverage == 1.0
     assert result.branch_coverage == 1.0
+
+
+def test_prepare_runtime_accepts_project_without_existing_tests(tmp_path):
+    archive = tmp_path / "project-without-tests.zip"
+    write_zip(
+        archive,
+        {"demo/pkg/__init__.py": "def add(a, b):\n    return a + b\n"},
+    )
+
+    result, python = prepare_runtime(
+        archive,
+        tmp_path / "runtime-without-tests",
+        configured_source="pkg",
+        configured_tests="tests",
+        timeout_seconds=120,
+    )
+
+    assert result.status == "runtime_ready", result.error
+    assert python is not None
+    assert result.collected_tests == 0
+    assert result.statement_coverage == 0.0
 
 
 def test_prepare_environment_builds_one_reusable_bundle_for_multiple_projects(tmp_path):
@@ -194,7 +222,7 @@ def test_uploaded_gepa_run_restores_bundle_without_reinstalling_dependencies(tmp
 
     monkeypatch.setattr(run_job, "_download_object", download)
     monkeypatch.setattr(run_job, "_upload_dir", lambda *args: None)
-    monkeypatch.setattr(run_job.subprocess, "call", run)
+    monkeypatch.setattr(run_job, "_run_cli", lambda command: (run(command), None))
     monkeypatch.setenv("TESTGEN_PYTHON", "before")
     monkeypatch.setenv("PROMPTOPT_RUNTIME_ROOT", str(tmp_path / "restored-runtime"))
     monkeypatch.setattr(

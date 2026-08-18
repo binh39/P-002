@@ -20,9 +20,36 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections import deque
 from pathlib import Path
 
 from cloud.runtime_workspace import detect_layout, find_project_root, safe_extract_runtime_bundle, safe_extract_zip
+
+
+def _run_cli(command: list[str]) -> tuple[int, str | None]:
+    """Stream CLI output to Cloud Logging while retaining a bounded traceback."""
+    tail: deque[str] = deque(maxlen=200)
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        bufsize=1,
+    )
+    assert process.stdout is not None
+    for line in process.stdout:
+        print(line, end="", flush=True)
+        tail.append(line.rstrip())
+    return_code = process.wait()
+    if return_code == 0:
+        return return_code, None
+    lines = list(tail)
+    traceback_start = max((index for index, line in enumerate(lines) if line.startswith("Traceback")), default=-1)
+    diagnostic = lines[traceback_start:] if traceback_start >= 0 else lines[-20:]
+    detail = "\n".join(line for line in diagnostic if line.strip()).strip()
+    return return_code, detail[-4000:] or f"Optimizer exited with code {return_code}"
 
 
 def _upload_dir(bucket: str, prefix: str, local_dir: Path) -> None:
@@ -185,7 +212,7 @@ def main() -> int:
             *cli_args,
         ]
         print(f"==> Running: {' '.join(command)}", flush=True)
-        return_code = subprocess.call(command)
+        return_code, cli_error = _run_cli(command)
         local_dir.mkdir(parents=True, exist_ok=True)
         required = (
             "optimized_program.json",
@@ -202,6 +229,7 @@ def main() -> int:
                     "return_code": return_code,
                     "missing_artifacts": missing,
                     "protocol_version": 2,
+                    "error": cli_error if status == "failed" else None,
                 },
                 indent=2,
             ),

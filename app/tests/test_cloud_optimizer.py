@@ -234,6 +234,33 @@ async def test_cloud_gepa_optimizer_copies_uploaded_project_into_job_prefix():
 
 
 @pytest.mark.asyncio
+async def test_cloud_gepa_optimizer_surfaces_the_worker_root_cause():
+    storage = FakeStorage()
+    prefix = "runner-jobs/gepa/failed/artifacts"
+    storage.objects[f"{prefix}/job_result.json"] = (
+        json.dumps(
+            {
+                "status": "failed",
+                "return_code": 1,
+                "missing_artifacts": ["optimized_program.json"],
+                "error": "RuntimeError: baseline target could not be measured",
+            }
+        ).encode(),
+        "application/json",
+    )
+    optimizer = CloudRunJobGepaOptimizer(
+        client=FakeJobsClient(storage),
+        storage=storage,
+        bucket="bucket",
+        job_name="projects/project/locations/region/jobs/promptopt-gepa-runner",
+        timeout_seconds=86400,
+    )
+
+    with pytest.raises(RuntimeError, match="baseline target could not be measured"):
+        await optimizer.collect(prefix)
+
+
+@pytest.mark.asyncio
 async def test_cloud_evolution_resolves_execution_label_and_parses_stdout():
     execution_id = "a1b2c3"
     logging_client = FakeLoggingClient(execution_id)

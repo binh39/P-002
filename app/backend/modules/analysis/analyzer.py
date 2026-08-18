@@ -96,6 +96,33 @@ def _is_python_target(path: PurePosixPath) -> bool:
     )
 
 
+def _archive_root_prefix(entries: list[zipfile.ZipInfo]) -> str:
+    """Mirror the runtime's single-wrapper-directory project-root detection."""
+    children: set[str] = set()
+    safe_entries: list[tuple[zipfile.ZipInfo, PurePosixPath]] = []
+    for info in entries:
+        path = PurePosixPath(info.filename.replace("\\", "/"))
+        if path.is_absolute() or ".." in path.parts or not path.parts:
+            continue
+        if path.parts[0] in {"__MACOSX", ".git"}:
+            continue
+        children.add(path.parts[0])
+        safe_entries.append((info, path))
+    if len(children) != 1:
+        return ""
+    prefix = next(iter(children))
+    # A lone root-level file is not a wrapper directory.
+    if any(len(path.parts) == 1 and not info.is_dir() for info, path in safe_entries):
+        return ""
+    return prefix
+
+
+def _project_relative_path(path: PurePosixPath, root_prefix: str) -> PurePosixPath:
+    if root_prefix and path.parts and path.parts[0] == root_prefix:
+        return PurePosixPath(*path.parts[1:])
+    return path
+
+
 def _records_from_report(
     project_id: str,
     sources: dict[str, str],
@@ -162,7 +189,8 @@ def analyze_zip(
         bundle.close()
         raise AppError(413, "TOO_MANY_ARCHIVE_ENTRIES", "The archive contains too many entries")
 
-    candidates: list[zipfile.ZipInfo] = []
+    root_prefix = _archive_root_prefix(entries)
+    candidates: list[tuple[zipfile.ZipInfo, str]] = []
     normalized_paths: set[str] = set()
     total_size = 0
     for info in entries:
@@ -175,14 +203,16 @@ def analyze_zip(
         if info.flag_bits & 0x1:
             bundle.close()
             raise AppError(422, "ENCRYPTED_ZIP_ENTRY", "Encrypted ZIP entries are not supported")
-        if not _is_python_target(path):
+        project_path = _project_relative_path(path, root_prefix)
+        if not _is_python_target(project_path):
             continue
-        normalized = path.as_posix().casefold()
+        archive_path = project_path.as_posix()
+        normalized = archive_path.casefold()
         if normalized in normalized_paths:
             bundle.close()
             raise AppError(422, "DUPLICATE_ZIP_ENTRY", "The archive contains duplicate Python paths")
         normalized_paths.add(normalized)
-        candidates.append(info)
+        candidates.append((info, archive_path))
         total_size += info.file_size
         if len(candidates) > max_python_files:
             bundle.close()
@@ -200,8 +230,7 @@ def analyze_zip(
     sources: dict[str, str] = {}
     with tempfile.TemporaryDirectory(prefix="prompt-optimizer-analysis-") as temporary:
         source_root = Path(temporary)
-        for info in candidates:
-            archive_path = PurePosixPath(info.filename.replace("\\", "/")).as_posix()
+        for info, archive_path in candidates:
             try:
                 source = bundle.read(info).decode("utf-8-sig")
                 compile(source, archive_path, "exec")

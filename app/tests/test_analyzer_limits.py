@@ -77,3 +77,16 @@ def test_analysis_rejects_case_insensitive_duplicate_python_paths():
         analyze_zip("project", archive, max_python_files=10, max_uncompressed_bytes=1024)
 
     assert error.value.code == "DUPLICATE_ZIP_ENTRY"
+
+
+def test_analysis_strips_the_same_single_wrapper_directory_as_runtime():
+    archive = archive_with(
+        {
+            "PySnooper-master/pysnooper/core.py": "def target():\n    return 1\n",
+            "PySnooper-master/README.md": "docs",
+        }
+    )
+
+    result = analyze_zip("project", archive, max_python_files=10, max_uncompressed_bytes=4096)
+
+    assert [function.file for function in result.functions] == ["pysnooper/core.py"]

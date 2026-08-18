@@ -51,6 +51,13 @@ export default function ProjectDetail() {
       ]);
     },
   });
+  const prepareRuntimeMutation = useMutation({
+    mutationFn: () => projects.prepareRuntime(projectId),
+    onSuccess: async (project) => {
+      queryClient.setQueryData(["projects", projectId], project);
+      await queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
   if (projectQuery.isPending)
     return (
       <div className="page-state" role="status">
@@ -102,15 +109,35 @@ export default function ProjectDetail() {
           isSample ? (
             <StatusBadge tone="info">Read-only sample</StatusBadge>
           ) : (
-            <button
-              className="primary-button"
-              disabled={analyzeMutation.isPending || project.status === "analyzing"}
-              onClick={() => analyzeMutation.mutate()}
-            >
-              {project.status === "analyzing" || analyzeMutation.isPending
-                ? "Analyzing..."
-                : "Re-analyze"}
-            </button>
+            <div className="platform-header-actions">
+              <button
+                className="secondary-button"
+                disabled={
+                  prepareRuntimeMutation.isPending ||
+                  project.status === "analyzing" ||
+                  project.status === "failed" ||
+                  ["runtime_queued", "runtime_preparing"].includes(runtimeStatus)
+                }
+                onClick={() => prepareRuntimeMutation.mutate()}
+              >
+                {prepareRuntimeMutation.isPending
+                  ? "Queueing runtime..."
+                  : runtimeStatus === "runtime_failed"
+                    ? "Retry runtime"
+                    : runtimeStatus === "runtime_ready"
+                      ? "Rebuild runtime"
+                      : "Prepare runtime"}
+              </button>
+              <button
+                className="primary-button"
+                disabled={analyzeMutation.isPending || project.status === "analyzing"}
+                onClick={() => analyzeMutation.mutate()}
+              >
+                {project.status === "analyzing" || analyzeMutation.isPending
+                  ? "Analyzing..."
+                  : "Re-analyze"}
+              </button>
+            </div>
           )
         }
       />
@@ -159,6 +186,13 @@ export default function ProjectDetail() {
           {analyzeMutation.error instanceof Error
             ? analyzeMutation.error.message
             : "Analysis could not be started."}
+        </div>
+      )}
+      {prepareRuntimeMutation.isError && (
+        <div className="page-state page-state-error" role="alert">
+          {prepareRuntimeMutation.error instanceof Error
+            ? prepareRuntimeMutation.error.message
+            : "Runtime preparation could not be started."}
         </div>
       )}
 
