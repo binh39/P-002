@@ -7,6 +7,9 @@ import zipfile
 from pathlib import Path
 
 from cloud.runtime_workspace import (
+    PROJECT_DEPENDENCY_FILES,
+    RUNTIME_PROTOCOL_VERSION,
+    RUNTIME_TOOL_REQUIREMENTS,
     RuntimeProjectSpec,
     create_runtime_bundle,
     prepare_environment,
@@ -14,6 +17,14 @@ from cloud.runtime_workspace import (
     safe_extract_runtime_bundle,
     safe_extract_zip,
 )
+
+
+def test_runtime_tool_requirements_include_repeat_plugin_and_bump_protocol():
+    assert "pytest-repeat==0.9.4" in RUNTIME_TOOL_REQUIREMENTS
+    assert RUNTIME_PROTOCOL_VERSION == 3
+    assert {"requirements-dev.txt", "requirements-test.txt", "test-requirements.txt"} <= set(
+        PROJECT_DEPENDENCY_FILES
+    )
 
 
 def write_zip(path: Path, files: dict[str, str]) -> None:
