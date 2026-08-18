@@ -65,6 +65,7 @@ export default function CreateExperiment() {
   const { projects, experiments } = useRepositories();
   const hasFullAccess = user?.email?.trim().toLowerCase() === "admin@gmail.com";
   const [step, setStep] = useState(0);
+  const [selectedEnvironmentId, setSelectedEnvironmentId] = useState("");
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const [experimentName, setExperimentName] = useState("");
   const [samplingMethod, setSamplingMethod] = useState<SamplingMethod>("random");
@@ -79,8 +80,17 @@ export default function CreateExperiment() {
   const [projectFilter, setProjectFilter] = useState("all");
 
   const projectsQuery = useQuery({
-    queryKey: ["sample-projects"],
-    queryFn: ({ signal }) => projects.listSamples(signal),
+    queryKey: ["experiment-projects"],
+    queryFn: async ({ signal }) => {
+      const [samples, uploaded] = await Promise.all([
+        projects.listSamples(signal),
+        projects.list(signal),
+      ]);
+      return [
+        ...samples,
+        ...(uploaded ?? []).filter((project) => project.runtimeStatus === "runtime_ready"),
+      ];
+    },
   });
   const functionQueries = useQueries({
     queries: selectedProjectIds.map((projectId) => ({
@@ -94,6 +104,10 @@ export default function CreateExperiment() {
     () => (projectsQuery.data ?? []).filter((project) => selectedProjectIds.includes(project.id)),
     [projectsQuery.data, selectedProjectIds],
   );
+  const environmentSelectionValid =
+    selectedProjects.length > 0 &&
+    selectedEnvironmentId !== "" &&
+    selectedProjects.every((project) => project.runtimeEnvironmentId === selectedEnvironmentId);
   const availableFunctions = useMemo<ExperimentFunction[]>(
     () =>
       functionQueries.flatMap((query, index) => {
@@ -163,7 +177,7 @@ export default function CreateExperiment() {
         customBaseline.initial.includes("{source_excerpt}") &&
         customBaseline.error.includes("{error}")));
   const canContinue = [
-    selectedProjectIds.length > 0,
+    environmentSelectionValid,
     !functionsLoading && !functionsError && functionSelectionValid,
     datasetValid,
     settingsValid,
@@ -202,6 +216,9 @@ export default function CreateExperiment() {
           ),
         );
         return current.filter((id) => id !== project.id);
+      }
+      if (selectedEnvironmentId !== "" && project.runtimeEnvironmentId !== selectedEnvironmentId) {
+        return current;
       }
       if (!experimentName.trim()) setExperimentName(`${project.name} prompt optimization`);
       return [...current, project.id];
@@ -249,6 +266,12 @@ export default function CreateExperiment() {
             <ProjectStep
               projects={projectsQuery.data}
               selectedProjectIds={selectedProjectIds}
+              selectedEnvironmentId={selectedEnvironmentId}
+              onEnvironmentChange={(environmentId) => {
+                setSelectedEnvironmentId(environmentId);
+                setSelectedProjectIds([]);
+                setManualAssignments({});
+              }}
               onToggle={toggleProject}
             />
           )}
@@ -352,6 +375,7 @@ export default function CreateExperiment() {
             disabled={
               startOptimization.isPending ||
               !experimentName.trim() ||
+              !environmentSelectionValid ||
               !settingsValid ||
               !datasetValid
             }
@@ -368,34 +392,67 @@ export default function CreateExperiment() {
 function ProjectStep({
   projects,
   selectedProjectIds,
+  selectedEnvironmentId,
+  onEnvironmentChange,
   onToggle,
 }: {
   projects: PythonProject[];
   selectedProjectIds: string[];
+  selectedEnvironmentId: string;
+  onEnvironmentChange: (environmentId: string) => void;
   onToggle: (project: PythonProject) => void;
 }) {
   const selectable = projects.filter((project) => ["ready", "warning"].includes(project.status));
+  const environments = Array.from(
+    new Map(
+      selectable
+        .filter((project) => project.runtimeEnvironmentId)
+        .map((project) => [
+          project.runtimeEnvironmentId as string,
+          project.runtimeEnvironmentName || "Unnamed environment",
+        ]),
+    ),
+  );
+  const compatible = selectable.filter(
+    (project) => project.runtimeEnvironmentId === selectedEnvironmentId,
+  );
   return (
     <>
       <WizardHeading
         step="Step 1"
         title="Choose projects"
-        description="Select one or more immutable repositories. There is no UI project limit."
+        description="Choose an environment, then select one or more projects prepared inside it."
       />
+      <Field
+        label="Runtime environment"
+        hint="A run restores one prepared bundle and can use only its member projects."
+      >
+        <select
+          value={selectedEnvironmentId}
+          onChange={(event) => onEnvironmentChange(event.target.value)}
+        >
+          <option value="">Choose an environment</option>
+          {environments.map(([id, name]) => (
+            <option key={id} value={id}>
+              {name}
+            </option>
+          ))}
+        </select>
+      </Field>
       <div className="selection-toolbar">
         <span>{selectedProjectIds.length} project(s) selected</span>
         <button
           className="table-action"
           onClick={() =>
-            selectable.filter((item) => !selectedProjectIds.includes(item.id)).forEach(onToggle)
+            compatible.filter((item) => !selectedProjectIds.includes(item.id)).forEach(onToggle)
           }
-          disabled={selectedProjectIds.length === selectable.length}
+          disabled={selectedEnvironmentId === "" || selectedProjectIds.length === compatible.length}
         >
-          Select all
+          Select all in environment
         </button>
       </div>
       <div className="select-project-grid">
-        {selectable.map((project) => {
+        {compatible.map((project) => {
           const active = selectedProjectIds.includes(project.id);
           return (
             <button
@@ -412,6 +469,7 @@ function ProjectStep({
               <StatusBadge tone={project.status === "ready" ? "success" : "warning"}>
                 {project.status === "ready" ? "Ready" : "Warning"}
               </StatusBadge>
+              <small>{project.runtimeEnvironmentName || "Runtime environment"}</small>
               <dl>
                 <div>
                   <dt>Commit</dt>

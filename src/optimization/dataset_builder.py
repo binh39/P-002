@@ -62,10 +62,10 @@ def count_branches(node: ast.AST) -> int:
             continue
         if isinstance(
             child,
-            (ast.If, ast.While, ast.With, ast.AsyncWith, ast.Assert, ast.IfExp),
+            ast.If | ast.While | ast.With | ast.AsyncWith | ast.Assert | ast.IfExp,
         ):
             total += 2
-        elif isinstance(child, (ast.For, ast.AsyncFor)):
+        elif isinstance(child, ast.For | ast.AsyncFor):
             total += 2
         elif isinstance(child, ast.Try):
             total += len(child.handlers) + 1
@@ -112,11 +112,11 @@ def _collect_from_tree(
     while stack:
         node, parents = stack.pop()
         for child in ast.iter_child_nodes(node):
-            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
                 prefix = [
                     parent.name
                     for parent in parents
-                    if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                    if isinstance(parent, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
                 ]
                 result.append(
                     FunctionInfo(

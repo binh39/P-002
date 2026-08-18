@@ -18,7 +18,13 @@ export default function ProjectDetail() {
   const projectQuery = useQuery({
     queryKey: ["projects", projectId],
     queryFn: ({ signal }) => projects.get(projectId, signal),
-    refetchInterval: (current) => (current.state.data?.status === "analyzing" ? 2_000 : false),
+    refetchInterval: (current) =>
+      current.state.data?.status === "analyzing" ||
+      ["runtime_queued", "runtime_preparing"].includes(
+        current.state.data?.runtimeStatus ?? "not_requested",
+      )
+        ? 2_000
+        : false,
   });
   const functionsQuery = useQuery({
     queryKey: ["projects", projectId, "functions"],
@@ -45,7 +51,6 @@ export default function ProjectDetail() {
       ]);
     },
   });
-
   if (projectQuery.isPending)
     return (
       <div className="page-state" role="status">
@@ -67,6 +72,22 @@ export default function ProjectDetail() {
 
   const project = projectQuery.data;
   const isSample = project.id.startsWith("sample:");
+  const runtimeStatus = project.runtimeStatus ?? (isSample ? "runtime_ready" : "not_requested");
+  const analysisChecks = isSample
+    ? [
+        "Bundled source snapshot available",
+        "Python syntax scanned",
+        "Functions and methods extracted",
+        "Statement denominators calculated",
+        "Branch denominators calculated",
+      ]
+    : [
+        "Private ZIP stored in isolated object storage",
+        "Python files inspected without executing source code",
+        "Test, migration, environment, and build folders excluded",
+        "Functions and methods extracted from valid Python syntax",
+        "Statement and branch denominators calculated statically",
+      ];
 
   return (
     <div className="platform-page project-detail-page">
@@ -110,6 +131,29 @@ export default function ProjectDetail() {
           Analysis failed. Review the ZIP archive and project settings, then run the analysis again.
         </div>
       )}
+      {!isSample && ["runtime_queued", "runtime_preparing"].includes(runtimeStatus) && (
+        <div className="platform-callout" role="status">
+          <div>
+            <strong>Preparing isolated Python runtime</strong>
+            <p>Installing dependencies, collecting tests, and measuring baseline coverage.</p>
+          </div>
+          <StatusBadge tone="info">Running</StatusBadge>
+        </div>
+      )}
+      {!isSample && runtimeStatus === "runtime_failed" && (
+        <div className="platform-callout platform-callout-danger" role="alert">
+          <div>
+            <strong>Project was not admitted to the environment</strong>
+            <p>
+              {project.runtimeReport?.error ?? "Runtime validation failed."} The environment's
+              active bundle and its existing projects were left unchanged.
+            </p>
+          </div>
+          <button className="secondary-button" onClick={() => navigate("/projects")}>
+            Upload revised ZIP
+          </button>
+        </div>
+      )}
       {analyzeMutation.isError && (
         <div className="page-state page-state-error" role="alert">
           {analyzeMutation.error instanceof Error
@@ -138,23 +182,69 @@ export default function ProjectDetail() {
             <section className="platform-card">
               <div className="card-heading">
                 <div>
-                  <h2>Configuration health</h2>
+                  <h2>Static analysis</h2>
                 </div>
-                <StatusBadge tone="success">5/5 checks</StatusBadge>
+                <StatusBadge tone={project.status === "warning" ? "warning" : "success"}>
+                  {project.status === "warning" ? "Completed with warnings" : "Completed"}
+                </StatusBadge>
               </div>
-              {[
-                "Python 3.11 runtime available",
-                "Dependencies installed",
-                "Project imports successfully",
-                "Pytest discovery succeeded",
-                "Branch coverage enabled",
-              ].map((check) => (
+              {analysisChecks.map((check) => (
                 <div className="validation-row" key={check}>
                   <span className="validation-check">✓</span>
                   <span>{check}</span>
-                  <small>Passed</small>
+                  <small>Verified</small>
                 </div>
               ))}
+            </section>
+            <section className="platform-card">
+              <div className="card-heading">
+                <div>
+                  <h2>Runtime readiness</h2>
+                </div>
+                <StatusBadge
+                  tone={isSample || runtimeStatus === "runtime_ready" ? "success" : "info"}
+                >
+                  {isSample ? "Bundled" : runtimeStatus.replace(/_/g, " ")}
+                </StatusBadge>
+              </div>
+              <dl className="definition-list">
+                <div>
+                  <dt>Environment</dt>
+                  <dd>{project.runtimeEnvironmentName || "Bundled sample environment"}</dd>
+                </div>
+                <div>
+                  <dt>Dependency fingerprint</dt>
+                  <dd>{project.runtimeDependencyFingerprint?.slice(0, 16) || "—"}</dd>
+                </div>
+                <div>
+                  <dt>Dependencies</dt>
+                  <dd>{project.runtimeReport?.dependencyFiles.join(", ") || "None detected"}</dd>
+                </div>
+                <div>
+                  <dt>Install</dt>
+                  <dd>{project.runtimeReport?.installStrategy || "Pending"}</dd>
+                </div>
+                <div>
+                  <dt>Collected tests</dt>
+                  <dd>{project.runtimeReport?.collectedTests ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt>Statement baseline</dt>
+                  <dd>
+                    {project.runtimeReport?.statementCoverage == null
+                      ? "—"
+                      : `${(project.runtimeReport.statementCoverage * 100).toFixed(1)}%`}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Branch baseline</dt>
+                  <dd>
+                    {project.runtimeReport?.branchCoverage == null
+                      ? "—"
+                      : `${(project.runtimeReport.branchCoverage * 100).toFixed(1)}%`}
+                  </dd>
+                </div>
+              </dl>
             </section>
             <section className="platform-card">
               <div className="card-heading">
@@ -275,7 +365,7 @@ export default function ProjectDetail() {
           <div className="table-toolbar">
             <div>
               <h2>Project versions</h2>
-              <p>Immutable source and configuration snapshots.</p>
+              <p>The immutable source snapshot used by static analysis.</p>
             </div>
           </div>
           <table className="platform-table">
@@ -296,22 +386,10 @@ export default function ProjectDetail() {
                 </td>
                 <td>{project.branch}</td>
                 <td>{project.functions}</td>
-                <td>cfg-a19c</td>
+                <td>Current settings</td>
                 <td>{project.analyzedAt}</td>
                 <td>
                   <StatusBadge tone="success">Current</StatusBadge>
-                </td>
-              </tr>
-              <tr>
-                <td>
-                  <code>8a10c4e</code>
-                </td>
-                <td>{project.branch}</td>
-                <td>{project.functions - 7}</td>
-                <td>cfg-92bf</td>
-                <td>Aug 1, 2026</td>
-                <td>
-                  <StatusBadge>Archived</StatusBadge>
                 </td>
               </tr>
             </tbody>

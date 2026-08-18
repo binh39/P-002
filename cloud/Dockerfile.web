@@ -8,6 +8,7 @@ RUN uv sync --frozen --python /usr/local/bin/python3.12
 FROM python:3.12-slim
 
 WORKDIR /app
+COPY --from=builder /bin/uv /bin/uv
 COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH="/app/src"
@@ -16,7 +17,7 @@ RUN useradd --create-home appuser
 COPY src/coverup ./src/coverup
 COPY src/optimization ./src/optimization
 COPY src/sample_repo ./sample_repo
-COPY cloud/run_job.py ./cloud/run_job.py
+COPY cloud/run_job.py cloud/prepare_runtime.py cloud/runtime_workspace.py ./cloud/
 RUN test -d /app/sample_repo/isort/isort \
     && test -d /app/sample_repo/mimesis/mimesis \
     && test -d /app/sample_repo/mlxtend/mlxtend \

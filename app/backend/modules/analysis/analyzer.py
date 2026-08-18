@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import stat
 import tempfile
 import zipfile
 from dataclasses import dataclass
@@ -14,7 +15,22 @@ from coverage import Coverage
 from backend.core.errors import AppError
 from backend.modules.analysis.schemas import ProjectFunctionRecord
 
-IGNORED_PARTS = {".git", ".venv", "venv", "site-packages", "__pycache__", "node_modules"}
+IGNORED_PARTS = {
+    ".git",
+    ".hg",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".tox",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+}
+NON_TARGET_PARTS = {"tests", "test", "migrations"}
+MAX_ARCHIVE_ENTRIES = 50_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +79,21 @@ def _function_end_line(function_data: dict, source_line_count: int) -> int:
 def _class_name(qualified_name: str, classes: dict) -> str:
     candidates = [name for name in classes if name and qualified_name.startswith(name + ".")]
     return max(candidates, key=len, default="")
+
+
+def _is_symlink(info: zipfile.ZipInfo) -> bool:
+    return stat.S_IFMT(info.external_attr >> 16) == stat.S_IFLNK
+
+
+def _is_python_target(path: PurePosixPath) -> bool:
+    lowered_parts = {part.lower() for part in path.parts}
+    filename = path.name.lower()
+    return (
+        path.suffix.lower() == ".py"
+        and not lowered_parts.intersection(IGNORED_PARTS | NON_TARGET_PARTS)
+        and not filename.startswith("test_")
+        and not filename.endswith("_test.py")
+    )
 
 
 def _records_from_report(
@@ -126,22 +157,42 @@ def analyze_zip(
     except zipfile.BadZipFile as exc:
         raise AppError(422, "INVALID_ZIP", "The uploaded source archive is not a valid ZIP file") from exc
 
+    entries = bundle.infolist()
+    if len(entries) > MAX_ARCHIVE_ENTRIES:
+        bundle.close()
+        raise AppError(413, "TOO_MANY_ARCHIVE_ENTRIES", "The archive contains too many entries")
+
     candidates: list[zipfile.ZipInfo] = []
+    normalized_paths: set[str] = set()
     total_size = 0
-    for info in bundle.infolist():
+    for info in entries:
         path = PurePosixPath(info.filename.replace("\\", "/"))
         if info.is_dir() or path.is_absolute() or ".." in path.parts:
             continue
-        if path.suffix != ".py" or any(part in IGNORED_PARTS for part in path.parts):
+        if _is_symlink(info):
+            bundle.close()
+            raise AppError(422, "UNSAFE_ZIP_ENTRY", "ZIP archives may not contain symbolic links")
+        if info.flag_bits & 0x1:
+            bundle.close()
+            raise AppError(422, "ENCRYPTED_ZIP_ENTRY", "Encrypted ZIP entries are not supported")
+        if not _is_python_target(path):
             continue
+        normalized = path.as_posix().casefold()
+        if normalized in normalized_paths:
+            bundle.close()
+            raise AppError(422, "DUPLICATE_ZIP_ENTRY", "The archive contains duplicate Python paths")
+        normalized_paths.add(normalized)
         candidates.append(info)
         total_size += info.file_size
         if len(candidates) > max_python_files:
+            bundle.close()
             raise AppError(413, "TOO_MANY_PYTHON_FILES", "The archive contains too many Python files")
         if total_size > max_uncompressed_bytes:
+            bundle.close()
             raise AppError(413, "ANALYSIS_ARCHIVE_TOO_LARGE", "Python sources exceed the analysis limit")
 
     if not candidates:
+        bundle.close()
         raise AppError(422, "NO_PYTHON_FILES", "The archive does not contain analyzable Python files")
 
     analyzed_at = datetime.now(UTC)
@@ -154,7 +205,7 @@ def analyze_zip(
             try:
                 source = bundle.read(info).decode("utf-8-sig")
                 compile(source, archive_path, "exec")
-            except (UnicodeDecodeError, SyntaxError):
+            except (UnicodeDecodeError, SyntaxError, RuntimeError, NotImplementedError, zipfile.BadZipFile):
                 warning_count += 1
                 continue
             destination = source_root.joinpath(*PurePosixPath(archive_path).parts)
@@ -175,6 +226,8 @@ def analyze_zip(
             functions = []
             statement_count = 0
             branch_count = 0
+
+    bundle.close()
 
     return AnalysisResult(
         functions=functions,

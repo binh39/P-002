@@ -24,6 +24,25 @@ interface ApiProject {
   statement_count: number;
   branch_count: number;
   analyzed_at: string | null;
+  runtime_environment_id: string | null;
+  runtime_environment_name: string | null;
+  runtime_bundle_object: string | null;
+  runtime_dependency_fingerprint: string | null;
+  runtime_status:
+    | "not_requested"
+    | "runtime_queued"
+    | "runtime_preparing"
+    | "runtime_ready"
+    | "runtime_failed";
+  runtime_report: {
+    dependency_files: string[];
+    install_strategy: string;
+    collected_tests: number;
+    statement_coverage: number | null;
+    branch_coverage: number | null;
+    error: string | null;
+    dependency_fingerprint: string | null;
+  } | null;
 }
 
 interface ApiProjectList {
@@ -100,6 +119,22 @@ function mapProject(project: ApiProject): PythonProject {
     testCommand: project.settings.tests.test_command,
     sourceDir: project.settings.runtime.source_directory,
     testDir: project.settings.tests.test_directory,
+    runtimeStatus: project.runtime_status,
+    runtimeEnvironmentId: project.runtime_environment_id,
+    runtimeEnvironmentName: project.runtime_environment_name,
+    runtimeBundleObject: project.runtime_bundle_object,
+    runtimeDependencyFingerprint: project.runtime_dependency_fingerprint,
+    runtimeReport: project.runtime_report
+      ? {
+          dependencyFiles: project.runtime_report.dependency_files,
+          installStrategy: project.runtime_report.install_strategy,
+          collectedTests: project.runtime_report.collected_tests,
+          statementCoverage: project.runtime_report.statement_coverage,
+          branchCoverage: project.runtime_report.branch_coverage,
+          error: project.runtime_report.error,
+          dependencyFingerprint: project.runtime_report.dependency_fingerprint,
+        }
+      : null,
   };
 }
 
@@ -137,13 +172,24 @@ export class HttpProjectRepository implements ProjectRepository {
     );
   }
 
+  async prepareRuntime(projectId: string) {
+    return mapProject(
+      await apiRequest<ApiProject>(`/projects/${projectId}/prepare-runtime`, { method: "POST" }),
+    );
+  }
+
   async create(input: CreateProjectInput) {
+    const contentType = ["application/zip", "application/x-zip-compressed"].includes(
+      input.file.type.toLowerCase(),
+    )
+      ? input.file.type.toLowerCase()
+      : "application/zip";
     const upload = await apiRequest<ApiUpload>("/uploads", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         filename: input.file.name,
-        content_type: input.file.type || "application/zip",
+        content_type: contentType,
         size_bytes: input.file.size,
       }),
     });
@@ -170,6 +216,8 @@ export class HttpProjectRepository implements ProjectRepository {
           upload_id: upload.id,
           branch: input.branch,
           commit: input.commit || null,
+          runtime_environment_id: input.runtimeEnvironmentId || null,
+          runtime_environment_name: input.runtimeEnvironmentName || null,
         }),
       }),
     );

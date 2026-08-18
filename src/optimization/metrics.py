@@ -107,7 +107,7 @@ def aggregate_coverage_score(
     if not normalized:
         legacy = [
             float(result["score"]) for result in results
-            if isinstance(result.get("score"), (int, float))
+            if isinstance(result.get("score"), int | float)
         ]
         if legacy:
             value = sum(legacy) / len(results)

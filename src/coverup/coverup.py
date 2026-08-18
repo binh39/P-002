@@ -428,12 +428,17 @@ module_available = dict()
 def missing_imports(modules: T.List[str]) -> T.List[str]:
     # TODO handle GPT sometimes generating 'from your_module import XYZ', asking us to modify
 
-    import importlib.util
-
     for module in modules:
         if module not in module_available:
-            spec = importlib.util.find_spec(module)
-            module_available[module] = 0 if spec is None else 1
+            python = os.environ.get("TESTGEN_PYTHON", sys.executable)
+            completed = subprocess.run(
+                [python, "-c", "import importlib.util,sys; raise SystemExit(importlib.util.find_spec(sys.argv[1]) is None)", module],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=30,
+            )
+            module_available[module] = 1 if completed.returncode == 0 else 0
 
     return [m for m in modules if not module_available[m]]
 
@@ -447,7 +452,8 @@ def install_missing_imports(args: argparse.Namespace, seg: CodeSegment, modules:
     for module in modules:
         try:
             # FIXME we probably want to limit the module(s) installed to an "approved" list
-            p = subprocess.run((f"{sys.executable} -m pip install {module}").split(),
+            python = os.environ.get("TESTGEN_PYTHON", sys.executable)
+            p = subprocess.run([python, "-m", "pip", "install", module],
                                check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60)
             version = importlib.metadata.version(module)
             module_available[module] = 2    # originally unavailable, but now added

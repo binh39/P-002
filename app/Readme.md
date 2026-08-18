@@ -353,3 +353,37 @@ Thá»© tá»± Æ°u tiÃªn Ä‘Æ°á»£c theo dÃµi chi tiáº¿t trong 
 5. ThÃªm quota, cost ceiling, artifact retention, structured monitoring vÃ  alerts.
 6. XÃ³a mock Dashboard/Datasets/Playground hoáº·c Ä‘á»‹nh nghÄ©a API/product semantics tÆ°Æ¡ng á»©ng.
 7. ThÃªm staging, browser E2E, tenant-isolation/security tests vÃ  rollback drill.
+
+## Uploaded project runtime preparation
+
+Uploaded ZIP projects are never installed or executed by the API service. The
+user chooses a runtime environment during upload. After static analysis, the API
+copies every active member plus the new candidate into an opaque
+`runner-jobs/runtime/<execution-id>/` prefix and starts
+`promptopt-runtime-preparer` under the dedicated `promptopt-runtime` service
+account. The worker contains UV; uploaded repositories do not need to bundle or
+install UV themselves.
+
+The job safely extracts every ZIP, resolves all `uv.lock`, `pyproject.toml`, and
+`requirements.txt` constraints together, creates one shared virtual environment,
+installs every project, runs `pytest --collect-only`, and measures baseline
+statement/branch coverage for each member. A successful candidate is archived as
+an immutable `runtime.tar.gz` bundle. The API atomically points every member at
+the new bundle only after the full validation succeeds. Dependency conflicts or
+runtime failures reject only the candidate; the previous active bundle remains
+unchanged. Concurrent admissions are queued per environment.
+
+An uploaded project is selectable only after its persisted status is
+`runtime_ready`. Experiment creation first selects an environment and accepts
+only projects from that environment. The bundled sample catalog is represented
+by the read-only `sample-runtime` environment. A GEPA job restores the selected
+bundle at the same isolated path and uses its Python interpreter for CoverUp,
+pytest, SlipCover, and coverage subprocesses; it does not reinstall project
+dependencies on each optimization run.
+
+Before the first production deployment, provision the runtime identity and
+prefix-restricted GCS permissions:
+
+```powershell
+.\app\infra\provision-production-runner.ps1
+```

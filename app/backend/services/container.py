@@ -30,6 +30,7 @@ from backend.modules.projects.repository import (
     InMemoryProjectRepository,
     ProjectRepository,
 )
+from backend.modules.projects.runtime import CloudRunRuntimePreparer, RuntimePreparationService
 from backend.modules.projects.samples import SampleProjectCatalog
 from backend.modules.projects.service import ProjectService
 from backend.modules.uploads.repository import (
@@ -100,6 +101,22 @@ def build_services(settings: Settings) -> ServiceContainer:
         settings.max_analysis_uncompressed_bytes,
     )
     projects = ProjectService(project_repository, uploads, samples)
+    runtime_runner = None
+    if settings.runtime_execution_backend == "cloud_run_job":
+        from google.cloud import run_v2
+
+        runtime_runner = CloudRunRuntimePreparer(
+            client=run_v2.JobsClient(),
+            storage=storage,
+            bucket=settings.gcs_bucket,
+            job_name=(
+                f"projects/{settings.gcp_project_id}/locations/{settings.cloud_tasks_location}/jobs/"
+                f"{settings.cloud_run_runtime_job}"
+            ),
+            timeout_seconds=settings.cloud_run_runtime_timeout_seconds,
+        )
+    runtime = RuntimePreparationService(project_repository, runtime_runner)
+    projects.set_runtime_service(runtime)
     analysis = AnalysisService(
         project_repository,
         function_repository,

@@ -8,7 +8,7 @@ import pytest
 from backend.modules.experiments.cloud_optimizer import CloudRunJobGepaOptimizer
 from backend.modules.experiments.optimizer import OptimizationTarget
 from backend.modules.experiments.prompts import baseline_prompt
-from backend.modules.experiments.schemas import ExperimentSettings
+from backend.modules.experiments.schemas import ExperimentSettings, ProjectSnapshot
 
 
 class FakeStorage:
@@ -168,6 +168,69 @@ async def test_cloud_gepa_optimizer_uses_isolated_web_prefix_and_maps_result():
         item["name"]: item["value"] for item in client.request["overrides"]["container_overrides"][0]["env"]
     }
     assert admin_environment["VERTEXAI_PROJECT"] == "project-7df9f963-9fe0-4b76-b3d"
+
+
+@pytest.mark.asyncio
+async def test_cloud_gepa_optimizer_copies_uploaded_project_into_job_prefix():
+    storage = FakeStorage()
+    storage.objects["users/u/uploads/source.zip"] = (b"zip-content", "application/zip")
+    storage.objects["runner-jobs/runtime/ready/runtime.tar.gz"] = (
+        b"runtime-content",
+        "application/gzip",
+    )
+    client = FakeJobsClient(storage)
+    optimizer = CloudRunJobGepaOptimizer(
+        client=client,
+        storage=storage,
+        bucket="private-source-bucket",
+        job_name="projects/project/locations/region/jobs/promptopt-gepa-runner",
+        timeout_seconds=86400,
+    )
+    target = OptimizationTarget(
+        id="target-1",
+        symbol="add",
+        split="train",
+        source_file="module.py",
+        project="uploaded",
+    )
+    snapshot = ProjectSnapshot(
+        project_id="project-1",
+        name="Uploaded",
+        source_directory="pkg",
+        test_directory="tests",
+        runner_project="uploaded",
+        archive_object="users/u/uploads/source.zip",
+        runtime_artifact_prefix="runner-jobs/runtime/ready",
+        runtime_environment_id="environment-1",
+        runtime_bundle_object="runner-jobs/runtime/ready/runtime.tar.gz",
+    )
+
+    await optimizer.start(
+        baseline=baseline_prompt(),
+        train=[target],
+        validation=[
+            OptimizationTarget(
+                id="target-2",
+                symbol="add",
+                split="validation",
+                source_file="module.py",
+                project="uploaded",
+            )
+        ],
+        holdout=None,
+        settings=ExperimentSettings(),
+        projects=[snapshot],
+    )
+
+    args = client.request["overrides"]["container_overrides"][0]["args"]
+    manifest_name = args[args.index("--project-manifest-object") + 1]
+    manifest = json.loads(storage.objects[manifest_name][0])
+    copied_name = manifest["projects"][0]["archive_object"]
+    assert copied_name.startswith("runner-jobs/gepa/")
+    assert storage.objects[copied_name][0] == b"zip-content"
+    copied_bundle = manifest["runtime_bundle_object"]
+    assert copied_bundle.startswith("runner-jobs/gepa/")
+    assert storage.objects[copied_bundle][0] == b"runtime-content"
 
 
 @pytest.mark.asyncio

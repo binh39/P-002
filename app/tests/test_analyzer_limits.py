@@ -1,4 +1,5 @@
 import io
+import stat
 import zipfile
 
 import pytest
@@ -31,3 +32,48 @@ def test_analysis_limits_python_file_count():
         analyze_zip("project", archive, max_python_files=1, max_uncompressed_bytes=1024)
 
     assert error.value.code == "TOO_MANY_PYTHON_FILES"
+
+
+def test_analysis_excludes_tests_migrations_and_build_outputs():
+    archive = archive_with(
+        {
+            "src/package/core.py": "def target():\n    return 1\n",
+            "tests/test_core.py": "def test_target():\n    assert True\n",
+            "src/package/core_test.py": "def helper_test():\n    return 1\n",
+            "migrations/version.py": "def upgrade():\n    return 1\n",
+            "build/generated.py": "def generated():\n    return 1\n",
+        }
+    )
+
+    result = analyze_zip("project", archive, max_python_files=10, max_uncompressed_bytes=4096)
+
+    assert result.python_file_count == 1
+    assert [function.qualified_name for function in result.functions] == ["target"]
+
+
+def test_analysis_rejects_symbolic_links():
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        link = zipfile.ZipInfo("src/package/link.py")
+        link.create_system = 3
+        link.external_attr = (stat.S_IFLNK | 0o777) << 16
+        archive.writestr(link, "target.py")
+
+    with pytest.raises(AppError) as error:
+        analyze_zip("project", buffer.getvalue(), max_python_files=10, max_uncompressed_bytes=1024)
+
+    assert error.value.code == "UNSAFE_ZIP_ENTRY"
+
+
+def test_analysis_rejects_case_insensitive_duplicate_python_paths():
+    archive = archive_with(
+        {
+            "src/package/core.py": "def one():\n    return 1\n",
+            "SRC/PACKAGE/CORE.PY": "def two():\n    return 2\n",
+        }
+    )
+
+    with pytest.raises(AppError) as error:
+        analyze_zip("project", archive, max_python_files=10, max_uncompressed_bytes=1024)
+
+    assert error.value.code == "DUPLICATE_ZIP_ENTRY"

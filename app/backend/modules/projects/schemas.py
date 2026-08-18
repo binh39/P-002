@@ -16,9 +16,43 @@ class ProjectStatus(StrEnum):
     FAILED = "failed"
 
 
+class RuntimeStatus(StrEnum):
+    NOT_REQUESTED = "not_requested"
+    QUEUED = "runtime_queued"
+    PREPARING = "runtime_preparing"
+    READY = "runtime_ready"
+    FAILED = "runtime_failed"
+
+
+class RuntimeProjectReport(StrictModel):
+    source_directory: str = ""
+    test_directory: str = ""
+    dependency_files: list[str] = Field(default_factory=list)
+    collected_tests: int = 0
+    statement_coverage: float | None = None
+    branch_coverage: float | None = None
+
+
+class RuntimeReport(StrictModel):
+    status: RuntimeStatus
+    source_directory: str = ""
+    test_directory: str = ""
+    dependency_files: list[str] = Field(default_factory=list)
+    install_strategy: str = ""
+    collected_tests: int = 0
+    statement_coverage: float | None = None
+    branch_coverage: float | None = None
+    commands: list[dict] = Field(default_factory=list)
+    projects: dict[str, RuntimeProjectReport] = Field(default_factory=dict)
+    dependency_fingerprint: str | None = None
+    bundle_object: str | None = None
+    error: str | None = None
+    protocol_version: int = 1
+
+
 class RuntimeSettings(StrictModel):
-    python_version: str = Field(default="3.11", pattern=r"^3\.(10|11|12|13)$")
-    runtime_image: str = Field(default="python:3.11-slim", max_length=200)
+    python_version: str = Field(default="3.12", pattern=r"^3\.(10|11|12|13)$")
+    runtime_image: str = Field(default="promptopt-runtime-preparer", max_length=200)
     working_directory: str = Field(default="./", max_length=300)
     source_directory: str = Field(default="src", max_length=300)
     cpu: int = Field(default=1, ge=1, le=8)
@@ -126,6 +160,8 @@ class CreateProjectRequest(StrictModel):
     upload_id: str
     branch: str = Field(default="main", min_length=1, max_length=200)
     commit: str | None = Field(default=None, max_length=64)
+    runtime_environment_id: str | None = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    runtime_environment_name: str | None = Field(default=None, min_length=1, max_length=100)
     settings: ProjectSettings = Field(default_factory=ProjectSettings)
 
 
@@ -144,6 +180,15 @@ class ProjectResponse(StrictModel):
     statement_count: int = 0
     branch_count: int = 0
     analyzed_at: datetime | None = None
+    runtime_environment_id: str | None = None
+    runtime_environment_name: str | None = None
+    runtime_bundle_object: str | None = None
+    runtime_dependency_fingerprint: str | None = None
+    runtime_status: RuntimeStatus = RuntimeStatus.NOT_REQUESTED
+    runtime_report: RuntimeReport | None = None
+    runtime_artifact_prefix: str | None = None
+    runtime_started_at: datetime | None = None
+    runtime_finished_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

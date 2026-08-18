@@ -221,6 +221,9 @@ class SampleProjectCatalog:
             statement_count=definition.statement_count,
             branch_count=definition.branch_count,
             analyzed_at=_SNAPSHOT_TIME,
+            runtime_environment_id="sample-runtime",
+            runtime_environment_name="Bundled sample environment",
+            runtime_status="runtime_ready",
             created_at=_SNAPSHOT_TIME,
             updated_at=_SNAPSHOT_TIME,
         )

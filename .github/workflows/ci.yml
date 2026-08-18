@@ -17,7 +17,7 @@ on:
       - "src/sample_repo.rar"
       - "src/sample_repo.zip"
       - "tests/**"
-      - "cloud/run_job.py"
+      - "cloud/**"
       - "cloud/Dockerfile.web"
       - "Dockerfile"
       - ".dockerignore"
@@ -40,7 +40,7 @@ on:
       - "src/sample_repo.rar"
       - "src/sample_repo.zip"
       - "tests/**"
-      - "cloud/run_job.py"
+      - "cloud/**"
       - "cloud/Dockerfile.web"
       - "Dockerfile"
       - ".dockerignore"
@@ -110,7 +110,7 @@ jobs:
           test -d src/sample_repo/typesystem/typesystem
       - name: Check GEPA pipeline
         run: |
-          uv run ruff check src/optimization tests/test_coverage_optimization.py tests/test_dataset_builder.py cloud/run_job.py
+          uv run ruff check src/optimization tests/test_coverage_optimization.py tests/test_dataset_builder.py tests/test_runtime_workspace.py cloud/run_job.py cloud/prepare_runtime.py cloud/runtime_workspace.py
           uv run python -m py_compile src/coverup/coverup.py src/optimization/gepa.py src/optimization/metrics.py src/optimization/cli.py src/optimization/runner.py src/optimization/prompts.py cloud/run_job.py
           uv run pytest -p no:pytest_isolate tests -q
       - name: Build GEPA runner image

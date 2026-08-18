@@ -11,6 +11,8 @@ Write-Warning "This compatibility script provisions only runner-specific resourc
 $ErrorActionPreference = "Stop"
 $RunnerAccountName = "promptopt-runner"
 $RunnerAccount = "$RunnerAccountName@$ProjectId.iam.gserviceaccount.com"
+$RuntimeAccountName = "promptopt-runtime"
+$RuntimeAccount = "$RuntimeAccountName@$ProjectId.iam.gserviceaccount.com"
 $ApiAccount = "promptopt-api@$ProjectId.iam.gserviceaccount.com"
 $DeployAccount = "github-backend-deploy@$ProjectId.iam.gserviceaccount.com"
 $RunnerObjectRole = "promptoptRunnerObjectIO"
@@ -42,6 +44,9 @@ Invoke-Gcloud services enable aiplatform.googleapis.com --project $ModelProjectI
 if (-not (Test-GcloudResource iam service-accounts describe $RunnerAccount --project $ProjectId)) {
     Invoke-Gcloud iam service-accounts create $RunnerAccountName --project $ProjectId --display-name "PromptOpt isolated runner"
 }
+if (-not (Test-GcloudResource iam service-accounts describe $RuntimeAccount --project $ProjectId)) {
+    Invoke-Gcloud iam service-accounts create $RuntimeAccountName --project $ProjectId --display-name "PromptOpt untrusted project runtime"
+}
 
 if (-not (Test-GcloudResource iam roles describe $RunnerObjectRole --project $ProjectId)) {
     Invoke-Gcloud iam roles create $RunnerObjectRole --project $ProjectId --file $RoleFile
@@ -59,11 +64,13 @@ else {
 
 $PrefixCondition = "expression=resource.name.startsWith('projects/_/buckets/$Bucket/objects/runner-jobs/'),title=PromptOptRunnerJobPrefix,description=Restrict runner access to opaque execution objects"
 Invoke-Gcloud storage buckets add-iam-policy-binding "gs://$Bucket" --member "serviceAccount:$RunnerAccount" --role $RunnerObjectRoleResource --condition $PrefixCondition
+Invoke-Gcloud storage buckets add-iam-policy-binding "gs://$Bucket" --member "serviceAccount:$RuntimeAccount" --role $RunnerObjectRoleResource --condition $PrefixCondition
 Invoke-Gcloud projects add-iam-policy-binding $ModelProjectId --member "serviceAccount:$RunnerAccount" --role roles/aiplatform.user --condition None
 Invoke-Gcloud projects add-iam-policy-binding $ModelProjectId --member "serviceAccount:$RunnerAccount" --role roles/serviceusage.serviceUsageConsumer --condition None
 Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$ApiAccount" --role $ApiOperationRoleResource --condition None
 Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$ApiAccount" --role roles/logging.viewer --condition None
 Invoke-Gcloud iam service-accounts add-iam-policy-binding $RunnerAccount --project $ProjectId --member "serviceAccount:$DeployAccount" --role roles/iam.serviceAccountUser
+Invoke-Gcloud iam service-accounts add-iam-policy-binding $RuntimeAccount --project $ProjectId --member "serviceAccount:$DeployAccount" --role roles/iam.serviceAccountUser
 
 if (-not (Test-GcloudResource tasks queues describe $Queue --location $Region --project $ProjectId)) {
     Invoke-Gcloud tasks queues create $Queue --location $Region --project $ProjectId --max-concurrent-dispatches 1 --max-dispatches-per-second 1 --max-attempts 3 --max-retry-duration 3600s

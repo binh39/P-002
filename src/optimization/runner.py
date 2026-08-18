@@ -291,7 +291,7 @@ class CoverUpExperimentRunner:
                 "stdout": "",
             }
         has_test = any(
-            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
             and node.name.startswith("test_")
             for node in ast.walk(tree)
         )
@@ -323,7 +323,7 @@ class CoverUpExperimentRunner:
         package_dir = self.config.package_dir_for(target.project).resolve()
         environment = _test_environment(
             self.config.project_root,
-            (package_dir.parent,),
+            (self.config.import_root_for(target.project),),
         )
         completed = run_coverage(
             project_root=self.config.project_root.resolve(),
@@ -471,7 +471,7 @@ class CoverUpExperimentRunner:
             )
         environment = _test_environment(
             self.config.project_root,
-            tuple(sorted({package_dir.parent for package_dir in package_dirs.values()})),
+            tuple(sorted({self.config.import_root_for(project) for project in projects})),
         )
 
         final_workspaces: dict[str, Path] = {}

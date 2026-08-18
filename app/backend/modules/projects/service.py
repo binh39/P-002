@@ -27,9 +27,41 @@ class ProjectService:
         self.repository = repository
         self.uploads = uploads
         self.samples = samples
+        self.runtime = None
+
+    def set_runtime_service(self, runtime) -> None:
+        self.runtime = runtime
 
     async def create(self, owner_id: str, payload: CreateProjectRequest) -> ProjectResponse:
         upload = await self.uploads.require_ready(payload.upload_id, owner_id)
+        environment_id = payload.runtime_environment_id or uuid4().hex
+        if environment_id == "sample-runtime":
+            raise AppError(
+                422,
+                "SAMPLE_RUNTIME_READ_ONLY",
+                "Uploaded projects cannot join the bundled sample environment",
+            )
+        environment_name = payload.runtime_environment_name or f"{payload.name} environment"
+        if payload.runtime_environment_id:
+            existing_members = [
+                item
+                for item in await self.repository.list_for_owner(owner_id)
+                if item.runtime_environment_id == environment_id
+            ]
+            if not existing_members:
+                raise AppError(
+                    422,
+                    "RUNTIME_ENVIRONMENT_NOT_FOUND",
+                    "The selected runtime environment does not exist",
+                )
+            environment_name = existing_members[0].runtime_environment_name or environment_name
+            expected_python = existing_members[0].settings.runtime.python_version
+            if payload.settings.runtime.python_version != expected_python:
+                raise AppError(
+                    409,
+                    "PYTHON_VERSION_CONFLICT",
+                    f"This environment uses Python {expected_python}",
+                )
         now = datetime.now(UTC)
         project = ProjectRecord(
             id=str(uuid4()),
@@ -40,6 +72,8 @@ class ProjectService:
             object_name=upload.object_name,
             branch=payload.branch,
             commit=payload.commit,
+            runtime_environment_id=environment_id,
+            runtime_environment_name=environment_name,
             status=ProjectStatus.UPLOADED,
             settings=payload.settings,
             created_at=now,
@@ -50,6 +84,8 @@ class ProjectService:
 
     async def list(self, owner_id: str) -> ProjectListResponse:
         projects = await self.repository.list_for_owner(owner_id)
+        if self.runtime:
+            projects = [await self.runtime.refresh(project) for project in projects]
         return ProjectListResponse(items=[self._response(project) for project in projects], total=len(projects))
 
     async def list_samples(self, owner_id: str) -> ProjectListResponse:
@@ -57,7 +93,20 @@ class ProjectService:
         return ProjectListResponse(items=[self._response(project) for project in projects], total=len(projects))
 
     async def get(self, project_id: str, owner_id: str) -> ProjectResponse:
-        return self._response(await self.require_owned(project_id, owner_id))
+        project = await self.require_owned(project_id, owner_id)
+        if self.runtime and not self.is_sample(project_id):
+            project = await self.runtime.refresh(project)
+        return self._response(project)
+
+    async def prepare_runtime(self, project_id: str, owner_id: str) -> ProjectResponse:
+        if self.is_sample(project_id):
+            raise AppError(409, "SAMPLE_PROJECT_READ_ONLY", "Bundled samples already have a runtime")
+        project = await self.require_owned(project_id, owner_id)
+        if project.status not in {ProjectStatus.READY, ProjectStatus.WARNING}:
+            raise AppError(409, "ANALYSIS_NOT_READY", "Static analysis must complete first")
+        if self.runtime is None:
+            raise AppError(503, "RUNTIME_PREPARER_UNAVAILABLE", "Runtime preparation is not configured")
+        return await self.runtime.request(project)
 
     async def update_settings(
         self,
@@ -77,6 +126,12 @@ class ProjectService:
         project.settings = ProjectSettings.model_validate(current)
         project.updated_at = datetime.now(UTC)
         await self.repository.save(project)
+        if (
+            self.runtime is not None
+            and self.runtime.runner is not None
+            and project.status in {ProjectStatus.READY, ProjectStatus.WARNING}
+        ):
+            return await self.runtime.request(project)
         return self._response(project)
 
     async def require_owned(self, project_id: str, owner_id: str) -> ProjectRecord:

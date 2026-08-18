@@ -41,6 +41,9 @@ const project = {
   testCommand: "pytest",
   sourceDir: "isort",
   testDir: "tests",
+  runtimeStatus: "runtime_ready" as const,
+  runtimeEnvironmentId: "sample-runtime",
+  runtimeEnvironmentName: "Bundled sample environment",
 };
 const functions = Array.from({ length: 3 }, (_, index) => ({
   id: `fn-${index + 1}`,
@@ -78,6 +81,9 @@ describe("create experiment wizard", () => {
   it("creates an experiment and queues optimization with baseline as candidate zero", async () => {
     render(<CreateExperiment />, { wrapper: Wrapper });
 
+    fireEvent.change(await screen.findByLabelText(/Runtime environment/i), {
+      target: { value: "sample-runtime" },
+    });
     fireEvent.click(await screen.findByRole("button", { name: /isort/i }));
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     await screen.findByText(/3 valid functions available/i);
@@ -104,6 +110,9 @@ describe("create experiment wizard", () => {
   it("requires an analyzed project before continuing", async () => {
     render(<CreateExperiment />, { wrapper: Wrapper });
 
+    fireEvent.change(await screen.findByLabelText(/Runtime environment/i), {
+      target: { value: "sample-runtime" },
+    });
     await screen.findByRole("button", { name: /isort/i });
     expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
   });
@@ -112,6 +121,9 @@ describe("create experiment wizard", () => {
     auth.user.email = "admin@gmail.com";
     render(<CreateExperiment />, { wrapper: Wrapper });
 
+    fireEvent.change(await screen.findByLabelText(/Runtime environment/i), {
+      target: { value: "sample-runtime" },
+    });
     fireEvent.click(await screen.findByRole("button", { name: /isort/i }));
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     await screen.findByText(/3 valid functions available/i);

@@ -21,6 +21,8 @@ def production_settings(**overrides):
         "experiment_task_audience": "https://api.example",
         "optimization_execution_backend": "cloud_run_job",
         "cloud_run_gepa_job": "gepa-runner",
+        "runtime_execution_backend": "cloud_run_job",
+        "cloud_run_runtime_job": "runtime-preparer",
     }
     values.update(overrides)
     return Settings(**values)
@@ -37,6 +39,7 @@ def test_production_cloud_run_job_configuration_is_valid():
     assert settings.experiment_dispatcher == "cloud_tasks"
     assert settings.optimization_execution_backend == "cloud_run_job"
     assert settings.cloud_run_gepa_timeout_seconds == 86400
+    assert settings.runtime_execution_backend == "cloud_run_job"
     assert settings.gcp_project_id == "project-7df9f963-9fe0-4b76-b3d"
     assert settings.admin_vertexai_project == "vinbuildphase"
 
@@ -49,3 +52,8 @@ def test_production_requires_cloud_gepa_execution_backend():
 def test_production_requires_admin_vertexai_project():
     with pytest.raises(ValidationError, match="ADMIN_VERTEXAI_PROJECT is required"):
         production_settings(admin_vertexai_project=" ")
+
+
+def test_production_requires_runtime_preparation_job():
+    with pytest.raises(ValidationError, match="RUNTIME_EXECUTION_BACKEND=cloud_run_job"):
+        production_settings(runtime_execution_backend="disabled")

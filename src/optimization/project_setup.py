@@ -151,7 +151,7 @@ def _validate_imports(
     cwd: Path,
 ) -> str:
     command = [
-        sys.executable,
+        environment.get("TESTGEN_PYTHON", sys.executable),
         "-c",
         (
             "import importlib,importlib.metadata,sys; "
