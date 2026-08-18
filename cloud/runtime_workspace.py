@@ -296,7 +296,10 @@ def prepare_environment(
             if any((root / name).is_file() for name in ("pyproject.toml", "setup.py", "setup.cfg")):
                 installable_roots.append(root)
 
-        if requirements or installable_roots or uv:
+        # These are runner-owned tools, not project dependencies.  Install
+        # them into every restored environment even when the project has no
+        # dependency manifest or the runner falls back from uv to pip.
+        if requirements or installable_roots or RUNTIME_TOOL_REQUIREMENTS:
             command = (
                 [uv, "pip", "install", "--python", str(python)]
                 if uv
@@ -304,8 +307,7 @@ def prepare_environment(
             )
             for requirement in requirements:
                 command.extend(["-r", str(requirement)])
-            if uv:
-                command.extend(RUNTIME_TOOL_REQUIREMENTS)
+            command.extend(RUNTIME_TOOL_REQUIREMENTS)
             command.extend(str(root) for root in installable_roots)
             _run(result, "resolve shared dependencies", command, workspace, deadline, maximum_output_bytes)
             check = [uv, "pip", "check", "--python", str(python)] if uv else [str(python), "-m", "pip", "check"]

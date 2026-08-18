@@ -7,9 +7,9 @@ import zipfile
 from pathlib import Path
 
 from cloud.runtime_workspace import (
+    PROJECT_DEPENDENCY_FILES,
     RUNTIME_PROTOCOL_VERSION,
     RUNTIME_TOOL_REQUIREMENTS,
-    PROJECT_DEPENDENCY_FILES,
     RuntimeProjectSpec,
     create_runtime_bundle,
     prepare_environment,
