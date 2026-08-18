@@ -5,6 +5,7 @@ from backend.api.dependencies import CurrentUser, InternalTask
 from .schemas import (
     ComparisonRunResponse,
     CreateExperimentRequest,
+    CreateTestGenerationRequest,
     EvolutionResponse,
     ExperimentListResponse,
     ExperimentResponse,
@@ -15,13 +16,17 @@ from .schemas import (
     PromptVersionResponse,
     PromptVersionStatus,
     ReviewPromptVersionRequest,
+    TestGenerationRunListResponse,
+    TestGenerationRunResponse,
 )
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
 optimization_internal_router = APIRouter(prefix="/internal/v1/optimization-runs", tags=["internal"])
 comparison_internal_router = APIRouter(prefix="/internal/v1/comparison-runs", tags=["internal"])
+test_generation_internal_router = APIRouter(prefix="/internal/v1/test-generation-runs", tags=["internal"])
 prompt_router = APIRouter(prefix="/prompt-versions", tags=["prompt-versions"])
 prompt_registry_router = APIRouter(prefix="/prompt-registry", tags=["prompt-registry"])
+test_generation_router = APIRouter(prefix="/test-generation-runs", tags=["test-generation"])
 
 
 @router.post("", response_model=ExperimentResponse, status_code=status.HTTP_201_CREATED)
@@ -164,3 +169,45 @@ async def list_prompt_registry(
 @prompt_registry_router.get("/{experiment_id}", response_model=PromptRegistryEntryResponse)
 async def get_prompt_registry_entry(experiment_id: str, user: CurrentUser, request: Request):
     return await request.app.state.services.experiments.get_prompt_registry_entry(experiment_id, user.uid)
+
+
+@prompt_registry_router.post(
+    "/{experiment_id}/test-generation",
+    response_model=TestGenerationRunResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def request_test_generation(
+    experiment_id: str,
+    payload: CreateTestGenerationRequest,
+    user: CurrentUser,
+    request: Request,
+):
+    return await request.app.state.services.experiments.request_test_generation(experiment_id, user.uid, payload)
+
+
+@test_generation_router.get("", response_model=TestGenerationRunListResponse)
+async def list_test_generation_runs(
+    user: CurrentUser,
+    request: Request,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+):
+    return await request.app.state.services.experiments.list_test_generation_runs(user.uid, offset, limit)
+
+
+@test_generation_router.get("/{run_id}", response_model=TestGenerationRunResponse)
+async def get_test_generation_run(run_id: str, user: CurrentUser, request: Request):
+    return await request.app.state.services.experiments.get_test_generation_run(run_id, user.uid)
+
+
+@test_generation_router.get("/{run_id}/artifacts/{artifact_name}")
+async def get_test_generation_artifact(run_id: str, artifact_name: str, user: CurrentUser, request: Request):
+    content = await request.app.state.services.experiments.get_test_generation_artifact(run_id, artifact_name, user.uid)
+    media_type = "application/zip" if artifact_name == "suite_zip" else "application/json"
+    return Response(content=content, media_type=media_type)
+
+
+@test_generation_internal_router.post("/{run_id}/execute", status_code=status.HTTP_204_NO_CONTENT)
+async def execute_test_generation(run_id: str, _task: InternalTask, request: Request):
+    await request.app.state.services.experiments.execute_test_generation(run_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

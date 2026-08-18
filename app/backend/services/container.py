@@ -17,11 +17,14 @@ from backend.modules.analysis.repository import (
 from backend.modules.analysis.service import AnalysisService
 from backend.modules.dashboard.service import DashboardService
 from backend.modules.experiments.cloud_optimizer import CloudRunJobGepaOptimizer
+from backend.modules.experiments.cloud_test_generator import CloudRunJobTestGenerator
 from backend.modules.experiments.dispatcher import (
     CloudTasksComparisonDispatcher,
     CloudTasksOptimizationDispatcher,
+    CloudTasksTestGenerationDispatcher,
     InlineComparisonDispatcher,
     InlineOptimizationDispatcher,
+    InlineTestGenerationDispatcher,
 )
 from backend.modules.experiments.repository import FirestoreExperimentRepository, InMemoryExperimentRepository
 from backend.modules.experiments.service import ExperimentService
@@ -156,6 +159,7 @@ def build_services(settings: Settings) -> ServiceContainer:
         dispatcher = InlineAnalysisDispatcher(analysis.run)
     analysis.set_dispatcher(dispatcher)
     cloud_optimizer = None
+    cloud_test_generator = None
     if settings.optimization_execution_backend == "cloud_run_job":
         from google.cloud import logging_v2, run_v2
 
@@ -171,12 +175,23 @@ def build_services(settings: Settings) -> ServiceContainer:
             logging_client=logging_v2.Client(project=settings.gcp_project_id),
             executions_client=run_v2.ExecutionsClient(),
         )
+        cloud_test_generator = CloudRunJobTestGenerator(
+            client=run_v2.JobsClient(),
+            storage=storage,
+            bucket=settings.gcs_bucket,
+            job_name=(
+                f"projects/{settings.gcp_project_id}/locations/{settings.cloud_tasks_location}/jobs/"
+                f"{settings.cloud_run_test_generation_job}"
+            ),
+            timeout_seconds=settings.cloud_run_test_generation_timeout_seconds,
+        )
     experiments = ExperimentService(
         experiment_repository,
         projects,
         function_repository,
         storage,
         cloud_optimizer=cloud_optimizer,
+        cloud_test_generator=cloud_test_generator,
         samples=samples,
         admin_vertexai_project=settings.admin_vertexai_project,
         provider_credentials=provider_credentials,
@@ -204,9 +219,22 @@ def build_services(settings: Settings) -> ServiceContainer:
                 settings.gcp_service_account_email,
             )
         )
+        experiments.set_test_generation_dispatcher(
+            CloudTasksTestGenerationDispatcher(
+                settings.gcp_project_id,
+                settings.cloud_tasks_location,
+                settings.experiment_cloud_tasks_queue,
+                settings.experiment_worker_url,
+                settings.experiment_task_audience,
+                settings.gcp_service_account_email,
+            )
+        )
     else:
         experiments.set_optimization_dispatcher(InlineOptimizationDispatcher(experiments.execute_optimization))
         experiments.set_comparison_dispatcher(InlineComparisonDispatcher(experiments.execute_comparison))
+        experiments.set_test_generation_dispatcher(
+            InlineTestGenerationDispatcher(experiments.execute_test_generation)
+        )
     return ServiceContainer(
         token_verifier=token_verifier,
         internal_token_verifier=internal_token_verifier,

@@ -14,6 +14,9 @@ from backend.modules.experiments.schemas import (
     PromptVersionRecord,
     PromptVersionStatus,
 )
+from backend.modules.experiments.schemas import (
+    TestGenerationRunRecord as FinalTestGenerationRunRecord,
+)
 from backend.modules.projects.schemas import RuntimeReport, RuntimeStatus
 from tests.test_api.test_analysis import AUTH_HEADERS, create_project, python_archive
 
@@ -416,3 +419,65 @@ async def test_prompt_registry_is_experiment_centric_and_owner_scoped(client, ap
     assert detail.json()["experiment_name"] == "owned-registry prompt optimization"
     assert foreign.status_code == 404
     assert foreign.json()["error"]["code"] == "EXPERIMENT_NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_final_test_generation_is_owner_scoped_and_idempotent(client, app):
+    created = await client.post(
+        "/api/v1/experiments",
+        headers=AUTH_HEADERS,
+        json={"project_ids": ["sample:isort"], "name": "Final suite source", "max_targets": 3},
+    )
+    assert created.status_code == 201, created.text
+    experiment = created.json()
+    function_id = experiment["targets"][0]["function_id"]
+    payload = {
+        "prompt_role": "baseline",
+        "scope": "functions",
+        "function_ids": [function_id],
+        "idempotency_key": "browser-retry-0001",
+    }
+    first = await client.post(
+        f"/api/v1/prompt-registry/{experiment['id']}/test-generation",
+        headers=AUTH_HEADERS,
+        json=payload,
+    )
+    retried = await client.post(
+        f"/api/v1/prompt-registry/{experiment['id']}/test-generation",
+        headers=AUTH_HEADERS,
+        json=payload,
+    )
+    assert first.status_code == 202, first.text
+    assert retried.status_code == 202
+    run = first.json()
+    assert retried.json()["id"] == run["id"]
+    assert run["prompt_role"] == "baseline"
+    assert run["target_ids"] == [f"sample:isort::{function_id}"]
+    assert run["cloud_artifact_prefix"] is None
+    listed = await client.get("/api/v1/test-generation-runs", headers=AUTH_HEADERS)
+    assert listed.status_code == 200
+    assert listed.json()["total"] == 1
+    assert listed.json()["items"][0]["id"] == run["id"]
+    foreign_record = FinalTestGenerationRunRecord.model_validate(
+        {**run, "id": "foreign-final-suite", "owner_id": "another-user"}
+    )
+    await app.state.services.experiments.repository.create_test_generation_run(foreign_record)
+    foreign = await client.get("/api/v1/test-generation-runs/foreign-final-suite", headers=AUTH_HEADERS)
+    assert foreign.status_code == 404
+    assert foreign.json()["error"]["code"] == "TEST_GENERATION_RUN_NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_final_test_generation_rejects_optimized_prompt_before_comparison(client):
+    created = await client.post(
+        "/api/v1/experiments",
+        headers=AUTH_HEADERS,
+        json={"project_ids": ["sample:isort"], "name": "No final prompt yet", "max_targets": 3},
+    )
+    response = await client.post(
+        f"/api/v1/prompt-registry/{created.json()['id']}/test-generation",
+        headers=AUTH_HEADERS,
+        json={"prompt_role": "optimized"},
+    )
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "OPTIMIZED_PROMPT_NOT_READY"

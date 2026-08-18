@@ -9,6 +9,7 @@ from .schemas import (
     PromptRole,
     PromptSnapshotRecord,
     PromptVersionRecord,
+    TestGenerationRunRecord,
 )
 
 
@@ -38,6 +39,10 @@ class ExperimentRepository(Protocol):
         self, experiment_id: str, role: PromptRole
     ) -> PromptSnapshotRecord | None: ...
     async def list_prompt_snapshots(self, experiment_id: str) -> list[PromptSnapshotRecord]: ...
+    async def create_test_generation_run(self, item: TestGenerationRunRecord) -> TestGenerationRunRecord: ...
+    async def get_test_generation_run(self, run_id: str) -> TestGenerationRunRecord | None: ...
+    async def save_test_generation_run(self, item: TestGenerationRunRecord) -> TestGenerationRunRecord: ...
+    async def list_test_generation_runs_for_owner(self, owner_id: str) -> list[TestGenerationRunRecord]: ...
 
 
 class InMemoryExperimentRepository:
@@ -48,6 +53,7 @@ class InMemoryExperimentRepository:
         self.comparison_runs: dict[str, ComparisonRunRecord] = {}
         self.prompt_versions: dict[str, PromptVersionRecord] = {}
         self.prompt_snapshots: dict[str, PromptSnapshotRecord] = {}
+        self.test_generation_runs: dict[str, TestGenerationRunRecord] = {}
 
     async def create(self, item):
         self.experiments[item.id] = item
@@ -81,6 +87,9 @@ class InMemoryExperimentRepository:
         }
         self.prompt_snapshots = {
             key: item for key, item in self.prompt_snapshots.items() if item.experiment_id != experiment_id
+        }
+        self.test_generation_runs = {
+            key: item for key, item in self.test_generation_runs.items() if item.experiment_id != experiment_id
         }
 
     async def create_run(self, item):
@@ -153,6 +162,26 @@ class InMemoryExperimentRepository:
             key=lambda item: item.created_at,
         )
 
+    async def create_test_generation_run(self, item):
+        if item.id in self.test_generation_runs:
+            raise ValueError(f"Test generation run already exists: {item.id}")
+        self.test_generation_runs[item.id] = item
+        return item
+
+    async def get_test_generation_run(self, run_id):
+        return self.test_generation_runs.get(run_id)
+
+    async def save_test_generation_run(self, item):
+        self.test_generation_runs[item.id] = item
+        return item
+
+    async def list_test_generation_runs_for_owner(self, owner_id):
+        return sorted(
+            (item for item in self.test_generation_runs.values() if item.owner_id == owner_id),
+            key=lambda item: item.created_at,
+            reverse=True,
+        )
+
 
 class FirestoreExperimentRepository:
     def __init__(self, client):
@@ -175,6 +204,9 @@ class FirestoreExperimentRepository:
 
     def _prompt_snapshots(self):
         return self.client.collection("prompt_snapshots")
+
+    def _test_generation_runs(self):
+        return self.client.collection("test_generation_runs")
 
     async def create(self, item):
         await self._experiments().document(item.id).create(item.model_dump(mode="python"))
@@ -205,6 +237,7 @@ class FirestoreExperimentRepository:
             self._comparison_runs(),
             self._prompt_versions(),
             self._prompt_snapshots(),
+            self._test_generation_runs(),
         ):
             snapshots = collection.where(filter=FieldFilter("experiment_id", "==", experiment_id)).stream()
             references.extend([snapshot.reference async for snapshot in snapshots])
@@ -302,6 +335,30 @@ class FirestoreExperimentRepository:
         return sorted(
             [PromptSnapshotRecord.model_validate(snapshot.to_dict()) async for snapshot in snapshots],
             key=lambda item: item.created_at,
+        )
+
+    async def create_test_generation_run(self, item):
+        await self._test_generation_runs().document(item.id).create(item.model_dump(mode="python"))
+        return item
+
+    async def get_test_generation_run(self, run_id):
+        snapshot = await self._test_generation_runs().document(run_id).get()
+        return TestGenerationRunRecord.model_validate(snapshot.to_dict()) if snapshot.exists else None
+
+    async def save_test_generation_run(self, item):
+        await self._test_generation_runs().document(item.id).set(item.model_dump(mode="python"))
+        return item
+
+    async def list_test_generation_runs_for_owner(self, owner_id):
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        snapshots = self._test_generation_runs().where(
+            filter=FieldFilter("owner_id", "==", owner_id)
+        ).stream()
+        return sorted(
+            [TestGenerationRunRecord.model_validate(snapshot.to_dict()) async for snapshot in snapshots],
+            key=lambda item: item.created_at,
+            reverse=True,
         )
 
 

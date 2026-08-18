@@ -370,6 +370,124 @@ class PromptRegistryListResponse(StrictModel):
     limit: int
 
 
+class TestGenerationStatus(StrEnum):
+    """Lifecycle for a user-requested, final test-suite generation job."""
+
+    QUEUED = "queued"
+    PREPARING = "preparing"
+    GENERATING = "generating"
+    RUNNING_TESTS = "running_tests"
+    COMPLETED = "completed"
+    PARTIAL = "partial"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    TIMED_OUT = "timed_out"
+
+
+class TestGenerationScope(StrEnum):
+    PROJECT = "project"
+    MODULES = "modules"
+    FUNCTIONS = "functions"
+
+
+class TestGenerationMetrics(StrictModel):
+    """Coverage for the complete generated suite and the selected targets separately."""
+
+    test_file_count: int = 0
+    test_count: int = 0
+    passed: int | None = None
+    failed: int | None = None
+    skipped: int | None = None
+    project_statement_coverage: float | None = None
+    project_branch_coverage: float | None = None
+    target_statement_coverage: float | None = None
+    target_branch_coverage: float | None = None
+    target_score: float | None = None
+    target_count: int = 0
+    completed_target_count: int = 0
+    failed_target_count: int = 0
+
+
+class CreateTestGenerationRequest(StrictModel):
+    """Request a new immutable final suite from an experiment prompt snapshot."""
+
+    prompt_role: PromptRole
+    scope: TestGenerationScope = TestGenerationScope.PROJECT
+    source_files: list[str] = Field(default_factory=list, max_length=200)
+    function_ids: list[str] = Field(default_factory=list, max_length=500)
+    model: str | None = None
+    random_seed: int = Field(default=7, ge=0)
+    repeat_tests: int | None = Field(default=None, ge=0, le=20)
+    max_attempts: int | None = Field(default=None, ge=1, le=20)
+    max_concurrency: int | None = Field(default=None, ge=1, le=32)
+    rate_limit: int | None = Field(default=None, ge=1)
+    cost_ceiling_usd: float | None = Field(default=None, gt=0, le=1000)
+    idempotency_key: str | None = Field(default=None, min_length=8, max_length=128)
+
+    @model_validator(mode="after")
+    def validate_scope(self):
+        if self.model is not None and self.model not in SUPPORTED_MODELS:
+            raise ValueError("Unsupported test-generation model")
+        if len(self.source_files) != len(set(self.source_files)):
+            raise ValueError("Duplicate source files are not allowed")
+        if len(self.function_ids) != len(set(self.function_ids)):
+            raise ValueError("Duplicate function IDs are not allowed")
+        if self.scope == TestGenerationScope.MODULES and not self.source_files:
+            raise ValueError("Module scope requires source_files")
+        if self.scope == TestGenerationScope.FUNCTIONS and not self.function_ids:
+            raise ValueError("Function scope requires function_ids")
+        if self.scope == TestGenerationScope.PROJECT and (self.source_files or self.function_ids):
+            raise ValueError("Project scope cannot include source_files or function_ids")
+        return self
+
+
+class TestGenerationRunResponse(StrictModel):
+    id: str
+    experiment_id: str
+    prompt_snapshot_id: str
+    prompt_digest: str
+    prompt_role: PromptRole
+    status: TestGenerationStatus
+    project_ids: list[str] = Field(default_factory=list)
+    source_snapshot_digest: str
+    dataset_digest: str
+    scope: TestGenerationScope
+    source_files: list[str] = Field(default_factory=list)
+    function_ids: list[str] = Field(default_factory=list)
+    target_ids: list[str] = Field(default_factory=list)
+    model: str
+    random_seed: int
+    repeat_tests: int
+    max_attempts: int
+    max_concurrency: int
+    rate_limit: int | None = None
+    cost_ceiling_usd: float | None = None
+    runner_protocol_version: int
+    metrics: TestGenerationMetrics = Field(default_factory=TestGenerationMetrics)
+    estimated_cost_usd: float | None = None
+    token_usage: dict[str, int] = Field(default_factory=dict)
+    artifact_objects: dict[str, str] = Field(default_factory=dict)
+    cloud_artifact_prefix: str | None = None
+    cloud_deadline_at: datetime | None = None
+    error_message: str | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
+
+class TestGenerationRunRecord(TestGenerationRunResponse):
+    owner_id: str
+    idempotency_key: str | None = None
+    provider_secret_refs: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+
+class TestGenerationRunListResponse(StrictModel):
+    items: list[TestGenerationRunResponse]
+    total: int
+    offset: int
+    limit: int
+
+
 class PromptVersionResponse(StrictModel):
     id: str
     experiment_id: str

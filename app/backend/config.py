@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     optimization_execution_backend: Literal["inline", "cloud_run_job"] = "inline"
     cloud_run_gepa_job: str = "promptopt-gepa-runner"
     cloud_run_gepa_timeout_seconds: int = Field(default=86400, ge=300, le=86400)
+    cloud_run_test_generation_job: str = "promptopt-gepa-runner"
+    cloud_run_test_generation_timeout_seconds: int = Field(default=7200, ge=300, le=86400)
     runtime_execution_backend: Literal["disabled", "cloud_run_job"] = "disabled"
     cloud_run_runtime_job: str = "promptopt-runtime-preparer"
     cloud_run_runtime_timeout_seconds: int = Field(default=1800, ge=60, le=7200)
@@ -89,6 +91,8 @@ class Settings(BaseSettings):
                 raise ValueError("EXPERIMENT_WORKER_URL and EXPERIMENT_TASK_AUDIENCE are required in production")
             if self.optimization_execution_backend != "cloud_run_job" or not self.cloud_run_gepa_job:
                 raise ValueError("OPTIMIZATION_EXECUTION_BACKEND=cloud_run_job and CLOUD_RUN_GEPA_JOB are required")
+            if not self.cloud_run_test_generation_job:
+                raise ValueError("CLOUD_RUN_TEST_GENERATION_JOB is required")
             if self.runtime_execution_backend != "cloud_run_job" or not self.cloud_run_runtime_job:
                 raise ValueError("RUNTIME_EXECUTION_BACKEND=cloud_run_job and CLOUD_RUN_RUNTIME_JOB are required")
             if not self.admin_vertexai_project.strip():

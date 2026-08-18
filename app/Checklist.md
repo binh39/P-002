@@ -748,20 +748,20 @@ Create experiment
 
 ##### C. Backend Final Test Generation
 
-- [ ]  Tạo entity `TestGenerationRun` độc lập với baseline/optimization/evaluation run.
-- [ ]  Mỗi run lưu owner, experiment ID, prompt ID/digest, `prompt_role` (`baseline` hoặc `optimized`),
+- [X]  Tạo entity `TestGenerationRun` độc lập với baseline/optimization/evaluation run.
+- [X]  Mỗi run lưu owner, experiment ID, prompt ID/digest, `prompt_role` (`baseline` hoặc `optimized`),
   project/source snapshot, target scope, model/provider, seed, runner config và thời điểm tạo.
-- [ ]  Chỉ cho phép tạo run từ prompt snapshot thuộc experiment của chính user và project snapshot còn hợp lệ.
-- [ ]  Tạo API generate test trả `202`; dispatch qua Cloud Tasks và chạy source/test trong Cloud Run Job cô lập.
-- [ ]  Hỗ trợ target scope: toàn project, module/file hoặc danh sách function được chọn.
+- [X]  Chỉ cho phép tạo run từ prompt snapshot thuộc experiment của chính user và project snapshot còn hợp lệ.
+- [X]  Tạo API generate test trả `202`; dispatch qua Cloud Tasks và chạy source/test trong Cloud Run Job cô lập.
+- [X]  Hỗ trợ target scope: toàn project, module/file hoặc danh sách function được chọn.
 - [ ]  Hỗ trợ tùy chọn model sinh test, repeat count, max attempts, concurrency/rate limit và cost ceiling.
 - [ ]  Tạo state machine `queued -> preparing -> generating -> running_tests -> completed | partial | failed | cancelled | timed_out`.
-- [ ]  Thêm idempotency key và chống double-click tạo hai active run giống nhau.
-- [ ]  Sau khi sinh, luôn chạy pytest + statement/branch coverage nếu runtime hợp lệ.
-- [ ]  Báo riêng coverage toàn project và coverage của target/function được chọn; không trộn hai loại metric.
+- [X]  Thêm idempotency key và chống double-click tạo hai active run giống nhau.
+- [X]  Sau khi sinh, luôn chạy pytest + statement/branch coverage nếu runtime hợp lệ.
+- [X]  Báo riêng coverage toàn project và coverage của target/function được chọn; không trộn hai loại metric.
 - [ ]  Lưu test count, passed/failed/skipped, statement/branch units, cost, token usage, model config và failure reason.
-- [ ]  Test generation run là immutable; regenerate luôn tạo run ID mới để kết quả còn tái lập được.
-- [ ]  Không đưa bất kỳ generated test workspace nội bộ nào của GEPA vào Final Test Cases API/list.
+- [X]  Test generation run là immutable; regenerate luôn tạo run ID mới để kết quả còn tái lập được.
+- [X]  Không đưa bất kỳ generated test workspace nội bộ nào của GEPA vào Final Test Cases API/list.
 
 ##### D. Paired generation baseline vs optimized
 
