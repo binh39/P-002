@@ -40,32 +40,61 @@ function MetricBar({
   );
 }
 
+function MetricDelta({ value, baseline }: { value: number | null; baseline?: number | null }) {
+  if (baseline === undefined || value === null || baseline === null) return null;
+  const delta = value - baseline;
+  if (delta === 0) return null;
+  const increased = delta > 0;
+  return (
+    <span
+      className={`prompt-registry-metric-delta ${increased ? "is-positive" : "is-negative"}`}
+      aria-label={`${increased ? "Increased" : "Decreased"} by ${Math.abs(delta * 100).toFixed(1)} percentage points`}
+    >
+      <span aria-hidden="true">{increased ? "↑" : "↓"}</span> {Math.abs(delta * 100).toFixed(1)}%
+    </span>
+  );
+}
+
 function MetricPanel({
   title,
   metrics,
   tone,
+  comparison,
 }: {
   title: string;
   metrics: PromptCoverageMetrics;
   tone: "baseline" | "final";
+  comparison?: PromptCoverageMetrics;
 }) {
   return (
     <section className={`prompt-registry-metric-panel is-${tone}`}>
       <h2>{title}</h2>
       <div className="prompt-registry-primary-score">
         <span>Score</span>
-        <strong>{percentage(metrics.score)}</strong>
+        <strong>
+          {percentage(metrics.score)}
+          <MetricDelta value={metrics.score} baseline={comparison?.score} />
+        </strong>
       </div>
       <MetricBar value={metrics.score} tone={tone} />
       <div className="prompt-registry-coverage-list">
         <div>
           <span>Statement coverage</span>
-          <strong>{percentage(metrics.statementCoverage)}</strong>
+          <strong>
+            {percentage(metrics.statementCoverage)}
+            <MetricDelta
+              value={metrics.statementCoverage}
+              baseline={comparison?.statementCoverage}
+            />
+          </strong>
           <MetricBar value={metrics.statementCoverage} tone="statement" />
         </div>
         <div>
           <span>Branch coverage</span>
-          <strong>{percentage(metrics.branchCoverage)}</strong>
+          <strong>
+            {percentage(metrics.branchCoverage)}
+            <MetricDelta value={metrics.branchCoverage} baseline={comparison?.branchCoverage} />
+          </strong>
           <MetricBar value={metrics.branchCoverage} tone="branch" />
         </div>
       </div>
@@ -286,7 +315,12 @@ export default function PromptRegistryDetail() {
       <section className="platform-card prompt-registry-summary">
         <div className="prompt-registry-metric-comparison">
           <MetricPanel title="Baseline" metrics={entry.baselineMetrics} tone="baseline" />
-          <MetricPanel title="Final Prompt" metrics={entry.optimizedMetrics} tone="final" />
+          <MetricPanel
+            title="Final Prompt"
+            metrics={entry.optimizedMetrics}
+            tone="final"
+            comparison={entry.baselineMetrics}
+          />
         </div>
       </section>
 
