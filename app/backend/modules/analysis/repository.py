@@ -10,6 +10,8 @@ class FunctionRepository(Protocol):
 
     async def get(self, project_id: str, function_id: str) -> ProjectFunctionRecord | None: ...
 
+    async def delete_for_project(self, project_id: str) -> None: ...
+
 
 class InMemoryFunctionRepository:
     def __init__(self):
@@ -26,6 +28,9 @@ class InMemoryFunctionRepository:
 
     async def get(self, project_id: str, function_id: str) -> ProjectFunctionRecord | None:
         return self.items.get(project_id, {}).get(function_id)
+
+    async def delete_for_project(self, project_id: str) -> None:
+        self.items.pop(project_id, None)
 
 
 class FirestoreFunctionRepository:
@@ -59,3 +64,11 @@ class FirestoreFunctionRepository:
     async def get(self, project_id: str, function_id: str) -> ProjectFunctionRecord | None:
         snapshot = await self._collection(project_id).document(function_id).get()
         return ProjectFunctionRecord.model_validate(snapshot.to_dict()) if snapshot.exists else None
+
+    async def delete_for_project(self, project_id: str) -> None:
+        snapshots = [snapshot async for snapshot in self._collection(project_id).stream()]
+        for offset in range(0, len(snapshots), 400):
+            batch = self.client.batch()
+            for snapshot in snapshots[offset : offset + 400]:
+                batch.delete(snapshot.reference)
+            await batch.commit()

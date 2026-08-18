@@ -112,7 +112,7 @@ def build_services(settings: Settings) -> ServiceContainer:
         settings.max_analysis_python_files,
         settings.max_analysis_uncompressed_bytes,
     )
-    projects = ProjectService(project_repository, uploads, samples)
+    projects = ProjectService(project_repository, uploads, samples, function_repository)
     runtime_runner = None
     if settings.runtime_execution_backend == "cloud_run_job":
         from google.cloud import run_v2

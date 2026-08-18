@@ -78,4 +78,16 @@ describe("HttpProjectRepository", () => {
     ]);
     expect(fetchMock).toHaveBeenCalledTimes(5);
   });
+
+  it("deletes an imported project through the project endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await new HttpProjectRepository().delete("project-1");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/projects/project-1"),
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
 });

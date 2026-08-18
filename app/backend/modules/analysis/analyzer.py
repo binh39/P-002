@@ -193,13 +193,17 @@ def analyze_zip(
     candidates: list[tuple[zipfile.ZipInfo, str]] = []
     normalized_paths: set[str] = set()
     total_size = 0
+    skipped_symlinks = 0
     for info in entries:
         path = PurePosixPath(info.filename.replace("\\", "/"))
         if info.is_dir() or path.is_absolute() or ".." in path.parts:
             continue
         if _is_symlink(info):
-            bundle.close()
-            raise AppError(422, "UNSAFE_ZIP_ENTRY", "ZIP archives may not contain symbolic links")
+            # Source archives downloaded from Git hosts commonly preserve
+            # repository symlinks. Never follow or extract them, but do not
+            # reject the otherwise valid project either.
+            skipped_symlinks += 1
+            continue
         if info.flag_bits & 0x1:
             bundle.close()
             raise AppError(422, "ENCRYPTED_ZIP_ENTRY", "Encrypted ZIP entries are not supported")
@@ -226,7 +230,7 @@ def analyze_zip(
         raise AppError(422, "NO_PYTHON_FILES", "The archive does not contain analyzable Python files")
 
     analyzed_at = datetime.now(UTC)
-    warning_count = 0
+    warning_count = skipped_symlinks
     sources: dict[str, str] = {}
     with tempfile.TemporaryDirectory(prefix="prompt-optimizer-analysis-") as temporary:
         source_root = Path(temporary)

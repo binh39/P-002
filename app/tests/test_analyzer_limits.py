@@ -51,7 +51,7 @@ def test_analysis_excludes_tests_migrations_and_build_outputs():
     assert [function.qualified_name for function in result.functions] == ["target"]
 
 
-def test_analysis_rejects_symbolic_links():
+def test_analysis_ignores_symbolic_links_without_materializing_them():
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
         link = zipfile.ZipInfo("src/package/link.py")
@@ -59,10 +59,13 @@ def test_analysis_rejects_symbolic_links():
         link.external_attr = (stat.S_IFLNK | 0o777) << 16
         archive.writestr(link, "target.py")
 
-    with pytest.raises(AppError) as error:
-        analyze_zip("project", buffer.getvalue(), max_python_files=10, max_uncompressed_bytes=1024)
+        archive.writestr("src/package/core.py", "def target():\n    return 1\n")
 
-    assert error.value.code == "UNSAFE_ZIP_ENTRY"
+    result = analyze_zip("project", buffer.getvalue(), max_python_files=10, max_uncompressed_bytes=1024)
+
+    assert result.python_file_count == 1
+    assert result.warning_count == 1
+    assert [item.qualified_name for item in result.functions] == ["target"]
 
 
 def test_analysis_rejects_case_insensitive_duplicate_python_paths():

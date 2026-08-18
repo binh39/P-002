@@ -9,4 +9,5 @@ export interface ProjectRepository {
   analyze(projectId: string): Promise<PythonProject>;
   prepareRuntime(projectId: string): Promise<PythonProject>;
   create(input: CreateProjectInput): Promise<PythonProject>;
+  delete(projectId: string): Promise<void>;
 }

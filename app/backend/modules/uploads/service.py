@@ -82,6 +82,11 @@ class UploadService:
             raise AppError(404, "UPLOAD_NOT_FOUND", "Upload was not found")
         return record
 
+    async def delete(self, upload_id: str, owner_id: str) -> None:
+        record = await self.require_owned(upload_id, owner_id)
+        await self.storage.delete(record.object_name)
+        await self.repository.delete(record.id)
+
     @staticmethod
     def _response(
         record: UploadRecord,

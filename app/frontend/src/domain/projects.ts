@@ -29,6 +29,7 @@ export interface PythonProject {
   branches: number;
   status: ProjectStatus;
   analyzedAt: string;
+  analysisError?: string | null;
   testCommand: string;
   sourceDir: string;
   testDir: string;

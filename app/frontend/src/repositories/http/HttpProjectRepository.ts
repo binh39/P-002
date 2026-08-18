@@ -24,6 +24,7 @@ interface ApiProject {
   statement_count: number;
   branch_count: number;
   analyzed_at: string | null;
+  analysis_error: string | null;
   runtime_environment_id: string | null;
   runtime_environment_name: string | null;
   runtime_bundle_object: string | null;
@@ -116,6 +117,7 @@ function mapProject(project: ApiProject): PythonProject {
           new Date(project.analyzed_at),
         )
       : "Analysis pending",
+    analysisError: project.analysis_error,
     testCommand: project.settings.tests.test_command,
     sourceDir: project.settings.runtime.source_directory,
     testDir: project.settings.tests.test_directory,
@@ -222,5 +224,9 @@ export class HttpProjectRepository implements ProjectRepository {
       }),
     );
     return this.analyze(project.id);
+  }
+
+  async delete(projectId: string) {
+    await apiRequest<void>(`/projects/${projectId}`, { method: "DELETE" });
   }
 }

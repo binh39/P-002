@@ -3,7 +3,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
-MINIMUM_RUNTIME_PROTOCOL_VERSION = 3
+MINIMUM_RUNTIME_PROTOCOL_VERSION = 4
 
 
 class StrictModel(BaseModel):
@@ -182,6 +182,7 @@ class ProjectResponse(StrictModel):
     statement_count: int = 0
     branch_count: int = 0
     analyzed_at: datetime | None = None
+    analysis_error: str | None = None
     runtime_environment_id: str | None = None
     runtime_environment_name: str | None = None
     runtime_bundle_object: str | None = None

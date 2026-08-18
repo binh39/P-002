@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -169,6 +169,23 @@ async def test_environment_rebuilds_are_queued_instead_of_rejected_as_busy():
     assert first_response.runtime_status == RuntimeStatus.PREPARING
     assert second_response.runtime_status == RuntimeStatus.QUEUED
     assert runner.start_calls == [["first"]]
+
+
+@pytest.mark.asyncio
+async def test_runtime_retry_resets_the_attempt_deadline():
+    repository = InMemoryProjectRepository()
+    candidate = project("candidate", status=RuntimeStatus.FAILED)
+    previous_started_at = datetime.now(UTC) - timedelta(hours=2)
+    candidate.runtime_started_at = previous_started_at
+    await repository.create(candidate)
+    runner = FakeRunner(RuntimeReport(status=RuntimeStatus.FAILED, error="pending"))
+    service = RuntimePreparationService(repository, runner)
+
+    retried = await service.request(candidate)
+
+    assert retried.runtime_started_at is not None
+    assert retried.runtime_started_at > previous_started_at + timedelta(hours=1)
+    assert retried.runtime_status == RuntimeStatus.PREPARING
 
 
 @pytest.mark.asyncio

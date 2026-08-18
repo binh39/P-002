@@ -161,6 +161,10 @@ def main() -> int:
                     json.dumps(project_layouts, indent=2),
                     encoding="utf-8",
                 )
+                # GEPA, DSPy, and CoverUp run with the trusted image Python.
+                # Only generated/user tests run in the prepared project venv.
+                # This keeps optimizer dependencies isolated from arbitrary
+                # dependency constraints in uploaded projects.
                 os.environ["TESTGEN_PYTHON"] = str(runtime_python)
             elif not sample_repos.is_dir():
                 raise RuntimeError(f"Bundled sample repository directory is missing: {sample_repos}")

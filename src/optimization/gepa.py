@@ -112,8 +112,7 @@ RUN_TEST_EXPERIMENT_TOOL = {
                 "hypothesis": {
                     "type": "string",
                     "description": (
-                        "The concrete causal change this test makes relative to "
-                        "the failed generated test."
+                        "The concrete causal change this test makes relative to the failed generated test."
                     ),
                 },
             },
@@ -152,11 +151,7 @@ class BestParetoCandidateSelector:
         self.pareto_selector = ParetoCandidateSelector(self.rng)
 
     def select_candidate_idx(self, state: Any) -> int:
-        selector = (
-            self.best_selector
-            if self.rng.random() < self.best_probability
-            else self.pareto_selector
-        )
+        selector = self.best_selector if self.rng.random() < self.best_probability else self.pareto_selector
         return selector.select_candidate_idx(state)
 
 
@@ -169,7 +164,10 @@ def log_reflection_request(request: Mapping[str, Any]) -> None:
 
 def _full_reflection_logs_enabled() -> bool:
     return os.environ.get("PROMPTOPT_FULL_REFLECTION_LOGS", "").strip().lower() in {
-        "1", "true", "yes", "on",
+        "1",
+        "true",
+        "yes",
+        "on",
     }
 
 
@@ -199,11 +197,19 @@ def log_full_reflection_event(event: str, payload: Any) -> None:
     if not _full_reflection_logs_enabled():
         return
     print(FULL_LOG_BEGIN, flush=True)
-    print(json.dumps({
-        "timestamp": datetime.now(UTC).isoformat(),
-        "event": event,
-        "payload": _log_value(payload),
-    }, indent=2, ensure_ascii=False, default=str), flush=True)
+    print(
+        json.dumps(
+            {
+                "timestamp": datetime.now(UTC).isoformat(),
+                "event": event,
+                "payload": _log_value(payload),
+            },
+            indent=2,
+            ensure_ascii=False,
+            default=str,
+        ),
+        flush=True,
+    )
     print(FULL_LOG_END, flush=True)
 
 
@@ -214,7 +220,8 @@ def _digest_lock(key: str) -> threading.Lock:
 
 
 def validate_template(
-    template: str, required_placeholders: tuple[str, ...] = INITIAL_PLACEHOLDERS,
+    template: str,
+    required_placeholders: tuple[str, ...] = INITIAL_PLACEHOLDERS,
 ) -> str | None:
     missing = [placeholder for placeholder in required_placeholders if placeholder not in template]
     if missing:
@@ -243,9 +250,7 @@ def validate_bundle(bundle: PromptBundle) -> str | None:
 
 
 def bundle_digest(bundle: PromptBundle) -> str:
-    serialized = "\n---PROMPT---\n".join(
-        (bundle.initial, bundle.error or "")
-    )
+    serialized = "\n---PROMPT---\n".join((bundle.initial, bundle.error or ""))
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
 
 
@@ -255,15 +260,20 @@ def _cache_name(workspace_kind: str, replicate: int) -> str:
 
 
 def _evaluation_digest(
-    runner: CoverUpExperimentRunner, targets: list[SymbolTarget],
+    runner: CoverUpExperimentRunner,
+    targets: list[SymbolTarget],
 ) -> str:
     """Fingerprint every input that can change a cached prompt evaluation."""
     config = getattr(runner, "config", None)
     config_values = {
         name: str(getattr(config, name, ""))
         for name in (
-            "coverup_model", "max_attempts", "repeat_tests", "pytest_args",
-            "max_concurrency", "rate_limit",
+            "coverup_model",
+            "max_attempts",
+            "repeat_tests",
+            "pytest_args",
+            "max_concurrency",
+            "rate_limit",
         )
     }
     source_hashes = {}
@@ -284,9 +294,7 @@ def _evaluation_digest(
             )
             path = next((value for value in candidates if value.is_file()), None)
             if path is not None:
-                source_hashes[target.source_file] = hashlib.sha256(
-                    path.read_bytes()
-                ).hexdigest()
+                source_hashes[target.source_file] = hashlib.sha256(path.read_bytes()).hexdigest()
     payload = {
         # Schema 10 fixed PYTHONHASHSEED across CoverUp and coverage subprocesses.
         # Schema 11 makes repeat_tests effective during generation and final
@@ -326,9 +334,7 @@ def evaluate_bundle_cached(
     for result in batch["results"]:
         if _result_identity(result) == wanted:
             return result
-    raise KeyError(
-        f"Target {wanted!r} is absent from cached batch {batch.get('run_ids', [])}"
-    )
+    raise KeyError(f"Target {wanted!r} is absent from cached batch {batch.get('run_ids', [])}")
 
 
 def evaluate_bundle_batch_cached(
@@ -352,9 +358,7 @@ def evaluate_bundle_batch_cached(
             raise ValueError(f"Batch targets must share one split, got {sorted(target_splits)}")
         split = next(iter(target_splits))
     elif target_splits != {split}:
-        raise ValueError(
-            f"Batch targets do not match requested split {split!r}: {sorted(target_splits)}"
-        )
+        raise ValueError(f"Batch targets do not match requested split {split!r}: {sorted(target_splits)}")
 
     # GEPA may sample the same example more than once in a minibatch. Evaluate each
     # identity once so CoverUp does not generate duplicate tests or return ambiguous
@@ -370,9 +374,7 @@ def evaluate_bundle_batch_cached(
 
     digest = bundle_digest(bundle)
     evaluation_digest = _evaluation_digest(runner, targets)
-    lock_key = (
-        f"{digest}:{evaluation_digest}:{split}:{workspace_kind}:{replicate}"
-    )
+    lock_key = f"{digest}:{evaluation_digest}:{split}:{workspace_kind}:{replicate}"
     with _digest_lock(lock_key):
         candidate_dir.mkdir(parents=True, exist_ok=True)
         candidate = candidate_dir / f"{digest}.json"
@@ -383,15 +385,17 @@ def evaluate_bundle_batch_cached(
         if not safe_split:
             raise ValueError("split must contain at least one safe path character")
         cache_path = (
-            candidate_dir / "evaluations" / digest / evaluation_digest / safe_split
+            candidate_dir
+            / "evaluations"
+            / digest
+            / evaluation_digest
+            / safe_split
             / _cache_name(workspace_kind, replicate)
         )
         if cache_path.exists():
             cached = json.loads(cache_path.read_text(encoding="utf-8"))
             requested = {_target_identity(target) for target in targets}
-            cached_targets = {
-                _result_identity(result) for result in cached.get("results", [])
-            }
+            cached_targets = {_result_identity(result) for result in cached.get("results", [])}
             if cached_targets != requested:
                 raise RuntimeError(
                     f"Cached batch target set differs for candidate {digest} split {split!r}. "
@@ -407,13 +411,15 @@ def evaluate_bundle_batch_cached(
         # workspace using a bounded global pool, then consolidates only tests
         # attributed by trace into one persistent candidate workspace. Each target
         # still gets a separate pytest/coverage pass and per-example feedback.
-        records = [runner.evaluate_batch(
-            targets,
-            candidate,
-            candidate_id=run_candidate_id,
-            split=split,
-            workspace_kind=workspace_kind,
-        )]
+        records = [
+            runner.evaluate_batch(
+                targets,
+                candidate,
+                candidate_id=run_candidate_id,
+                split=split,
+                workspace_kind=workspace_kind,
+            )
+        ]
 
         results = []
         for record in records:
@@ -424,20 +430,19 @@ def evaluate_bundle_batch_cached(
                 )
             for target_result in record.results:
                 target = target_result.target
-                results.append({
-                    "prompt_digest": digest,
-                    "evaluation_digest": evaluation_digest,
-                    "replicate": replicate,
-                    "target": target.__dict__,
-                    "run_id": record.run_id,
-                    "score": (
-                        float(target_result.score["score"])
-                        if target_result.score else 0.0
-                    ),
-                    "coverage": target_result.score,
-                    "feedback": target_result.feedback,
-                    "attempt_traces": getattr(target_result, "attempt_traces", []),
-                })
+                results.append(
+                    {
+                        "prompt_digest": digest,
+                        "evaluation_digest": evaluation_digest,
+                        "replicate": replicate,
+                        "target": target.__dict__,
+                        "run_id": record.run_id,
+                        "score": (float(target_result.score["score"]) if target_result.score else 0.0),
+                        "coverage": target_result.score,
+                        "feedback": target_result.feedback,
+                        "attempt_traces": getattr(target_result, "attempt_traces", []),
+                    }
+                )
         batch = {
             "prompt_digest": digest,
             "evaluation_digest": evaluation_digest,
@@ -445,17 +450,13 @@ def evaluate_bundle_batch_cached(
             "split": split,
             "workspace_kind": workspace_kind,
             "run_ids": [record.run_id for record in records],
-            "generator_exit_codes": [
-                int(getattr(record, "exit_code", 0) or 0) for record in records
-            ],
+            "generator_exit_codes": [int(getattr(record, "exit_code", 0) or 0) for record in records],
             "tests_workspaces": [record.tests_workspace for record in records],
             "results": results,
         }
         batch["aggregate"] = aggregate_coverage_score(results)
         cache_path.parent.mkdir(parents=True, exist_ok=True)
-        cache_path.write_text(
-            json.dumps(batch, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+        cache_path.write_text(json.dumps(batch, indent=2, ensure_ascii=False), encoding="utf-8")
         return batch
 
 
@@ -465,9 +466,7 @@ def _target_identity(target: SymbolTarget) -> tuple[str, str, str, str]:
 
 def _result_identity(result: dict) -> tuple[str, str, str, str]:
     target = result["target"]
-    return (
-        target["project"], target["source_file"], target["symbol"], target["split"]
-    )
+    return (target["project"], target["source_file"], target["symbol"], target["split"])
 
 
 def _mean(values: Sequence[float]) -> float:
@@ -502,34 +501,32 @@ def _compact_attempt(attempt: Mapping[str, Any]) -> dict[str, Any]:
     row = {
         key: attempt[key]
         for key in (
-            "attempt", "replicate", "component", "outcome", "next_component",
-            "finish_reason", "missing_imports", "gained_lines", "gained_branches",
-            "remaining_lines", "remaining_branches",
+            "attempt",
+            "replicate",
+            "component",
+            "outcome",
+            "next_component",
+            "finish_reason",
+            "missing_imports",
+            "gained_lines",
+            "gained_branches",
+            "remaining_lines",
+            "remaining_branches",
         )
         if key in attempt
     }
     if "prompt_input" in attempt:
-        row["prompt_input"] = _clip_text(
-            attempt["prompt_input"], 6_000, keep_tail=True
-        )
+        row["prompt_input"] = _clip_text(attempt["prompt_input"], 6_000, keep_tail=True)
     if "generated_test" in attempt:
         row["generated_test"] = _clip_text(attempt["generated_test"], 10_000)
     if "model_reflection" in attempt:
-        row["model_reflection"] = _clip_text(
-            attempt["model_reflection"], 3_000
-        )
+        row["model_reflection"] = _clip_text(attempt["model_reflection"], 3_000)
     if "execution_error" in attempt:
-        row["execution_error"] = _clip_text(
-            attempt["execution_error"], 6_000, keep_tail=True
-        )
+        row["execution_error"] = _clip_text(attempt["execution_error"], 6_000, keep_tail=True)
     if "assistant_response" in attempt:
-        row["assistant_response"] = _clip_text(
-            attempt["assistant_response"], 3_000
-        )
+        row["assistant_response"] = _clip_text(attempt["assistant_response"], 3_000)
     get_info_calls = attempt.get("get_info_calls", [])
-    if isinstance(get_info_calls, Sequence) and not isinstance(
-        get_info_calls, str | bytes
-    ):
+    if isinstance(get_info_calls, Sequence) and not isinstance(get_info_calls, str | bytes):
         row["get_info_calls"] = [
             {
                 "name": str(call.get("name", "get_info")),
@@ -580,36 +577,26 @@ def _build_execution_episodes(
                         6_000,
                         keep_tail=True,
                     ),
-                    "repair_prompt_input": _clip_text(
-                        attempt.get("prompt_input", ""), 6_000, keep_tail=True
-                    ),
-                    "repaired_test": _clip_text(
-                        attempt.get("generated_test", ""), 10_000
-                    ),
-                    "model_reflection": _clip_text(
-                        attempt.get("model_reflection", ""), 3_000
-                    ),
+                    "repair_prompt_input": _clip_text(attempt.get("prompt_input", ""), 6_000, keep_tail=True),
+                    "repaired_test": _clip_text(attempt.get("generated_test", ""), 10_000),
+                    "model_reflection": _clip_text(attempt.get("model_reflection", ""), 3_000),
                     "outcome": attempt.get("outcome", "unknown"),
-                    "get_info_calls": _compact_attempt(attempt).get(
-                        "get_info_calls", []
-                    ),
+                    "get_info_calls": _compact_attempt(attempt).get("get_info_calls", []),
                 }
                 for key in (
-                    "execution_error", "finish_reason", "missing_imports",
-                    "gained_lines", "gained_branches", "remaining_lines",
+                    "execution_error",
+                    "finish_reason",
+                    "missing_imports",
+                    "gained_lines",
+                    "gained_branches",
+                    "remaining_lines",
                     "remaining_branches",
                 ):
                     if key in attempt:
-                        output_key = (
-                            "execution_error_after"
-                            if key == "execution_error"
-                            else key
-                        )
+                        output_key = "execution_error_after" if key == "execution_error" else key
                         value = attempt[key]
                         transition[output_key] = (
-                            _clip_text(value, 6_000, keep_tail=True)
-                            if key == "execution_error"
-                            else value
+                            _clip_text(value, 6_000, keep_tail=True) if key == "execution_error" else value
                         )
                 repair_transitions.append(transition)
 
@@ -617,13 +604,15 @@ def _build_execution_episodes(
                 previous_test_attempt = attempt
 
         terminal = _compact_attempt(values[-1]) if values else {}
-        episodes.append({
-            "replicate": replicate,
-            "initial_attempts": initial_attempts,
-            "repair_transitions": repair_transitions,
-            "terminal_outcome": terminal.get("outcome", "unknown"),
-            "terminal_component": terminal.get("component", "unknown"),
-        })
+        episodes.append(
+            {
+                "replicate": replicate,
+                "initial_attempts": initial_attempts,
+                "repair_transitions": repair_transitions,
+                "terminal_outcome": terminal.get("outcome", "unknown"),
+                "terminal_component": terminal.get("component", "unknown"),
+            }
+        )
     return episodes
 
 
@@ -667,23 +656,19 @@ def _order_contrastive_trajectories(
 ) -> list[Mapping[str, Any]]:
     """Lead with one negative and one positive example when both are available."""
     values = list(trajectories)
-    negative = [
-        trajectory for trajectory in values
-        if _exemplar_type(trajectory) in {"regression", "failure"}
-    ]
-    positive = [
-        trajectory for trajectory in values
-        if _exemplar_type(trajectory) == "positive"
-    ]
+    negative = [trajectory for trajectory in values if _exemplar_type(trajectory) in {"regression", "failure"}]
+    positive = [trajectory for trajectory in values if _exemplar_type(trajectory) == "positive"]
     representatives: list[Mapping[str, Any]] = []
     if negative:
-        representatives.append(min(
-            negative,
-            key=lambda trajectory: (
-                float(trajectory.get("score_delta", 0.0)),
-                float(trajectory.get("score", 0.0)),
-            ),
-        ))
+        representatives.append(
+            min(
+                negative,
+                key=lambda trajectory: (
+                    float(trajectory.get("score_delta", 0.0)),
+                    float(trajectory.get("score", 0.0)),
+                ),
+            )
+        )
     if positive:
         best_positive = max(
             positive,
@@ -696,10 +681,7 @@ def _order_contrastive_trajectories(
             representatives.append(best_positive)
     return [
         *representatives,
-        *(
-            trajectory for trajectory in values
-            if all(trajectory is not value for value in representatives)
-        ),
+        *(trajectory for trajectory in values if all(trajectory is not value for value in representatives)),
     ]
 
 
@@ -731,25 +713,19 @@ def evaluate_bundle_repeated(
     ]
     aggregate_rows = [
         aggregate_coverage_score(
-            batch["results"], reference_results=reference_results,
+            batch["results"],
+            reference_results=reference_results,
         )
         for batch in batches
     ]
-    aggregate_keys = {
-        key for row in aggregate_rows for key, value in row.items()
-        if isinstance(value, int | float)
-    }
+    aggregate_keys = {key for row in aggregate_rows for key, value in row.items() if isinstance(value, int | float)}
     aggregate = {
-        key: _mean([float(row[key]) for row in aggregate_rows if key in row])
-        for key in sorted(aggregate_keys)
+        key: _mean([float(row[key]) for row in aggregate_rows if key in row]) for key in sorted(aggregate_keys)
     }
     merged_results = []
     for target in targets:
         identity = _target_identity(target)
-        samples = [
-            result for batch in batches for result in batch["results"]
-            if _result_identity(result) == identity
-        ]
+        samples = [result for batch in batches for result in batch["results"] if _result_identity(result) == identity]
         representative = dict(samples[0])
         representative["score"] = _mean([float(item["score"]) for item in samples])
         representative["replicate_scores"] = [float(item["score"]) for item in samples]
@@ -757,23 +733,24 @@ def evaluate_bundle_repeated(
         if coverages:
             merged_coverage = dict(coverages[0])
             numeric_keys = (
-                "score", "statement_gain", "branch_gain", "statement_coverage",
-                "branch_coverage", "covered_statements", "num_statements",
-                "covered_branches", "num_branches",
+                "score",
+                "statement_gain",
+                "branch_gain",
+                "statement_coverage",
+                "branch_coverage",
+                "covered_statements",
+                "num_statements",
+                "covered_branches",
+                "num_branches",
             )
             for key in numeric_keys:
-                values = [
-                    float(coverage[key]) for coverage in coverages if key in coverage
-                ]
+                values = [float(coverage[key]) for coverage in coverages if key in coverage]
                 if values:
                     merged_coverage[key] = _mean(values)
-            merged_coverage["valid"] = all(
-                coverage.get("valid") is not False for coverage in coverages
-            )
+            merged_coverage["valid"] = all(coverage.get("valid") is not False for coverage in coverages)
             representative["coverage"] = merged_coverage
         representative["feedback"] = "\n\n".join(
-            f"Replicate {index}:\n{item['feedback']}"
-            for index, item in enumerate(samples)
+            f"Replicate {index}:\n{item['feedback']}" for index, item in enumerate(samples)
         )
         merged_results.append(representative)
     return {
@@ -781,14 +758,8 @@ def evaluate_bundle_repeated(
         "split": split,
         "workspace_kind": workspace_kind,
         "replicates": replicates,
-        "run_ids": [
-            run_id for batch in batches for run_id in batch.get("run_ids", [])
-        ],
-        "tests_workspaces": [
-            workspace
-            for batch in batches
-            for workspace in batch.get("tests_workspaces", [])
-        ],
+        "run_ids": [run_id for batch in batches for run_id in batch.get("run_ids", [])],
+        "tests_workspaces": [workspace for batch in batches for workspace in batch.get("tests_workspaces", [])],
         "results": merged_results,
         "aggregate": aggregate,
         "batches": batches,
@@ -844,9 +815,7 @@ def build_coverage_report(
             workspace_kind="baseline",
             replicates=evaluation_replicates,
         )
-        optimized_kind = (
-            "baseline" if optimized_digest_value == baseline_digest_value else "candidate"
-        )
+        optimized_kind = "baseline" if optimized_digest_value == baseline_digest_value else "candidate"
         optimized_batch = evaluate_bundle_repeated(
             runner,
             targets,
@@ -901,21 +870,30 @@ def _definition_lines(source: str, symbol: str) -> set[int]:
                 if qualified == wanted or node.name == symbol:
                     matches.append(node)
                 visit(node.body, qualified)
+                continue
+            # Nested definitions can live below control-flow nodes such as
+            # if/try/match. Keep the lexical function/class scope while walking
+            # those statement containers so qualified targets remain findable.
+            children = [child for child in ast.iter_child_nodes(node) if isinstance(child, ast.stmt)]
+            visit(children, scope)
 
     visit(tree.body, [])
     if not matches:
         return set()
-    node = matches[0]
-    start = min(
-        [node.lineno, *(decorator.lineno for decorator in getattr(node, "decorator_list", []))]
-    )
-    end = getattr(node, "end_lineno", node.lineno)
-    return set(range(start, min(end, start + 14) + 1))
+    selected: set[int] = set()
+    for node in matches:
+        start = min([node.lineno, *(decorator.lineno for decorator in getattr(node, "decorator_list", []))])
+        end = getattr(node, "end_lineno", node.lineno)
+        selected.update(range(start, min(end, start + 14) + 1))
+    return selected
 
 
 def _source_context(
-    runner: CoverUpExperimentRunner, target: SymbolTarget, coverage: dict | None,
-    *, max_lines: int = 80,
+    runner: CoverUpExperimentRunner,
+    target: SymbolTarget,
+    coverage: dict | None,
+    *,
+    max_lines: int = 80,
 ) -> str:
     path = _find_source_path(runner, target)
     if path is None:
@@ -961,12 +939,8 @@ def _attempt_failure_severity(attempt: Mapping[str, Any]) -> float:
     if outcome in _FAILURE_SEVERITY:
         return _FAILURE_SEVERITY[outcome]
     if outcome == "coverage_gain_saved":
-        gained = len(attempt.get("gained_lines", [])) + len(
-            attempt.get("gained_branches", [])
-        )
-        remaining = len(attempt.get("remaining_lines", [])) + len(
-            attempt.get("remaining_branches", [])
-        )
+        gained = len(attempt.get("gained_lines", [])) + len(attempt.get("gained_branches", []))
+        remaining = len(attempt.get("remaining_lines", [])) + len(attempt.get("remaining_branches", []))
         total = gained + remaining
         return remaining / total if total else 0.0
     return 0.0
@@ -1006,16 +980,11 @@ class CausalReflectionComponentSelector:
                 if severity <= 0:
                     continue
                 replicate = int(attempt.get("replicate", 0) or 0)
-                terminal_multiplier = (
-                    1.5 if terminal_by_replicate.get(replicate) == index else 1.0
-                )
+                terminal_multiplier = 1.5 if terminal_by_replicate.get(replicate) == index else 1.0
                 priority[component] += target_gap * severity * terminal_multiplier
                 evidence[component] += 1
 
-        eligible = [
-            component for component in candidate
-            if evidence.get(component, 0) > 0
-        ]
+        eligible = [component for component in candidate if evidence.get(component, 0) > 0]
         if not eligible:
             # A no-op proposal is preferable to inventing a mutation without causal
             # evidence. GEPA will reject the duplicate candidate.
@@ -1094,8 +1063,7 @@ class CoverUpPromptAdapter:
         self.evaluation_replicates = evaluation_replicates
         self.reference_units: dict[tuple[str, str, str, str], tuple[int, int]] = {}
         self.max_component_chars = {
-            name: max(MIN_COMPONENT_CHAR_BUDGET[name], len(text) * 3)
-            for name, text in baseline.as_candidate().items()
+            name: max(MIN_COMPONENT_CHAR_BUDGET[name], len(text) * 3) for name, text in baseline.as_candidate().items()
         }
         self.candidate_lineage: dict[str, dict[str, Any]] = {}
 
@@ -1107,7 +1075,8 @@ class CoverUpPromptAdapter:
             coverage = item.get("coverage")
             if coverage:
                 self.reference_units[_result_identity(item)] = (
-                    int(coverage["num_statements"]), int(coverage["num_branches"])
+                    int(coverage["num_statements"]),
+                    int(coverage["num_branches"]),
                 )
 
     def _micro_coverage_components(
@@ -1118,38 +1087,25 @@ class CoverUpPromptAdapter:
     ) -> tuple[float, float, bool]:
         """Return per-target contributions whose mean is split micro coverage."""
         self._remember_reference_units(evaluated_results)
-        reference_identities = [
-            _target_identity(target) for target in reference_targets
-        ]
+        reference_identities = [_target_identity(target) for target in reference_targets]
         # ``optimize`` preflights the baseline over the complete split, so the
         # denominator remains stable even when GEPA evaluates only a minibatch.
         # Direct adapter users without a preflight fall back to the evaluated
         # rows rather than assigning unknown targets zero executable units.
         identities = (
             reference_identities
-            if reference_identities
-            and all(identity in self.reference_units for identity in reference_identities)
+            if reference_identities and all(identity in self.reference_units for identity in reference_identities)
             else [_result_identity(item) for item in evaluated_results]
         )
-        total_statements = sum(
-            self.reference_units.get(identity, (0, 0))[0] for identity in identities
-        )
-        total_branches = sum(
-            self.reference_units.get(identity, (0, 0))[1] for identity in identities
-        )
+        total_statements = sum(self.reference_units.get(identity, (0, 0))[0] for identity in identities)
+        total_branches = sum(self.reference_units.get(identity, (0, 0))[1] for identity in identities)
         coverage = result.get("coverage")
         valid = coverage is not None and coverage.get("valid") is not False
         covered_statements = int(coverage["covered_statements"]) if valid else 0
         covered_branches = int(coverage["covered_branches"]) if valid else 0
         count = len(identities)
-        statement = (
-            count * covered_statements / total_statements
-            if total_statements else 1.0
-        )
-        branch = (
-            count * covered_branches / total_branches
-            if total_branches else 1.0
-        )
+        statement = count * covered_statements / total_statements if total_statements else 1.0
+        branch = count * covered_branches / total_branches if total_branches else 1.0
         return statement, branch, bool(total_branches)
 
     def _weighted_score(
@@ -1158,15 +1114,10 @@ class CoverUpPromptAdapter:
         evaluated_results: list[dict],
         reference_targets: list[SymbolTarget],
     ) -> float:
-        statement, branch, has_branches = self._micro_coverage_components(
-            result, evaluated_results, reference_targets
-        )
+        statement, branch, has_branches = self._micro_coverage_components(result, evaluated_results, reference_targets)
         if not has_branches:
             return statement
-        return (
-            STATEMENT_SCORE_WEIGHT * statement
-            + BRANCH_SCORE_WEIGHT * branch
-        )
+        return STATEMENT_SCORE_WEIGHT * statement + BRANCH_SCORE_WEIGHT * branch
 
     def _evaluate_replicates(
         self,
@@ -1189,7 +1140,8 @@ class CoverUpPromptAdapter:
         ]
 
     def _comparison_candidate(
-        self, candidate: dict[str, str],
+        self,
+        candidate: dict[str, str],
     ) -> tuple[dict[str, str], list[str], str]:
         digest = bundle_digest(PromptBundle.from_candidate(candidate))
         lineage = self.candidate_lineage.get(digest)
@@ -1201,7 +1153,8 @@ class CoverUpPromptAdapter:
             )
         baseline_candidate = self.baseline.as_candidate()
         changed = [
-            component for component in COMPONENT_PLACEHOLDERS
+            component
+            for component in COMPONENT_PLACEHOLDERS
             if candidate.get(component) != baseline_candidate[component]
         ]
         return baseline_candidate, changed, "baseline"
@@ -1244,10 +1197,7 @@ class CoverUpPromptAdapter:
         # Run only that batch; complete split evaluations are reserved for the
         # baseline preflight and final validation paths outside this adapter.
         repeated_batches = self._evaluate_replicates(batch, bundle, split=split)
-        lookups = [
-            {_result_identity(result): result for result in record["results"]}
-            for record in repeated_batches
-        ]
+        lookups = [{_result_identity(result): result for result in record["results"]} for record in repeated_batches]
         comparison_lookups = lookups
         baseline_lookups = lookups
         comparison_digest = bundle_digest(bundle)
@@ -1255,9 +1205,7 @@ class CoverUpPromptAdapter:
         changed_components: list[str] = []
         comparison_source = "baseline"
         if capture_traces:
-            parent_candidate, changed_components, comparison_source = (
-                self._comparison_candidate(candidate)
-            )
+            parent_candidate, changed_components, comparison_source = self._comparison_candidate(candidate)
             parent_bundle = PromptBundle.from_candidate(parent_candidate)
             comparison_digest = bundle_digest(parent_bundle)
             batches_by_digest = {bundle_digest(bundle): repeated_batches}
@@ -1273,12 +1221,10 @@ class CoverUpPromptAdapter:
             parent_batches = comparison_batches(parent_bundle)
             baseline_batches = comparison_batches(self.baseline)
             comparison_lookups = [
-                {_result_identity(result): result for result in record["results"]}
-                for record in parent_batches
+                {_result_identity(result): result for result in record["results"]} for record in parent_batches
             ]
             baseline_lookups = [
-                {_result_identity(result): result for result in record["results"]}
-                for record in baseline_batches
+                {_result_identity(result): result for result in record["results"]} for record in baseline_batches
             ]
         outputs = []
         scores = []
@@ -1288,17 +1234,11 @@ class CoverUpPromptAdapter:
             identity = _target_identity(target)
             samples = [lookup[identity] for lookup in lookups]
             micro_coverage_samples = [
-                self._micro_coverage_components(
-                    sample, record["results"], reference_targets
-                )
+                self._micro_coverage_components(sample, record["results"], reference_targets)
                 for sample, record in zip(samples, repeated_batches, strict=True)
             ]
             weighted_scores = [
-                (
-                    STATEMENT_SCORE_WEIGHT * statement
-                    + BRANCH_SCORE_WEIGHT * branch
-                    if has_branches else statement
-                )
+                (STATEMENT_SCORE_WEIGHT * statement + BRANCH_SCORE_WEIGHT * branch if has_branches else statement)
                 for statement, branch, has_branches in micro_coverage_samples
             ]
             raw_scores = [float(sample["score"]) for sample in samples]
@@ -1312,17 +1252,15 @@ class CoverUpPromptAdapter:
             }
             outputs.append(output)
             scores.append(score)
-            objectives.append({
-                # GEPA macro-averages objective values over validation targets.
-                # These scaled contributions therefore aggregate back to the
-                # same micro coverage components used by the weighted score.
-                "statement_coverage": _mean([
-                    statement for statement, _, _ in micro_coverage_samples
-                ]),
-                "branch_coverage": _mean([
-                    branch for _, branch, _ in micro_coverage_samples
-                ]),
-            })
+            objectives.append(
+                {
+                    # GEPA macro-averages objective values over validation targets.
+                    # These scaled contributions therefore aggregate back to the
+                    # same micro coverage components used by the weighted score.
+                    "statement_coverage": _mean([statement for statement, _, _ in micro_coverage_samples]),
+                    "branch_coverage": _mean([branch for _, branch, _ in micro_coverage_samples]),
+                }
+            )
             if trajectories is not None:
                 parent_samples = [lookup[identity] for lookup in comparison_lookups]
                 baseline_samples = [lookup[identity] for lookup in baseline_lookups]
@@ -1333,53 +1271,46 @@ class CoverUpPromptAdapter:
                 worst = samples[representative_replicate]
                 attempt_traces = _attempts_with_replicates(samples)
                 parent_attempt_traces = _attempts_with_replicates(parent_samples)
-                parent_replicate_scores = [
-                    float(sample["score"]) for sample in parent_samples
-                ]
-                baseline_replicate_scores = [
-                    float(sample["score"]) for sample in baseline_samples
-                ]
+                parent_replicate_scores = [float(sample["score"]) for sample in parent_samples]
+                baseline_replicate_scores = [float(sample["score"]) for sample in baseline_samples]
                 parent_score = _mean(parent_replicate_scores)
                 baseline_score = _mean(baseline_replicate_scores)
                 score_delta = raw_score - parent_score
-                trajectories.append({
-                    "target": target.__dict__,
-                    "score": raw_score,
-                    "candidate_score": raw_score,
-                    "parent_score": parent_score,
-                    "baseline_score": baseline_score,
-                    "score_delta": score_delta,
-                    "baseline_score_delta": raw_score - baseline_score,
-                    "comparison_outcome": _comparison_outcome(score_delta),
-                    "comparison_source": comparison_source,
-                    "candidate_digest": bundle_digest(bundle),
-                    "parent_digest": comparison_digest,
-                    "baseline_digest": baseline_digest,
-                    "changed_components": changed_components,
-                    "weighted_score": score,
-                    "replicate_scores": raw_scores,
-                    "parent_replicate_scores": parent_replicate_scores,
-                    "baseline_replicate_scores": baseline_replicate_scores,
-                    "representative_replicate": representative_replicate,
-                    "candidate_test": _representative_test(
-                        samples[representative_replicate].get("attempt_traces", [])
-                    ),
-                    "parent_test": _representative_test(
-                        parent_samples[representative_replicate].get(
-                            "attempt_traces", []
-                        )
-                    ),
-                    "feedback": "\n\n".join(
-                        f"Replicate {replicate}:\n{sample['feedback']}"
-                        for replicate, sample in enumerate(samples)
-                    ),
-                    "coverage": worst.get("coverage"),
-                    "attempt_traces": attempt_traces,
-                    "parent_attempt_traces": parent_attempt_traces,
-                    "source_context": _source_context(
-                        self.runner, target, worst.get("coverage")
-                    ),
-                })
+                trajectories.append(
+                    {
+                        "target": target.__dict__,
+                        "score": raw_score,
+                        "candidate_score": raw_score,
+                        "parent_score": parent_score,
+                        "baseline_score": baseline_score,
+                        "score_delta": score_delta,
+                        "baseline_score_delta": raw_score - baseline_score,
+                        "comparison_outcome": _comparison_outcome(score_delta),
+                        "comparison_source": comparison_source,
+                        "candidate_digest": bundle_digest(bundle),
+                        "parent_digest": comparison_digest,
+                        "baseline_digest": baseline_digest,
+                        "changed_components": changed_components,
+                        "weighted_score": score,
+                        "replicate_scores": raw_scores,
+                        "parent_replicate_scores": parent_replicate_scores,
+                        "baseline_replicate_scores": baseline_replicate_scores,
+                        "representative_replicate": representative_replicate,
+                        "candidate_test": _representative_test(
+                            samples[representative_replicate].get("attempt_traces", [])
+                        ),
+                        "parent_test": _representative_test(
+                            parent_samples[representative_replicate].get("attempt_traces", [])
+                        ),
+                        "feedback": "\n\n".join(
+                            f"Replicate {replicate}:\n{sample['feedback']}" for replicate, sample in enumerate(samples)
+                        ),
+                        "coverage": worst.get("coverage"),
+                        "attempt_traces": attempt_traces,
+                        "parent_attempt_traces": parent_attempt_traces,
+                        "source_context": _source_context(self.runner, target, worst.get("coverage")),
+                    }
+                )
         return gepa_core.EvaluationBatch(
             outputs=outputs,
             scores=scores,
@@ -1396,80 +1327,46 @@ class CoverUpPromptAdapter:
         trajectories = eval_batch.trajectories
         if trajectories is None:
             raise ValueError("GEPA reflection requires captured CoverUp trajectories")
-        trajectories = [
-            trajectory for trajectory in trajectories
-            if _has_incomplete_coverage(trajectory)
-        ]
+        trajectories = [trajectory for trajectory in trajectories if _has_incomplete_coverage(trajectory)]
         result: dict[str, list[dict[str, Any]]] = {}
         for component in components_to_update:
             placeholders = COMPONENT_PLACEHOLDERS[component]
-            has_structured_traces = any(
-                trajectory.get("attempt_traces") for trajectory in trajectories
-            )
+            has_structured_traces = any(trajectory.get("attempt_traces") for trajectory in trajectories)
             component_trajectories = [
-                trajectory for trajectory in trajectories
-                if any(
-                    attempt.get("component") == component
-                    for attempt in trajectory.get("attempt_traces", [])
-                )
+                trajectory
+                for trajectory in trajectories
+                if any(attempt.get("component") == component for attempt in trajectory.get("attempt_traces", []))
             ]
             # Compatibility for custom runners that predate trace schema 7. Real
             # traced runs never borrow evidence from an unexercised component.
             if not has_structured_traces:
                 component_trajectories = list(trajectories)
-            component_trajectories = _order_contrastive_trajectories(
-                component_trajectories
-            )
+            component_trajectories = _order_contrastive_trajectories(component_trajectories)
             result[component] = [
                 {
                     "Inputs": {
                         "component": component,
                         "component_role": COMPONENT_ROLES[component],
                         "required_literal_placeholders": list(placeholders),
-                        "target": (
-                            f"{trajectory['target']['source_file']}::"
-                            f"{trajectory['target']['symbol']}"
-                        ),
+                        "target": (f"{trajectory['target']['source_file']}::{trajectory['target']['symbol']}"),
                         "active_component": component,
-                        "changed_components": trajectory.get(
-                            "changed_components", []
-                        ),
-                        "source_context": _clip_text(
-                            trajectory["source_context"], 12_000
-                        ),
+                        "changed_components": trajectory.get("changed_components", []),
+                        "source_context": _clip_text(trajectory["source_context"], 12_000),
                     },
                     "Generated Outputs": {
                         "symbol_score": trajectory["score"],
-                        "candidate_score": trajectory.get(
-                            "candidate_score", trajectory["score"]
-                        ),
-                        "parent_score": trajectory.get(
-                            "parent_score", trajectory["score"]
-                        ),
-                        "baseline_score": trajectory.get(
-                            "baseline_score", trajectory["score"]
-                        ),
+                        "candidate_score": trajectory.get("candidate_score", trajectory["score"]),
+                        "parent_score": trajectory.get("parent_score", trajectory["score"]),
+                        "baseline_score": trajectory.get("baseline_score", trajectory["score"]),
                         "score_delta": trajectory.get("score_delta", 0.0),
-                        "baseline_score_delta": trajectory.get(
-                            "baseline_score_delta", 0.0
-                        ),
-                        "comparison_outcome": trajectory.get(
-                            "comparison_outcome", "tied"
-                        ),
-                        "comparison_source": trajectory.get(
-                            "comparison_source", "baseline"
-                        ),
+                        "baseline_score_delta": trajectory.get("baseline_score_delta", 0.0),
+                        "comparison_outcome": trajectory.get("comparison_outcome", "tied"),
+                        "comparison_source": trajectory.get("comparison_source", "baseline"),
                         "exemplar_type": _exemplar_type(trajectory),
                         "replicate_scores": trajectory.get("replicate_scores", []),
-                        "parent_replicate_scores": trajectory.get(
-                            "parent_replicate_scores", []
-                        ),
-                        "baseline_replicate_scores": trajectory.get(
-                            "baseline_replicate_scores", []
-                        ),
-                        "representative_replicate": trajectory.get(
-                            "representative_replicate", 0
-                        ),
+                        "parent_replicate_scores": trajectory.get("parent_replicate_scores", []),
+                        "baseline_replicate_scores": trajectory.get("baseline_replicate_scores", []),
+                        "representative_replicate": trajectory.get("representative_replicate", 0),
                         "candidate_component_chars": len(candidate[component]),
                         "candidate_test": trajectory.get(
                             "candidate_test",
@@ -1477,13 +1374,9 @@ class CoverUpPromptAdapter:
                         ),
                         "parent_test": trajectory.get(
                             "parent_test",
-                            _representative_test(
-                                trajectory.get("parent_attempt_traces", [])
-                            ),
+                            _representative_test(trajectory.get("parent_attempt_traces", [])),
                         ),
-                        "execution_episodes": _build_execution_episodes(
-                            trajectory.get("attempt_traces", [])
-                        ),
+                        "execution_episodes": _build_execution_episodes(trajectory.get("attempt_traces", [])),
                     },
                     "Feedback": (
                         "Contrastive result: candidate "
@@ -1511,9 +1404,7 @@ class CoverUpPromptAdapter:
         with _digest_lock(f"reflection-trace:{trace_path.resolve()}"):
             trace_path.parent.mkdir(parents=True, exist_ok=True)
             with trace_path.open("a", encoding="utf-8") as trace_file:
-                trace_file.write(
-                    json.dumps(trace_payload, ensure_ascii=False, default=str) + "\n"
-                )
+                trace_file.write(json.dumps(trace_payload, ensure_ascii=False, default=str) + "\n")
         return result
 
     @staticmethod
@@ -1522,7 +1413,9 @@ class CoverUpPromptAdapter:
 
     @classmethod
     def _extract_function_call(
-        cls, response: Any, expected_name: str,
+        cls,
+        response: Any,
+        expected_name: str,
     ) -> dict[str, Any] | None:
         if isinstance(response, str | bytes) or not isinstance(response, Sequence):
             return None
@@ -1550,7 +1443,9 @@ class CoverUpPromptAdapter:
     def _extract_test_experiment(cls, response: Any) -> dict[str, str] | None:
         arguments = cls._extract_function_call(response, "run_test_experiment")
         if arguments is None or set(arguments) != {
-            "case_id", "test_module", "hypothesis",
+            "case_id",
+            "test_module",
+            "hypothesis",
         }:
             return None
         if not all(
@@ -1581,19 +1476,13 @@ class CoverUpPromptAdapter:
         if (
             not isinstance(arguments["evidence"], list)
             or not arguments["evidence"]
-            or not all(
-                isinstance(item, str) and item.strip()
-                for item in arguments["evidence"]
-            )
+            or not all(isinstance(item, str) and item.strip() for item in arguments["evidence"])
         ):
             return None
         if (
             not isinstance(arguments["successful_experiment_ids"], list)
             or not arguments["successful_experiment_ids"]
-            or not all(
-                isinstance(item, str) and item.strip()
-                for item in arguments["successful_experiment_ids"]
-            )
+            or not all(isinstance(item, str) and item.strip() for item in arguments["successful_experiment_ids"])
         ):
             return None
         return arguments
@@ -1618,32 +1507,24 @@ class CoverUpPromptAdapter:
                 target = targets.get(label)
                 if target is None or (component, label) in seen:
                     continue
-                baseline_score = float(
-                    outputs.get("candidate_score", outputs.get("symbol_score", 0.0))
-                )
+                baseline_score = float(outputs.get("candidate_score", outputs.get("symbol_score", 0.0)))
                 if not _has_incomplete_coverage({"score": baseline_score}):
                     continue
                 seen.add((component, label))
-                case_id = "case-" + hashlib.sha256(
-                    f"{component}\0{label}".encode()
-                ).hexdigest()[:10]
+                case_id = "case-" + hashlib.sha256(f"{component}\0{label}".encode()).hexdigest()[:10]
                 case_targets[case_id] = target
-                cases.append({
-                    "case_id": case_id,
-                    "component": component,
-                    "target": label,
-                    "baseline_score": baseline_score,
-                    "source_context": _clip_text(
-                        inputs.get("source_context", ""), 12_000
-                    ),
-                    "failed_test": _clip_text(
-                        outputs.get("candidate_test", ""), 12_000
-                    ),
-                    "execution_episodes": outputs.get("execution_episodes", []),
-                    "feedback": _clip_text(
-                        record.get("Feedback", ""), 6_000, keep_tail=True
-                    ),
-                })
+                cases.append(
+                    {
+                        "case_id": case_id,
+                        "component": component,
+                        "target": label,
+                        "baseline_score": baseline_score,
+                        "source_context": _clip_text(inputs.get("source_context", ""), 12_000),
+                        "failed_test": _clip_text(outputs.get("candidate_test", ""), 12_000),
+                        "execution_episodes": outputs.get("execution_episodes", []),
+                        "feedback": _clip_text(record.get("Feedback", ""), 6_000, keep_tail=True),
+                    }
+                )
         return cases, case_targets
 
     def _record_optimizer_experiment(self, payload: Mapping[str, Any]) -> None:
@@ -1651,9 +1532,7 @@ class CoverUpPromptAdapter:
         with _digest_lock(f"optimizer-experiments:{path.resolve()}"):
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("a", encoding="utf-8") as output:
-                output.write(
-                    json.dumps(payload, ensure_ascii=False, default=str) + "\n"
-                )
+                output.write(json.dumps(payload, ensure_ascii=False, default=str) + "\n")
 
     def _run_optimizer_test_experiments(
         self,
@@ -1702,9 +1581,7 @@ Choose one case. Infer a concrete causal defect in the failed test, then call ru
                     "optimizer_test_model_response",
                     {"attempt": attempt, "response": response},
                 )
-                proposed = self._extract_test_experiment(
-                    response
-                )
+                proposed = self._extract_test_experiment(response)
             except (TypeError, ValueError) as exc:
                 log_full_reflection_event(
                     "optimizer_test_response_error",
@@ -1720,10 +1597,7 @@ Choose one case. Infer a concrete causal defect in the failed test, then call ru
                 history.append(invalid)
                 log_full_reflection_event("optimizer_test_invalid_tool_call", invalid)
                 continue
-            case = next(
-                value for value in visible_cases
-                if value["case_id"] == proposed["case_id"]
-            )
+            case = next(value for value in visible_cases if value["case_id"] == proposed["case_id"])
             experiment_id = (
                 f"{bundle_digest(PromptBundle.from_candidate(candidate))}-"
                 f"{proposed['case_id']}-a{attempt}-{datetime.now(UTC).strftime('%H%M%S%f')}"
@@ -1744,8 +1618,7 @@ Choose one case. Infer a concrete causal defect in the failed test, then call ru
                 }
             improved = (
                 bool(result.get("pytest_passed"))
-                and float(result.get("score", 0.0))
-                > float(case["baseline_score"]) + 1e-9
+                and float(result.get("score", 0.0)) > float(case["baseline_score"]) + 1e-9
             )
             experiment = {
                 "attempt": attempt,
@@ -1759,14 +1632,14 @@ Choose one case. Infer a concrete causal defect in the failed test, then call ru
             }
             history.append(experiment)
             log_full_reflection_event("optimizer_test_execution", experiment)
-            self._record_optimizer_experiment({
-                "schema_version": 1,
-                "timestamp": datetime.now(UTC).isoformat(),
-                "candidate_digest": bundle_digest(
-                    PromptBundle.from_candidate(candidate)
-                ),
-                **experiment,
-            })
+            self._record_optimizer_experiment(
+                {
+                    "schema_version": 1,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "candidate_digest": bundle_digest(PromptBundle.from_candidate(candidate)),
+                    **experiment,
+                }
+            )
             if improved:
                 break
         return history
@@ -1803,10 +1676,7 @@ Choose one case. Infer a concrete causal defect in the failed test, then call ru
                 output.write(json.dumps(payload, ensure_ascii=False) + "\n")
         log_full_reflection_event("reflection_decision", payload)
         changed = ",".join(changed_components) or "none"
-        print(
-            "Reflection function call: "
-            f"status={status} selection={selection or 'none'} changed={changed}"
-        )
+        print(f"Reflection function call: status={status} selection={selection or 'none'} changed={changed}")
 
     def propose_new_texts(
         self,
@@ -1814,17 +1684,10 @@ Choose one case. Infer a concrete causal defect in the failed test, then call ru
         reflective_dataset: Mapping[str, Sequence[Mapping[str, Any]]],
         components_to_update: list[str],
     ) -> dict[str, str]:
-        proposals = {
-            component: candidate[component] for component in components_to_update
-        }
-        evidence = {
-            component: list(reflective_dataset.get(component, []))
-            for component in components_to_update
-        }
+        proposals = {component: candidate[component] for component in components_to_update}
+        evidence = {component: list(reflective_dataset.get(component, [])) for component in components_to_update}
         if not any(evidence.values()):
-            self._log_reflection_decision(
-                candidate, components_to_update, status="no_failure_evidence"
-            )
+            self._log_reflection_decision(candidate, components_to_update, status="no_failure_evidence")
             return proposals
 
         contracts = {
@@ -1851,9 +1714,7 @@ Choose one case. Infer a concrete causal defect in the failed test, then call ru
                 status="no_runnable_experiment_case",
             )
             return proposals
-        experiments = self._run_optimizer_test_experiments(
-            candidate, cases, case_targets
-        )
+        experiments = self._run_optimizer_test_experiments(candidate, cases, case_targets)
         successful = [item for item in experiments if item.get("success")]
         if not successful:
             self._log_reflection_decision(
@@ -1863,9 +1724,7 @@ Choose one case. Infer a concrete causal defect in the failed test, then call ru
                 optimizer_calls=len(experiments),
             )
             return proposals
-        successful_ids = {
-            str(item["result"]["experiment_id"]) for item in successful
-        }
+        successful_ids = {str(item["result"]["experiment_id"]) for item in successful}
         prompt = f"""
 You are optimizing a reusable two-stage CoverUp pytest-generation system. The stages are `initial` test generation and conditional `error` repair.
 
@@ -1901,10 +1760,10 @@ Preserve useful instructions and required literal placeholders. Do not copy targ
             {
                 "role": "system",
                 "content": (
-                        "You optimize reusable CoverUp prompt components for a less-capable "
-                        "test model. Distill execution-proven behavior into a detailed "
-                        "Reflexion procedure with a strict reflection-versus-Python output "
-                        "contract, then call update_prompt_component once."
+                    "You optimize reusable CoverUp prompt components for a less-capable "
+                    "test model. Distill execution-proven behavior into a detailed "
+                    "Reflexion procedure with a strict reflection-versus-Python output "
+                    "contract, then call update_prompt_component once."
                 ),
             },
             {"role": "user", "content": prompt},
@@ -1922,16 +1781,10 @@ Preserve useful instructions and required literal placeholders. Do not copy targ
         log_reflection_request(request)
         try:
             response = self.reflection_lm(**request)
-            log_full_reflection_event(
-                "prompt_update_model_response", response
-            )
-            update = self._extract_component_update(
-                response
-            )
+            log_full_reflection_event("prompt_update_model_response", response)
+            update = self._extract_component_update(response)
         except (TypeError, ValueError) as exc:
-            log_full_reflection_event(
-                "prompt_update_response_error", {"error": repr(exc)}
-            )
+            log_full_reflection_event("prompt_update_response_error", {"error": repr(exc)})
             update = None
         if update is None:
             self._log_reflection_decision(
@@ -1957,20 +1810,26 @@ Preserve useful instructions and required literal placeholders. Do not copy targ
         selected = set(evidence) if selection == "all" else {selection}
         if not selected or not selected.issubset(evidence):
             self._log_reflection_decision(
-                candidate, components_to_update, status="invalid_selection",
+                candidate,
+                components_to_update,
+                status="invalid_selection",
                 selection=selection,
             )
             return proposals
         if selection == "all" and selected != set(COMPONENT_PLACEHOLDERS):
             self._log_reflection_decision(
-                candidate, components_to_update, status="invalid_all_contract",
+                candidate,
+                components_to_update,
+                status="invalid_all_contract",
                 selection=selection,
             )
             return proposals
         replacements = update["replacements"]
         if set(replacements) != selected:
             self._log_reflection_decision(
-                candidate, components_to_update, status="incomplete_replacements",
+                candidate,
+                components_to_update,
+                status="incomplete_replacements",
                 selection=selection,
             )
             return proposals
@@ -1978,21 +1837,24 @@ Preserve useful instructions and required literal placeholders. Do not copy targ
             replacement = replacements[component]
             if not isinstance(replacement, str):
                 self._log_reflection_decision(
-                    candidate, components_to_update, status="invalid_replacement_type",
-                    selection=selection, detail=component,
+                    candidate,
+                    components_to_update,
+                    status="invalid_replacement_type",
+                    selection=selection,
+                    detail=component,
                 )
                 return proposals
-            if error := validate_template(
-                replacement, COMPONENT_PLACEHOLDERS[component]
-            ):
+            if error := validate_template(replacement, COMPONENT_PLACEHOLDERS[component]):
                 self._log_reflection_decision(
-                    candidate, components_to_update, status="invalid_template",
-                    selection=selection, detail=f"{component}: {error}",
+                    candidate,
+                    components_to_update,
+                    status="invalid_template",
+                    selection=selection,
+                    detail=f"{component}: {error}",
                 )
                 return proposals
             leaked_targets = [
-                item["target"] for item in successful
-                if str(item["target"]).lower() in replacement.lower()
+                item["target"] for item in successful if str(item["target"]).lower() in replacement.lower()
             ]
             if leaked_targets:
                 self._log_reflection_decision(
@@ -2007,29 +1869,28 @@ Preserve useful instructions and required literal placeholders. Do not copy targ
                 return proposals
             if len(replacement) > self.max_component_chars[component]:
                 self._log_reflection_decision(
-                    candidate, components_to_update, status="template_too_long",
-                    selection=selection, detail=component,
+                    candidate,
+                    components_to_update,
+                    status="template_too_long",
+                    selection=selection,
+                    detail=component,
                 )
                 return proposals
-        if selection == "all" and any(
-            replacements[component] == candidate[component]
-            for component in selected
-        ):
+        if selection == "all" and any(replacements[component] == candidate[component] for component in selected):
             self._log_reflection_decision(
-                candidate, components_to_update, status="all_requires_both_changes",
+                candidate,
+                components_to_update,
+                status="all_requires_both_changes",
                 selection=selection,
             )
             return proposals
         proposals.update(replacements)
         proposed_candidate = {**candidate, **proposals}
         changed_components = [
-            component for component in components_to_update
-            if proposed_candidate[component] != candidate[component]
+            component for component in components_to_update if proposed_candidate[component] != candidate[component]
         ]
         if changed_components:
-            self.candidate_lineage[
-                bundle_digest(PromptBundle.from_candidate(proposed_candidate))
-            ] = {
+            self.candidate_lineage[bundle_digest(PromptBundle.from_candidate(proposed_candidate))] = {
                 "parent_candidate": dict(candidate),
                 "changed_components": changed_components,
                 "successful_experiment_ids": sorted(cited_experiments),
@@ -2040,9 +1901,7 @@ Preserve useful instructions and required literal placeholders. Do not copy targ
                 "schema_version": 1,
                 "timestamp": datetime.now(UTC).isoformat(),
                 "parent_digest": bundle_digest(PromptBundle.from_candidate(candidate)),
-                "candidate_digest": bundle_digest(
-                    PromptBundle.from_candidate(proposed_candidate)
-                ),
+                "candidate_digest": bundle_digest(PromptBundle.from_candidate(proposed_candidate)),
                 "changed_components": changed_components,
                 "successful_experiment_ids": sorted(cited_experiments),
                 "diagnosis": update["diagnosis"],
@@ -2060,12 +1919,13 @@ Preserve useful instructions and required literal placeholders. Do not copy targ
             with _digest_lock(f"experiment-lessons:{lesson_path.resolve()}"):
                 lesson_path.parent.mkdir(parents=True, exist_ok=True)
                 with lesson_path.open("a", encoding="utf-8") as output:
-                    output.write(
-                        json.dumps(lesson_payload, ensure_ascii=False) + "\n"
-                    )
+                    output.write(json.dumps(lesson_payload, ensure_ascii=False) + "\n")
         self._log_reflection_decision(
-            candidate, components_to_update, status="accepted",
-            selection=selection, changed_components=changed_components,
+            candidate,
+            components_to_update,
+            status="accepted",
+            selection=selection,
+            changed_components=changed_components,
             experiment_ids=sorted(cited_experiments),
             optimizer_calls=len(experiments) + 1,
         )
@@ -2093,7 +1953,9 @@ def _optimization_run_digest(
 
 
 def validate_reference_evaluation(
-    results: list[dict], *, split: str = "validation",
+    results: list[dict],
+    *,
+    split: str = "validation",
     expected_targets: Sequence[SymbolTarget] | None = None,
 ) -> None:
     """Reject a reference batch that cannot provide denominators for every target."""
@@ -2109,10 +1971,7 @@ def validate_reference_evaluation(
         denominator_valid = False
         if coverage is not None and coverage.get("valid") is not False:
             try:
-                denominator_valid = (
-                    int(coverage["num_statements"]) > 0
-                    and int(coverage["num_branches"]) >= 0
-                )
+                denominator_valid = int(coverage["num_statements"]) > 0 and int(coverage["num_branches"]) >= 0
             except (KeyError, TypeError, ValueError):
                 denominator_valid = False
         if not denominator_valid:
@@ -2120,9 +1979,7 @@ def validate_reference_evaluation(
             label = f"{target.get('source_file', '?')}::{target.get('symbol', '?')}"
             feedback_lines = [
                 line.strip()
-                for line in str(
-                    result.get("feedback", "No coverage data")
-                ).splitlines()
+                for line in str(result.get("feedback", "No coverage data")).splitlines()
                 if line.strip() and not re.fullmatch(r"Replicate \d+:?", line.strip())
             ]
             feedback = feedback_lines[0] if feedback_lines else "No coverage data"
@@ -2198,14 +2055,9 @@ def optimize(
         adapter._remember_reference_units(baseline_preflight["results"])
         if preflight_split == "train":
             incomplete = {
-                _result_identity(result)
-                for result in baseline_preflight["results"]
-                if _has_incomplete_coverage(result)
+                _result_identity(result) for result in baseline_preflight["results"] if _has_incomplete_coverage(result)
             }
-            reflection_train_targets = [
-                target for target in train_targets
-                if _target_identity(target) in incomplete
-            ]
+            reflection_train_targets = [target for target in train_targets if _target_identity(target) in incomplete]
         if preflight_split == "validation":
             validation_baseline_aggregate = baseline_preflight.get("aggregate") or (
                 aggregate_coverage_score(baseline_preflight["results"])
@@ -2213,9 +2065,7 @@ def optimize(
     assert validation_baseline_aggregate is not None
     baseline_metrics = {
         "score": float(validation_baseline_aggregate.get("score", 0.0)),
-        "statement": float(
-            validation_baseline_aggregate.get("statement_coverage", 0.0)
-        ),
+        "statement": float(validation_baseline_aggregate.get("statement_coverage", 0.0)),
         "branch": float(validation_baseline_aggregate.get("branch_coverage", 0.0)),
     }
     print(
@@ -2223,8 +2073,7 @@ def optimize(
         flush=True,
     )
     print(
-        "Reflection train targets below 100% coverage: "
-        f"{len(reflection_train_targets)}/{len(train_targets)}",
+        f"Reflection train targets below 100% coverage: {len(reflection_train_targets)}/{len(train_targets)}",
         flush=True,
     )
     adapter.targets_by_split["train"] = reflection_train_targets
@@ -2236,9 +2085,7 @@ def optimize(
             validation_scores=[baseline_metrics["score"]],
             total_metric_calls=0,
         )
-    run_digest = _optimization_run_digest(
-        runner, baseline, train_targets, validation_targets, evaluation_replicates
-    )
+    run_digest = _optimization_run_digest(runner, baseline, train_targets, validation_targets, evaluation_replicates)
     result = gepa_core.optimize(
         seed_candidate=baseline.as_candidate(),
         trainset=reflection_train_targets,
@@ -2251,9 +2098,7 @@ def optimize(
         ),
         frontier_type="hybrid",
         skip_perfect_score=False,
-        reflection_minibatch_size=min(
-            REFLECTION_MINIBATCH_SIZE, len(reflection_train_targets)
-        ),
+        reflection_minibatch_size=min(REFLECTION_MINIBATCH_SIZE, len(reflection_train_targets)),
         module_selector=LLMReflectionComponentSelector(),
         use_merge=True,
         max_merge_invocations=5,

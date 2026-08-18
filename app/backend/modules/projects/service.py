@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from backend.core.errors import AppError
+from backend.modules.analysis.repository import FunctionRepository
 from backend.modules.projects.repository import ProjectRepository
 from backend.modules.projects.schemas import (
     CreateProjectRequest,
@@ -11,6 +12,7 @@ from backend.modules.projects.schemas import (
     ProjectSettings,
     ProjectSettingsPatch,
     ProjectStatus,
+    RuntimeStatus,
 )
 from backend.modules.uploads.service import UploadService
 
@@ -23,10 +25,12 @@ class ProjectService:
         repository: ProjectRepository,
         uploads: UploadService,
         samples: SampleProjectCatalog | None = None,
+        functions: FunctionRepository | None = None,
     ):
         self.repository = repository
         self.uploads = uploads
         self.samples = samples
+        self.functions = functions
         self.runtime = None
 
     def set_runtime_service(self, runtime) -> None:
@@ -133,6 +137,22 @@ class ProjectService:
         ):
             return await self.runtime.request(project)
         return self._response(project)
+
+    async def delete(self, project_id: str, owner_id: str) -> None:
+        if self.is_sample(project_id):
+            raise AppError(409, "SAMPLE_PROJECT_READ_ONLY", "Bundled samples cannot be deleted")
+        project = await self.require_owned(project_id, owner_id)
+        if project.status == ProjectStatus.ANALYZING or project.runtime_status in {
+            RuntimeStatus.QUEUED,
+            RuntimeStatus.PREPARING,
+        }:
+            raise AppError(409, "PROJECT_BUSY", "Wait for the active project operation to finish")
+        if self.functions is not None:
+            await self.functions.delete_for_project(project.id)
+        owner_projects = await self.repository.list_for_owner(owner_id)
+        if not any(item.id != project.id and item.upload_id == project.upload_id for item in owner_projects):
+            await self.uploads.delete(project.upload_id, owner_id)
+        await self.repository.delete(project.id)
 
     async def require_owned(self, project_id: str, owner_id: str) -> ProjectRecord:
         if self.samples and (sample := self.samples.get(project_id, owner_id)):

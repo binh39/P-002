@@ -25,6 +25,8 @@ class UploadRepository(Protocol):
 
     async def save(self, upload: UploadRecord) -> UploadRecord: ...
 
+    async def delete(self, upload_id: str) -> None: ...
+
 
 class InMemoryUploadRepository:
     def __init__(self):
@@ -40,6 +42,9 @@ class InMemoryUploadRepository:
     async def save(self, upload: UploadRecord) -> UploadRecord:
         self.items[upload.id] = upload
         return upload
+
+    async def delete(self, upload_id: str) -> None:
+        self.items.pop(upload_id, None)
 
 
 class FirestoreUploadRepository:
@@ -59,6 +64,9 @@ class FirestoreUploadRepository:
     async def save(self, upload: UploadRecord) -> UploadRecord:
         await self.collection.document(upload.id).set(self._serialize(upload))
         return upload
+
+    async def delete(self, upload_id: str) -> None:
+        await self.collection.document(upload_id).delete()
 
     @staticmethod
     def _serialize(upload: UploadRecord) -> dict:

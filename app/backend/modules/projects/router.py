@@ -31,6 +31,11 @@ async def get_project(project_id: str, user: CurrentUser, request: Request):
     return await request.app.state.services.projects.get(project_id, user.uid)
 
 
+@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_project(project_id: str, user: CurrentUser, request: Request):
+    await request.app.state.services.projects.delete(project_id, user.uid)
+
+
 @router.post("/{project_id}/prepare-runtime", response_model=ProjectResponse, status_code=status.HTTP_202_ACCEPTED)
 async def prepare_project_runtime(project_id: str, user: CurrentUser, request: Request):
     return await request.app.state.services.projects.prepare_runtime(project_id, user.uid)
