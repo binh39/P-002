@@ -6,10 +6,10 @@ import { Field, PageHeader } from "@/components/PlatformUI";
 import type { AIProvider, ProviderCredential } from "@/domain/providerCredentials";
 
 const tabs = ["General", "AI & Optimization", "Evaluation", "Execution & Security"];
-const providerDetails: Array<{ provider: AIProvider; name: string; hint: string }> = [
-  { provider: "gemini", name: "Gemini", hint: "Used by models that begin with gemini/." },
-  { provider: "openai", name: "OpenAI", hint: "Used by models that begin with openai/." },
-  { provider: "deepseek", name: "DeepSeek", hint: "Used by models that begin with deepseek/." },
+const providerDetails: Array<{ provider: AIProvider; name: string }> = [
+  { provider: "gemini", name: "Gemini" },
+  { provider: "openai", name: "OpenAI" },
+  { provider: "deepseek", name: "DeepSeek" },
 ];
 
 export default function Settings() {
@@ -82,14 +82,8 @@ export default function Settings() {
                   </Field>
                 </div>
               </SettingsSection>
-              <SettingsSection
-                title="AI provider keys"
-                description="Keys are encrypted in Google Secret Manager. The browser only receives a masked value."
-              >
+              <SettingsSection title="AI provider keys">
                 {credentialsQuery.isLoading ? <p>Loading provider credentials…</p> : null}
-                {credentialsQuery.isError ? (
-                  <p className="form-error">Could not load provider credentials.</p>
-                ) : null}
                 {providerDetails.map((detail) => (
                   <ProviderKeyForm
                     key={detail.provider}
@@ -125,7 +119,7 @@ function ProviderKeyForm({
   onSave,
   onRemove,
 }: {
-  detail: { provider: AIProvider; name: string; hint: string };
+  detail: { provider: AIProvider; name: string };
   credential?: ProviderCredential;
   onSave(apiKey: string): Promise<void>;
   onRemove(): Promise<void>;
@@ -144,7 +138,7 @@ function ProviderKeyForm({
     <form className="integration-row provider-key-row" onSubmit={submit}>
       <div>
         <strong>{detail.name}</strong>
-        <span>{credential?.configured ? `Configured: ${credential.maskedKey}` : detail.hint}</span>
+        {credential?.configured ? <span>{credential.maskedKey}</span> : null}
       </div>
       <div className="provider-key-actions">
         <input
@@ -345,7 +339,7 @@ function SettingsSection({
   children,
 }: {
   title: string;
-  description: string;
+  description?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -353,7 +347,7 @@ function SettingsSection({
       <div className="card-heading">
         <div>
           <h2>{title}</h2>
-          <p>{description}</p>
+          {description ? <p>{description}</p> : null}
         </div>
       </div>
       {children}
