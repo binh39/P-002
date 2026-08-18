@@ -303,6 +303,73 @@ class PromptVersionStatus(StrEnum):
     REJECTED = "rejected"
 
 
+class PromptRole(StrEnum):
+    BASELINE = "baseline"
+    OPTIMIZED = "optimized"
+
+
+class PromptSnapshotOrigin(StrEnum):
+    INITIAL_BASELINE = "initial_baseline"
+    OPTIMIZED_CANDIDATE = "optimized_candidate"
+    BASELINE_RETAINED = "baseline_retained"
+
+
+class PromptCoverageMetrics(StrictModel):
+    score: float | None = None
+    statement_coverage: float | None = None
+    branch_coverage: float | None = None
+    pass_rate: float | None = None
+
+
+class PromptSnapshotResponse(StrictModel):
+    """An immutable prompt bundle and the execution context that produced it."""
+
+    id: str
+    experiment_id: str
+    role: PromptRole
+    origin: PromptSnapshotOrigin
+    prompt_digest: str
+    prompt: dict[str, str]
+    source_snapshot_digest: str
+    dataset_digest: str
+    split_seed: int
+    runner_protocol_version: int
+    coverup_model: str
+    optimize_model: str
+    metrics: PromptCoverageMetrics = Field(default_factory=PromptCoverageMetrics)
+    estimated_cost_usd: float | None = None
+    created_at: datetime
+
+
+class PromptSnapshotRecord(PromptSnapshotResponse):
+    owner_id: str
+    project_ids: list[str] = Field(default_factory=list)
+
+
+class PromptRegistryEntryResponse(StrictModel):
+    """Experiment-centric registry entry containing the two final prompt bundles."""
+
+    experiment_id: str
+    experiment_name: str
+    project_ids: list[str] = Field(default_factory=list)
+    project_names: list[str] = Field(default_factory=list)
+    status: ExperimentStatus
+    baseline: PromptSnapshotResponse
+    optimized: PromptSnapshotResponse | None = None
+    baseline_metrics: PromptCoverageMetrics = Field(default_factory=PromptCoverageMetrics)
+    optimized_metrics: PromptCoverageMetrics = Field(default_factory=PromptCoverageMetrics)
+    absolute_gain: float | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class PromptRegistryListResponse(StrictModel):
+    items: list[PromptRegistryEntryResponse]
+    total: int
+    offset: int
+    limit: int
+
+
 class PromptVersionResponse(StrictModel):
     id: str
     experiment_id: str

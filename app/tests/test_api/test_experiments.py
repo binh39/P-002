@@ -378,3 +378,41 @@ async def test_prompt_version_list_is_owned_and_filters_by_status(client, app):
     }
     assert awaiting_review.json()["total"] == 1
     assert awaiting_review.json()["items"][0]["id"] == "owned-review-version"
+
+
+@pytest.mark.asyncio
+async def test_prompt_registry_is_experiment_centric_and_owner_scoped(client, app):
+    repository = app.state.services.experiments.repository
+    now = datetime.now(UTC)
+    prompt = baseline_prompt()
+    for owner_id, experiment_id in (("local-user", "owned-registry"), ("another-user", "foreign-registry")):
+        await repository.create(
+            ExperimentRecord(
+                id=experiment_id,
+                owner_id=owner_id,
+                project_id="project-1",
+                project_ids=["project-1"],
+                name=f"{experiment_id} prompt optimization",
+                target_function_ids=["fn-1"],
+                baseline_prompt=prompt.as_candidate(),
+                status=ExperimentStatus.DRAFT,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+    listed = await client.get("/api/v1/prompt-registry", headers=AUTH_HEADERS)
+    detail = await client.get("/api/v1/prompt-registry/owned-registry", headers=AUTH_HEADERS)
+    foreign = await client.get("/api/v1/prompt-registry/foreign-registry", headers=AUTH_HEADERS)
+
+    assert listed.status_code == 200
+    assert listed.json()["total"] == 1
+    entry = listed.json()["items"][0]
+    assert entry["experiment_id"] == "owned-registry"
+    assert entry["baseline"]["role"] == "baseline"
+    assert entry["baseline"]["prompt"] == prompt.as_candidate()
+    assert entry["optimized"] is None
+    assert detail.status_code == 200
+    assert detail.json()["experiment_name"] == "owned-registry prompt optimization"
+    assert foreign.status_code == 404
+    assert foreign.json()["error"]["code"] == "EXPERIMENT_NOT_FOUND"

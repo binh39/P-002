@@ -9,6 +9,8 @@ from .schemas import (
     ExperimentListResponse,
     ExperimentResponse,
     OptimizationRunResponse,
+    PromptRegistryEntryResponse,
+    PromptRegistryListResponse,
     PromptVersionListResponse,
     PromptVersionResponse,
     PromptVersionStatus,
@@ -19,6 +21,7 @@ router = APIRouter(prefix="/experiments", tags=["experiments"])
 optimization_internal_router = APIRouter(prefix="/internal/v1/optimization-runs", tags=["internal"])
 comparison_internal_router = APIRouter(prefix="/internal/v1/comparison-runs", tags=["internal"])
 prompt_router = APIRouter(prefix="/prompt-versions", tags=["prompt-versions"])
+prompt_registry_router = APIRouter(prefix="/prompt-registry", tags=["prompt-registry"])
 
 
 @router.post("", response_model=ExperimentResponse, status_code=status.HTTP_201_CREATED)
@@ -146,3 +149,18 @@ async def reject_prompt_version(
     return await request.app.state.services.experiments.review_prompt_version(
         version_id, user.uid, PromptVersionStatus.REJECTED, payload.comment
     )
+
+
+@prompt_registry_router.get("", response_model=PromptRegistryListResponse)
+async def list_prompt_registry(
+    user: CurrentUser,
+    request: Request,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+):
+    return await request.app.state.services.experiments.list_prompt_registry(user.uid, offset, limit)
+
+
+@prompt_registry_router.get("/{experiment_id}", response_model=PromptRegistryEntryResponse)
+async def get_prompt_registry_entry(experiment_id: str, user: CurrentUser, request: Request):
+    return await request.app.state.services.experiments.get_prompt_registry_entry(experiment_id, user.uid)

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import re
 from datetime import UTC, datetime, timedelta
@@ -27,6 +28,13 @@ from .schemas import (
     OptimizationRunRecord,
     OptimizationRunResponse,
     ProjectSnapshot,
+    PromptCoverageMetrics,
+    PromptRegistryEntryResponse,
+    PromptRegistryListResponse,
+    PromptRole,
+    PromptSnapshotOrigin,
+    PromptSnapshotRecord,
+    PromptSnapshotResponse,
     PromptVersionListResponse,
     PromptVersionRecord,
     PromptVersionResponse,
@@ -114,6 +122,126 @@ class ExperimentService:
         prompt = PromptBundle.from_candidate(candidate) if candidate is not None else baseline_prompt()
         prompt.validate()
         return prompt
+
+    @staticmethod
+    def _stable_digest(payload: object) -> str:
+        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        return hashlib.sha256(encoded).hexdigest()[:32]
+
+    @classmethod
+    def _source_snapshot_digest(cls, item: ExperimentRecord) -> str:
+        projects = [snapshot.model_dump(mode="json") for snapshot in item.project_snapshots]
+        return cls._stable_digest({"project_ids": item.project_ids, "projects": projects})
+
+    @classmethod
+    def _dataset_digest(cls, item: ExperimentRecord) -> str:
+        targets = [target.model_dump(mode="json") for target in item.targets]
+        return cls._stable_digest(
+            {
+                "targets": targets,
+                "splits": item.dataset_splits,
+                "seed": item.split_seed,
+                "sampling_method": item.sampling_method.value,
+            }
+        )
+
+    @staticmethod
+    def _coverage_metrics(raw: dict | None) -> PromptCoverageMetrics:
+        raw = raw or {}
+        return PromptCoverageMetrics(
+            score=raw.get("score"),
+            statement_coverage=raw.get("statement_coverage"),
+            branch_coverage=raw.get("branch_coverage"),
+            pass_rate=raw.get("pass_rate"),
+        )
+
+    @staticmethod
+    def _runner_protocol_version(item: ExperimentRecord) -> int:
+        return max((snapshot.runtime_protocol_version for snapshot in item.project_snapshots), default=1)
+
+    def _new_prompt_snapshot(
+        self,
+        item: ExperimentRecord,
+        *,
+        role: PromptRole,
+        origin: PromptSnapshotOrigin,
+        prompt: PromptBundle,
+        metrics: PromptCoverageMetrics | None = None,
+        created_at: datetime | None = None,
+    ) -> PromptSnapshotRecord:
+        return PromptSnapshotRecord(
+            id=f"{item.id}:{role.value}",
+            owner_id=item.owner_id,
+            experiment_id=item.id,
+            project_ids=list(item.project_ids),
+            role=role,
+            origin=origin,
+            prompt_digest=prompt.digest(),
+            prompt=prompt.as_candidate(),
+            source_snapshot_digest=self._source_snapshot_digest(item),
+            dataset_digest=self._dataset_digest(item),
+            split_seed=item.split_seed,
+            runner_protocol_version=self._runner_protocol_version(item),
+            coverup_model=item.settings.coverup_model,
+            optimize_model=item.settings.optimize_model,
+            metrics=metrics or PromptCoverageMetrics(),
+            created_at=created_at or datetime.now(UTC),
+        )
+
+    async def _ensure_baseline_prompt_snapshot(self, item: ExperimentRecord) -> PromptSnapshotRecord:
+        existing = await self.repository.get_prompt_snapshot(item.id, PromptRole.BASELINE)
+        if existing is not None:
+            return existing
+        snapshot = self._new_prompt_snapshot(
+            item,
+            role=PromptRole.BASELINE,
+            origin=PromptSnapshotOrigin.INITIAL_BASELINE,
+            prompt=self._baseline_for(item),
+            created_at=item.created_at,
+        )
+        await self.repository.create_prompt_snapshot(snapshot)
+        return snapshot
+
+    async def _ensure_optimized_prompt_snapshot(
+        self, item: ExperimentRecord, comparison: ComparisonRunRecord | None = None
+    ) -> PromptSnapshotRecord | None:
+        existing = await self.repository.get_prompt_snapshot(item.id, PromptRole.OPTIMIZED)
+        if existing is not None:
+            return existing
+        comparison = comparison or (
+            await self.repository.get_comparison_run(item.comparison_run_id)
+            if item.comparison_run_id
+            else None
+        )
+        if comparison is None or comparison.status not in {
+            ExperimentStatus.COMPARISON_SUCCEEDED,
+            ExperimentStatus.IN_REVIEW,
+        }:
+            return None
+
+        prompt = self._baseline_for(item)
+        origin = PromptSnapshotOrigin.BASELINE_RETAINED
+        metrics = self._coverage_metrics(comparison.baseline_metrics)
+        if comparison.promotion_eligible:
+            optimization = await self.repository.get_optimization_run(comparison.optimization_run_id)
+            if optimization is None or not optimization.candidate_prompt:
+                return None
+            candidate = PromptBundle.from_candidate(optimization.candidate_prompt)
+            if candidate.digest() != comparison.candidate_prompt_digest:
+                return None
+            prompt = candidate
+            origin = PromptSnapshotOrigin.OPTIMIZED_CANDIDATE
+            metrics = self._coverage_metrics(comparison.candidate_metrics)
+        snapshot = self._new_prompt_snapshot(
+            item,
+            role=PromptRole.OPTIMIZED,
+            origin=origin,
+            prompt=prompt,
+            metrics=metrics,
+            created_at=comparison.finished_at or comparison.created_at,
+        )
+        await self.repository.create_prompt_snapshot(snapshot)
+        return snapshot
 
     async def create(
         self,
@@ -248,6 +376,7 @@ class ExperimentService:
             updated_at=now,
         )
         await self.repository.create(item)
+        await self._ensure_baseline_prompt_snapshot(item)
         return ExperimentResponse.model_validate(item)
 
     async def get(self, experiment_id: str, owner_id: str) -> ExperimentResponse:
@@ -773,6 +902,8 @@ class ExperimentService:
                 run.status = ExperimentStatus.COMPARISON_SUCCEEDED
                 item.status = ExperimentStatus.OPTIMIZATION_SUCCEEDED
             item.updated_at = run.finished_at
+            await self._ensure_baseline_prompt_snapshot(item)
+            await self._ensure_optimized_prompt_snapshot(item, run)
         except Exception as exc:
             run.status = ExperimentStatus.FAILED
             run.error_message = str(exc)[-4000:]
@@ -820,6 +951,48 @@ class ExperimentService:
             total=total,
             offset=offset,
             limit=limit,
+        )
+
+    async def get_prompt_registry_entry(self, experiment_id: str, owner_id: str) -> PromptRegistryEntryResponse:
+        item = await self._owned(experiment_id, owner_id)
+        return await self._prompt_registry_entry(item)
+
+    async def list_prompt_registry(
+        self, owner_id: str, offset: int = 0, limit: int = 50
+    ) -> PromptRegistryListResponse:
+        experiments = await self.repository.list_for_owner(owner_id)
+        total = len(experiments)
+        page = experiments[offset : offset + limit]
+        return PromptRegistryListResponse(
+            items=[await self._prompt_registry_entry(item) for item in page],
+            total=total,
+            offset=offset,
+            limit=limit,
+        )
+
+    async def _prompt_registry_entry(self, item: ExperimentRecord) -> PromptRegistryEntryResponse:
+        """Materialize immutable prompt snapshots for historical experiment records on read."""
+        baseline = await self._ensure_baseline_prompt_snapshot(item)
+        optimized = await self._ensure_optimized_prompt_snapshot(item)
+        comparison = (
+            await self.repository.get_comparison_run(item.comparison_run_id)
+            if item.comparison_run_id
+            else None
+        )
+        project_names = [snapshot.name for snapshot in item.project_snapshots] or list(item.project_ids)
+        return PromptRegistryEntryResponse(
+            experiment_id=item.id,
+            experiment_name=item.name,
+            project_ids=list(item.project_ids),
+            project_names=project_names,
+            status=item.status,
+            baseline=PromptSnapshotResponse.model_validate(baseline),
+            optimized=PromptSnapshotResponse.model_validate(optimized) if optimized else None,
+            baseline_metrics=self._coverage_metrics(comparison.baseline_metrics if comparison else None),
+            optimized_metrics=optimized.metrics if optimized else PromptCoverageMetrics(),
+            absolute_gain=comparison.absolute_gain if comparison else None,
+            created_at=item.created_at,
+            updated_at=item.updated_at,
         )
 
     async def review_prompt_version(
