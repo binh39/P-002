@@ -276,9 +276,7 @@ class ExperimentService:
         if existing is not None:
             return existing
         comparison = comparison or (
-            await self.repository.get_comparison_run(item.comparison_run_id)
-            if item.comparison_run_id
-            else None
+            await self.repository.get_comparison_run(item.comparison_run_id) if item.comparison_run_id else None
         )
         if comparison is None or comparison.status not in {
             ExperimentStatus.COMPARISON_SUCCEEDED,
@@ -1037,9 +1035,7 @@ class ExperimentService:
         item = await self._owned(experiment_id, owner_id)
         return await self._prompt_registry_entry(item)
 
-    async def list_prompt_registry(
-        self, owner_id: str, offset: int = 0, limit: int = 50
-    ) -> PromptRegistryListResponse:
+    async def list_prompt_registry(self, owner_id: str, offset: int = 0, limit: int = 50) -> PromptRegistryListResponse:
         experiments = await self.repository.list_for_owner(owner_id)
         total = len(experiments)
         page = experiments[offset : offset + limit]
@@ -1055,28 +1051,20 @@ class ExperimentService:
         baseline = await self._ensure_baseline_prompt_snapshot(item)
         optimized = await self._ensure_optimized_prompt_snapshot(item)
         comparison = (
-            await self.repository.get_comparison_run(item.comparison_run_id)
-            if item.comparison_run_id
-            else None
+            await self.repository.get_comparison_run(item.comparison_run_id) if item.comparison_run_id else None
         )
         optimization = (
-            await self.repository.get_optimization_run(item.optimization_run_id)
-            if item.optimization_run_id
-            else None
+            await self.repository.get_optimization_run(item.optimization_run_id) if item.optimization_run_id else None
         )
         cost_report = optimization.cost_report if optimization else {}
         per_prompt_cost = cost_report.get("coverup_by_prompt") or {}
-        baseline_cost = float(
-            (per_prompt_cost.get(baseline.prompt_digest) or {}).get("estimated_cost_usd") or 0.0
-        )
+        baseline_cost = float((per_prompt_cost.get(baseline.prompt_digest) or {}).get("estimated_cost_usd") or 0.0)
         optimized_cost = float(optimization.estimated_cost_usd) if optimization else 0.0
         baseline_response = PromptSnapshotResponse.model_validate(baseline).model_copy(
             update={"estimated_cost_usd": baseline_cost}
         )
         optimized_response = (
-            PromptSnapshotResponse.model_validate(optimized).model_copy(
-                update={"estimated_cost_usd": optimized_cost}
-            )
+            PromptSnapshotResponse.model_validate(optimized).model_copy(update={"estimated_cost_usd": optimized_cost})
             if optimized
             else None
         )
@@ -1262,9 +1250,7 @@ class ExperimentService:
             raise AppError(422, "INVALID_ARTIFACT", "Test-generation manifest must be a JSON object")
         return _redact_artifact_value(manifest)
 
-    async def get_test_generation_text_artifact(
-        self, run_id: str, artifact_name: str, owner_id: str
-    ) -> dict[str, str]:
+    async def get_test_generation_text_artifact(self, run_id: str, artifact_name: str, owner_id: str) -> dict[str, str]:
         """Return an indexed generated test or coverage report as bounded UTF-8 text."""
         if not re.fullmatch(r"file-(generated-test|coverage)-[1-9][0-9]*", artifact_name):
             raise AppError(404, "ARTIFACT_NOT_FOUND", "Text artifact was not found in this final test-generation run")
@@ -1331,7 +1317,9 @@ class ExperimentService:
                         "pytest_args": item.settings.pytest_args,
                         "random_seed": run.random_seed,
                     },
-                    projects=item.project_snapshots if any(snapshot.archive_object for snapshot in item.project_snapshots) else None,
+                    projects=item.project_snapshots
+                    if any(snapshot.archive_object for snapshot in item.project_snapshots)
+                    else None,
                     provider_secret_refs=run.provider_secret_refs,
                 )
                 run.cloud_deadline_at = datetime.now(UTC) + timedelta(seconds=self.cloud_test_generator.timeout_seconds)
@@ -1352,9 +1340,7 @@ class ExperimentService:
             }
             run.artifact_objects = _validated_final_test_artifact_objects(prefix, artifacts)
             run.status = (
-                TestGenerationStatus.PARTIAL
-                if result.get("status") == "partial"
-                else TestGenerationStatus.COMPLETED
+                TestGenerationStatus.PARTIAL if result.get("status") == "partial" else TestGenerationStatus.COMPLETED
             )
             run.finished_at = datetime.now(UTC)
         except Exception as exc:
