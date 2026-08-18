@@ -21,7 +21,7 @@ export function currentNavigationId(pathname: string): NavigationId {
   }
   if (pathname.startsWith("/docs/coverage")) return "coverage";
   if (pathname.startsWith("/prompts")) return "registry";
-  if (pathname.startsWith("/test-cases")) return "testCases";
+  if (pathname.startsWith("/test-cases") || pathname.startsWith("/test-suites")) return "testCases";
   if (pathname.startsWith("/settings")) return "settings";
   return "dashboard";
 }

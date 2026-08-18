@@ -330,7 +330,7 @@ export default function PromptRegistryDetail() {
           prompt={entry.baseline.prompt}
           action={
             <PromptActions
-              label="Generate baseline tests"
+              label="Generate Tests"
               disabled={activeRole === "optimized"}
               loading={activeRole === "baseline"}
               onClick={() => testGeneration.mutate("baseline")}
@@ -342,7 +342,7 @@ export default function PromptRegistryDetail() {
           prompt={selectedPrompt}
           action={
             <PromptActions
-              label="Generate final tests"
+              label="Generate Tests"
               disabled={selected === null || activeRole === "baseline"}
               loading={activeRole === "optimized"}
               onClick={() => testGeneration.mutate("optimized")}

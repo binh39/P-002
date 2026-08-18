@@ -112,8 +112,13 @@ export default function TestCases() {
     <div className="platform-page test-cases-page">
       <PageHeader
         eyebrow="Generated final suites"
-        title="Test Cases"
-        description="Only user-requested test suites generated from immutable prompt snapshots are shown here."
+        title="Test Suites"
+        description="Standalone test suites generated from prompts saved in Prompt Registry."
+        actions={
+          <button className="primary-button" onClick={() => navigate("/test-suites/new")}>
+            Create Test Suites
+          </button>
+        }
       />
       <section className="platform-card registry-filters">
         <label className="registry-search-field">

@@ -330,7 +330,7 @@ export default function TestCaseDetail() {
             ? query.error.message
             : "The requested test run was not found."}
         </p>
-        <button onClick={() => navigate("/test-cases")}>Back to Test Cases</button>
+        <button onClick={() => navigate("/test-cases")}>Back to Test Suites</button>
       </div>
     );
   }
@@ -339,7 +339,7 @@ export default function TestCaseDetail() {
   return (
     <div className="platform-page test-case-detail-page">
       <button className="back-link" onClick={() => navigate("/test-cases")}>
-        ← Test Cases
+        ← Test Suites
       </button>
       <PageHeader
         eyebrow={`Experiment · ${run.experimentId}`}

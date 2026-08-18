@@ -6905,6 +6905,114 @@ textarea {
   display: none;
 }
 
+.wizard-stepper {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.wizard-step {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 13px;
+  border: 1px solid var(--border, #dce1ec);
+  border-radius: 10px;
+  color: var(--muted, #667085);
+  background: #fff;
+  font-size: 12px;
+}
+
+.wizard-step span {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #eef2ff;
+  color: var(--primary, #4f6ef7);
+  font-weight: 700;
+}
+
+.wizard-step.is-active {
+  border-color: color-mix(in srgb, var(--primary, #4f6ef7) 45%, transparent);
+  color: var(--text, #1d2939);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary, #4f6ef7) 8%, transparent);
+}
+
+.wizard-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.wizard-heading h2 {
+  margin: 4px 0;
+}
+
+.wizard-heading p {
+  margin: 0;
+  color: var(--muted, #667085);
+}
+
+.create-suite-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.create-suite-project-picker {
+  padding: 16px;
+  border: 1px solid var(--border, #dce1ec);
+  border-radius: 12px;
+  background: #fbfcff;
+}
+
+.create-suite-project-picker .card-heading {
+  margin-bottom: 12px;
+}
+
+.create-suite-project-picker .card-heading p {
+  margin: 0;
+  color: var(--muted, #667085);
+}
+
+.create-suite-project-list {
+  display: grid;
+  gap: 8px;
+}
+
+.create-suite-project {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 12px;
+  border: 1px solid var(--border, #dce1ec);
+  border-radius: 9px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.create-suite-project.is-selected {
+  border-color: color-mix(in srgb, var(--primary, #4f6ef7) 42%, transparent);
+  background: #f7f8ff;
+}
+
+.create-suite-project input {
+  accent-color: var(--primary, #4f6ef7);
+}
+
+.create-suite-project span {
+  display: grid;
+  gap: 3px;
+}
+
+.create-suite-project small {
+  color: var(--muted, #667085);
+}
+
+.create-suite-review {
+  margin: 0;
+}
+
 .registry-row {
   cursor: pointer;
 }
