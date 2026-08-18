@@ -707,9 +707,9 @@ Create experiment
 
 - [ ]  ThÃªm backend API list prompt versions theo owner, status, experiment vÃ  pagination.
 - [ ]  Chá»‘t semantics cho `active`, `approved`, `rejected`, `archived`; khÃ´ng dÃ¹ng status chá»‰ tá»“n táº¡i trong UI.
-- [ ]  Ná»‘i Prompt Registry vÃ o repository HTTP tháº­t.
+- [X]  Ná»‘i Prompt Registry vÃ o repository HTTP tháº­t.
 - [ ]  Hiá»ƒn thá»‹ prompt lineage, source experiment, comparison metrics vÃ  audit decision.
-- [ ]  XÃ³a danh sÃ¡ch prompt hard-code trong `Registry.tsx` sau khi API list hoáº¡t Ä‘á»™ng.
+- [X]  XÃ³a danh sÃ¡ch prompt hard-code trong `Registry.tsx` sau khi API list hoáº¡t Ä‘á»™ng.
 
 #### Prompt Registry và Final Test Cases
 
@@ -719,15 +719,15 @@ Create experiment
 
 ##### A. Chốt domain và dữ liệu Prompt Registry
 
-- [ ]  Mỗi experiment chỉ hiển thị một row trong Prompt Registry; không tách baseline và optimized thành hai row.
+- [X]  Mỗi experiment chỉ hiển thị một row trong Prompt Registry; không tách baseline và optimized thành hai row.
 - [ ]  Row experiment hiển thị tên experiment, baseline score (khi di chuột vào hiện statement coverage, branch coverage của baseline), optimized score (khi di chuột vào hiện statement coverage, branch coverage), mức cải thiện, generation model, optimization model, cost và thời điểm tạo. Lưu ý hiển thị gọn trong bảng đó luôn để người dùng không phải cuộn sang trái, phải. (Nếu nội dung dài quá thì bảo tôi để xem xét bỏ thời điểm tạo)
 - [ ]  Không hiển thị version/latency ở danh sách chính; chỉ hiển thị trạng thái khi experiment chưa hoàn tất
   hoặc thất bại.
-- [ ]  Lưu hai prompt snapshot immutable cho mỗi experiment với role `baseline` và `optimized`.
-- [ ]  Mỗi prompt snapshot lưu `initial`, `error`, prompt digest, experiment ID, source snapshot digest,
+- [X]  Lưu hai prompt snapshot immutable cho mỗi experiment với role `baseline` và `optimized`.
+- [X]  Mỗi prompt snapshot lưu `initial`, `error`, prompt digest, experiment ID, source snapshot digest,
   dataset/split/seed, runner protocol, COVERUP_MODEL, OPTIMIZE_MODEL, metrics và cost tương ứng.
-- [ ]  Không sửa prompt snapshot đã có kết quả; mọi chỉnh sửa thủ công phải tạo draft/prompt mới với digest mới.
-- [ ]  Phân biệt rõ COVERUP_MODEL dùng prompt để sinh test và OPTIMIZE_MODEL dùng để đề xuất prompt mới.
+- [X]  Không sửa prompt snapshot đã có kết quả; mọi chỉnh sửa thủ công phải tạo draft/prompt mới với digest mới.
+- [X]  Phân biệt rõ COVERUP_MODEL dùng prompt để sinh test và OPTIMIZE_MODEL dùng để đề xuất prompt mới.
 - [ ]  Thiết kế API owner-scoped để list experiment registry có pagination/filter/search và lấy detail của
   một experiment cùng hai prompt snapshot.
 - [ ]  Thiết kế artifact references; metadata nhỏ lưu Firestore, prompt/report/code/artifact lớn lưu private GCS.
@@ -796,7 +796,7 @@ Create experiment
 - [ ]  Thêm syntax highlighting, copy code, unified test diff, download file và download toàn bộ suite ZIP.
 - [ ]  Nếu có coverage line data, đánh dấu dòng source covered/missed và branch còn thiếu.
 - [ ]  Với paired run, hiển thị target improved/unchanged/regressed/failed và cho chuyển nhanh giữa các target.
-- [ ]  Test Cases không có mock data trong connected/production mode.
+- [X]  Test Cases không có mock data trong connected/production mode.
 
 ##### G. Verification và Definition of Done
 
@@ -806,7 +806,7 @@ Create experiment
 - [ ]  Test user A không thể list/xem/download/delete TestGenerationRun hoặc artifact của user B.
 - [ ]  Browser E2E: experiment thành công -> chọn optimized -> generate -> poll -> xem code/coverage -> download ZIP.
 - [ ]  Browser E2E paired comparison: cùng config -> xem baseline/optimized tests và coverage delta.
-- [ ]  Xác nhận Test Cases API không trả về run/artifact nội bộ của quá trình optimize prompt.
+- [X]  Xác nhận Test Cases API không trả về run/artifact nội bộ của quá trình optimize prompt.
 - [ ]  Production smoke trên ít nhất một project upload thật với optimized prompt và một paired comparison nhỏ.
 - [ ]  Cập nhật README/API contract/runbook sau khi vertical slice Final Test Cases chạy production thành công.
 
