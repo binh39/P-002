@@ -5,6 +5,10 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 SUPPORTED_MODELS = (
+    "google/gemini-2.5-flash",
+    "google/gemini-2.5-flash-lite",
+    "google/gemini-2.5-pro",
+    # ``gemini/`` remains accepted for immutable historical experiments.
     "gemini/gemini-2.5-flash",
     "gemini/gemini-2.5-flash-lite",
     "gemini/gemini-2.5-pro",
@@ -416,6 +420,10 @@ class CreateTestGenerationRequest(StrictModel):
     """Request a new immutable final suite from an experiment prompt snapshot."""
 
     prompt_role: PromptRole
+    name: str = Field(default="Test Suite", min_length=1, max_length=120)
+    project_ids: list[str] = Field(default_factory=list, max_length=50)
+    sampling_method: SamplingMethod = SamplingMethod.RANDOM
+    function_count: int | None = Field(default=None, ge=1, le=500)
     scope: TestGenerationScope = TestGenerationScope.PROJECT
     source_files: list[str] = Field(default_factory=list, max_length=200)
     function_ids: list[str] = Field(default_factory=list, max_length=500)
@@ -436,9 +444,15 @@ class CreateTestGenerationRequest(StrictModel):
             raise ValueError("Duplicate source files are not allowed")
         if len(self.function_ids) != len(set(self.function_ids)):
             raise ValueError("Duplicate function IDs are not allowed")
+        if len(self.project_ids) != len(set(self.project_ids)):
+            raise ValueError("Duplicate project IDs are not allowed")
         if self.scope == TestGenerationScope.MODULES and not self.source_files:
             raise ValueError("Module scope requires source_files")
-        if self.scope == TestGenerationScope.FUNCTIONS and not self.function_ids:
+        if (
+            self.scope == TestGenerationScope.FUNCTIONS
+            and not self.function_ids
+            and self.sampling_method == SamplingMethod.MANUAL
+        ):
             raise ValueError("Function scope requires function_ids")
         if self.scope == TestGenerationScope.PROJECT and (self.source_files or self.function_ids):
             raise ValueError("Project scope cannot include source_files or function_ids")
@@ -448,11 +462,14 @@ class CreateTestGenerationRequest(StrictModel):
 class TestGenerationRunResponse(StrictModel):
     id: str
     experiment_id: str
+    name: str = "Test Suite"
     prompt_snapshot_id: str
     prompt_digest: str
     prompt_role: PromptRole
     status: TestGenerationStatus
     project_ids: list[str] = Field(default_factory=list)
+    sampling_method: SamplingMethod = SamplingMethod.RANDOM
+    runtime_environment_id: str | None = None
     source_snapshot_digest: str
     dataset_digest: str
     scope: TestGenerationScope
@@ -483,6 +500,7 @@ class TestGenerationRunRecord(TestGenerationRunResponse):
     owner_id: str
     idempotency_key: str | None = None
     provider_secret_refs: dict[str, dict[str, str]] = Field(default_factory=dict)
+    target_snapshots: list[TargetReference] = Field(default_factory=list)
 
 
 class TestGenerationRunListResponse(StrictModel):

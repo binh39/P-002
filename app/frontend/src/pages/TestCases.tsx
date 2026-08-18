@@ -61,7 +61,7 @@ function timestamp(value: string) {
 }
 
 function runMatchesSearch(run: TestGenerationRun, value: string) {
-  return [run.id, run.experimentId, run.projectIds.join(" "), run.model]
+  return [run.name, run.id, run.experimentId, run.projectIds.join(" "), run.model]
     .join(" ")
     .toLowerCase()
     .includes(value);
@@ -203,7 +203,7 @@ export default function TestCases() {
                     }}
                   >
                     <td className="test-suite-name-cell">
-                      <strong title={run.experimentId}>{run.experimentId}</strong>
+                      <strong title={run.name}>{run.name}</strong>
                       <small title={run.projectIds.join(", ")}>{run.projectIds.join(", ")}</small>
                     </td>
                     <td>{run.promptRole === "baseline" ? "Baseline" : "Final"}</td>

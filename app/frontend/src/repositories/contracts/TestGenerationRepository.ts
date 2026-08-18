@@ -1,7 +1,15 @@
 import type { PromptRole, TestGenerationRun, TestGenerationRunList } from "@/domain/experiments";
+import type { SamplingMethod } from "@/domain/experimentConfiguration";
 
 export interface CreateTestGenerationInput {
   promptRole: PromptRole;
+  name?: string;
+  projectIds?: string[];
+  samplingMethod?: SamplingMethod;
+  functionCount?: number | null;
+  functionIds?: string[];
+  model?: string;
+  randomSeed?: number;
   idempotencyKey: string;
 }
 

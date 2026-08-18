@@ -7009,6 +7009,53 @@ textarea {
   color: var(--muted, #667085);
 }
 
+.function-selection-list {
+  display: grid;
+  gap: 10px;
+}
+
+.create-suite-function-list {
+  display: grid;
+  max-height: 420px;
+  gap: 7px;
+  overflow: auto;
+  padding: 2px;
+}
+
+.create-suite-function-list label {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--border, #dce1ec);
+  border-radius: 9px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.create-suite-function-list label.is-selected {
+  border-color: color-mix(in srgb, var(--primary, #4f6ef7) 42%, transparent);
+  background: #f7f8ff;
+}
+
+.create-suite-function-list input {
+  margin-top: 3px;
+  accent-color: var(--primary, #4f6ef7);
+}
+
+.create-suite-function-list span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.create-suite-function-list small {
+  overflow: hidden;
+  color: var(--muted, #667085);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .create-suite-review {
   margin: 0;
 }

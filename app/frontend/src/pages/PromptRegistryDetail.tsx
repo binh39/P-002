@@ -1,16 +1,10 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { type ReactNode, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import { useLocation, useRoute } from "wouter";
 
 import { useRepositories } from "@/app/providers";
 import { PageHeader } from "@/components/PlatformUI";
-import type {
-  Experiment,
-  PromptCoverageMetrics,
-  PromptBundle,
-  PromptRole,
-  TestGenerationRun,
-} from "@/domain/experiments";
+import type { Experiment, PromptCoverageMetrics, PromptBundle } from "@/domain/experiments";
 
 function percentage(value: number | null) {
   return value === null ? "—" : `${(value * 100).toFixed(1)}%`;
@@ -184,22 +178,14 @@ function ExperimentSettings({ experiment }: { experiment: Experiment }) {
   );
 }
 
-function newIdempotencyKey(role: PromptRole) {
-  const suffix =
-    globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  return `prompt-registry-${role}-${suffix}`;
-}
-
 function PromptActions({
   label,
   disabled,
-  loading,
   onClick,
   title,
 }: {
   label: string;
   disabled: boolean;
-  loading: boolean;
   onClick: () => void;
   title?: string;
 }) {
@@ -207,11 +193,11 @@ function PromptActions({
     <button
       className="secondary-button"
       type="button"
-      disabled={disabled || loading}
+      disabled={disabled}
       onClick={onClick}
       title={title}
     >
-      {loading ? "Starting test run…" : label}
+      {label}
     </button>
   );
 }
@@ -219,12 +205,7 @@ function PromptActions({
 export default function PromptRegistryDetail() {
   const [, params] = useRoute("/prompts/:experimentId");
   const [, navigate] = useLocation();
-  const {
-    promptRegistry,
-    experiments,
-    testGeneration: testGenerationRepository,
-  } = useRepositories();
-  const [testGenerationRun, setTestGenerationRun] = useState<TestGenerationRun | null>(null);
+  const { promptRegistry, experiments } = useRepositories();
   const experimentId = params?.experimentId ?? "";
   const query = useQuery({
     queryKey: ["prompt-registry", experimentId],
@@ -236,17 +217,6 @@ export default function PromptRegistryDetail() {
     queryFn: ({ signal }) => experiments.get(experimentId, signal),
     enabled: experimentId !== "",
   });
-  const testGeneration = useMutation({
-    mutationFn: async (role: PromptRole) => {
-      const run = await testGenerationRepository.create(experimentId, {
-        promptRole: role,
-        idempotencyKey: newIdempotencyKey(role),
-      });
-      return run;
-    },
-    onSuccess: setTestGenerationRun,
-  });
-
   if (query.isPending) {
     return (
       <div className="page-state" role="status">
@@ -271,7 +241,6 @@ export default function PromptRegistryDetail() {
   const entry = query.data;
   const selected = entry.optimized;
   const selectedPrompt = selected?.prompt ?? entry.baseline.prompt;
-  const activeRole = testGeneration.isPending ? testGeneration.variables : undefined;
 
   return (
     <div className="platform-page prompt-registry-detail-page">
@@ -283,34 +252,6 @@ export default function PromptRegistryDetail() {
         title={entry.experimentName}
         description={`${entry.projectNames.join(", ") || entry.projectIds.join(", ")} · final prompt snapshots`}
       />
-
-      {testGeneration.isError && (
-        <section className="prompt-registry-generation-notice is-error" role="alert">
-          {testGeneration.error instanceof Error
-            ? testGeneration.error.message
-            : "Could not start final test generation."}
-        </section>
-      )}
-      {testGenerationRun && (
-        <section
-          className={`prompt-registry-generation-notice ${
-            testGenerationRun.status === "failed" ? "is-error" : ""
-          }`}
-          role={testGenerationRun.status === "failed" ? "alert" : "status"}
-        >
-          {testGenerationRun.status === "failed" ? (
-            <>
-              Test generation failed:{" "}
-              {testGenerationRun.errorMessage ?? "The runner did not return a reason."}
-            </>
-          ) : (
-            <>
-              {testGenerationRun.promptRole === "baseline" ? "Baseline" : "Final"} test run{" "}
-              <code>{testGenerationRun.id}</code> is {testGenerationRun.status.replace(/_/g, " ")}.
-            </>
-          )}
-        </section>
-      )}
 
       <section className="platform-card prompt-registry-summary">
         <div className="prompt-registry-metric-comparison">
@@ -331,9 +272,12 @@ export default function PromptRegistryDetail() {
           action={
             <PromptActions
               label="Generate Tests"
-              disabled={activeRole === "optimized"}
-              loading={activeRole === "baseline"}
-              onClick={() => testGeneration.mutate("baseline")}
+              disabled={false}
+              onClick={() =>
+                navigate(
+                  `/test-suites/new?experiment=${encodeURIComponent(experimentId)}&prompt=baseline`,
+                )
+              }
             />
           }
         />
@@ -343,9 +287,12 @@ export default function PromptRegistryDetail() {
           action={
             <PromptActions
               label="Generate Tests"
-              disabled={selected === null || activeRole === "baseline"}
-              loading={activeRole === "optimized"}
-              onClick={() => testGeneration.mutate("optimized")}
+              disabled={selected === null}
+              onClick={() =>
+                navigate(
+                  `/test-suites/new?experiment=${encodeURIComponent(experimentId)}&prompt=optimized`,
+                )
+              }
               title={
                 selected === null
                   ? "Complete the final comparison before generating final tests."

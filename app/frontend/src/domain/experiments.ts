@@ -252,11 +252,14 @@ export interface TestGenerationMetrics {
 export interface TestGenerationRun {
   id: string;
   experimentId: string;
+  name: string;
   promptSnapshotId: string;
   promptDigest: string;
   promptRole: PromptRole;
   status: TestGenerationStatus;
   projectIds: string[];
+  samplingMethod: "random" | "most_branches" | "most_statements" | "manual";
+  runtimeEnvironmentId: string | null;
   sourceSnapshotDigest: string;
   datasetDigest: string;
   scope: "project" | "modules" | "functions";
