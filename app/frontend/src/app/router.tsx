@@ -21,6 +21,7 @@ const ProjectDetail = lazy(() => import("@/pages/ProjectDetail"));
 const Projects = lazy(() => import("@/pages/Projects"));
 const Settings = lazy(() => import("@/pages/Settings"));
 const TestCases = lazy(() => import("@/pages/TestCases"));
+const CreateTestSuite = lazy(() => import("@/pages/CreateTestSuite"));
 const TestCaseDetail = lazy(() => import("@/pages/TestCaseDetail"));
 
 const legacyPagePaths = {
@@ -124,6 +125,9 @@ function RoutedApplication() {
           </Route>
           <Route path="/test-cases">
             <TestCases />
+          </Route>
+          <Route path="/test-suites/new">
+            <CreateTestSuite />
           </Route>
           <Route path="/test-cases/:runId">
             <TestCaseDetail />

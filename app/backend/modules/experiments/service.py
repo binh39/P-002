@@ -1101,7 +1101,7 @@ class ExperimentService:
         }
 
     @staticmethod
-    def _select_test_generation_targets(
+    def _select_legacy_test_generation_targets(
         item: ExperimentRecord, payload: CreateTestGenerationRequest
     ) -> list[TargetReference]:
         if payload.scope == TestGenerationScope.PROJECT:
@@ -1119,9 +1119,79 @@ class ExperimentService:
             raise AppError(409, "TARGET_SNAPSHOT_INVALID", "The experiment contains duplicate immutable targets")
         return selected
 
-    async def _require_test_generation_projects(self, item: ExperimentRecord, owner_id: str) -> None:
+    async def _select_configured_test_generation_targets(
+        self, item: ExperimentRecord, owner_id: str, payload: CreateTestGenerationRequest
+    ) -> list[TargetReference]:
+        """Build a fresh, immutable final-suite target snapshot from the selected projects.
+
+        An experiment's prompt is reusable for every analyzed function in the
+        projects that produced that prompt; it is not limited to the smaller
+        train/validation/test sample used by GEPA.
+        """
+        selected_project_ids = payload.project_ids or list(item.project_ids)
+        snapshots = {snapshot.project_id: snapshot for snapshot in item.project_snapshots}
+        unknown = sorted(set(selected_project_ids) - set(snapshots))
+        if unknown:
+            raise AppError(
+                422,
+                "TEST_GENERATION_PROJECT_NOT_IN_EXPERIMENT",
+                "A test suite can only use projects from the selected prompt's experiment",
+            )
+        environments = {snapshots[project_id].runtime_environment_id for project_id in selected_project_ids}
+        if len(environments) != 1:
+            raise AppError(
+                422,
+                "RUNTIME_ENVIRONMENT_MISMATCH",
+                "Every selected Test Suite project must use the same runtime environment",
+            )
+        available: dict[str, TargetReference] = {}
+        for project_id in selected_project_ids:
+            project = await self.projects.require_owned(project_id, owner_id)
+            snapshot = snapshots[project_id]
+            for function in await self._list_functions(project_id):
+                if not is_valid_optimization_function(function):
+                    continue
+                source_file = self._runner_source_file(project, function.file)
+                if source_file is None:
+                    continue
+                target = TargetReference(
+                    project_id=project_id,
+                    function_id=function.id,
+                    project=snapshot.runner_project,
+                    source_file=source_file,
+                    symbol=function.qualified_name,
+                    statements=function.statements,
+                    branches=function.branches,
+                    loc=function.loc,
+                )
+                available[target.key] = target
+        if not available:
+            raise AppError(422, "TEST_GENERATION_SCOPE_EMPTY", "No valid functions are available")
+        try:
+            if payload.sampling_method == SamplingMethod.MANUAL:
+                selected_keys = set(payload.function_ids)
+                missing = selected_keys - set(available)
+                if missing:
+                    raise ValueError(f"Unknown selected functions: {', '.join(sorted(missing)[:10])}")
+                selected = [available[key] for key in payload.function_ids]
+            else:
+                selected = select_targets(
+                    available.values(), payload.sampling_method, payload.random_seed, payload.function_count
+                )
+        except ValueError as exc:
+            raise AppError(422, "INVALID_TEST_GENERATION_SELECTION", str(exc)) from exc
+        if not selected:
+            raise AppError(422, "TEST_GENERATION_SCOPE_EMPTY", "The selected test-suite scope has no targets")
+        return selected
+
+    async def _require_test_generation_projects(
+        self, item: ExperimentRecord, owner_id: str, project_ids: list[str] | None = None
+    ) -> None:
         """Confirm the immutable project snapshots still have executable source/runtime inputs."""
+        selected = set(project_ids or item.project_ids)
         for snapshot in item.project_snapshots:
+            if snapshot.project_id not in selected:
+                continue
             project = await self.projects.require_owned(snapshot.project_id, owner_id)
             if self.projects.is_sample(project.id):
                 continue
@@ -1139,7 +1209,8 @@ class ExperimentService:
         payload: CreateTestGenerationRequest,
     ) -> TestGenerationRunResponse:
         item = await self._owned(experiment_id, owner_id)
-        await self._require_test_generation_projects(item, owner_id)
+        requested_project_ids = payload.project_ids or list(item.project_ids)
+        await self._require_test_generation_projects(item, owner_id, requested_project_ids)
         snapshot = await self.repository.get_prompt_snapshot(item.id, payload.prompt_role)
         if snapshot is None:
             if payload.prompt_role == PromptRole.BASELINE:
@@ -1152,7 +1223,16 @@ class ExperimentService:
                 "OPTIMIZED_PROMPT_NOT_READY",
                 "An optimized prompt is available only after the experiment final comparison finishes",
             )
-        targets = self._select_test_generation_targets(item, payload)
+        configured_selection = (
+            bool(payload.project_ids)
+            or payload.function_count is not None
+            or payload.sampling_method != SamplingMethod.RANDOM
+        )
+        targets = (
+            await self._select_configured_test_generation_targets(item, owner_id, payload)
+            if configured_selection
+            else self._select_legacy_test_generation_targets(item, payload)
+        )
         settings = self._test_generation_settings(item, payload)
         model = payload.model or snapshot.coverup_model
         if self.test_generation_dispatcher is None:
@@ -1173,11 +1253,21 @@ class ExperimentService:
             id=new_id(),
             owner_id=owner_id,
             experiment_id=item.id,
+            name=payload.name.strip(),
             prompt_snapshot_id=snapshot.id,
             prompt_digest=snapshot.prompt_digest,
             prompt_role=snapshot.role,
             status=TestGenerationStatus.QUEUED,
-            project_ids=list(snapshot.project_ids),
+            project_ids=list(dict.fromkeys(target.project_id for target in targets)),
+            sampling_method=payload.sampling_method,
+            runtime_environment_id=next(
+                (
+                    project_snapshot.runtime_environment_id
+                    for project_snapshot in item.project_snapshots
+                    if project_snapshot.project_id in requested_project_ids
+                ),
+                None,
+            ),
             source_snapshot_digest=snapshot.source_snapshot_digest,
             dataset_digest=snapshot.dataset_digest,
             scope=payload.scope,
@@ -1197,6 +1287,7 @@ class ExperimentService:
                 environment: {"secret": reference.secret, "version": reference.version}
                 for environment, reference in provider_secret_refs.items()
             },
+            target_snapshots=targets,
             created_at=now,
         )
         await self.repository.create_test_generation_run(run)
@@ -1286,6 +1377,7 @@ class ExperimentService:
             if snapshot is None or snapshot.id != run.prompt_snapshot_id or snapshot.prompt_digest != run.prompt_digest:
                 raise RuntimeError("Immutable prompt snapshot is unavailable")
             targets_by_id = {target.key: target for target in item.targets}
+            targets_by_id.update({target.key: target for target in run.target_snapshots})
             targets = [targets_by_id[target_id] for target_id in run.target_ids if target_id in targets_by_id]
             if len(targets) != len(run.target_ids):
                 raise RuntimeError("The immutable target snapshot is incomplete")
@@ -1321,8 +1413,12 @@ class ExperimentService:
                         "pytest_args": item.settings.pytest_args,
                         "random_seed": run.random_seed,
                     },
-                    projects=item.project_snapshots
-                    if any(snapshot.archive_object for snapshot in item.project_snapshots)
+                    projects=[snapshot for snapshot in item.project_snapshots if snapshot.project_id in run.project_ids]
+                    if any(
+                        snapshot.archive_object
+                        for snapshot in item.project_snapshots
+                        if snapshot.project_id in run.project_ids
+                    )
                     else None,
                     provider_secret_refs=run.provider_secret_refs,
                 )

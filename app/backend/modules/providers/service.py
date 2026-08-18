@@ -176,7 +176,7 @@ def provider_for_model(model: str) -> AIProvider | None:
         return AIProvider.OPENAI
     if model.startswith("deepseek/"):
         return AIProvider.DEEPSEEK
-    if model.startswith("gemini/"):
+    if model.startswith(("gemini/", "google/")):
         return AIProvider.GEMINI
     return None
 

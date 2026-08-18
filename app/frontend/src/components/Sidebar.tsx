@@ -25,7 +25,7 @@ const navItems = [
   { id: "projects" as NavigationId, label: "Projects", Icon: IC.Code },
   { id: "experiments" as NavigationId, label: "Experiments", Icon: IC.Flask },
   { id: "registry" as NavigationId, label: "Prompt Registry", Icon: IC.CheckSquare },
-  { id: "testCases" as NavigationId, label: "Test Cases", Icon: IC.Database },
+  { id: "testCases" as NavigationId, label: "Test Suites", Icon: IC.Database },
 ];
 
 export default function Sidebar({

@@ -4,7 +4,7 @@ import { useLocation, useRoute } from "wouter";
 
 import { useRepositories } from "@/app/providers";
 import { PageHeader, StatCard, StatusBadge } from "@/components/PlatformUI";
-import type { Experiment, TestGenerationStatus } from "@/domain/experiments";
+import type { TestGenerationRun, TestGenerationStatus } from "@/domain/experiments";
 
 const activeStatuses: TestGenerationStatus[] = [
   "queued",
@@ -181,37 +181,25 @@ function TestSuiteMetrics({
   );
 }
 
-const samplingLabels: Record<Experiment["samplingMethod"], string> = {
+const samplingLabels: Record<TestGenerationRun["samplingMethod"], string> = {
   random: "Random",
   most_branches: "Most branches",
   most_statements: "Most statements",
   manual: "Manual selection",
 };
 
-function TestSuiteSettings({ experiment }: { experiment: Experiment }) {
-  const { settings, splitPercentages } = experiment;
+function TestSuiteSettings({ run }: { run: TestGenerationRun }) {
   const values: Array<[string, string]> = [
-    ["Environment", "Cloud Run isolated runner"],
-    ["Function selection", samplingLabels[experiment.samplingMethod]],
-    ["Functions", String(experiment.targetFunctionIds.length)],
-    ["Random seed", String(experiment.splitSeed)],
-    [
-      "Dataset split",
-      `${splitPercentages.train}% train / ${splitPercentages.validation}% valid / ${splitPercentages.test}% test`,
-    ],
-    ["CoverUp model", settings.coverupModel],
-    ["Optimize model", settings.optimizeModel],
+    ["Environment", run.runtimeEnvironmentId || "Cloud Run isolated runner"],
+    ["Function selection", samplingLabels[run.samplingMethod]],
+    ["Functions", String(run.targetIds.length)],
+    ["Random seed", run.samplingMethod === "random" ? String(run.randomSeed) : "None Available"],
+    ["Model", run.model],
     [
       "CoverUp",
-      `${settings.maxAttempts} attempts · ${settings.repeatTests} repeats · concurrency ${settings.maxConcurrency}`,
+      `${run.maxAttempts} attempts · ${run.repeatTests} repeats · concurrency ${run.maxConcurrency}`,
     ],
-    ["Rate limit", settings.rateLimit === null ? "Default" : `${settings.rateLimit} requests/min`],
-    [
-      "GEPA budget",
-      `${settings.maxMetricCalls} metric calls · ${settings.evaluationReplicates} replicate(s)`,
-    ],
-    ["Reflection temperature", String(settings.reflectionTemperature)],
-    ["Pytest arguments", settings.pytestArgs || "Default"],
+    ["Rate limit", run.rateLimit === null ? "Default" : `${run.rateLimit} requests/min`],
   ];
   return (
     <section className="platform-card prompt-registry-settings-card">
@@ -270,7 +258,7 @@ function PythonCode({ content, label }: { content: string; label: string }) {
 export default function TestCaseDetail() {
   const [, params] = useRoute("/test-cases/:runId");
   const [, navigate] = useLocation();
-  const { testGeneration, experiments } = useRepositories();
+  const { testGeneration } = useRepositories();
   const runId = params?.runId ?? "";
   const [selectedTestAlias, setSelectedTestAlias] = useState<string | null>(null);
   const [selectedSourceAlias, setSelectedSourceAlias] = useState<string | null>(null);
@@ -287,11 +275,6 @@ export default function TestCaseDetail() {
     enabled:
       runId !== "" && query.data !== undefined && !activeStatuses.includes(query.data.status),
     retry: 1,
-  });
-  const experimentQuery = useQuery({
-    queryKey: ["experiments", query.data?.experimentId],
-    queryFn: ({ signal }) => experiments.get(query.data?.experimentId ?? "", signal),
-    enabled: query.data !== undefined,
   });
   const indexed = manifestQuery.data ? indexedArtifacts(manifestQuery.data) : [];
   const generatedTests = indexed.filter((artifact) => artifact.kind === "generated_test");
@@ -330,7 +313,7 @@ export default function TestCaseDetail() {
             ? query.error.message
             : "The requested test run was not found."}
         </p>
-        <button onClick={() => navigate("/test-cases")}>Back to Test Cases</button>
+        <button onClick={() => navigate("/test-cases")}>Back to Test Suites</button>
       </div>
     );
   }
@@ -339,12 +322,12 @@ export default function TestCaseDetail() {
   return (
     <div className="platform-page test-case-detail-page">
       <button className="back-link" onClick={() => navigate("/test-cases")}>
-        ← Test Cases
+        ← Test Suites
       </button>
       <PageHeader
         eyebrow={`Experiment · ${run.experimentId}`}
-        title={run.promptRole === "baseline" ? "Baseline test suite" : "Final prompt test suite"}
-        description={`Run ${run.id}`}
+        title={run.name}
+        description={`${run.promptRole === "baseline" ? "Baseline" : "Final"} prompt · Experiment ${run.experimentId}`}
         actions={
           <StatusBadge tone={statusTone(run.status)}>{formatStatus(run.status)}</StatusBadge>
         }
@@ -442,7 +425,7 @@ export default function TestCaseDetail() {
           ) : null}
         </section>
       </section>
-      {experimentQuery.data && <TestSuiteSettings experiment={experimentQuery.data} />}
+      <TestSuiteSettings run={run} />
     </div>
   );
 }

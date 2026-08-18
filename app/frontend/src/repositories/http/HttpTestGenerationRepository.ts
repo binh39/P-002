@@ -28,11 +28,14 @@ interface ApiTestGenerationMetrics {
 interface ApiTestGenerationRun {
   id: string;
   experiment_id: string;
+  name?: string;
   prompt_snapshot_id: string;
   prompt_digest: string;
   prompt_role: TestGenerationRun["promptRole"];
   status: TestGenerationRun["status"];
   project_ids: string[];
+  sampling_method?: TestGenerationRun["samplingMethod"];
+  runtime_environment_id?: string | null;
   source_snapshot_digest: string;
   dataset_digest: string;
   scope: TestGenerationRun["scope"];
@@ -86,11 +89,14 @@ function mapRun(run: ApiTestGenerationRun): TestGenerationRun {
   return {
     id: run.id,
     experimentId: run.experiment_id,
+    name: run.name || `Test Suite ${run.id.slice(0, 8)}`,
     promptSnapshotId: run.prompt_snapshot_id,
     promptDigest: run.prompt_digest,
     promptRole: run.prompt_role,
     status: run.status,
     projectIds: run.project_ids,
+    samplingMethod: run.sampling_method ?? "random",
+    runtimeEnvironmentId: run.runtime_environment_id ?? null,
     sourceSnapshotDigest: run.source_snapshot_digest,
     datasetDigest: run.dataset_digest,
     scope: run.scope,
@@ -164,7 +170,14 @@ export class HttpTestGenerationRepository implements TestGenerationRepository {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt_role: input.promptRole,
-          scope: "project",
+          name: input.name,
+          project_ids: input.projectIds,
+          sampling_method: input.samplingMethod,
+          function_count: input.functionCount,
+          function_ids: input.functionIds,
+          model: input.model,
+          random_seed: input.randomSeed,
+          scope: input.samplingMethod === "manual" ? "functions" : "project",
           idempotency_key: input.idempotencyKey,
         }),
         signal,

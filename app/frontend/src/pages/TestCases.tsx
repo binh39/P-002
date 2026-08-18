@@ -61,7 +61,7 @@ function timestamp(value: string) {
 }
 
 function runMatchesSearch(run: TestGenerationRun, value: string) {
-  return [run.id, run.experimentId, run.projectIds.join(" "), run.model]
+  return [run.name, run.id, run.experimentId, run.projectIds.join(" "), run.model]
     .join(" ")
     .toLowerCase()
     .includes(value);
@@ -112,8 +112,13 @@ export default function TestCases() {
     <div className="platform-page test-cases-page">
       <PageHeader
         eyebrow="Generated final suites"
-        title="Test Cases"
-        description="Only user-requested test suites generated from immutable prompt snapshots are shown here."
+        title="Test Suites"
+        description="Standalone test suites generated from prompts saved in Prompt Registry."
+        actions={
+          <button className="primary-button" onClick={() => navigate("/test-suites/new")}>
+            Create Test Suites
+          </button>
+        }
       />
       <section className="platform-card registry-filters">
         <label className="registry-search-field">
@@ -198,7 +203,7 @@ export default function TestCases() {
                     }}
                   >
                     <td className="test-suite-name-cell">
-                      <strong title={run.experimentId}>{run.experimentId}</strong>
+                      <strong title={run.name}>{run.name}</strong>
                       <small title={run.projectIds.join(", ")}>{run.projectIds.join(", ")}</small>
                     </td>
                     <td>{run.promptRole === "baseline" ? "Baseline" : "Final"}</td>

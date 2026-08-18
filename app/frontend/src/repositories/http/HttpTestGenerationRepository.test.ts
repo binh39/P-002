@@ -97,6 +97,80 @@ describe("HttpTestGenerationRepository", () => {
     expect(result).toMatchObject({ items: [], total: 0, limit: 100 });
   });
 
+  it("sends the named suite target-selection configuration to the API", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: "test-run-configured",
+            experiment_id: "experiment-1",
+            name: "Branch coverage regression",
+            prompt_snapshot_id: "experiment-1:optimized",
+            prompt_digest: "optimized-digest",
+            prompt_role: "optimized",
+            status: "queued",
+            project_ids: ["sample:isort"],
+            sampling_method: "most_branches",
+            runtime_environment_id: "sample-runtime",
+            source_snapshot_digest: "source-digest",
+            dataset_digest: "dataset-digest",
+            scope: "project",
+            source_files: [],
+            function_ids: [],
+            target_ids: [],
+            model: "google/gemini-2.5-flash",
+            random_seed: 23,
+            repeat_tests: 5,
+            max_attempts: 3,
+            max_concurrency: 10,
+            rate_limit: null,
+            cost_ceiling_usd: null,
+            runner_protocol_version: 1,
+            metrics: {},
+            estimated_cost_usd: 0,
+            token_usage: {},
+            artifact_objects: {},
+            error_message: null,
+            created_at: "2026-08-18T00:00:00Z",
+            started_at: null,
+            finished_at: null,
+          }),
+          { status: 202, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    await new HttpTestGenerationRepository().create("experiment-1", {
+      promptRole: "optimized",
+      name: "Branch coverage regression",
+      projectIds: ["sample:isort"],
+      samplingMethod: "most_branches",
+      functionCount: 24,
+      model: "google/gemini-2.5-flash",
+      randomSeed: 23,
+      idempotencyKey: "configured-test-suite-key",
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/prompt-registry/experiment-1/test-generation",
+      expect.objectContaining({
+        body: JSON.stringify({
+          prompt_role: "optimized",
+          name: "Branch coverage regression",
+          project_ids: ["sample:isort"],
+          sampling_method: "most_branches",
+          function_count: 24,
+          function_ids: undefined,
+          model: "google/gemini-2.5-flash",
+          random_seed: 23,
+          scope: "project",
+          idempotency_key: "configured-test-suite-key",
+        }),
+      }),
+    );
+  });
+
   it("retrieves a run and downloads its owner-scoped artifact", async () => {
     vi.stubGlobal(
       "fetch",

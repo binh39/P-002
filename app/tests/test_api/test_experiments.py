@@ -518,6 +518,39 @@ async def test_final_test_generation_is_owner_scoped_and_idempotent(client, app)
 
 
 @pytest.mark.asyncio
+async def test_final_test_generation_uses_its_own_project_selection_snapshot(client, app):
+    created = await client.post(
+        "/api/v1/experiments",
+        headers=AUTH_HEADERS,
+        json={"project_ids": ["sample:isort"], "name": "Reusable final suite prompt", "max_targets": 3},
+    )
+    assert created.status_code == 201, created.text
+    experiment = created.json()
+    response = await client.post(
+        f"/api/v1/prompt-registry/{experiment['id']}/test-generation",
+        headers=AUTH_HEADERS,
+        json={
+            "prompt_role": "baseline",
+            "name": "Branch-heavy isort suite",
+            "project_ids": ["sample:isort"],
+            "sampling_method": "most_branches",
+            "function_count": 4,
+            "random_seed": 19,
+        },
+    )
+    assert response.status_code == 202, response.text
+    run = response.json()
+    assert run["name"] == "Branch-heavy isort suite"
+    assert run["sampling_method"] == "most_branches"
+    assert run["project_ids"] == ["sample:isort"]
+    assert len(run["target_ids"]) == 4
+    stored = await app.state.services.experiments.repository.get_test_generation_run(run["id"])
+    assert stored is not None
+    assert len(stored.target_snapshots) == 4
+    assert {target.key for target in stored.target_snapshots} == set(run["target_ids"])
+
+
+@pytest.mark.asyncio
 async def test_final_test_generation_rejects_optimized_prompt_before_comparison(client):
     created = await client.post(
         "/api/v1/experiments",
