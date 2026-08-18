@@ -39,8 +39,8 @@ const availableModels = [
   "openai/gpt-4.1",
   "openai/gpt-5-mini",
   "openai/gpt-5",
-  "deepseek/deepseek-chat",
-  "deepseek/deepseek-reasoner",
+  "deepseek/deepseek-v4-flash",
+  "deepseek/deepseek-v4-pro",
 ] as const;
 const sparseBaselinePrompt: PromptBundle = {
   initial: `Write pytest tests for {filename} that cover {coverage_targets}.
