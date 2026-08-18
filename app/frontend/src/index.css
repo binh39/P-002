@@ -975,8 +975,8 @@ body {
 }
 .provider-key-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 16px;
   align-items: center;
 }
 .provider-key-actions {
@@ -995,6 +995,10 @@ body {
   margin: 0;
 }
 @media (max-width: 520px) {
+  .provider-key-row {
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 10px;
+  }
   .provider-key-actions {
     grid-template-columns: minmax(0, 1fr) auto;
   }
