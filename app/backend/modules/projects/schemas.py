@@ -3,6 +3,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
+MINIMUM_RUNTIME_PROTOCOL_VERSION = 3
+
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")

@@ -20,22 +20,30 @@ from pathlib import Path, PurePosixPath
 MAX_ARCHIVE_ENTRIES = 20_000
 MAX_UNCOMPRESSED_BYTES = 250 * 1024 * 1024
 MAX_FILE_BYTES = 25 * 1024 * 1024
-# Bump whenever the reusable virtual environment gains a runner dependency.
-# Existing bundles are immutable and must be rebuilt under the new protocol.
 RUNTIME_PROTOCOL_VERSION = 3
-_PACKAGE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-RUNTIME_TOOL_REQUIREMENTS = (
+RUNTIME_TOOL_PACKAGES = (
     "pytest==9.1.1",
     "pytest-repeat==0.9.4",
     "coverage==7.15.2",
     "slipcover==1.0.18",
 )
-PROJECT_DEPENDENCY_FILES = (
+DEPENDENCY_FILES = (
+    "uv.lock",
+    "pyproject.toml",
+    "requirements.txt",
+    "requirements-dev.txt",
+    "requirements-test.txt",
+    "test-requirements.txt",
+    "setup.py",
+    "setup.cfg",
+)
+LEGACY_REQUIREMENT_FILES = (
     "requirements.txt",
     "requirements-dev.txt",
     "requirements-test.txt",
     "test-requirements.txt",
 )
+_PACKAGE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 @dataclass(slots=True)
@@ -233,11 +241,7 @@ def prepare_environment(
             safe_extract_zip(spec.archive, extracted)
             root = find_project_root(extracted).resolve()
             source, test_dir = detect_layout(root, spec.configured_source, spec.configured_tests)
-            dependency_files = [
-                name
-                for name in ("uv.lock", "pyproject.toml", *PROJECT_DEPENDENCY_FILES, "setup.py", "setup.cfg")
-                if (root / name).is_file()
-            ]
+            dependency_files = [name for name in DEPENDENCY_FILES if (root / name).is_file()]
             roots[spec.project_id] = root
             sources[spec.project_id] = source
             tests[spec.project_id] = test_dir
@@ -258,7 +262,7 @@ def prepare_environment(
             _run(
                 result,
                 "create shared environment",
-                [uv, "venv", "--python", sys.executable, "--system-site-packages", str(venv_dir)],
+                [uv, "venv", "--python", sys.executable, str(venv_dir)],
                 workspace,
                 deadline,
                 maximum_output_bytes,
@@ -270,36 +274,37 @@ def prepare_environment(
         requirements: list[Path] = []
         installable_roots: list[Path] = []
         for project_id, root in roots.items():
-            if (root / "uv.lock").is_file() and (root / "pyproject.toml").is_file() and uv:
+            if (root / "pyproject.toml").is_file() and uv:
                 exported = workspace / "resolved" / f"{project_id}.txt"
                 exported.parent.mkdir(parents=True, exist_ok=True)
-                _run(
-                    result,
-                    f"export {project_id} lock",
+                export_command = [uv, "export"]
+                if (root / "uv.lock").is_file():
+                    export_command.append("--frozen")
+                export_command.extend(
                     [
-                        uv,
-                        "export",
-                        "--frozen",
+                        "--all-groups",
                         "--no-emit-project",
                         "--format",
                         "requirements-txt",
                         "--output-file",
                         str(exported),
-                    ],
+                    ]
+                )
+                _run(
+                    result,
+                    f"export {project_id} lock",
+                    export_command,
                     root,
                     deadline,
                     maximum_output_bytes,
                 )
                 requirements.append(exported)
             else:
-                requirements.extend(root / name for name in PROJECT_DEPENDENCY_FILES if (root / name).is_file())
+                requirements.extend(root / name for name in LEGACY_REQUIREMENT_FILES if (root / name).is_file())
             if any((root / name).is_file() for name in ("pyproject.toml", "setup.py", "setup.cfg")):
                 installable_roots.append(root)
 
-        # These are runner-owned tools, not project dependencies.  Install
-        # them into every restored environment even when the project has no
-        # dependency manifest or the runner falls back from uv to pip.
-        if requirements or installable_roots or RUNTIME_TOOL_REQUIREMENTS:
+        if requirements or installable_roots or uv:
             command = (
                 [uv, "pip", "install", "--python", str(python)]
                 if uv
@@ -307,7 +312,8 @@ def prepare_environment(
             )
             for requirement in requirements:
                 command.extend(["-r", str(requirement)])
-            command.extend(RUNTIME_TOOL_REQUIREMENTS)
+            if uv:
+                command.extend(RUNTIME_TOOL_PACKAGES)
             command.extend(str(root) for root in installable_roots)
             _run(result, "resolve shared dependencies", command, workspace, deadline, maximum_output_bytes)
             check = [uv, "pip", "check", "--python", str(python)] if uv else [str(python), "-m", "pip", "check"]
@@ -318,17 +324,18 @@ def prepare_environment(
 
         for project_id in roots:
             project_result = result.projects[project_id]
+            pytest_target = tests[project_id] if tests[project_id].is_dir() else roots[project_id]
             collect = _run(
                 result,
                 f"collect tests for {project_id}",
-                [str(python), "-m", "pytest", "--collect-only", "-q", str(tests[project_id])],
+                [str(python), "-m", "pytest", "--collect-only", "-q", str(pytest_target)],
                 roots[project_id],
                 deadline,
                 maximum_output_bytes,
+                allowed_return_codes=(0, 5),
+                pytest_plugin_autoload=bool(uv),
             )
             project_result.collected_tests = _parse_collected_tests(collect.output)
-            if project_result.collected_tests < 1:
-                raise RuntimeError(f"pytest could not collect at least one test for {project_id}")
             coverage_data = workspace / "coverage" / f".coverage-{project_id}"
             coverage_json = workspace / "coverage" / f"{project_id}.json"
             coverage_json.parent.mkdir(parents=True, exist_ok=True)
@@ -346,11 +353,13 @@ def prepare_environment(
                     "-m",
                     "pytest",
                     "-q",
-                    str(tests[project_id]),
+                    str(pytest_target),
                 ],
                 roots[project_id],
                 deadline,
                 maximum_output_bytes,
+                allowed_return_codes=(0, 5),
+                pytest_plugin_autoload=bool(uv),
             )
             _run(
                 result,
@@ -408,7 +417,15 @@ def prepare_runtime(
 
 
 def _run(
-    result: RuntimeResult, name: str, command: list[str], cwd: Path, deadline: float, output_limit: int
+    result: RuntimeResult,
+    name: str,
+    command: list[str],
+    cwd: Path,
+    deadline: float,
+    output_limit: int,
+    *,
+    allowed_return_codes: tuple[int, ...] = (0,),
+    pytest_plugin_autoload: bool = False,
 ) -> CommandResult:
     remaining = max(1.0, deadline - time.monotonic())
     started = time.monotonic()
@@ -418,8 +435,9 @@ def _run(
         "TZ": "UTC",
         "PIP_NO_INPUT": "1",
         "PIP_DISABLE_PIP_VERSION_CHECK": "1",
-        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
     }
+    if not pytest_plugin_autoload:
+        env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
     for env_name in (
         "SYSTEMROOT",
         "WINDIR",
@@ -453,7 +471,7 @@ def _run(
     result.commands.append(item)
     if item.timed_out:
         raise RuntimeError(f"{name} timed out")
-    if item.return_code != 0:
+    if item.return_code not in allowed_return_codes:
         detail = item.output[-2000:]
         if name == "resolve shared dependencies":
             raise RuntimeError(f"Dependency conflict prevented this project from joining the environment: {detail}")

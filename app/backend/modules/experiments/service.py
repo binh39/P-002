@@ -7,7 +7,7 @@ from backend.infrastructure.storage import ObjectStorage
 from backend.modules.analysis.repository import FunctionRepository
 from backend.modules.analysis.schemas import is_valid_optimization_function
 from backend.modules.projects.samples import SampleProjectCatalog
-from backend.modules.projects.schemas import RuntimeStatus
+from backend.modules.projects.schemas import MINIMUM_RUNTIME_PROTOCOL_VERSION, RuntimeStatus
 from backend.modules.projects.service import ProjectService
 
 from .dataset import select_targets, split_targets, validate_manual_splits
@@ -158,17 +158,17 @@ class ExperimentService:
             )
         if any(project.runtime_status != RuntimeStatus.READY for project in uploaded):
             raise AppError(409, "RUNTIME_NOT_READY", "Every uploaded project must pass runtime preparation")
-        stale_runtime = [
+        outdated_runtime = [
             project
             for project in uploaded
             if project.runtime_report is None
-            or project.runtime_report.protocol_version != self.runtime_bundle_protocol_version
+            or project.runtime_report.protocol_version < MINIMUM_RUNTIME_PROTOCOL_VERSION
         ]
-        if stale_runtime:
+        if outdated_runtime:
             raise AppError(
                 409,
-                "RUNTIME_BUNDLE_STALE",
-                "Runtime dependencies changed; prepare the uploaded project runtime again before creating an experiment",
+                "RUNTIME_REBUILD_REQUIRED",
+                "One or more uploaded projects use an outdated runtime; rebuild the runtime before creating an experiment",
             )
         snapshots = []
         available: dict[str, TargetReference] = {}
@@ -194,11 +194,14 @@ class ExperimentService:
             for function in await self._list_functions(project.id):
                 if not is_valid_optimization_function(function):
                     continue
+                runner_source_file = self._runner_source_file(project, function.file)
+                if runner_source_file is None:
+                    continue
                 target = TargetReference(
                     project_id=project.id,
                     function_id=function.id,
                     project=runner_project,
-                    source_file=self._runner_source_file(project, function.file),
+                    source_file=runner_source_file,
                     symbol=function.qualified_name,
                     statements=function.statements,
                     branches=function.branches,
@@ -875,13 +878,24 @@ class ExperimentService:
             suffix += 1
         return candidate
 
-    def _runner_source_file(self, project, source_file: str) -> str:
+    def _runner_source_file(self, project, source_file: str) -> str | None:
         if self.projects.is_sample(project.id):
             return source_file
-        source = project.settings.runtime.source_directory.replace("\\", "/").strip("./")
+        source = project.settings.runtime.source_directory.replace("\\", "/").strip("/")
         normalized = source_file.replace("\\", "/").lstrip("./")
-        prefix = f"{source}/" if source else ""
-        return normalized[len(prefix) :] if prefix and normalized.startswith(prefix) else normalized
+        if source in {"", "."}:
+            return normalized
+        if normalized == source or normalized.startswith(f"{source}/"):
+            return normalized
+        # Backward compatibility for analysis records created before archive
+        # wrapper directories were stripped (for example repo-main/src/pkg.py).
+        marker = f"/{source}/"
+        if marker in f"/{normalized}":
+            suffix = f"/{normalized}".split(marker, 1)[1]
+            return f"{source}/{suffix}"
+        # setup.py, scripts/, misc/, and other files outside the detected
+        # coverage source cannot produce a measurable GEPA target.
+        return None
 
     @staticmethod
     def _comparison_metrics(coverage: dict | None) -> dict:

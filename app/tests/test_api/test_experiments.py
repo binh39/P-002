@@ -1,3 +1,5 @@
+import io
+import zipfile
 from datetime import UTC, datetime
 
 import pytest
@@ -12,6 +14,7 @@ from backend.modules.experiments.schemas import (
     PromptVersionRecord,
     PromptVersionStatus,
 )
+from backend.modules.projects.schemas import RuntimeReport, RuntimeStatus
 from tests.test_api.test_analysis import AUTH_HEADERS, create_project, python_archive
 
 
@@ -102,6 +105,44 @@ async def test_uploaded_project_requires_runtime_before_experiment(client):
     )
     assert created.status_code == 409
     assert created.json()["error"]["code"] == "RUNTIME_NOT_READY"
+
+
+@pytest.mark.asyncio
+async def test_uploaded_experiment_requires_current_runtime_and_only_uses_source_targets(client, app):
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr(
+            "repo-main/pkg/core.py",
+            "def one():\n    return 1\n\ndef two():\n    return 2\n\ndef three():\n    return 3\n",
+        )
+        archive.writestr("repo-main/setup.py", "def packaging_helper():\n    return 'ignored'\n")
+    project_id = await create_project(client, buffer.getvalue())
+    await client.post(f"/api/v1/projects/{project_id}/analyze", headers=AUTH_HEADERS)
+    repository = app.state.services.projects.repository
+    project = await repository.get(project_id)
+    project.settings.runtime.source_directory = "pkg"
+    project.runtime_status = RuntimeStatus.READY
+    project.runtime_report = RuntimeReport(status=RuntimeStatus.READY, protocol_version=2)
+    await repository.save(project)
+    payload = {
+        "project_ids": [project_id],
+        "name": "Wrapped source project",
+        "max_targets": 4,
+        "random_seed": 7,
+    }
+
+    outdated = await client.post("/api/v1/experiments", headers=AUTH_HEADERS, json=payload)
+
+    assert outdated.status_code == 409
+    assert outdated.json()["error"]["code"] == "RUNTIME_REBUILD_REQUIRED"
+
+    project.runtime_report = RuntimeReport(status=RuntimeStatus.READY, protocol_version=3)
+    await repository.save(project)
+    created = await client.post("/api/v1/experiments", headers=AUTH_HEADERS, json=payload)
+
+    assert created.status_code == 201, created.text
+    assert {target["source_file"] for target in created.json()["targets"]} == {"pkg/core.py"}
+    assert len(created.json()["targets"]) == 3
 
 
 @pytest.mark.asyncio
