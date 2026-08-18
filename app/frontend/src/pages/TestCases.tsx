@@ -243,9 +243,6 @@ export default function TestCases() {
           </div>
         )}
       </section>
-      <button className="secondary-button" onClick={() => navigate("/prompts")}>
-        Open Prompt Registry
-      </button>
     </div>
   );
 }
