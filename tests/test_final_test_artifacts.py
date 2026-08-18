@@ -1,6 +1,7 @@
 import hashlib
 
-from cloud.run_test_generation import _artifact_index
+from cloud.run_test_generation import _artifact_index, _workspaces_for_targets
+from src.optimization.models import SymbolTarget
 
 
 def test_final_test_artifact_index_contains_only_generated_tests_and_coverage(tmp_path):
@@ -26,3 +27,20 @@ def test_final_test_artifact_index_contains_only_generated_tests_and_coverage(tm
     assert result[1]["content_type"] == "application/json"
     assert result[1]["size_bytes"] == len(coverage.read_bytes())
     assert result[1]["sha256"] == hashlib.sha256(coverage.read_bytes()).hexdigest()
+
+
+def test_final_test_workspaces_are_derived_from_symbol_targets(tmp_path):
+    workspace = tmp_path / "generated_tests"
+    single = _workspaces_for_targets(
+        [SymbolTarget(project="isort", source_file="isort/api.py", symbol="sort_file", split="final")], str(workspace)
+    )
+    multiple = _workspaces_for_targets(
+        [
+            SymbolTarget(project="isort", source_file="isort/api.py", symbol="sort_file", split="final"),
+            SymbolTarget(project="mimesis", source_file="mimesis/__init__.py", symbol="x", split="final"),
+        ],
+        str(workspace),
+    )
+
+    assert single == {"isort": workspace}
+    assert multiple == {"isort": workspace / "isort", "mimesis": workspace / "mimesis"}

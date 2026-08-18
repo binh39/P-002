@@ -87,9 +87,7 @@ def _target_metrics(batch) -> dict:
     covered_branches = sum(int(score.get("covered_branches", 0) or 0) for score in scores)
     completed = len(scores)
     failed = sum(
-        not result.score
-        or not result.score.get("valid")
-        or result.score.get("tests_passed") is False
+        not result.score or not result.score.get("valid") or result.score.get("tests_passed") is False
         for result in batch.results
     )
     statement = covered_statements / statement_denominator if statement_denominator else None
@@ -97,7 +95,9 @@ def _target_metrics(batch) -> dict:
     score = (
         (statement + branch) / 2
         if statement is not None and branch is not None
-        else statement if statement is not None else branch
+        else statement
+        if statement is not None
+        else branch
     )
     return {
         "target_statement_coverage": statement,
@@ -107,6 +107,15 @@ def _target_metrics(batch) -> dict:
         "completed_target_count": completed,
         "failed_target_count": failed,
     }
+
+
+def _workspaces_for_targets(targets: list[SymbolTarget], tests_workspace: str) -> dict[str, Path]:
+    """Resolve the persistent generated-test workspace for each selected project."""
+    project_ids = {symbol_target.project for symbol_target in targets}
+    root_workspace = Path(tests_workspace)
+    if len(project_ids) == 1:
+        return {project_id: root_workspace for project_id in project_ids}
+    return {project_id: root_workspace / project_id for project_id in project_ids}
 
 
 def _stage_projects(args, root: Path) -> tuple[Path, dict[str, ProjectLayout]]:
@@ -202,22 +211,20 @@ def _run(args, artifacts: Path) -> dict:
         split="final",
         workspace_kind="candidate",
     )
-    target = _target_metrics(batch)
+    target_metrics = _target_metrics(batch)
     cost = aggregate_usage_events(
-        event
-        for result in batch.results
-        for event in result.attempt_traces
-        if isinstance(event, dict)
+        event for result in batch.results for event in result.attempt_traces if isinstance(event, dict)
     )
-    workspaces = {target.project: Path(batch.tests_workspace)}
-    if len({target.project for target in targets}) > 1:
-        root_workspace = Path(batch.tests_workspace)
-        workspaces = {project: root_workspace / project for project in {target.project for target in targets}}
+    workspaces = _workspaces_for_targets(targets, batch.tests_workspace)
     per_project = {}
     suite_failed = False
     for project, workspace in sorted(workspaces.items()):
-        project_layout = config.projects[project] if config.projects and project in config.projects else ProjectLayout(
-            package_dir=config.package_dir, tests_dir=config.tests_dir, import_root=config.package_dir.parent
+        project_layout = (
+            config.projects[project]
+            if config.projects and project in config.projects
+            else ProjectLayout(
+                package_dir=config.package_dir, tests_dir=config.tests_dir, import_root=config.package_dir.parent
+            )
         )
         coverage_path = artifacts / "coverage" / f"{re.sub(r'[^A-Za-z0-9_.-]+', '_', project)}.json"
         completed = run_coverage(
@@ -227,7 +234,9 @@ def _run(args, artifacts: Path) -> dict:
             output=coverage_path,
             pytest_args=config.pytest_args,
             repeat_tests=config.repeat_tests,
-            env=_test_environment(config.project_root, (project_layout.import_root or project_layout.package_dir.parent,)),
+            env=_test_environment(
+                config.project_root, (project_layout.import_root or project_layout.package_dir.parent,)
+            ),
         )
         if completed.returncode:
             suite_failed = True
@@ -239,21 +248,31 @@ def _run(args, artifacts: Path) -> dict:
             "project_statement_coverage": statement,
             "project_branch_coverage": branch,
         }
-    project_statements = [value["project_statement_coverage"] for value in per_project.values() if value["project_statement_coverage"] is not None]
-    project_branches = [value["project_branch_coverage"] for value in per_project.values() if value["project_branch_coverage"] is not None]
+    project_statements = [
+        value["project_statement_coverage"]
+        for value in per_project.values()
+        if value["project_statement_coverage"] is not None
+    ]
+    project_branches = [
+        value["project_branch_coverage"]
+        for value in per_project.values()
+        if value["project_branch_coverage"] is not None
+    ]
     generated_files = sorted(path for path in Path(batch.tests_workspace).rglob("test_*.py") if path.is_file())
     archive_base = artifacts / "generated_tests"
     shutil.make_archive(str(archive_base), "zip", root_dir=Path(batch.tests_workspace))
     artifact_files = _artifact_index(artifacts, generated_files)
-    status = "partial" if suite_failed or target["failed_target_count"] else "completed"
+    status = "partial" if suite_failed or target_metrics["failed_target_count"] else "completed"
     return {
         "schema_version": 2,
         "status": status,
         "metrics": {
-            **target,
+            **target_metrics,
             "test_file_count": len(generated_files),
             "test_count": _count_tests(generated_files),
-            "project_statement_coverage": sum(project_statements) / len(project_statements) if project_statements else None,
+            "project_statement_coverage": sum(project_statements) / len(project_statements)
+            if project_statements
+            else None,
             "project_branch_coverage": sum(project_branches) / len(project_branches) if project_branches else None,
         },
         "estimated_cost_usd": cost["estimated_cost_usd"],
