@@ -4,7 +4,10 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-SUPPORTED_GEMINI_MODELS = (
+SUPPORTED_MODELS = (
+    "gemini/gemini-2.5-flash",
+    "gemini/gemini-2.5-flash-lite",
+    "gemini/gemini-2.5-pro",
     "vertex_ai/gemini-2.5-flash",
     "vertex_ai/gemini-2.5-flash-lite",
     "vertex_ai/gemini-2.5-pro",
@@ -13,6 +16,12 @@ SUPPORTED_GEMINI_MODELS = (
     "vertex_ai/gemini-3.5-flash",
     "vertex_ai/gemini-3.5-flash-lite",
     "vertex_ai/gemini-3.6-flash",
+    "openai/gpt-4.1-mini",
+    "openai/gpt-4.1",
+    "openai/gpt-5-mini",
+    "openai/gpt-5",
+    "deepseek/deepseek-chat",
+    "deepseek/deepseek-reasoner",
 )
 
 
@@ -73,9 +82,9 @@ class ExperimentSettings(StrictModel):
 
     @model_validator(mode="after")
     def models_are_supported(self):
-        if self.coverup_model not in SUPPORTED_GEMINI_MODELS:
+        if self.coverup_model not in SUPPORTED_MODELS:
             raise ValueError("Unsupported COVERUP_MODEL")
-        if self.optimize_model not in SUPPORTED_GEMINI_MODELS:
+        if self.optimize_model not in SUPPORTED_MODELS:
             raise ValueError("Unsupported OPTIMIZE_MODEL")
         return self
 
@@ -223,6 +232,7 @@ class OptimizationRunRecord(OptimizationRunResponse):
     # Internal routing metadata. This is persisted with the run but intentionally
     # omitted from OptimizationRunResponse so clients cannot choose a billing project.
     vertexai_project: str | None = None
+    provider_secret_refs: dict[str, dict[str, str]] = Field(default_factory=dict)
 
 
 class EvolutionIteration(StrictModel):

@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     gcp_project_id: str = "project-7df9f963-9fe0-4b76-b3d"
     admin_vertexai_project: str = "vinbuildphase"
     gcp_service_account_email: str = ""
+    provider_secret_prefix: str = "promptopt-provider"
     gcs_bucket: str = ""
     cloud_tasks_location: str = "asia-southeast1"
     cloud_tasks_queue: str = "promptopt-analysis"

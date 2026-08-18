@@ -33,6 +33,11 @@ from backend.modules.projects.repository import (
 from backend.modules.projects.runtime import CloudRunRuntimePreparer, RuntimePreparationService
 from backend.modules.projects.samples import SampleProjectCatalog
 from backend.modules.projects.service import ProjectService
+from backend.modules.providers.service import (
+    InMemoryProviderCredentialStore,
+    ProviderCredentialService,
+    SecretManagerProviderCredentialStore,
+)
 from backend.modules.uploads.repository import (
     FirestoreUploadRepository,
     InMemoryUploadRepository,
@@ -50,6 +55,7 @@ class ServiceContainer:
     analysis: AnalysisService
     experiments: ExperimentService
     dashboard: DashboardService
+    provider_credentials: ProviderCredentialService
 
 
 def build_services(settings: Settings) -> ServiceContainer:
@@ -79,6 +85,12 @@ def build_services(settings: Settings) -> ServiceContainer:
         if settings.repository_backend == "firestore"
         else InMemoryExperimentRepository()
     )
+    credential_store = (
+        SecretManagerProviderCredentialStore(settings.gcp_project_id, settings.provider_secret_prefix)
+        if settings.app_env == "production"
+        else InMemoryProviderCredentialStore()
+    )
+    provider_credentials = ProviderCredentialService(credential_store)
 
     if settings.storage_backend == "gcs":
         storage = GcsObjectStorage(
@@ -167,6 +179,7 @@ def build_services(settings: Settings) -> ServiceContainer:
         cloud_optimizer=cloud_optimizer,
         samples=samples,
         admin_vertexai_project=settings.admin_vertexai_project,
+        provider_credentials=provider_credentials,
     )
     dashboard = DashboardService(experiment_repository)
     if settings.experiment_dispatcher == "cloud_tasks":
@@ -201,4 +214,5 @@ def build_services(settings: Settings) -> ServiceContainer:
         analysis=analysis,
         experiments=experiments,
         dashboard=dashboard,
+        provider_credentials=provider_credentials,
     )

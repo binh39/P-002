@@ -49,6 +49,7 @@ class CloudRunJobGepaOptimizer:
         settings: ExperimentSettings,
         vertexai_project: str | None = None,
         projects: list | None = None,
+        provider_secret_refs: dict[str, dict[str, str]] | None = None,
     ) -> OptimizationResult:
         artifacts_prefix = await self.start(
             baseline=baseline,
@@ -58,6 +59,7 @@ class CloudRunJobGepaOptimizer:
             settings=settings,
             vertexai_project=vertexai_project,
             projects=projects,
+            provider_secret_refs=provider_secret_refs,
         )
         result = await self.collect(artifacts_prefix)
         if result is None:
@@ -74,6 +76,7 @@ class CloudRunJobGepaOptimizer:
         settings: ExperimentSettings,
         vertexai_project: str | None = None,
         projects: list | None = None,
+        provider_secret_refs: dict[str, dict[str, str]] | None = None,
     ) -> str:
         """Upload immutable inputs and trigger the job without waiting for completion."""
         if not train or not validation:
@@ -177,6 +180,18 @@ class CloudRunJobGepaOptimizer:
         ]
         if vertexai_project:
             environment.append({"name": "VERTEXAI_PROJECT", "value": vertexai_project})
+        for name, reference in (provider_secret_refs or {}).items():
+            environment.append(
+                {
+                    "name": name,
+                    "value_source": {
+                        "secret_key_ref": {
+                            "secret": reference["secret"],
+                            "version": reference["version"],
+                        }
+                    },
+                }
+            )
         request = {
             "name": self.job_name,
             "overrides": {

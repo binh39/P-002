@@ -6,6 +6,7 @@ ANALYSIS_DISPATCHER: cloud_tasks
 GCP_PROJECT_ID: project-7df9f963-9fe0-4b76-b3d
 ADMIN_VERTEXAI_PROJECT: vinbuildphase
 GCP_SERVICE_ACCOUNT_EMAIL: promptopt-api@project-7df9f963-9fe0-4b76-b3d.iam.gserviceaccount.com
+PROVIDER_SECRET_PREFIX: promptopt-provider
 GCS_BUCKET: project-7df9f963-9fe0-4b76-b3d-promptopt-sources
 SAMPLE_REPOS_DIR: /app/sample_repo
 CLOUD_TASKS_LOCATION: asia-southeast1

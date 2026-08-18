@@ -21,6 +21,9 @@ $RoleFile = Join-Path $PSScriptRoot "runner-object-role.yaml"
 $ApiOperationRole = "promptoptJobOperationPoller"
 $ApiOperationRoleResource = "projects/$ProjectId/roles/$ApiOperationRole"
 $ApiOperationRoleFile = Join-Path $PSScriptRoot "api-job-operation-role.yaml"
+$ProviderSecretRole = "promptoptProviderSecretManager"
+$ProviderSecretRoleResource = "projects/$ProjectId/roles/$ProviderSecretRole"
+$ProviderSecretRoleFile = Join-Path $PSScriptRoot "provider-secret-role.yaml"
 
 function Invoke-Gcloud {
     & gcloud @args
@@ -38,7 +41,7 @@ function Test-GcloudResource {
     return $Exists
 }
 
-Invoke-Gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudtasks.googleapis.com --project $ProjectId
+Invoke-Gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudtasks.googleapis.com secretmanager.googleapis.com --project $ProjectId
 Invoke-Gcloud services enable aiplatform.googleapis.com --project $ModelProjectId
 
 if (-not (Test-GcloudResource iam service-accounts describe $RunnerAccount --project $ProjectId)) {
@@ -61,6 +64,12 @@ if (-not (Test-GcloudResource iam roles describe $ApiOperationRole --project $Pr
 else {
     Invoke-Gcloud iam roles update $ApiOperationRole --project $ProjectId --file $ApiOperationRoleFile
 }
+if (-not (Test-GcloudResource iam roles describe $ProviderSecretRole --project $ProjectId)) {
+    Invoke-Gcloud iam roles create $ProviderSecretRole --project $ProjectId --file $ProviderSecretRoleFile
+}
+else {
+    Invoke-Gcloud iam roles update $ProviderSecretRole --project $ProjectId --file $ProviderSecretRoleFile
+}
 
 $PrefixCondition = "expression=resource.name.startsWith('projects/_/buckets/$Bucket/objects/runner-jobs/'),title=PromptOptRunnerJobPrefix,description=Restrict runner access to opaque execution objects"
 Invoke-Gcloud storage buckets add-iam-policy-binding "gs://$Bucket" --member "serviceAccount:$RunnerAccount" --role $RunnerObjectRoleResource --condition $PrefixCondition
@@ -68,6 +77,8 @@ Invoke-Gcloud storage buckets add-iam-policy-binding "gs://$Bucket" --member "se
 Invoke-Gcloud projects add-iam-policy-binding $ModelProjectId --member "serviceAccount:$RunnerAccount" --role roles/aiplatform.user --condition None
 Invoke-Gcloud projects add-iam-policy-binding $ModelProjectId --member "serviceAccount:$RunnerAccount" --role roles/serviceusage.serviceUsageConsumer --condition None
 Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$ApiAccount" --role $ApiOperationRoleResource --condition None
+Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$ApiAccount" --role $ProviderSecretRoleResource --condition None
+Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$RunnerAccount" --role roles/secretmanager.secretAccessor --condition None
 Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$ApiAccount" --role roles/logging.viewer --condition None
 Invoke-Gcloud iam service-accounts add-iam-policy-binding $RunnerAccount --project $ProjectId --member "serviceAccount:$DeployAccount" --role roles/iam.serviceAccountUser
 Invoke-Gcloud iam service-accounts add-iam-policy-binding $RuntimeAccount --project $ProjectId --member "serviceAccount:$DeployAccount" --role roles/iam.serviceAccountUser
