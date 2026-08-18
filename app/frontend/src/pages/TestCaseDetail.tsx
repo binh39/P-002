@@ -4,7 +4,7 @@ import { useLocation, useRoute } from "wouter";
 
 import { useRepositories } from "@/app/providers";
 import { PageHeader, StatCard, StatusBadge } from "@/components/PlatformUI";
-import type { TestGenerationStatus } from "@/domain/experiments";
+import type { Experiment, TestGenerationStatus } from "@/domain/experiments";
 
 const activeStatuses: TestGenerationStatus[] = [
   "queued",
@@ -96,6 +96,110 @@ function fileName(path: string) {
   return path.split("/").at(-1) ?? path;
 }
 
+function progressWidth(value: number | null) {
+  return `${Math.round(Math.max(0, Math.min(1, value ?? 0)) * 100)}%`;
+}
+
+function MetricBar({
+  value,
+  tone,
+}: {
+  value: number | null;
+  tone: "final" | "statement" | "branch";
+}) {
+  return (
+    <span className={`prompt-registry-metric-bar is-${tone}`} aria-hidden="true">
+      <span style={{ width: progressWidth(value) }} />
+    </span>
+  );
+}
+
+function TestSuiteMetrics({
+  targetScore,
+  statementCoverage,
+  branchCoverage,
+}: {
+  targetScore: number | null;
+  statementCoverage: number | null;
+  branchCoverage: number | null;
+}) {
+  return (
+    <section className="platform-card prompt-registry-summary test-suite-summary">
+      <div className="prompt-registry-metric-comparison">
+        <section className="prompt-registry-metric-panel is-final">
+          <h2>Coverage result</h2>
+          <div className="prompt-registry-primary-score">
+            <span>Target score</span>
+            <strong>{percentage(targetScore)}</strong>
+          </div>
+          <MetricBar value={targetScore} tone="final" />
+          <div className="prompt-registry-coverage-list">
+            <div>
+              <span>Project statement</span>
+              <strong>{percentage(statementCoverage)}</strong>
+              <MetricBar value={statementCoverage} tone="statement" />
+            </div>
+            <div>
+              <span>Project branch</span>
+              <strong>{percentage(branchCoverage)}</strong>
+              <MetricBar value={branchCoverage} tone="branch" />
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+  );
+}
+
+const samplingLabels: Record<Experiment["samplingMethod"], string> = {
+  random: "Random",
+  most_branches: "Most branches",
+  most_statements: "Most statements",
+  manual: "Manual selection",
+};
+
+function TestSuiteSettings({ experiment }: { experiment: Experiment }) {
+  const { settings, splitPercentages } = experiment;
+  const values: Array<[string, string]> = [
+    ["Environment", "Cloud Run isolated runner"],
+    ["Function selection", samplingLabels[experiment.samplingMethod]],
+    ["Functions", String(experiment.targetFunctionIds.length)],
+    ["Random seed", String(experiment.splitSeed)],
+    [
+      "Dataset split",
+      `${splitPercentages.train}% train / ${splitPercentages.validation}% valid / ${splitPercentages.test}% test`,
+    ],
+    ["CoverUp model", settings.coverupModel],
+    ["Optimize model", settings.optimizeModel],
+    [
+      "CoverUp",
+      `${settings.maxAttempts} attempts · ${settings.repeatTests} repeats · concurrency ${settings.maxConcurrency}`,
+    ],
+    ["Rate limit", settings.rateLimit === null ? "Default" : `${settings.rateLimit} requests/min`],
+    [
+      "GEPA budget",
+      `${settings.maxMetricCalls} metric calls · ${settings.evaluationReplicates} replicate(s)`,
+    ],
+    ["Reflection temperature", String(settings.reflectionTemperature)],
+    ["Pytest arguments", settings.pytestArgs || "Default"],
+  ];
+  return (
+    <section className="platform-card prompt-registry-settings-card">
+      <div className="card-heading">
+        <h2>Test Suite Settings</h2>
+      </div>
+      <dl className="definition-list prompt-registry-settings-list">
+        {values.map(([label, value]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd title={value}>{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
 function PythonCode({ content, label }: { content: string; label: string }) {
   const pattern =
     /(#.*$)|((?:[rubf]|br|rf)?(?:"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'))|(\b[A-Za-z_][A-Za-z0-9_]*\b)|(\b\d+(?:\.\d+)?\b)/gim;
@@ -136,7 +240,7 @@ function PythonCode({ content, label }: { content: string; label: string }) {
 export default function TestCaseDetail() {
   const [, params] = useRoute("/test-cases/:runId");
   const [, navigate] = useLocation();
-  const { testGeneration } = useRepositories();
+  const { testGeneration, experiments } = useRepositories();
   const runId = params?.runId ?? "";
   const [selectedTestAlias, setSelectedTestAlias] = useState<string | null>(null);
   const [selectedSourceAlias, setSelectedSourceAlias] = useState<string | null>(null);
@@ -153,6 +257,11 @@ export default function TestCaseDetail() {
     enabled:
       runId !== "" && query.data !== undefined && !activeStatuses.includes(query.data.status),
     retry: 1,
+  });
+  const experimentQuery = useQuery({
+    queryKey: ["experiments", query.data?.experimentId],
+    queryFn: ({ signal }) => experiments.get(query.data?.experimentId ?? "", signal),
+    enabled: query.data !== undefined,
   });
   const indexed = manifestQuery.data ? indexedArtifacts(manifestQuery.data) : [];
   const generatedTests = indexed.filter((artifact) => artifact.kind === "generated_test");
@@ -215,18 +324,20 @@ export default function TestCaseDetail() {
           {run.errorMessage}
         </section>
       )}
-      <div className="platform-stats-grid">
+      <TestSuiteMetrics
+        targetScore={run.metrics.targetScore}
+        statementCoverage={run.metrics.projectStatementCoverage}
+        branchCoverage={run.metrics.projectBranchCoverage}
+      />
+      <div className="platform-stats-grid test-suite-run-stats">
         <StatCard
-          label="Project statement"
-          value={percentage(run.metrics.projectStatementCoverage)}
+          label="Tests"
+          value={run.metrics.testCount}
+          detail={`${run.metrics.testFileCount} files`}
         />
-        <StatCard
-          label="Project branch"
-          value={percentage(run.metrics.projectBranchCoverage)}
-          tone="orange"
-        />
-        <StatCard label="Target score" value={percentage(run.metrics.targetScore)} tone="violet" />
-        <StatCard label="Estimated cost" value={formatCost(run.estimatedCostUsd)} tone="green" />
+        <StatCard label="Passed" value={run.metrics.passed ?? "—"} tone="orange" />
+        <StatCard label="Failed" value={run.metrics.failed ?? "—"} tone="violet" />
+        <StatCard label="Cost" value={formatCost(run.estimatedCostUsd)} tone="green" />
       </div>
       <section className="platform-card test-case-explorer">
         <aside className="test-case-file-list">
@@ -299,6 +410,7 @@ export default function TestCaseDetail() {
           ) : null}
         </section>
       </section>
+      {experimentQuery.data && <TestSuiteSettings experiment={experimentQuery.data} />}
     </div>
   );
 }
