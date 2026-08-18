@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     runtime_execution_backend: Literal["disabled", "cloud_run_job"] = "disabled"
     cloud_run_runtime_job: str = "promptopt-runtime-preparer"
     cloud_run_runtime_timeout_seconds: int = Field(default=1800, ge=60, le=7200)
-    runtime_bundle_protocol_version: int = Field(default=4, ge=1)
+    runtime_bundle_protocol_version: int = Field(default=5, ge=1)
     gepa_max_concurrency: int = Field(default=10, ge=1, le=32)
     gepa_repeat_tests: int = Field(default=5, ge=0, le=20)
     gepa_evaluation_replicates: int = Field(default=1, ge=1, le=10)
