@@ -205,6 +205,15 @@ async def get_test_generation_manifest(run_id: str, user: CurrentUser, request: 
     return await request.app.state.services.experiments.get_test_generation_manifest(run_id, user.uid)
 
 
+@test_generation_router.get("/{run_id}/artifacts/{artifact_name}/content")
+async def get_test_generation_text_artifact(
+    run_id: str, artifact_name: str, user: CurrentUser, request: Request
+):
+    return await request.app.state.services.experiments.get_test_generation_text_artifact(
+        run_id, artifact_name, user.uid
+    )
+
+
 @test_generation_router.get("/{run_id}/artifacts/{artifact_name}")
 async def get_test_generation_artifact(run_id: str, artifact_name: str, user: CurrentUser, request: Request):
     content = await request.app.state.services.experiments.get_test_generation_artifact(run_id, artifact_name, user.uid)

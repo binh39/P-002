@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import json
 import os
 import re
@@ -19,10 +20,40 @@ from pathlib import Path
 
 from cloud.run_job import _download_object, _upload_dir
 from cloud.runtime_workspace import detect_layout, find_project_root, safe_extract_runtime_bundle, safe_extract_zip
-from src.optimization.coveragepy import load_report, run_coverage
 from src.optimization.costs import aggregate_usage_events
+from src.optimization.coveragepy import load_report, run_coverage
 from src.optimization.models import ExperimentConfig, ProjectLayout, SymbolTarget
 from src.optimization.runner import CoverUpExperimentRunner, _test_environment
+
+
+def _artifact_index(artifacts: Path, generated_files: list[Path]) -> list[dict[str, object]]:
+    """Describe browser-safe final-suite artifacts without exposing GCS object names."""
+    records: list[dict[str, object]] = []
+    candidates = [("generated_test", path, "text/x-python") for path in generated_files]
+    candidates.extend(
+        ("coverage", path, "application/json")
+        for path in sorted((artifacts / "coverage").glob("*.json"))
+        if path.is_file()
+    )
+    kind_counts: dict[str, int] = {}
+    for kind, path, content_type in candidates:
+        try:
+            content = path.read_bytes()
+            relative = path.resolve().relative_to(artifacts.resolve()).as_posix()
+        except (OSError, ValueError):
+            continue
+        kind_counts[kind] = kind_counts.get(kind, 0) + 1
+        records.append(
+            {
+                "id": f"{kind.replace('_', '-')}-{kind_counts[kind]}",
+                "kind": kind,
+                "path": relative,
+                "content_type": content_type,
+                "size_bytes": len(content),
+                "sha256": hashlib.sha256(content).hexdigest(),
+            }
+        )
+    return records
 
 
 def _count_tests(paths: list[Path]) -> int:
@@ -213,9 +244,10 @@ def _run(args, artifacts: Path) -> dict:
     generated_files = sorted(path for path in Path(batch.tests_workspace).rglob("test_*.py") if path.is_file())
     archive_base = artifacts / "generated_tests"
     shutil.make_archive(str(archive_base), "zip", root_dir=Path(batch.tests_workspace))
+    artifact_files = _artifact_index(artifacts, generated_files)
     status = "partial" if suite_failed or target["failed_target_count"] else "completed"
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "status": status,
         "metrics": {
             **target,
@@ -238,6 +270,7 @@ def _run(args, artifacts: Path) -> dict:
             "suite_zip": "generated_tests.zip",
             "generated_tests_directory": "generated_tests",
             "coverage_directory": "coverage",
+            "files": artifact_files,
         },
     }
 

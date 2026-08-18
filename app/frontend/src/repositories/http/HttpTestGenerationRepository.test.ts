@@ -190,4 +190,35 @@ describe("HttpTestGenerationRepository", () => {
       expect.objectContaining({ headers: expect.objectContaining({ Accept: "application/json" }) }),
     );
   });
+
+  it("requests indexed text artifacts through the bounded content endpoint", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              artifact_name: "file-generated-test-1",
+              content: "def test_x(): pass",
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        ),
+    );
+
+    const result = await new HttpTestGenerationRepository().getTextArtifact(
+      "test-run-1",
+      "file-generated-test-1",
+    );
+
+    expect(result).toEqual({
+      artifactName: "file-generated-test-1",
+      content: "def test_x(): pass",
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/test-generation-runs/test-run-1/artifacts/file-generated-test-1/content",
+      expect.objectContaining({ headers: expect.objectContaining({ Accept: "application/json" }) }),
+    );
+  });
 });

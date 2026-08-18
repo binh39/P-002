@@ -55,6 +55,7 @@ from .schemas import (
 
 STANDARD_MAX_METRIC_CALLS = 2200
 MAX_TEST_GENERATION_MANIFEST_BYTES = 1_000_000
+MAX_TEST_GENERATION_ARTIFACT_FILES = 1_000
 
 _FINAL_VALIDATION_SCALAR_FIELDS = (
     "mean_score",
@@ -111,6 +112,40 @@ def _redact_artifact_value(value):
         else:
             redacted[key] = _redact_artifact_value(item)
     return redacted
+
+
+def _validated_final_test_artifact_objects(prefix: str, artifacts: dict) -> dict[str, str]:
+    """Map the runner's constrained artifact index to owner-scoped object aliases."""
+    objects = {
+        "manifest": f"{prefix}/{artifacts.get('manifest', 'test_generation_result.json')}",
+        "suite_zip": f"{prefix}/{artifacts.get('suite_zip', 'generated_tests.zip')}",
+    }
+    files = artifacts.get("files")
+    if not isinstance(files, list):
+        return objects
+    for entry in files[:MAX_TEST_GENERATION_ARTIFACT_FILES]:
+        if not isinstance(entry, dict):
+            continue
+        artifact_id, kind, relative_path = entry.get("id"), entry.get("kind"), entry.get("path")
+        if not all(isinstance(value, str) for value in (artifact_id, kind, relative_path)):
+            continue
+        if not re.fullmatch(r"[a-z0-9-]{1,80}", artifact_id):
+            continue
+        if kind == "generated_test":
+            expected_prefix, expected_suffix = "generated_tests/", ".py"
+        elif kind == "coverage":
+            expected_prefix, expected_suffix = "coverage/", ".json"
+        else:
+            continue
+        normalized_path = relative_path.replace("\\", "/")
+        if (
+            not normalized_path.startswith(expected_prefix)
+            or not normalized_path.endswith(expected_suffix)
+            or ".." in normalized_path.split("/")
+        ):
+            continue
+        objects[f"file-{artifact_id}"] = f"{prefix}/{normalized_path}"
+    return objects
 
 
 class ExperimentService:
@@ -1227,6 +1262,21 @@ class ExperimentService:
             raise AppError(422, "INVALID_ARTIFACT", "Test-generation manifest must be a JSON object")
         return _redact_artifact_value(manifest)
 
+    async def get_test_generation_text_artifact(
+        self, run_id: str, artifact_name: str, owner_id: str
+    ) -> dict[str, str]:
+        """Return an indexed generated test or coverage report as bounded UTF-8 text."""
+        if not re.fullmatch(r"file-(generated-test|coverage)-[1-9][0-9]*", artifact_name):
+            raise AppError(404, "ARTIFACT_NOT_FOUND", "Text artifact was not found in this final test-generation run")
+        content = await self.get_test_generation_artifact(run_id, artifact_name, owner_id)
+        if len(content) > MAX_TEST_GENERATION_MANIFEST_BYTES:
+            raise AppError(413, "ARTIFACT_TOO_LARGE", "Text artifact is too large to view")
+        try:
+            text = content.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise AppError(422, "INVALID_ARTIFACT", "Text artifact is not valid UTF-8") from exc
+        return {"artifact_name": artifact_name, "content": text}
+
     async def execute_test_generation(self, run_id: str) -> None:
         run = await self.repository.get_test_generation_run(run_id)
         if run is None:
@@ -1300,10 +1350,7 @@ class ExperimentService:
                 for key, value in raw_usage.items()
                 if isinstance(value, int | float) and value >= 0
             }
-            run.artifact_objects = {
-                "manifest": f"{prefix}/{artifacts.get('manifest', 'test_generation_result.json')}",
-                "suite_zip": f"{prefix}/{artifacts.get('suite_zip', 'generated_tests.zip')}",
-            }
+            run.artifact_objects = _validated_final_test_artifact_objects(prefix, artifacts)
             run.status = (
                 TestGenerationStatus.PARTIAL
                 if result.get("status") == "partial"

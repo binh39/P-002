@@ -13,6 +13,36 @@ const activeStatuses: TestGenerationStatus[] = [
   "running_tests",
 ];
 
+type IndexedArtifact = {
+  id: string;
+  kind: "generated_test" | "coverage";
+  path: string;
+  alias: string;
+};
+
+function indexedArtifacts(manifest: Record<string, unknown>): IndexedArtifact[] {
+  const artifacts = manifest.artifacts;
+  if (!artifacts || typeof artifacts !== "object") return [];
+  const files = (artifacts as Record<string, unknown>).files;
+  if (!Array.isArray(files)) return [];
+  return files.flatMap((file) => {
+    if (!file || typeof file !== "object") return [];
+    const entry = file as Record<string, unknown>;
+    const id = entry.id;
+    const kind = entry.kind;
+    const path = entry.path;
+    if (
+      typeof id !== "string" ||
+      typeof path !== "string" ||
+      (kind !== "generated_test" && kind !== "coverage") ||
+      !/^[a-z0-9-]{1,80}$/.test(id)
+    ) {
+      return [];
+    }
+    return [{ id, kind, path, alias: `file-${id}` }];
+  });
+}
+
 function percentage(value: number | null) {
   return value === null ? "—" : `${(value * 100).toFixed(1)}%`;
 }
@@ -38,6 +68,7 @@ export default function TestCaseDetail() {
   const { testGeneration } = useRepositories();
   const runId = params?.runId ?? "";
   const [manifestVisible, setManifestVisible] = useState(false);
+  const [selectedArtifact, setSelectedArtifact] = useState<IndexedArtifact | null>(null);
   const query = useQuery({
     queryKey: ["test-generation-runs", runId],
     queryFn: ({ signal }) => testGeneration.get(runId, signal),
@@ -66,6 +97,13 @@ export default function TestCaseDetail() {
     enabled: manifestVisible && runId !== "",
     retry: 1,
   });
+  const textArtifactQuery = useQuery({
+    queryKey: ["test-generation-runs", runId, "artifact", selectedArtifact?.alias],
+    queryFn: ({ signal }) =>
+      testGeneration.getTextArtifact(runId, selectedArtifact?.alias ?? "", signal),
+    enabled: selectedArtifact !== null && runId !== "",
+    retry: 1,
+  });
 
   if (query.isPending) {
     return (
@@ -90,6 +128,7 @@ export default function TestCaseDetail() {
 
   const run = query.data;
   const artifacts = Object.keys(run.artifactObjects);
+  const availableTextArtifacts = manifestQuery.data ? indexedArtifacts(manifestQuery.data) : [];
   return (
     <div className="platform-page test-case-detail-page">
       <button className="back-link" onClick={() => navigate("/test-cases")}>
@@ -282,9 +321,41 @@ export default function TestCaseDetail() {
           </p>
         )}
         {manifestVisible && manifestQuery.data && (
-          <pre className="prompt-registry-code test-generation-manifest">
-            <code>{JSON.stringify(manifestQuery.data, null, 2)}</code>
-          </pre>
+          <>
+            <pre className="prompt-registry-code test-generation-manifest">
+              <code>{JSON.stringify(manifestQuery.data, null, 2)}</code>
+            </pre>
+            {availableTextArtifacts.length > 0 && (
+              <div className="test-generation-artifact-viewer">
+                <h3>Generated files</h3>
+                <div className="prompt-registry-header-actions">
+                  {availableTextArtifacts.map((artifact) => (
+                    <button
+                      key={artifact.alias}
+                      className="secondary-button"
+                      onClick={() => setSelectedArtifact(artifact)}
+                    >
+                      {artifact.kind === "generated_test" ? "View test" : "View coverage"}:{" "}
+                      {artifact.path}
+                    </button>
+                  ))}
+                </div>
+                {textArtifactQuery.isPending && <p role="status">Loading selected file…</p>}
+                {textArtifactQuery.isError && (
+                  <p className="inline-validation-error" role="alert">
+                    {textArtifactQuery.error instanceof Error
+                      ? textArtifactQuery.error.message
+                      : "Selected file could not be displayed."}
+                  </p>
+                )}
+                {selectedArtifact && textArtifactQuery.data && (
+                  <pre className="prompt-registry-code test-generation-manifest">
+                    <code>{textArtifactQuery.data.content}</code>
+                  </pre>
+                )}
+              </div>
+            )}
+          </>
         )}
       </section>
     </div>

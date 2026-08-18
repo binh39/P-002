@@ -470,12 +470,21 @@ async def test_final_test_generation_is_owner_scoped_and_idempotent(client, app)
     manifest_object = f"artifacts/local-user/final-test-runs/{run['id']}/test_generation_result.json"
     owned_record = await app.state.services.experiments.repository.get_test_generation_run(run["id"])
     assert owned_record is not None
-    owned_record.artifact_objects = {"manifest": manifest_object}
+    generated_test_object = f"artifacts/local-user/final-test-runs/{run['id']}/generated_tests/test_final.py"
+    owned_record.artifact_objects = {
+        "manifest": manifest_object,
+        "file-generated-test-1": generated_test_object,
+    }
     await app.state.services.experiments.repository.save_test_generation_run(owned_record)
     await app.state.services.experiments.storage.write(
         manifest_object,
         b'{"metrics":{"test_count":2},"api_key":"must-not-leak","nested":{"token":"hidden"}}',
         "application/json",
+    )
+    await app.state.services.experiments.storage.write(
+        generated_test_object,
+        b"def test_final():\n    assert True\n",
+        "text/x-python",
     )
     manifest = await client.get(
         f"/api/v1/test-generation-runs/{run['id']}/artifacts/manifest/content",
@@ -485,6 +494,14 @@ async def test_final_test_generation_is_owner_scoped_and_idempotent(client, app)
         "/api/v1/test-generation-runs/foreign-final-suite/artifacts/manifest/content",
         headers=AUTH_HEADERS,
     )
+    text_artifact = await client.get(
+        f"/api/v1/test-generation-runs/{run['id']}/artifacts/file-generated-test-1/content",
+        headers=AUTH_HEADERS,
+    )
+    unindexed_text_artifact = await client.get(
+        f"/api/v1/test-generation-runs/{run['id']}/artifacts/file-generated-test-2/content",
+        headers=AUTH_HEADERS,
+    )
     assert manifest.status_code == 200
     assert manifest.json() == {
         "metrics": {"test_count": 2},
@@ -492,6 +509,12 @@ async def test_final_test_generation_is_owner_scoped_and_idempotent(client, app)
         "nested": {"token": "[redacted]"},
     }
     assert foreign_manifest.status_code == 404
+    assert text_artifact.status_code == 200
+    assert text_artifact.json() == {
+        "artifact_name": "file-generated-test-1",
+        "content": "def test_final():\n    assert True\n",
+    }
+    assert unindexed_text_artifact.status_code == 404
 
 
 @pytest.mark.asyncio

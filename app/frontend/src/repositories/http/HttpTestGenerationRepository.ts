@@ -137,6 +137,18 @@ export class HttpTestGenerationRepository implements TestGenerationRepository {
     );
   }
 
+  async getTextArtifact(
+    runId: string,
+    artifactName: string,
+    signal?: AbortSignal,
+  ): Promise<{ artifactName: string; content: string }> {
+    const response = await apiRequest<{ artifact_name: string; content: string }>(
+      `/test-generation-runs/${runId}/artifacts/${artifactName}/content`,
+      { signal },
+    );
+    return { artifactName: response.artifact_name, content: response.content };
+  }
+
   async downloadArtifact(runId: string, artifactName: string): Promise<Blob> {
     return apiDownload(`/test-generation-runs/${runId}/artifacts/${artifactName}`);
   }
