@@ -6723,6 +6723,80 @@ textarea {
   background: #e79722;
 }
 
+.test-cases-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.test-cases-table th:nth-child(1) {
+  width: 20%;
+}
+.test-cases-table th:nth-child(2) {
+  width: 9%;
+}
+.test-cases-table th:nth-child(3) {
+  width: 18%;
+}
+.test-cases-table th:nth-child(4) {
+  width: 8%;
+}
+.test-cases-table th:nth-child(5),
+.test-cases-table th:nth-child(6) {
+  width: 14%;
+}
+.test-cases-table th:nth-child(7) {
+  width: 9%;
+}
+.test-cases-table th:nth-child(8) {
+  width: 8%;
+}
+
+.test-suite-name-cell > strong,
+.test-suite-name-cell > small,
+.test-suite-model-cell > code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.test-suite-coverage {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.test-suite-coverage-bar {
+  display: block;
+  width: 100%;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8ecf4;
+}
+
+.test-suite-coverage-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.test-suite-coverage-bar.is-project > span {
+  background: #159e76;
+}
+.test-suite-coverage-bar.is-target > span {
+  background: #8b5cf6;
+}
+
+.test-cases-table td:nth-child(4) > small,
+.test-cases-table td:nth-child(5) > strong,
+.test-cases-table td:nth-child(5) > small,
+.test-cases-table td:nth-child(6) > strong,
+.test-cases-table td:nth-child(6) > small,
+.test-cases-table .table-error {
+  display: none;
+}
+
 .registry-row {
   cursor: pointer;
 }
