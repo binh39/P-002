@@ -57,9 +57,10 @@ def test_safe_extract_ignores_symbolic_links(tmp_path):
 
 
 def test_runtime_bundle_contains_every_pytest_plugin_used_by_gepa():
-    assert RUNTIME_PROTOCOL_VERSION == 5
+    assert RUNTIME_PROTOCOL_VERSION == 6
     assert "pytest-asyncio==1.4.0" in RUNTIME_TOOL_PACKAGES
     assert "pytest-repeat==0.9.4" in RUNTIME_TOOL_PACKAGES
+    assert "pytest-timeout==2.4.0" in RUNTIME_TOOL_PACKAGES
 
 
 def test_detect_layout_supports_lib_package_layout(tmp_path):
@@ -103,7 +104,14 @@ def test_prepare_runtime_accepts_project_without_existing_tests(tmp_path):
     archive = tmp_path / "project-without-tests.zip"
     write_zip(
         archive,
-        {"demo/pkg/__init__.py": "def add(a, b):\n    return a + b\n"},
+        {
+            "demo/pkg/__init__.py": "def add(a, b):\n    return a + b\n",
+            # This looks like a test to a project-root collection, but it is
+            # an executable integration helper and must never be imported.
+            "demo/test/integration/library/async_test.py": (
+                "raise RuntimeError('project root was collected')\n"
+            ),
+        },
     )
 
     result, python = prepare_runtime(
@@ -118,6 +126,36 @@ def test_prepare_runtime_accepts_project_without_existing_tests(tmp_path):
     assert python is not None
     assert result.collected_tests == 0
     assert result.statement_coverage == 0.0
+    assert result.test_directory == ".promptopt-empty-tests"
+
+
+def test_prepare_runtime_prefers_unit_tests_over_integration_harnesses(tmp_path):
+    archive = tmp_path / "project-with-mixed-tests.zip"
+    write_zip(
+        archive,
+        {
+            "demo/pkg/__init__.py": "def add(a, b):\n    return a + b\n",
+            "demo/test/units/test_pkg.py": (
+                "from pkg import add\n\ndef test_add():\n    assert add(2, 3) == 5\n"
+            ),
+            "demo/test/integration/library/async_test.py": (
+                "raise RuntimeError('integration harness was collected')\n"
+            ),
+        },
+    )
+
+    result, python = prepare_runtime(
+        archive,
+        tmp_path / "runtime-with-mixed-tests",
+        configured_source="pkg",
+        configured_tests="tests",
+        timeout_seconds=120,
+    )
+
+    assert result.status == "runtime_ready", result.error
+    assert python is not None
+    assert result.collected_tests == 1
+    assert result.test_directory == "test/units"
 
 
 def test_prepare_runtime_does_not_build_dynamic_version_project(tmp_path):

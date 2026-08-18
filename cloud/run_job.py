@@ -149,6 +149,10 @@ def main() -> int:
                     shutil.copytree(project_root, destination)
                     staged_source = destination / source.relative_to(project_root)
                     staged_tests = destination / tests.relative_to(project_root)
+                    # Runtime admission may intentionally select a synthetic
+                    # empty test directory for projects that have no unit
+                    # suite (or only executable integration harnesses).
+                    staged_tests.mkdir(parents=True, exist_ok=True)
                     project_layouts[name] = {
                         "package_dir": str(staged_source),
                         "tests_dir": str(staged_tests),
