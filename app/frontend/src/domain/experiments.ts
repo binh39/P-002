@@ -265,6 +265,13 @@ export interface TestGenerationRun {
   createdAt: string;
 }
 
+export interface TestGenerationRunList {
+  items: TestGenerationRun[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
 export const optimizationRunIsActive = (status: ExperimentStatus) =>
   status === "optimization_queued" || status === "optimizing" || status === "candidate_evaluating";
 

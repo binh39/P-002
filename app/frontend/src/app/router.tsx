@@ -20,6 +20,7 @@ const PromptRegistryDetail = lazy(() => import("@/pages/PromptRegistryDetail"));
 const ProjectDetail = lazy(() => import("@/pages/ProjectDetail"));
 const Projects = lazy(() => import("@/pages/Projects"));
 const Settings = lazy(() => import("@/pages/Settings"));
+const TestCases = lazy(() => import("@/pages/TestCases"));
 
 const legacyPagePaths = {
   dashboard: "/dashboard",
@@ -119,6 +120,9 @@ function RoutedApplication() {
           </Route>
           <Route path="/prompts/:experimentId">
             <PromptRegistryDetail />
+          </Route>
+          <Route path="/test-cases">
+            <TestCases />
           </Route>
           <Route path="/settings">
             <Settings />

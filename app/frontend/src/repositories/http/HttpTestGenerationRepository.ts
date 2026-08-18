@@ -1,5 +1,9 @@
 import { apiRequest } from "@/api/client";
-import type { TestGenerationMetrics, TestGenerationRun } from "@/domain/experiments";
+import type {
+  TestGenerationMetrics,
+  TestGenerationRun,
+  TestGenerationRunList,
+} from "@/domain/experiments";
 import type {
   CreateTestGenerationInput,
   TestGenerationRepository,
@@ -35,6 +39,13 @@ interface ApiTestGenerationRun {
   estimated_cost_usd: number;
   error_message: string | null;
   created_at: string;
+}
+
+interface ApiTestGenerationRunList {
+  items: ApiTestGenerationRun[];
+  total: number;
+  offset: number;
+  limit: number;
 }
 
 function mapMetrics(metrics: ApiTestGenerationMetrics): TestGenerationMetrics {
@@ -74,6 +85,13 @@ function mapRun(run: ApiTestGenerationRun): TestGenerationRun {
 }
 
 export class HttpTestGenerationRepository implements TestGenerationRepository {
+  async list(signal?: AbortSignal): Promise<TestGenerationRunList> {
+    const response = await apiRequest<ApiTestGenerationRunList>("/test-generation-runs?limit=100", {
+      signal,
+    });
+    return { ...response, items: response.items.map(mapRun) };
+  }
+
   async create(
     experimentId: string,
     input: CreateTestGenerationInput,

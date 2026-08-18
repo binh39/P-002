@@ -784,8 +784,8 @@ Create experiment
 
 ##### F. Trang Test Cases mới
 
-- [ ]  Thêm route `/test-cases` chỉ liệt kê Final TestGenerationRun do người dùng chủ động tạo.
-- [ ]  Danh sách hiển thị run, project, experiment, prompt role, model, target count, tests, passed/failed,
+- [X]  Thêm route `/test-cases` chỉ liệt kê Final TestGenerationRun do người dùng chủ động tạo.
+- [X]  Danh sách hiển thị run, project, experiment, prompt role, model, target count, tests, passed/failed,
   statement/branch coverage, status và created time.
 - [ ]  Thêm filter theo project, experiment, prompt role, model, status và khoảng thời gian.
 - [ ]  Click run mở detail có prompt snapshot, project/source digest, config, metrics, cost và artifact downloads.

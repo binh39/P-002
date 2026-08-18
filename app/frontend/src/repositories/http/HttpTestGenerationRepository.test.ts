@@ -71,4 +71,29 @@ describe("HttpTestGenerationRepository", () => {
       metrics: { projectStatementCoverage: null },
     });
   });
+
+  it("lists only the final test-generation runs returned by the API", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            items: [],
+            total: 0,
+            offset: 0,
+            limit: 100,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    const result = await new HttpTestGenerationRepository().list();
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/test-generation-runs?limit=100",
+      expect.objectContaining({ headers: expect.objectContaining({ Accept: "application/json" }) }),
+    );
+    expect(result).toMatchObject({ items: [], total: 0, limit: 100 });
+  });
 });

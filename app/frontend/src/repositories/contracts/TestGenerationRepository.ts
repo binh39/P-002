@@ -1,4 +1,4 @@
-import type { PromptRole, TestGenerationRun } from "@/domain/experiments";
+import type { PromptRole, TestGenerationRun, TestGenerationRunList } from "@/domain/experiments";
 
 export interface CreateTestGenerationInput {
   promptRole: PromptRole;
@@ -6,6 +6,7 @@ export interface CreateTestGenerationInput {
 }
 
 export interface TestGenerationRepository {
+  list(signal?: AbortSignal): Promise<TestGenerationRunList>;
   create(
     experimentId: string,
     input: CreateTestGenerationInput,
