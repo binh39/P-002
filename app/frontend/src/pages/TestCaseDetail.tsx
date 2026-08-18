@@ -1,5 +1,5 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { type ReactNode, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 
 import { useRepositories } from "@/app/providers";
@@ -12,10 +12,45 @@ const activeStatuses: TestGenerationStatus[] = [
   "generating",
   "running_tests",
 ];
+const pythonKeywords = new Set([
+  "and",
+  "as",
+  "assert",
+  "async",
+  "await",
+  "break",
+  "class",
+  "continue",
+  "def",
+  "del",
+  "elif",
+  "else",
+  "except",
+  "False",
+  "finally",
+  "for",
+  "from",
+  "if",
+  "import",
+  "in",
+  "is",
+  "lambda",
+  "None",
+  "not",
+  "or",
+  "pass",
+  "raise",
+  "return",
+  "True",
+  "try",
+  "while",
+  "with",
+  "yield",
+]);
 
 type IndexedArtifact = {
   id: string;
-  kind: "generated_test" | "coverage";
+  kind: "generated_test" | "source" | "coverage";
   path: string;
   alias: string;
 };
@@ -34,11 +69,10 @@ function indexedArtifacts(manifest: Record<string, unknown>): IndexedArtifact[] 
     if (
       typeof id !== "string" ||
       typeof path !== "string" ||
-      (kind !== "generated_test" && kind !== "coverage") ||
+      (kind !== "generated_test" && kind !== "source" && kind !== "coverage") ||
       !/^[a-z0-9-]{1,80}$/.test(id)
-    ) {
+    )
       return [];
-    }
     return [{ id, kind, path, alias: `file-${id}` }];
   });
 }
@@ -46,20 +80,57 @@ function indexedArtifacts(manifest: Record<string, unknown>): IndexedArtifact[] 
 function percentage(value: number | null) {
   return value === null ? "—" : `${(value * 100).toFixed(1)}%`;
 }
-
 function formatStatus(status: TestGenerationStatus) {
-  return status.replace(/_/g, " ").replace(/^./, (character) => character.toUpperCase());
+  return status.replace(/_/g, " ").replace(/^./, (char) => char.toUpperCase());
 }
-
 function statusTone(status: TestGenerationStatus) {
   if (status === "completed") return "success" as const;
   if (["failed", "cancelled", "timed_out"].includes(status)) return "danger" as const;
   if (status === "partial") return "warning" as const;
   return "info" as const;
 }
-
 function formatCost(value: number) {
   return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(value);
+}
+function fileName(path: string) {
+  return path.split("/").at(-1) ?? path;
+}
+
+function PythonCode({ content, label }: { content: string; label: string }) {
+  const pattern =
+    /(#.*$)|((?:[rubf]|br|rf)?(?:"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'))|(\b[A-Za-z_][A-Za-z0-9_]*\b)|(\b\d+(?:\.\d+)?\b)/gim;
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+  for (const match of content.matchAll(pattern)) {
+    const index = match.index ?? 0;
+    if (index > cursor) nodes.push(content.slice(cursor, index));
+    const token = match[0];
+    const className = match[1]
+      ? "syntax-comment"
+      : match[2]
+        ? "syntax-string"
+        : match[3] && pythonKeywords.has(token)
+          ? "syntax-keyword"
+          : match[4]
+            ? "syntax-number"
+            : undefined;
+    nodes.push(
+      className ? (
+        <span className={className} key={`${index}-${token}`}>
+          {token}
+        </span>
+      ) : (
+        token
+      ),
+    );
+    cursor = index + token.length;
+  }
+  if (cursor < content.length) nodes.push(content.slice(cursor));
+  return (
+    <pre className="test-case-code" aria-label={label}>
+      <code>{nodes}</code>
+    </pre>
+  );
 }
 
 export default function TestCaseDetail() {
@@ -67,8 +138,8 @@ export default function TestCaseDetail() {
   const [, navigate] = useLocation();
   const { testGeneration } = useRepositories();
   const runId = params?.runId ?? "";
-  const [manifestVisible, setManifestVisible] = useState(false);
-  const [selectedArtifact, setSelectedArtifact] = useState<IndexedArtifact | null>(null);
+  const [selectedTestAlias, setSelectedTestAlias] = useState<string | null>(null);
+  const [selectedSourceAlias, setSelectedSourceAlias] = useState<string | null>(null);
   const query = useQuery({
     queryKey: ["test-generation-runs", runId],
     queryFn: ({ signal }) => testGeneration.get(runId, signal),
@@ -76,42 +147,41 @@ export default function TestCaseDetail() {
     refetchInterval: (current) =>
       current.state.data && activeStatuses.includes(current.state.data.status) ? 3_000 : false,
   });
-  const download = useMutation({
-    mutationFn: async (artifactName: string) => ({
-      artifactName,
-      blob: await testGeneration.downloadArtifact(runId, artifactName),
-    }),
-    onSuccess: ({ artifactName, blob }) => {
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download =
-        artifactName === "suite_zip" ? "generated-tests.zip" : "test-generation-manifest.json";
-      anchor.click();
-      URL.revokeObjectURL(url);
-    },
-  });
   const manifestQuery = useQuery({
     queryKey: ["test-generation-runs", runId, "manifest"],
     queryFn: ({ signal }) => testGeneration.getManifest(runId, signal),
-    enabled: manifestVisible && runId !== "",
+    enabled:
+      runId !== "" && query.data !== undefined && !activeStatuses.includes(query.data.status),
     retry: 1,
   });
-  const textArtifactQuery = useQuery({
-    queryKey: ["test-generation-runs", runId, "artifact", selectedArtifact?.alias],
+  const indexed = manifestQuery.data ? indexedArtifacts(manifestQuery.data) : [];
+  const generatedTests = indexed.filter((artifact) => artifact.kind === "generated_test");
+  const sourceFiles = indexed.filter((artifact) => artifact.kind === "source");
+  const selectedTest =
+    generatedTests.find((artifact) => artifact.alias === selectedTestAlias) ?? generatedTests[0];
+  const selectedSource =
+    sourceFiles.find((artifact) => artifact.alias === selectedSourceAlias) ?? sourceFiles[0];
+  const testQuery = useQuery({
+    queryKey: ["test-generation-runs", runId, "test", selectedTest?.alias],
     queryFn: ({ signal }) =>
-      testGeneration.getTextArtifact(runId, selectedArtifact?.alias ?? "", signal),
-    enabled: selectedArtifact !== null && runId !== "",
+      testGeneration.getTextArtifact(runId, selectedTest?.alias ?? "", signal),
+    enabled: selectedTest !== undefined && runId !== "",
+    retry: 1,
+  });
+  const sourceQuery = useQuery({
+    queryKey: ["test-generation-runs", runId, "source", selectedSource?.alias],
+    queryFn: ({ signal }) =>
+      testGeneration.getTextArtifact(runId, selectedSource?.alias ?? "", signal),
+    enabled: selectedSource !== undefined && runId !== "",
     retry: 1,
   });
 
-  if (query.isPending) {
+  if (query.isPending)
     return (
       <div className="page-state" role="status">
         Loading final test run…
       </div>
     );
-  }
   if (query.isError || !query.data) {
     return (
       <div className="page-state page-state-error" role="alert">
@@ -127,8 +197,6 @@ export default function TestCaseDetail() {
   }
 
   const run = query.data;
-  const artifacts = Object.keys(run.artifactObjects);
-  const availableTextArtifacts = manifestQuery.data ? indexedArtifacts(manifestQuery.data) : [];
   return (
     <div className="platform-page test-case-detail-page">
       <button className="back-link" onClick={() => navigate("/test-cases")}>
@@ -160,203 +228,76 @@ export default function TestCaseDetail() {
         <StatCard label="Target score" value={percentage(run.metrics.targetScore)} tone="violet" />
         <StatCard label="Estimated cost" value={formatCost(run.estimatedCostUsd)} tone="green" />
       </div>
-      <div className="platform-two-column prompt-registry-prompt-grid">
-        <section className="platform-card">
+      <section className="platform-card test-case-explorer">
+        <aside className="test-case-file-list">
           <div className="card-heading">
-            <h2>Immutable snapshot</h2>
+            <h2>Test cases</h2>
           </div>
-          <dl className="definition-list prompt-registry-metadata">
-            <div>
-              <dt>Prompt snapshot</dt>
-              <dd>
-                <code>{run.promptSnapshotId}</code>
-              </dd>
-            </div>
-            <div>
-              <dt>Prompt digest</dt>
-              <dd>
-                <code>{run.promptDigest}</code>
-              </dd>
-            </div>
-            <div>
-              <dt>Source snapshot</dt>
-              <dd>
-                <code>{run.sourceSnapshotDigest}</code>
-              </dd>
-            </div>
-            <div>
-              <dt>Dataset digest</dt>
-              <dd>
-                <code>{run.datasetDigest}</code>
-              </dd>
-            </div>
-            <div>
-              <dt>Projects</dt>
-              <dd>{run.projectIds.join(", ")}</dd>
-            </div>
-          </dl>
-        </section>
-        <section className="platform-card">
-          <div className="card-heading">
-            <h2>Generation configuration</h2>
-          </div>
-          <dl className="definition-list prompt-registry-metadata">
-            <div>
-              <dt>Model</dt>
-              <dd>
-                <code>{run.model}</code>
-              </dd>
-            </div>
-            <div>
-              <dt>Scope</dt>
-              <dd>
-                {run.scope} · {run.targetIds.length} targets
-              </dd>
-            </div>
-            <div>
-              <dt>Seed</dt>
-              <dd>{run.randomSeed}</dd>
-            </div>
-            <div>
-              <dt>Attempts / repeat</dt>
-              <dd>
-                {run.maxAttempts} / {run.repeatTests}
-              </dd>
-            </div>
-            <div>
-              <dt>Concurrency / rate</dt>
-              <dd>
-                {run.maxConcurrency} / {run.rateLimit ?? "default"}
-              </dd>
-            </div>
-            <div>
-              <dt>Runner protocol</dt>
-              <dd>v{run.runnerProtocolVersion}</dd>
-            </div>
-          </dl>
-        </section>
-      </div>
-      <section className="platform-card">
-        <div className="card-heading">
-          <div>
-            <h2>Suite results</h2>
-            <p>Final-suite coverage is distinct from target-only coverage.</p>
-          </div>
-        </div>
-        <div className="platform-stats-grid baseline-metrics-grid">
-          <StatCard
-            label="Tests"
-            value={run.metrics.testCount}
-            detail={`${run.metrics.testFileCount} files`}
-          />
-          <StatCard
-            label="Passed"
-            value={run.metrics.passed ?? "—"}
-            detail={`${run.metrics.failed ?? "—"} failed`}
-            tone="green"
-          />
-          <StatCard
-            label="Target statement"
-            value={percentage(run.metrics.targetStatementCoverage)}
-            detail={`${run.metrics.completedTargetCount}/${run.metrics.targetCount} targets`}
-            tone="violet"
-          />
-          <StatCard
-            label="Target branch"
-            value={percentage(run.metrics.targetBranchCoverage)}
-            detail={`${run.metrics.failedTargetCount} failed targets`}
-            tone="orange"
-          />
-        </div>
-      </section>
-      <section className="platform-card">
-        <div className="card-heading">
-          <div>
-            <h2>Artifacts</h2>
-            <p>
-              Files are downloaded through the owner-scoped API; no long-lived signed URL is stored
-              in the browser.
-            </p>
-          </div>
-        </div>
-        {artifacts.length === 0 ? (
-          <div className="empty-state">Artifacts appear when the runner completes.</div>
-        ) : (
-          <div className="prompt-registry-header-actions">
-            {run.artifactObjects.manifest && (
+          {manifestQuery.isPending && <p role="status">Loading generated tests…</p>}
+          {manifestQuery.isError && (
+            <p className="inline-validation-error">Generated tests are unavailable for this run.</p>
+          )}
+          {!manifestQuery.isPending && !manifestQuery.isError && generatedTests.length === 0 && (
+            <p className="muted-cell">No generated Python test files were recorded.</p>
+          )}
+          <div className="test-case-file-buttons">
+            {generatedTests.map((artifact) => (
               <button
-                className="secondary-button"
-                onClick={() => setManifestVisible((visible) => !visible)}
+                type="button"
+                key={artifact.alias}
+                className={selectedTest?.alias === artifact.alias ? "is-selected" : ""}
+                title={artifact.path}
+                onClick={() => setSelectedTestAlias(artifact.alias)}
               >
-                {manifestVisible ? "Hide manifest" : "View manifest"}
-              </button>
-            )}
-            {artifacts.map((artifactName) => (
-              <button
-                key={artifactName}
-                className="secondary-button"
-                disabled={download.isPending}
-                onClick={() => download.mutate(artifactName)}
-              >
-                {download.isPending && download.variables === artifactName
-                  ? "Downloading…"
-                  : artifactName === "suite_zip"
-                    ? "Download suite ZIP"
-                    : "Download manifest"}
+                {fileName(artifact.path)}
               </button>
             ))}
           </div>
-        )}
-        {download.isError && (
-          <p className="inline-validation-error" role="alert">
-            {download.error instanceof Error ? download.error.message : "Artifact download failed."}
-          </p>
-        )}
-        {manifestVisible && manifestQuery.isPending && <p role="status">Loading manifest…</p>}
-        {manifestVisible && manifestQuery.isError && (
-          <p className="inline-validation-error" role="alert">
-            {manifestQuery.error instanceof Error
-              ? manifestQuery.error.message
-              : "Manifest could not be displayed."}
-          </p>
-        )}
-        {manifestVisible && manifestQuery.data && (
-          <>
-            <pre className="prompt-registry-code test-generation-manifest">
-              <code>{JSON.stringify(manifestQuery.data, null, 2)}</code>
-            </pre>
-            {availableTextArtifacts.length > 0 && (
-              <div className="test-generation-artifact-viewer">
-                <h3>Generated files</h3>
-                <div className="prompt-registry-header-actions">
-                  {availableTextArtifacts.map((artifact) => (
-                    <button
-                      key={artifact.alias}
-                      className="secondary-button"
-                      onClick={() => setSelectedArtifact(artifact)}
-                    >
-                      {artifact.kind === "generated_test" ? "View test" : "View coverage"}:{" "}
-                      {artifact.path}
-                    </button>
-                  ))}
-                </div>
-                {textArtifactQuery.isPending && <p role="status">Loading selected file…</p>}
-                {textArtifactQuery.isError && (
-                  <p className="inline-validation-error" role="alert">
-                    {textArtifactQuery.error instanceof Error
-                      ? textArtifactQuery.error.message
-                      : "Selected file could not be displayed."}
-                  </p>
-                )}
-                {selectedArtifact && textArtifactQuery.data && (
-                  <pre className="prompt-registry-code test-generation-manifest">
-                    <code>{textArtifactQuery.data.content}</code>
-                  </pre>
-                )}
-              </div>
+        </aside>
+        <section className="test-case-code-panel">
+          <div className="card-heading">
+            <h2>Source code</h2>
+            {sourceFiles.length > 1 && (
+              <select
+                aria-label="Select source file"
+                value={selectedSource?.alias ?? ""}
+                onChange={(event) => setSelectedSourceAlias(event.target.value)}
+              >
+                {sourceFiles.map((artifact) => (
+                  <option key={artifact.alias} value={artifact.alias}>
+                    {artifact.path}
+                  </option>
+                ))}
+              </select>
             )}
-          </>
-        )}
+          </div>
+          {sourceFiles.length === 0 ? (
+            <p className="muted-cell">
+              Source code was not stored for this historical run. Generate a new suite after
+              deployment to view it here.
+            </p>
+          ) : sourceQuery.isPending ? (
+            <p role="status">Loading source…</p>
+          ) : sourceQuery.isError ? (
+            <p className="inline-validation-error">Source code could not be loaded.</p>
+          ) : sourceQuery.data ? (
+            <PythonCode content={sourceQuery.data.content} label="Source code" />
+          ) : null}
+        </section>
+        <section className="test-case-code-panel">
+          <div className="card-heading">
+            <h2>Generated test</h2>
+          </div>
+          {!selectedTest ? (
+            <p className="muted-cell">Select a generated test file.</p>
+          ) : testQuery.isPending ? (
+            <p role="status">Loading test…</p>
+          ) : testQuery.isError ? (
+            <p className="inline-validation-error">Generated test could not be loaded.</p>
+          ) : testQuery.data ? (
+            <PythonCode content={testQuery.data.content} label="Generated test code" />
+          ) : null}
+        </section>
       </section>
     </div>
   );

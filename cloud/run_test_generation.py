@@ -16,7 +16,7 @@ import re
 import shutil
 import sys
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from cloud.run_job import _download_object, _upload_dir
 from cloud.runtime_workspace import detect_layout, find_project_root, safe_extract_runtime_bundle, safe_extract_zip
@@ -26,10 +26,13 @@ from src.optimization.models import ExperimentConfig, ProjectLayout, SymbolTarge
 from src.optimization.runner import CoverUpExperimentRunner, _test_environment
 
 
-def _artifact_index(artifacts: Path, generated_files: list[Path]) -> list[dict[str, object]]:
+def _artifact_index(
+    artifacts: Path, generated_files: list[Path], source_files: list[Path] | None = None
+) -> list[dict[str, object]]:
     """Describe browser-safe final-suite artifacts without exposing GCS object names."""
     records: list[dict[str, object]] = []
     candidates = [("generated_test", path, "text/x-python") for path in generated_files]
+    candidates.extend(("source", path, "text/x-python") for path in source_files or [])
     candidates.extend(
         ("coverage", path, "application/json")
         for path in sorted((artifacts / "coverage").glob("*.json"))
@@ -54,6 +57,47 @@ def _artifact_index(artifacts: Path, generated_files: list[Path]) -> list[dict[s
             }
         )
     return records
+
+
+def _copy_source_artifacts(
+    artifacts: Path,
+    targets: list[SymbolTarget],
+    config: ExperimentConfig,
+    sample_repos: Path,
+) -> list[Path]:
+    """Copy selected source modules into the final artifact bundle for the browser viewer."""
+    copied: list[Path] = []
+    seen: set[tuple[str, str]] = set()
+    for target in targets:
+        normalized = target.source_file.replace("\\", "/")
+        relative = PurePosixPath(normalized)
+        if not relative.parts or relative.is_absolute() or ".." in relative.parts:
+            continue
+        identity = (target.project, normalized)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        package_dir = config.package_dir_for(target.project).resolve()
+        roots = [package_dir.parent, package_dir]
+        if target.project.startswith("sample:"):
+            roots.insert(0, sample_repos / target.project.split(":", 1)[1])
+        source_path = next(
+            (
+                candidate
+                for root in roots
+                if (candidate := (root / Path(*relative.parts)).resolve()).is_file()
+                and (root.resolve() == candidate or root.resolve() in candidate.parents)
+            ),
+            None,
+        )
+        if source_path is None or source_path.stat().st_size > 1_000_000:
+            continue
+        safe_project = re.sub(r"[^A-Za-z0-9_.-]+", "_", target.project).strip("._-") or "project"
+        destination = artifacts / "source" / safe_project / Path(*relative.parts)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source_path, destination)
+        copied.append(destination)
+    return copied
 
 
 def _count_tests(paths: list[Path]) -> int:
@@ -259,9 +303,10 @@ def _run(args, artifacts: Path) -> dict:
         if value["project_branch_coverage"] is not None
     ]
     generated_files = sorted(path for path in Path(batch.tests_workspace).rglob("test_*.py") if path.is_file())
+    source_files = _copy_source_artifacts(artifacts, targets, config, sample_repos)
     archive_base = artifacts / "generated_tests"
     shutil.make_archive(str(archive_base), "zip", root_dir=Path(batch.tests_workspace))
-    artifact_files = _artifact_index(artifacts, generated_files)
+    artifact_files = _artifact_index(artifacts, generated_files, source_files)
     status = "partial" if suite_failed or target_metrics["failed_target_count"] else "completed"
     return {
         "schema_version": 2,
