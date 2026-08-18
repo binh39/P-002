@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 
 import { useRepositories } from "@/app/providers";
@@ -73,11 +73,20 @@ function MetricPanel({
   );
 }
 
-function PromptCode({ title, prompt }: { title: string; prompt: PromptBundle }) {
+function PromptCode({
+  title,
+  prompt,
+  action,
+}: {
+  title: string;
+  prompt: PromptBundle;
+  action?: ReactNode;
+}) {
   return (
     <section className="platform-card prompt-registry-prompt-card">
       <div className="card-heading">
         <h2>{title}</h2>
+        {action}
       </div>
       <div className="prompt-registry-prompt-parts">
         <section>
@@ -178,38 +187,6 @@ function PromptActions({
   );
 }
 
-function HeaderActions({
-  optimizedAvailable,
-  activeRole,
-  onGenerate,
-}: {
-  optimizedAvailable: boolean;
-  activeRole: PromptRole | undefined;
-  onGenerate: (role: PromptRole) => void;
-}) {
-  return (
-    <div className="prompt-registry-header-actions">
-      <PromptActions
-        label="Generate baseline tests"
-        disabled={activeRole === "optimized"}
-        loading={activeRole === "baseline"}
-        onClick={() => onGenerate("baseline")}
-      />
-      <PromptActions
-        label="Generate final tests"
-        disabled={!optimizedAvailable || activeRole === "baseline"}
-        loading={activeRole === "optimized"}
-        onClick={() => onGenerate("optimized")}
-        title={
-          optimizedAvailable
-            ? undefined
-            : "Complete the final comparison before generating final tests."
-        }
-      />
-    </div>
-  );
-}
-
 export default function PromptRegistryDetail() {
   const [, params] = useRoute("/prompts/:experimentId");
   const [, navigate] = useLocation();
@@ -276,13 +253,6 @@ export default function PromptRegistryDetail() {
         eyebrow={`Experiment · ${entry.experimentId}`}
         title={entry.experimentName}
         description={`${entry.projectNames.join(", ") || entry.projectIds.join(", ")} · final prompt snapshots`}
-        actions={
-          <HeaderActions
-            optimizedAvailable={selected !== null}
-            activeRole={activeRole}
-            onGenerate={(role) => testGeneration.mutate(role)}
-          />
-        }
       />
 
       {testGeneration.isError && (
@@ -321,8 +291,35 @@ export default function PromptRegistryDetail() {
       </section>
 
       <div className="platform-two-column prompt-registry-prompt-grid">
-        <PromptCode title="Baseline prompt" prompt={entry.baseline.prompt} />
-        <PromptCode title="Final Prompt" prompt={selectedPrompt} />
+        <PromptCode
+          title="Baseline prompt"
+          prompt={entry.baseline.prompt}
+          action={
+            <PromptActions
+              label="Generate baseline tests"
+              disabled={activeRole === "optimized"}
+              loading={activeRole === "baseline"}
+              onClick={() => testGeneration.mutate("baseline")}
+            />
+          }
+        />
+        <PromptCode
+          title="Final Prompt"
+          prompt={selectedPrompt}
+          action={
+            <PromptActions
+              label="Generate final tests"
+              disabled={selected === null || activeRole === "baseline"}
+              loading={activeRole === "optimized"}
+              onClick={() => testGeneration.mutate("optimized")}
+              title={
+                selected === null
+                  ? "Complete the final comparison before generating final tests."
+                  : undefined
+              }
+            />
+          }
+        />
       </div>
       {experimentQuery.data && <ExperimentSettings experiment={experimentQuery.data} />}
       {!selected && (

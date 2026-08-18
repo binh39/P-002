@@ -6930,10 +6930,12 @@ textarea {
   color: #c03b3b;
 }
 
-.prompt-registry-header-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.registry-table .metric-positive {
+  color: #07845c;
+}
+
+.registry-table .metric-negative {
+  color: #c03b3b;
 }
 
 .prompt-registry-generation-notice {
@@ -7051,6 +7053,16 @@ textarea {
 .prompt-registry-prompt-card,
 .prompt-registry-diff-card {
   min-width: 0;
+}
+
+.prompt-registry-prompt-card > .card-heading {
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.prompt-registry-prompt-card > .card-heading .secondary-button {
+  flex: 0 0 auto;
 }
 
 .prompt-registry-code {
