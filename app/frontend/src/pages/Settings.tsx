@@ -84,9 +84,6 @@ export default function Settings() {
               </SettingsSection>
               <SettingsSection title="AI provider keys">
                 {credentialsQuery.isLoading ? <p>Loading provider credentials…</p> : null}
-                {credentialsQuery.isError ? (
-                  <p className="form-error">Could not load provider credentials.</p>
-                ) : null}
                 {providerDetails.map((detail) => (
                   <ProviderKeyForm
                     key={detail.provider}
