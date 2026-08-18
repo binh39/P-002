@@ -12,6 +12,7 @@ from cloud.runtime_workspace import (
     RUNTIME_TOOL_PACKAGES,
     RuntimeProjectSpec,
     create_runtime_bundle,
+    detect_layout,
     prepare_environment,
     prepare_runtime,
     safe_extract_runtime_bundle,
@@ -56,8 +57,21 @@ def test_safe_extract_ignores_symbolic_links(tmp_path):
 
 
 def test_runtime_bundle_contains_every_pytest_plugin_used_by_gepa():
-    assert RUNTIME_PROTOCOL_VERSION == 4
+    assert RUNTIME_PROTOCOL_VERSION == 5
+    assert "pytest-asyncio==1.4.0" in RUNTIME_TOOL_PACKAGES
     assert "pytest-repeat==0.9.4" in RUNTIME_TOOL_PACKAGES
+
+
+def test_detect_layout_supports_lib_package_layout(tmp_path):
+    project = tmp_path / "project"
+    package = project / "lib" / "example"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("VALUE = 1\n", encoding="utf-8")
+
+    source, tests = detect_layout(project)
+
+    assert source == package
+    assert tests == project / "tests"
 
 
 def test_prepare_runtime_collects_tests_and_baseline_coverage(tmp_path):

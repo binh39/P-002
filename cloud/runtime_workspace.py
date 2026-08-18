@@ -23,9 +23,10 @@ from src.optimization.project_setup import prepare_project
 MAX_ARCHIVE_ENTRIES = 20_000
 MAX_UNCOMPRESSED_BYTES = 250 * 1024 * 1024
 MAX_FILE_BYTES = 25 * 1024 * 1024
-RUNTIME_PROTOCOL_VERSION = 4
+RUNTIME_PROTOCOL_VERSION = 5
 RUNTIME_TOOL_PACKAGES = (
     "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
     "pytest-repeat==0.9.4",
     "coverage==7.15.2",
     "slipcover==1.0.18",
@@ -186,10 +187,14 @@ def detect_layout(root: Path, configured_source: str = "src", configured_tests: 
 
 
 def _detect_source(root: Path) -> Path:
-    src = root / "src"
-    if src.is_dir() and any(src.rglob("*.py")):
-        packages = [item for item in src.iterdir() if item.is_dir() and (item / "__init__.py").is_file()]
-        return packages[0] if len(packages) == 1 else src
+    # Python projects commonly place import packages under src/ or lib/.
+    # Treat these as generic source containers rather than assuming src/ only.
+    for container_name in ("src", "lib", "python"):
+        container = root / container_name
+        if not container.is_dir() or not any(container.rglob("*.py")):
+            continue
+        packages = [item for item in container.iterdir() if item.is_dir() and (item / "__init__.py").is_file()]
+        return packages[0] if len(packages) == 1 else container
     packages = [
         item
         for item in root.iterdir()

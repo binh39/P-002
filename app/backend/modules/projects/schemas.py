@@ -3,7 +3,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
-MINIMUM_RUNTIME_PROTOCOL_VERSION = 4
+MINIMUM_RUNTIME_PROTOCOL_VERSION = 5
 
 
 class StrictModel(BaseModel):
