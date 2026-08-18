@@ -133,15 +133,19 @@ def _validated_final_test_artifact_objects(prefix: str, artifacts: dict) -> dict
             continue
         if kind == "generated_test":
             expected_prefix, expected_suffix = "generated_tests/", ".py"
+        elif kind == "source":
+            expected_prefix, expected_suffix = "source/", ".py"
         elif kind == "coverage":
             expected_prefix, expected_suffix = "coverage/", ".json"
         else:
             continue
         normalized_path = relative_path.replace("\\", "/")
+        path_parts = normalized_path.split("/")
         if (
             not normalized_path.startswith(expected_prefix)
             or not normalized_path.endswith(expected_suffix)
-            or ".." in normalized_path.split("/")
+            or ".." in path_parts
+            or (kind == "source" and len(path_parts) < 3)
         ):
             continue
         objects[f"file-{artifact_id}"] = f"{prefix}/{normalized_path}"
@@ -1251,8 +1255,8 @@ class ExperimentService:
         return _redact_artifact_value(manifest)
 
     async def get_test_generation_text_artifact(self, run_id: str, artifact_name: str, owner_id: str) -> dict[str, str]:
-        """Return an indexed generated test or coverage report as bounded UTF-8 text."""
-        if not re.fullmatch(r"file-(generated-test|coverage)-[1-9][0-9]*", artifact_name):
+        """Return an indexed generated test, source module, or coverage report as bounded UTF-8 text."""
+        if not re.fullmatch(r"file-(generated-test|source|coverage)-[1-9][0-9]*", artifact_name):
             raise AppError(404, "ARTIFACT_NOT_FOUND", "Text artifact was not found in this final test-generation run")
         content = await self.get_test_generation_artifact(run_id, artifact_name, owner_id)
         if len(content) > MAX_TEST_GENERATION_MANIFEST_BYTES:

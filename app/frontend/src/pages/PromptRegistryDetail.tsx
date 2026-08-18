@@ -3,15 +3,14 @@ import { useState } from "react";
 import { useLocation, useRoute } from "wouter";
 
 import { useRepositories } from "@/app/providers";
-import { PageHeader, StatCard, StatusBadge } from "@/components/PlatformUI";
+import { PageHeader } from "@/components/PlatformUI";
 import type {
+  Experiment,
+  PromptCoverageMetrics,
   PromptBundle,
   PromptRole,
-  PromptSnapshot,
   TestGenerationRun,
 } from "@/domain/experiments";
-
-type PromptComponent = "initial" | "error";
 
 function percentage(value: number | null) {
   return value === null ? "—" : `${(value * 100).toFixed(1)}%`;
@@ -23,78 +22,126 @@ function formatTimestamp(value: string) {
   );
 }
 
-function finalPromptLabel(snapshot: PromptSnapshot | null) {
-  if (!snapshot) return "Optimization pending";
-  return snapshot.origin === "baseline_retained" ? "Baseline retained" : "Optimized prompt";
+function progressWidth(value: number | null) {
+  return `${Math.round(Math.max(0, Math.min(1, value ?? 0)) * 100)}%`;
 }
 
-function diffLines(baseline: string, optimized: string) {
-  const before = baseline.split("\n");
-  const after = optimized.split("\n");
-  const lines: string[] = [];
-  for (let index = 0; index < Math.max(before.length, after.length); index += 1) {
-    const beforeLine = before[index];
-    const afterLine = after[index];
-    if (beforeLine === afterLine) {
-      if (beforeLine !== undefined) lines.push(`  ${beforeLine}`);
-      continue;
-    }
-    if (beforeLine !== undefined) lines.push(`- ${beforeLine}`);
-    if (afterLine !== undefined) lines.push(`+ ${afterLine}`);
-  }
-  return lines.join("\n");
-}
-
-function PromptMetadata({ snapshot }: { snapshot: PromptSnapshot }) {
+function MetricBar({
+  value,
+  tone,
+}: {
+  value: number | null;
+  tone: "baseline" | "final" | "statement" | "branch";
+}) {
   return (
-    <dl className="definition-list prompt-registry-metadata">
-      <div>
-        <dt>Prompt digest</dt>
-        <dd>
-          <code>{snapshot.promptDigest}</code>
-        </dd>
-      </div>
-      <div>
-        <dt>Generation model</dt>
-        <dd>
-          <code>{snapshot.coverupModel}</code>
-        </dd>
-      </div>
-      <div>
-        <dt>Optimizer model</dt>
-        <dd>
-          <code>{snapshot.optimizeModel}</code>
-        </dd>
-      </div>
-      <div>
-        <dt>Dataset seed</dt>
-        <dd>{snapshot.splitSeed}</dd>
-      </div>
-      <div>
-        <dt>Runtime protocol</dt>
-        <dd>v{snapshot.runnerProtocolVersion}</dd>
-      </div>
-    </dl>
+    <span className={`prompt-registry-metric-bar is-${tone}`} aria-hidden="true">
+      <span style={{ width: progressWidth(value) }} />
+    </span>
   );
 }
 
-function PromptCode({
+function MetricPanel({
   title,
-  prompt,
-  component,
+  metrics,
+  tone,
 }: {
   title: string;
-  prompt: PromptBundle;
-  component: PromptComponent;
+  metrics: PromptCoverageMetrics;
+  tone: "baseline" | "final";
 }) {
+  return (
+    <section className={`prompt-registry-metric-panel is-${tone}`}>
+      <h2>{title}</h2>
+      <div className="prompt-registry-primary-score">
+        <span>Score</span>
+        <strong>{percentage(metrics.score)}</strong>
+      </div>
+      <MetricBar value={metrics.score} tone={tone} />
+      <div className="prompt-registry-coverage-list">
+        <div>
+          <span>Statement coverage</span>
+          <strong>{percentage(metrics.statementCoverage)}</strong>
+          <MetricBar value={metrics.statementCoverage} tone="statement" />
+        </div>
+        <div>
+          <span>Branch coverage</span>
+          <strong>{percentage(metrics.branchCoverage)}</strong>
+          <MetricBar value={metrics.branchCoverage} tone="branch" />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PromptCode({ title, prompt }: { title: string; prompt: PromptBundle }) {
   return (
     <section className="platform-card prompt-registry-prompt-card">
       <div className="card-heading">
         <h2>{title}</h2>
       </div>
-      <pre className="prompt-registry-code">
-        <code>{prompt[component]}</code>
-      </pre>
+      <div className="prompt-registry-prompt-parts">
+        <section>
+          <h3>Initial prompt</h3>
+          <pre className="prompt-registry-code">
+            <code>{prompt.initial}</code>
+          </pre>
+        </section>
+        <section>
+          <h3>Error prompt</h3>
+          <pre className="prompt-registry-code">
+            <code>{prompt.error}</code>
+          </pre>
+        </section>
+      </div>
+    </section>
+  );
+}
+
+const samplingLabels: Record<Experiment["samplingMethod"], string> = {
+  random: "Random",
+  most_branches: "Most branches",
+  most_statements: "Most statements",
+  manual: "Manual selection",
+};
+
+function ExperimentSettings({ experiment }: { experiment: Experiment }) {
+  const { settings, splitPercentages } = experiment;
+  const values: Array<[string, string]> = [
+    ["Environment", "Cloud Run isolated runner"],
+    ["Function selection", samplingLabels[experiment.samplingMethod]],
+    ["Functions", String(experiment.targetFunctionIds.length)],
+    ["Random seed", String(experiment.splitSeed)],
+    [
+      "Dataset split",
+      `${splitPercentages.train}% train / ${splitPercentages.validation}% valid / ${splitPercentages.test}% test`,
+    ],
+    ["CoverUp model", settings.coverupModel],
+    ["Optimize model", settings.optimizeModel],
+    [
+      "CoverUp",
+      `${settings.maxAttempts} attempts · ${settings.repeatTests} repeats · concurrency ${settings.maxConcurrency}`,
+    ],
+    ["Rate limit", settings.rateLimit === null ? "Default" : `${settings.rateLimit} requests/min`],
+    [
+      "GEPA budget",
+      `${settings.maxMetricCalls} metric calls · ${settings.evaluationReplicates} replicate(s)`,
+    ],
+    ["Reflection temperature", String(settings.reflectionTemperature)],
+    ["Pytest arguments", settings.pytestArgs || "Default"],
+  ];
+  return (
+    <section className="platform-card prompt-registry-settings-card">
+      <div className="card-heading">
+        <h2>Experiment settings</h2>
+      </div>
+      <dl className="definition-list prompt-registry-settings-list">
+        {values.map(([label, value]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd title={value}>{value}</dd>
+          </div>
+        ))}
+      </dl>
     </section>
   );
 }
@@ -166,14 +213,21 @@ function HeaderActions({
 export default function PromptRegistryDetail() {
   const [, params] = useRoute("/prompts/:experimentId");
   const [, navigate] = useLocation();
-  const { promptRegistry, testGeneration: testGenerationRepository } = useRepositories();
-  const [component, setComponent] = useState<PromptComponent>("initial");
-  const [view, setView] = useState<"side-by-side" | "diff">("side-by-side");
+  const {
+    promptRegistry,
+    experiments,
+    testGeneration: testGenerationRepository,
+  } = useRepositories();
   const [testGenerationRun, setTestGenerationRun] = useState<TestGenerationRun | null>(null);
   const experimentId = params?.experimentId ?? "";
   const query = useQuery({
     queryKey: ["prompt-registry", experimentId],
     queryFn: ({ signal }) => promptRegistry.get(experimentId, signal),
+    enabled: experimentId !== "",
+  });
+  const experimentQuery = useQuery({
+    queryKey: ["experiments", experimentId],
+    queryFn: ({ signal }) => experiments.get(experimentId, signal),
     enabled: experimentId !== "",
   });
   const testGeneration = useMutation({
@@ -260,107 +314,17 @@ export default function PromptRegistryDetail() {
       )}
 
       <section className="platform-card prompt-registry-summary">
-        <div className="card-heading">
-          <div>
-            <h2>Paired evaluation</h2>
-            <p>Baseline and final prompt metrics use the same locked evaluation protocol.</p>
-          </div>
-          <StatusBadge tone={selected?.origin === "optimized_candidate" ? "success" : "warning"}>
-            {finalPromptLabel(selected)}
-          </StatusBadge>
-        </div>
-        <div className="platform-stats-grid baseline-metrics-grid">
-          <StatCard
-            label="Baseline score"
-            value={percentage(entry.baselineMetrics.score)}
-            detail="Locked baseline"
-          />
-          <StatCard
-            label="Final prompt score"
-            value={percentage(entry.optimizedMetrics.score)}
-            detail={finalPromptLabel(selected)}
-            tone="violet"
-          />
-          <StatCard
-            label="Statement coverage"
-            value={percentage(entry.optimizedMetrics.statementCoverage)}
-            detail={`Baseline ${percentage(entry.baselineMetrics.statementCoverage)}`}
-            tone="green"
-          />
-          <StatCard
-            label="Branch coverage"
-            value={percentage(entry.optimizedMetrics.branchCoverage)}
-            detail={`Baseline ${percentage(entry.baselineMetrics.branchCoverage)}`}
-            tone="orange"
-          />
+        <div className="prompt-registry-metric-comparison">
+          <MetricPanel title="Baseline" metrics={entry.baselineMetrics} tone="baseline" />
+          <MetricPanel title="Final Prompt" metrics={entry.optimizedMetrics} tone="final" />
         </div>
       </section>
 
-      <div className="prompt-registry-view-controls" aria-label="Prompt display controls">
-        <div role="group" aria-label="Prompt component">
-          {(["initial", "error"] as PromptComponent[]).map((value) => (
-            <button
-              key={value}
-              className={component === value ? "is-selected" : ""}
-              onClick={() => setComponent(value)}
-            >
-              {value === "initial" ? "Initial prompt" : "Error prompt"}
-            </button>
-          ))}
-        </div>
-        <div role="group" aria-label="Prompt comparison view">
-          <button
-            className={view === "side-by-side" ? "is-selected" : ""}
-            onClick={() => setView("side-by-side")}
-          >
-            Side by side
-          </button>
-          <button className={view === "diff" ? "is-selected" : ""} onClick={() => setView("diff")}>
-            Unified diff
-          </button>
-        </div>
-      </div>
-
-      {view === "side-by-side" ? (
-        <div className="platform-two-column prompt-registry-prompt-grid">
-          <PromptCode
-            title="Baseline prompt"
-            prompt={entry.baseline.prompt}
-            component={component}
-          />
-          <PromptCode
-            title={finalPromptLabel(selected)}
-            prompt={selectedPrompt}
-            component={component}
-          />
-        </div>
-      ) : (
-        <section className="platform-card prompt-registry-diff-card">
-          <div className="card-heading">
-            <h2>{component === "initial" ? "Initial prompt diff" : "Error prompt diff"}</h2>
-          </div>
-          <pre className="prompt-registry-code prompt-registry-unified-diff">
-            <code>{diffLines(entry.baseline.prompt[component], selectedPrompt[component])}</code>
-          </pre>
-        </section>
-      )}
-
       <div className="platform-two-column prompt-registry-prompt-grid">
-        <section className="platform-card">
-          <div className="card-heading">
-            <h2>Baseline context</h2>
-          </div>
-          <PromptMetadata snapshot={entry.baseline} />
-        </section>
-        {selected && (
-          <section className="platform-card">
-            <div className="card-heading">
-              <h2>{finalPromptLabel(selected)} context</h2>
-            </div>
-            <PromptMetadata snapshot={selected} />
-          </section>
-        )}
+        <PromptCode title="Baseline prompt" prompt={entry.baseline.prompt} />
+        <PromptCode title="Final Prompt" prompt={selectedPrompt} />
       </div>
+      {experimentQuery.data && <ExperimentSettings experiment={experimentQuery.data} />}
       {!selected && (
         <section className="platform-card empty-state">
           Final prompt details will appear after optimization and the locked comparison finish.

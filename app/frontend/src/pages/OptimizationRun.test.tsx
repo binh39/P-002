@@ -121,17 +121,16 @@ describe("optimization run", () => {
     render(<OptimizationRun />, { wrapper: Wrapper });
 
     expect(await screen.findByText("isort optimization")).toBeInTheDocument();
-    expect(screen.getByText("Sparse baseline initial prompt")).toBeInTheDocument();
-    expect(screen.getByText("Optimized initial prompt")).toBeInTheDocument();
-    expect(screen.getByText("Baseline prompt")).toBeInTheDocument();
-    expect(screen.getByText("Final selected prompt")).toBeInTheDocument();
     expect(screen.getByText("+0.500")).toBeInTheDocument();
     const resultsCard = screen.getByText("Evaluation results").closest("section");
     expect(resultsCard).not.toBeNull();
     expect(within(resultsCard!).getByText("Validation")).toBeInTheDocument();
     expect(within(resultsCard!).getByText("Final locked test")).toBeInTheDocument();
     expect(within(resultsCard!).getByText("Promoted")).toBeInTheDocument();
-    expect(screen.getByText("candidate_prompt.json")).toBeInTheDocument();
+    expect(screen.queryByText("Prompt lineage")).not.toBeInTheDocument();
+    expect(screen.queryByText("Optimization artifacts")).not.toBeInTheDocument();
+    expect(screen.queryByText("Baseline prompt")).not.toBeInTheDocument();
+    expect(screen.queryByText("Final selected prompt")).not.toBeInTheDocument();
     expect(screen.getByText("Live GEPA evolution")).toBeInTheDocument();
     expect(screen.getAllByText("Iteration 2")).toHaveLength(2);
     expect(screen.getByText("Repair the failing test.")).toBeInTheDocument();
@@ -161,8 +160,8 @@ describe("optimization run", () => {
     render(<OptimizationRun />, { wrapper: Wrapper });
 
     expect(await screen.findByText("Baseline retained")).toBeInTheDocument();
-    expect(await screen.findAllByText("Sparse baseline initial prompt")).toHaveLength(2);
-    expect(screen.queryByText("Optimized initial prompt")).not.toBeInTheDocument();
+    expect(screen.queryByText("Baseline prompt")).not.toBeInTheDocument();
+    expect(screen.queryByText("Final selected prompt")).not.toBeInTheDocument();
   });
 
   it("cancels an active Cloud Run optimization from the running card", async () => {

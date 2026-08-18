@@ -19,6 +19,31 @@ function coverageSummary(metrics: PromptCoverageMetrics) {
   return `${percentage(metrics.statementCoverage)} stmt · ${percentage(metrics.branchCoverage)} branch`;
 }
 
+function scoreWidth(value: number | null) {
+  return `${Math.round(Math.max(0, Math.min(1, value ?? 0)) * 100)}%`;
+}
+
+function ScoreCell({
+  metrics,
+  tone,
+}: {
+  metrics: PromptCoverageMetrics;
+  tone: "baseline" | "final";
+}) {
+  if (metrics.score === null) return <span className="muted-cell">Pending optimization</span>;
+  return (
+    <div
+      className="registry-score"
+      title={`Score ${percentage(metrics.score)} · ${coverageSummary(metrics)}`}
+    >
+      <strong>{percentage(metrics.score)}</strong>
+      <span className={`registry-score-bar is-${tone}`} aria-hidden="true">
+        <span style={{ width: scoreWidth(metrics.score) }} />
+      </span>
+    </div>
+  );
+}
+
 function formatTimestamp(value: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
     new Date(value),
@@ -130,7 +155,6 @@ export default function Registry() {
                   <th>Baseline</th>
                   <th>Final prompt</th>
                   <th>Delta</th>
-                  <th>Models</th>
                   <th>Cost</th>
                   <th>Updated</th>
                 </tr>
@@ -151,29 +175,26 @@ export default function Registry() {
                         }
                       }}
                     >
-                      <td>
-                        <strong>{entry.experimentName}</strong>
-                        <small>{entry.experimentId}</small>
+                      <td className="registry-experiment-cell">
+                        <strong title={entry.experimentName}>{entry.experimentName}</strong>
+                        <small title={entry.experimentId}>{entry.experimentId}</small>
                         {!inactive && (
                           <StatusBadge tone={statusTone(entry.status)}>
                             {formatStatus(entry.status)}
                           </StatusBadge>
                         )}
                       </td>
-                      <td>{entry.projectNames.join(", ") || entry.projectIds.join(", ")}</td>
-                      <td>
-                        <strong>{percentage(entry.baselineMetrics.score)}</strong>
-                        <small>{coverageSummary(entry.baselineMetrics)}</small>
+                      <td
+                        className="registry-project-cell"
+                        title={entry.projectNames.join(", ") || entry.projectIds.join(", ")}
+                      >
+                        {entry.projectNames.join(", ") || entry.projectIds.join(", ")}
                       </td>
                       <td>
-                        {entry.optimized ? (
-                          <>
-                            <strong>{percentage(entry.optimizedMetrics.score)}</strong>
-                            <small>{coverageSummary(entry.optimizedMetrics)}</small>
-                          </>
-                        ) : (
-                          <span className="muted-cell">Pending optimization</span>
-                        )}
+                        <ScoreCell metrics={entry.baselineMetrics} tone="baseline" />
+                      </td>
+                      <td>
+                        <ScoreCell metrics={entry.optimizedMetrics} tone="final" />
                       </td>
                       <td>
                         {entry.absoluteGain === null ? (
@@ -185,13 +206,9 @@ export default function Registry() {
                             }
                           >
                             {entry.absoluteGain >= 0 ? "+" : ""}
-                            {(entry.absoluteGain * 100).toFixed(1)} pp
+                            {(entry.absoluteGain * 100).toFixed(1)}%
                           </strong>
                         )}
-                      </td>
-                      <td>
-                        <code>{entry.baseline.coverupModel}</code>
-                        <small>Optimize: {entry.baseline.optimizeModel}</small>
                       </td>
                       <td>
                         {entry.optimized?.estimatedCostUsd ??

@@ -29,6 +29,31 @@ function statusTone(status: TestGenerationStatus) {
   return "info" as const;
 }
 
+function coverageScore(statement: number | null, branch: number | null) {
+  if (statement === null && branch === null) return null;
+  if (statement === null) return branch;
+  if (branch === null) return statement;
+  return (statement + branch) / 2;
+}
+
+function coverageWidth(value: number | null) {
+  return `${Math.round(Math.max(0, Math.min(1, value ?? 0)) * 100)}%`;
+}
+
+function CoverageCell({ value, tone }: { value: number | null; tone: "project" | "target" }) {
+  return (
+    <div
+      className="test-suite-coverage"
+      title={value === null ? "Coverage unavailable" : `Coverage ${percentage(value)}`}
+    >
+      <strong>{percentage(value)}</strong>
+      <span className={`test-suite-coverage-bar is-${tone}`} aria-hidden="true">
+        <span style={{ width: coverageWidth(value) }} />
+      </span>
+    </div>
+  );
+}
+
 function timestamp(value: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
     new Date(value),
@@ -145,10 +170,10 @@ export default function TestCases() {
           </div>
         ) : (
           <div className="table-scroll">
-            <table className="platform-table">
+            <table className="platform-table test-cases-table">
               <thead>
                 <tr>
-                  <th>Run</th>
+                  <th>Test Suites</th>
                   <th>Prompt</th>
                   <th>Model</th>
                   <th>Tests</th>
@@ -172,14 +197,13 @@ export default function TestCases() {
                       }
                     }}
                   >
-                    <td>
-                      <strong>{run.experimentId}</strong>
-                      <small>{run.projectIds.join(", ")}</small>
-                      <small>{run.id}</small>
+                    <td className="test-suite-name-cell">
+                      <strong title={run.experimentId}>{run.experimentId}</strong>
+                      <small title={run.projectIds.join(", ")}>{run.projectIds.join(", ")}</small>
                     </td>
                     <td>{run.promptRole === "baseline" ? "Baseline" : "Final"}</td>
-                    <td>
-                      <code>{run.model}</code>
+                    <td className="test-suite-model-cell">
+                      <code title={run.model}>{run.model}</code>
                     </td>
                     <td>
                       <strong>{run.metrics.testCount}</strong>
@@ -191,10 +215,18 @@ export default function TestCases() {
                       </small>
                     </td>
                     <td>
+                      <CoverageCell
+                        value={coverageScore(
+                          run.metrics.projectStatementCoverage,
+                          run.metrics.projectBranchCoverage,
+                        )}
+                        tone="project"
+                      />
                       <strong>{percentage(run.metrics.projectStatementCoverage)}</strong>
                       <small>Branch {percentage(run.metrics.projectBranchCoverage)}</small>
                     </td>
                     <td>
+                      <CoverageCell value={run.metrics.targetScore} tone="target" />
                       <strong>{percentage(run.metrics.targetStatementCoverage)}</strong>
                       <small>Branch {percentage(run.metrics.targetBranchCoverage)}</small>
                     </td>
@@ -202,9 +234,6 @@ export default function TestCases() {
                       <StatusBadge tone={statusTone(run.status)}>
                         {formatStatus(run.status)}
                       </StatusBadge>
-                      {run.errorMessage && (
-                        <small className="table-error">{run.errorMessage}</small>
-                      )}
                     </td>
                     <td>{timestamp(run.createdAt)}</td>
                   </tr>
@@ -214,9 +243,6 @@ export default function TestCases() {
           </div>
         )}
       </section>
-      <button className="secondary-button" onClick={() => navigate("/prompts")}>
-        Open Prompt Registry
-      </button>
     </div>
   );
 }

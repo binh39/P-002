@@ -563,105 +563,113 @@ export default function OptimizationRun() {
         </section>
       )}
 
-      <div className="platform-two-column optimization-details-grid">
-        <section className="platform-card">
-          <div className="card-heading">
-            <div>
-              <h2>Prompt lineage</h2>
-            </div>
-          </div>
-          <dl className="definition-list">
-            <div>
-              <dt>Parent digest</dt>
-              <dd>
-                <code>{run.parentPromptDigest}</code>
-              </dd>
-            </div>
-            <div>
-              <dt>Candidate digest</dt>
-              <dd>
-                <code>{run.candidatePromptDigest ?? "Pending"}</code>
-              </dd>
-            </div>
-            <div>
-              <dt>Created</dt>
-              <dd>{formatTimestamp(run.createdAt)}</dd>
-            </div>
-            <div>
-              <dt>Started</dt>
-              <dd>{formatTimestamp(run.startedAt)}</dd>
-            </div>
-            <div>
-              <dt>Finished</dt>
-              <dd>{formatTimestamp(run.finishedAt)}</dd>
-            </div>
-          </dl>
-        </section>
-
-        <section className="platform-card">
-          <div className="card-heading">
-            <div>
-              <h2>Optimization artifacts</h2>
-            </div>
-            <StatusBadge tone={run.artifacts.length > 0 ? "success" : "neutral"}>
-              {run.artifacts.length} files
-            </StatusBadge>
-          </div>
-          {run.artifacts.length === 0 ? (
-            <div className="empty-state">Artifacts will appear after optimization succeeds.</div>
-          ) : (
-            <div className="artifact-list">
-              {run.artifacts.map((artifact) => (
-                <div key={artifact}>
-                  <span>
-                    <strong>{artifact}</strong>
-                    <small>Optimization JSON artifact</small>
-                  </span>
-                  <button
-                    className="table-action"
-                    disabled={download.isPending}
-                    onClick={() => download.mutate(artifact)}
-                  >
-                    Download
-                  </button>
+      {run.id === "" && (
+        <>
+          <div className="platform-two-column optimization-details-grid">
+            <section className="platform-card">
+              <div className="card-heading">
+                <div>
+                  <h2>Prompt lineage</h2>
                 </div>
-              ))}
-            </div>
-          )}
-          {download.isError && (
-            <div className="auth-error" role="alert">
-              {download.error.message}
-            </div>
-          )}
-        </section>
-      </div>
+              </div>
+              <dl className="definition-list">
+                <div>
+                  <dt>Parent digest</dt>
+                  <dd>
+                    <code>{run.parentPromptDigest}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Candidate digest</dt>
+                  <dd>
+                    <code>{run.candidatePromptDigest ?? "Pending"}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Created</dt>
+                  <dd>{formatTimestamp(run.createdAt)}</dd>
+                </div>
+                <div>
+                  <dt>Started</dt>
+                  <dd>{formatTimestamp(run.startedAt)}</dd>
+                </div>
+                <div>
+                  <dt>Finished</dt>
+                  <dd>{formatTimestamp(run.finishedAt)}</dd>
+                </div>
+              </dl>
+            </section>
 
-      <div className="platform-two-column optimization-details-grid">
-        <PromptCard
-          title="Baseline prompt"
-          description="The immutable candidate-zero prompt saved with this experiment."
-          prompt={baselinePrompt}
-          emptyMessage={
-            experimentQuery.isPending
-              ? "Loading the baseline prompt…"
-              : "No baseline prompt snapshot is available."
-          }
-        />
-        <PromptCard
-          title="Final selected prompt"
-          description={
-            run.finalComparison?.promoted
-              ? "The optimized prompt passed the strict promotion gate."
-              : "The baseline was retained because the proposal did not strictly improve it."
-          }
-          prompt={finalPrompt}
-          emptyMessage={
-            active
-              ? "The final prompt will appear when optimization finishes."
-              : "No final prompt decision was published."
-          }
-        />
-      </div>
+            <section className="platform-card">
+              <div className="card-heading">
+                <div>
+                  <h2>Optimization artifacts</h2>
+                </div>
+                <StatusBadge tone={run.artifacts.length > 0 ? "success" : "neutral"}>
+                  {run.artifacts.length} files
+                </StatusBadge>
+              </div>
+              {run.artifacts.length === 0 ? (
+                <div className="empty-state">
+                  Artifacts will appear after optimization succeeds.
+                </div>
+              ) : (
+                <div className="artifact-list">
+                  {run.artifacts.map((artifact) => (
+                    <div key={artifact}>
+                      <span>
+                        <strong>{artifact}</strong>
+                        <small>Optimization JSON artifact</small>
+                      </span>
+                      <button
+                        className="table-action"
+                        disabled={download.isPending}
+                        onClick={() => download.mutate(artifact)}
+                      >
+                        Download
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {download.isError && (
+                <div className="auth-error" role="alert">
+                  {download.error instanceof Error
+                    ? download.error.message
+                    : "Could not download artifact."}
+                </div>
+              )}
+            </section>
+          </div>
+
+          <div className="platform-two-column optimization-details-grid">
+            <PromptCard
+              title="Baseline prompt"
+              description="The immutable candidate-zero prompt saved with this experiment."
+              prompt={baselinePrompt}
+              emptyMessage={
+                experimentQuery.isPending
+                  ? "Loading the baseline prompt…"
+                  : "No baseline prompt snapshot is available."
+              }
+            />
+            <PromptCard
+              title="Final selected prompt"
+              description={
+                run.finalComparison?.promoted
+                  ? "The optimized prompt passed the strict promotion gate."
+                  : "The baseline was retained because the proposal did not strictly improve it."
+              }
+              prompt={finalPrompt}
+              emptyMessage={
+                active
+                  ? "The final prompt will appear when optimization finishes."
+                  : "No final prompt decision was published."
+              }
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }
