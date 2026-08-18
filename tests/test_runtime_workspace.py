@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import stat
 import sys
 import tarfile
 import zipfile
@@ -38,8 +39,24 @@ def test_safe_extract_rejects_path_traversal(tmp_path):
         raise AssertionError("path traversal must be rejected")
 
 
+def test_safe_extract_ignores_symbolic_links(tmp_path):
+    archive = tmp_path / "source.zip"
+    with zipfile.ZipFile(archive, "w") as bundle:
+        link = zipfile.ZipInfo("project/link.py")
+        link.create_system = 3
+        link.external_attr = (stat.S_IFLNK | 0o777) << 16
+        bundle.writestr(link, "target.py")
+        bundle.writestr("project/target.py", "def target():\n    return 1\n")
+
+    output = tmp_path / "output"
+    safe_extract_zip(archive, output)
+
+    assert not (output / "project" / "link.py").exists()
+    assert (output / "project" / "target.py").is_file()
+
+
 def test_runtime_bundle_contains_every_pytest_plugin_used_by_gepa():
-    assert RUNTIME_PROTOCOL_VERSION == 3
+    assert RUNTIME_PROTOCOL_VERSION == 4
     assert "pytest-repeat==0.9.4" in RUNTIME_TOOL_PACKAGES
 
 
@@ -87,6 +104,47 @@ def test_prepare_runtime_accepts_project_without_existing_tests(tmp_path):
     assert python is not None
     assert result.collected_tests == 0
     assert result.statement_coverage == 0.0
+
+
+def test_prepare_runtime_does_not_build_dynamic_version_project(tmp_path):
+    archive = tmp_path / "dynamic-version.zip"
+    write_zip(
+        archive,
+        {
+            "demo/pyproject.toml": (
+                "[build-system]\n"
+                'requires = ["setuptools>=61", "setuptools-scm"]\n'
+                'build-backend = "setuptools.build_meta"\n\n'
+                "[project]\n"
+                'name = "example"\n'
+                'dynamic = ["version"]\n'
+            ),
+            "demo/src/example/__init__.py": "def value():\n    return 1\n",
+            "demo/tests/test_example.py": ("from example import value\n\ndef test_value():\n    assert value() == 1\n"),
+        },
+    )
+
+    result, python = prepare_runtime(
+        archive,
+        tmp_path / "dynamic-runtime",
+        configured_source="src",
+        configured_tests="tests",
+        timeout_seconds=120,
+    )
+
+    assert result.status == "runtime_ready", result.error
+    assert python is not None
+    resolve = next(
+        (item for item in result.commands if item.name == "resolve shared dependencies"),
+        None,
+    )
+    if resolve is not None:
+        assert "SETUPTOOLS_SCM_PRETEND_VERSION" not in resolve.output
+        assert result.install_strategy == "uv dependency-only shared resolution"
+    else:
+        # The local fallback uses the image's system packages when uv is not
+        # installed; production runtime images always include uv.
+        assert result.install_strategy == "PYTHONPATH (no dependency manifest)"
 
 
 def test_prepare_environment_builds_one_reusable_bundle_for_multiple_projects(tmp_path):
@@ -141,13 +199,13 @@ def test_prepare_environment_reports_atomic_dependency_conflict(tmp_path, monkey
 
     original_run = runtime_workspace._run
 
-    def fail_resolution(result, name, command, cwd, deadline, output_limit):
+    def fail_resolution(result, name, command, cwd, deadline, output_limit, **kwargs):
         if name == "resolve shared dependencies":
             raise RuntimeError(
                 "Dependency conflict prevented this project from joining the environment: "
                 "shared-dependency has incompatible constraints"
             )
-        return original_run(result, name, command, cwd, deadline, output_limit)
+        return original_run(result, name, command, cwd, deadline, output_limit, **kwargs)
 
     monkeypatch.setattr(runtime_workspace, "_run", fail_resolution)
     result, python = prepare_environment(
@@ -248,4 +306,68 @@ def test_uploaded_gepa_run_restores_bundle_without_reinstalling_dependencies(tmp
     assert layout["package_dir"].replace("\\", "/").endswith("/friendly-name/src")
     assert layout["import_root"] == layout["package_dir"]
     assert captured["test_python"] != "before"
+    assert captured["command"][0] == sys.executable
+    assert captured["command"][0] != captured["test_python"]
     assert "prepare_runtime" not in " ".join(captured["command"])
+
+
+def test_sample_gepa_run_keeps_bundled_layout_and_trusted_python(tmp_path, monkeypatch):
+    from cloud import run_job
+
+    sample_repos = tmp_path / "sample-repos"
+    (sample_repos / "isort" / "isort").mkdir(parents=True)
+    (sample_repos / "isort" / "tests").mkdir()
+    objects = {
+        "inputs/dataset.jsonl": b'{"project":"isort"}\n',
+        "inputs/prompt.json": b"{}",
+    }
+    captured = {}
+
+    def download(bucket, object_name, destination):
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(objects[object_name])
+
+    def run(command):
+        captured["command"] = command
+        captured["test_python"] = os.environ.get("TESTGEN_PYTHON")
+        artifacts = Path(command[command.index("--artifacts-dir") + 1])
+        for relative in (
+            "optimized_program.json",
+            "prompts/gepa_proposed.json",
+            "prompts/gepa_optimized.json",
+            "final_validation.json",
+        ):
+            path = artifacts / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("{}", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(run_job, "_download_object", download)
+    monkeypatch.setattr(run_job, "_upload_dir", lambda *args: None)
+    monkeypatch.setattr(run_job, "_run_cli", lambda command: (run(command), None))
+    monkeypatch.delenv("TESTGEN_PYTHON", raising=False)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_job",
+            "--bucket",
+            "bucket",
+            "--artifacts-name",
+            "runner-jobs/gepa/run/artifacts",
+            "--dataset-object",
+            "inputs/dataset.jsonl",
+            "--prompt-object",
+            "inputs/prompt.json",
+            "--sample-repos-dir",
+            str(sample_repos),
+        ],
+    )
+
+    assert run_job.main() == 0
+    command = captured["command"]
+    assert command[0] == sys.executable
+    assert captured["test_python"] is None
+    assert "--project-layouts-file" not in command
+    assert command[command.index("--sample-repos-dir") + 1] == str(sample_repos.resolve())
+    assert command[command.index("--package-dir") + 1] == str((sample_repos / "isort" / "isort").resolve())

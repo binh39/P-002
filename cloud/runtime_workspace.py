@@ -12,15 +12,18 @@ import subprocess
 import sys
 import tarfile
 import time
+import tomllib
 import venv
 import zipfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path, PurePosixPath
 
+from src.optimization.project_setup import prepare_project
+
 MAX_ARCHIVE_ENTRIES = 20_000
 MAX_UNCOMPRESSED_BYTES = 250 * 1024 * 1024
 MAX_FILE_BYTES = 25 * 1024 * 1024
-RUNTIME_PROTOCOL_VERSION = 3
+RUNTIME_PROTOCOL_VERSION = 4
 RUNTIME_TOOL_PACKAGES = (
     "pytest==9.1.1",
     "pytest-repeat==0.9.4",
@@ -120,7 +123,10 @@ def safe_extract_zip(archive: Path, destination: Path) -> None:
                 raise ValueError(f"Encrypted ZIP entry is not supported: {normalized}")
             mode = info.external_attr >> 16
             if stat.S_ISLNK(mode):
-                raise ValueError(f"Symbolic links are not allowed in ZIP files: {normalized}")
+                # Git-generated ZIP files may contain repository symlinks.
+                # Ignoring them is safe because no link is materialized or
+                # followed inside the runtime workspace.
+                continue
             if info.file_size > MAX_FILE_BYTES:
                 raise ValueError(f"ZIP entry exceeds {MAX_FILE_BYTES} bytes: {normalized}")
             total += info.file_size
@@ -205,6 +211,15 @@ def _safe_relative(root: Path, value: str) -> Path:
     return candidate
 
 
+def _dependency_group_names(pyproject: Path) -> list[str]:
+    try:
+        payload = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return []
+    groups = payload.get("dependency-groups", {})
+    return sorted(str(name) for name in groups) if isinstance(groups, dict) else []
+
+
 def prepare_environment(
     specs: list[RuntimeProjectSpec],
     workspace: Path,
@@ -272,39 +287,41 @@ def prepare_environment(
         python = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
         requirements: list[Path] = []
-        installable_roots: list[Path] = []
+        dependency_groups: list[str] = []
+        pyproject_requirements = False
         for project_id, root in roots.items():
             if (root / "pyproject.toml").is_file() and uv:
-                exported = workspace / "resolved" / f"{project_id}.txt"
-                exported.parent.mkdir(parents=True, exist_ok=True)
-                export_command = [uv, "export"]
                 if (root / "uv.lock").is_file():
-                    export_command.append("--frozen")
-                export_command.extend(
-                    [
-                        "--all-groups",
-                        "--no-emit-project",
-                        "--format",
-                        "requirements-txt",
-                        "--output-file",
-                        str(exported),
-                    ]
-                )
-                _run(
-                    result,
-                    f"export {project_id} lock",
-                    export_command,
-                    root,
-                    deadline,
-                    maximum_output_bytes,
-                )
-                requirements.append(exported)
+                    exported = workspace / "resolved" / f"{project_id}.txt"
+                    exported.parent.mkdir(parents=True, exist_ok=True)
+                    _run(
+                        result,
+                        f"export {project_id} lock",
+                        [
+                            uv,
+                            "export",
+                            "--frozen",
+                            "--all-groups",
+                            "--no-emit-project",
+                            "--format",
+                            "requirements-txt",
+                            "--output-file",
+                            str(exported),
+                        ],
+                        root,
+                        deadline,
+                        maximum_output_bytes,
+                    )
+                    requirements.append(exported)
+                else:
+                    pyproject = root / "pyproject.toml"
+                    requirements.append(pyproject)
+                    pyproject_requirements = True
+                    dependency_groups.extend(f"{pyproject}:{name}" for name in _dependency_group_names(pyproject))
             else:
                 requirements.extend(root / name for name in LEGACY_REQUIREMENT_FILES if (root / name).is_file())
-            if any((root / name).is_file() for name in ("pyproject.toml", "setup.py", "setup.cfg")):
-                installable_roots.append(root)
 
-        if requirements or installable_roots or uv:
+        if requirements or uv:
             command = (
                 [uv, "pip", "install", "--python", str(python)]
                 if uv
@@ -313,14 +330,42 @@ def prepare_environment(
             for requirement in requirements:
                 command.extend(["-r", str(requirement)])
             if uv:
+                if pyproject_requirements:
+                    command.append("--all-extras")
+                for group in dependency_groups:
+                    command.extend(["--group", group])
                 command.extend(RUNTIME_TOOL_PACKAGES)
-            command.extend(str(root) for root in installable_roots)
-            _run(result, "resolve shared dependencies", command, workspace, deadline, maximum_output_bytes)
+            _run(
+                result,
+                "resolve shared dependencies",
+                command,
+                workspace,
+                deadline,
+                maximum_output_bytes,
+            )
             check = [uv, "pip", "check", "--python", str(python)] if uv else [str(python), "-m", "pip", "check"]
             _run(result, "verify dependency compatibility", check, workspace, deadline, maximum_output_bytes)
-            result.install_strategy = "uv shared resolution" if uv else "pip shared resolution"
+            result.install_strategy = "uv dependency-only shared resolution" if uv else "pip shared resolution"
         else:
             result.install_strategy = "PYTHONPATH (no dependency manifest)"
+
+        site_packages = (
+            venv_dir / "Lib" / "site-packages"
+            if os.name == "nt"
+            else venv_dir / "lib" / f"python{actual_python}" / "site-packages"
+        )
+        prepared_environment = dict(os.environ)
+        prepared_environment["TESTGEN_PYTHON"] = str(python)
+        import_roots = [source.parent if (source / "__init__.py").is_file() else source for source in sources.values()]
+        prepared_environment["PYTHONPATH"] = os.pathsep.join(str(path) for path in import_roots)
+        for project_id in roots:
+            _, prepared_environment = prepare_project(
+                roots[project_id],
+                sources[project_id],
+                prepared_environment,
+                metadata_site=site_packages,
+            )
+        test_environment = {"PYTHONPATH": prepared_environment["PYTHONPATH"]}
 
         for project_id in roots:
             project_result = result.projects[project_id]
@@ -334,6 +379,7 @@ def prepare_environment(
                 maximum_output_bytes,
                 allowed_return_codes=(0, 5),
                 pytest_plugin_autoload=bool(uv),
+                extra_env=test_environment,
             )
             project_result.collected_tests = _parse_collected_tests(collect.output)
             coverage_data = workspace / "coverage" / f".coverage-{project_id}"
@@ -360,6 +406,7 @@ def prepare_environment(
                 maximum_output_bytes,
                 allowed_return_codes=(0, 5),
                 pytest_plugin_autoload=bool(uv),
+                extra_env=test_environment,
             )
             _run(
                 result,
@@ -426,6 +473,7 @@ def _run(
     *,
     allowed_return_codes: tuple[int, ...] = (0,),
     pytest_plugin_autoload: bool = False,
+    extra_env: dict[str, str] | None = None,
 ) -> CommandResult:
     remaining = max(1.0, deadline - time.monotonic())
     started = time.monotonic()
@@ -438,6 +486,8 @@ def _run(
     }
     if not pytest_plugin_autoload:
         env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
+    if extra_env:
+        env.update(extra_env)
     for env_name in (
         "SYSTEMROOT",
         "WINDIR",
@@ -452,7 +502,8 @@ def _run(
         if value := os.environ.get(env_name):
             env[env_name] = value
     if (cwd / "src").is_dir():
-        env["PYTHONPATH"] = str(cwd / "src")
+        existing_pythonpath = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = str(cwd / "src") + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
     try:
         completed = subprocess.run(
             command,

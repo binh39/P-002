@@ -117,3 +117,38 @@ async def test_internal_worker_requires_task_identity(client):
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "INTERNAL_AUTH_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_analysis_failure_is_persisted_for_the_project_page(client):
+    project_id = await create_project(client, b"not a zip archive")
+
+    response = await client.post(f"/api/v1/projects/{project_id}/analyze", headers=AUTH_HEADERS)
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "failed"
+    assert response.json()["analysis_error"] == "The uploaded source archive is not a valid ZIP file"
+
+
+@pytest.mark.asyncio
+async def test_imported_project_can_be_deleted_with_its_functions(client, app):
+    project_id = await create_project(client, python_archive())
+    await client.post(f"/api/v1/projects/{project_id}/analyze", headers=AUTH_HEADERS)
+    assert await app.state.services.analysis.functions.list_for_project(project_id)
+
+    response = await client.delete(f"/api/v1/projects/{project_id}", headers=AUTH_HEADERS)
+
+    assert response.status_code == 204
+    assert (await client.get(f"/api/v1/projects/{project_id}", headers=AUTH_HEADERS)).status_code == 404
+    assert await app.state.services.analysis.functions.list_for_project(project_id) == []
+
+
+@pytest.mark.asyncio
+async def test_bundled_sample_project_cannot_be_deleted(client):
+    samples = await client.get("/api/v1/projects/samples", headers=AUTH_HEADERS)
+    sample_id = samples.json()["items"][0]["id"]
+
+    response = await client.delete(f"/api/v1/projects/{sample_id}", headers=AUTH_HEADERS)
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "SAMPLE_PROJECT_READ_ONLY"

@@ -104,3 +104,30 @@ def test_project_setup_validates_with_selected_runtime_interpreter(tmp_path: Pat
     )
 
     assert observed["command"][0] == "prepared-python"
+
+
+def test_project_setup_uses_primary_import_for_multi_package_source(tmp_path: Path, monkeypatch):
+    project = tmp_path / "example"
+    source = project / "src"
+    (source / "example").mkdir(parents=True)
+    (source / "optional_plugin").mkdir()
+    (source / "example" / "__init__.py").write_text("", encoding="utf-8")
+    (source / "optional_plugin" / "__init__.py").write_text(
+        "import dependency_that_is_not_installed\n", encoding="utf-8"
+    )
+    (project / "pyproject.toml").write_text('[project]\nname = "example"\nversion = "1.2.3"\n', encoding="utf-8")
+    observed = {}
+
+    def fake_run(command, **kwargs):
+        observed["command"] = command
+        return subprocess.CompletedProcess(command, 0, stdout="")
+
+    monkeypatch.setattr("src.optimization.project_setup.subprocess.run", fake_run)
+
+    report, environment = prepare_project(project, source)
+
+    assert report.import_name == "example"
+    assert report.required_imports == ("example",)
+    assert report.version == "1.2.3"
+    assert observed["command"][-1] == "example"
+    assert str(source) in environment["PYTHONPATH"]

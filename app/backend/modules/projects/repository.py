@@ -12,6 +12,8 @@ class ProjectRepository(Protocol):
 
     async def save(self, project: ProjectRecord) -> ProjectRecord: ...
 
+    async def delete(self, project_id: str) -> None: ...
+
 
 class InMemoryProjectRepository:
     def __init__(self):
@@ -31,6 +33,9 @@ class InMemoryProjectRepository:
     async def save(self, project: ProjectRecord) -> ProjectRecord:
         self.items[project.id] = project
         return project
+
+    async def delete(self, project_id: str) -> None:
+        self.items.pop(project_id, None)
 
 
 class FirestoreProjectRepository:
@@ -53,3 +58,6 @@ class FirestoreProjectRepository:
     async def save(self, project: ProjectRecord) -> ProjectRecord:
         await self.collection.document(project.id).set(project.model_dump(mode="python"))
         return project
+
+    async def delete(self, project_id: str) -> None:
+        await self.collection.document(project_id).delete()

@@ -58,6 +58,14 @@ export default function ProjectDetail() {
       await queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
   });
+  const deleteMutation = useMutation({
+    mutationFn: () => projects.delete(projectId),
+    onSuccess: async () => {
+      queryClient.removeQueries({ queryKey: ["projects", projectId] });
+      await queryClient.invalidateQueries({ queryKey: ["projects"] });
+      navigate("/projects");
+    },
+  });
   if (projectQuery.isPending)
     return (
       <div className="page-state" role="status">
@@ -111,6 +119,25 @@ export default function ProjectDetail() {
           ) : (
             <div className="platform-header-actions">
               <button
+                className="danger-button"
+                disabled={
+                  deleteMutation.isPending ||
+                  project.status === "analyzing" ||
+                  ["runtime_queued", "runtime_preparing"].includes(runtimeStatus)
+                }
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `Delete ${project.name}? Its uploaded ZIP and analyzed functions will be permanently removed.`,
+                    )
+                  ) {
+                    deleteMutation.mutate();
+                  }
+                }}
+              >
+                {deleteMutation.isPending ? "Deleting..." : "Delete project"}
+              </button>
+              <button
                 className="secondary-button"
                 disabled={
                   prepareRuntimeMutation.isPending ||
@@ -155,7 +182,15 @@ export default function ProjectDetail() {
       )}
       {project.status === "failed" && (
         <div className="page-state page-state-error" role="alert">
-          Analysis failed. Review the ZIP archive and project settings, then run the analysis again.
+          {project.analysisError ??
+            "Analysis failed. Review the ZIP archive and project settings, then run the analysis again."}
+        </div>
+      )}
+      {deleteMutation.isError && (
+        <div className="page-state page-state-error" role="alert">
+          {deleteMutation.error instanceof Error
+            ? deleteMutation.error.message
+            : "Project could not be deleted."}
         </div>
       )}
       {!isSample && ["runtime_queued", "runtime_preparing"].includes(runtimeStatus) && (

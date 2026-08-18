@@ -33,6 +33,8 @@ class ObjectStorage(Protocol):
 
     async def write(self, object_name: str, content: bytes, content_type: str) -> None: ...
 
+    async def delete(self, object_name: str) -> None: ...
+
 
 class LocalObjectStorage:
     def __init__(self, directory: str, api_prefix: str):
@@ -80,6 +82,13 @@ class LocalObjectStorage:
     async def write(self, object_name: str, content: bytes, content_type: str) -> None:
         del content_type
         await self.put_local(object_name, content)
+
+    async def delete(self, object_name: str) -> None:
+        target = (self.root / object_name).resolve()
+        if self.root not in target.parents:
+            raise AppError(400, "INVALID_OBJECT_NAME", "Upload destination is invalid")
+        if await asyncio.to_thread(target.is_file):
+            await asyncio.to_thread(target.unlink)
 
 
 class GcsObjectStorage:
@@ -135,3 +144,8 @@ class GcsObjectStorage:
     async def write(self, object_name: str, content: bytes, content_type: str) -> None:
         blob = self.bucket.blob(object_name)
         await asyncio.to_thread(blob.upload_from_string, content, content_type=content_type)
+
+    async def delete(self, object_name: str) -> None:
+        blob = self.bucket.blob(object_name)
+        if await asyncio.to_thread(blob.exists, self.client):
+            await asyncio.to_thread(blob.delete)

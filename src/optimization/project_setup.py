@@ -51,8 +51,11 @@ def prepare_project(
     manifest_root = _manifest_root(root, package)
     profile = _load_profile(manifest_root)
     distribution_name = str(profile.get("distribution_name") or _distribution_name(manifest_root, package))
-    import_name = str(profile.get("import_name") or package.name)
-    version = str(profile.get("version") or _package_version(package) or "0+promptopt")
+    detected_imports = _source_import_names(package)
+    import_name = str(profile.get("import_name") or _primary_import_name(distribution_name, detected_imports))
+    version = str(profile.get("version") or _project_version(manifest_root, package) or "0+local")
+    # Do not eagerly import every top-level module. Some projects expose optional
+    # modules whose dependencies are intentionally not part of the default install.
     required = tuple(dict.fromkeys([import_name, *profile.get("required_imports", [])]))
 
     metadata_site = (metadata_site or manifest_root / ".promptopt-site").resolve()
@@ -64,7 +67,8 @@ def prepare_project(
     )
 
     prepared_environment = dict(environment or os.environ)
-    python_paths = [str(metadata_site), str(manifest_root)]
+    import_root = package.parent if (package / "__init__.py").is_file() else package
+    python_paths = [str(metadata_site), str(import_root), str(manifest_root)]
     if existing := prepared_environment.get("PYTHONPATH"):
         python_paths.append(existing)
     prepared_environment["PYTHONPATH"] = os.pathsep.join(python_paths)
@@ -131,7 +135,20 @@ def _distribution_name(root: Path, package_dir: Path) -> str:
     return package_dir.name
 
 
-def _package_version(package_dir: Path) -> str | None:
+def _project_version(root: Path, package_dir: Path) -> str | None:
+    pyproject = root / "pyproject.toml"
+    if pyproject.is_file():
+        value = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+        if version := value.get("project", {}).get("version"):
+            return str(version)
+    setup_cfg = root / "setup.cfg"
+    if setup_cfg.is_file():
+        parser = configparser.ConfigParser()
+        parser.read(setup_cfg, encoding="utf-8")
+        if parser.has_option("metadata", "version"):
+            version = parser.get("metadata", "version").strip()
+            if version and not version.startswith("attr:"):
+                return version
     for candidate in (package_dir / "__init__.py", package_dir / "_version.py"):
         if not candidate.is_file():
             continue
@@ -142,6 +159,24 @@ def _package_version(package_dir: Path) -> str | None:
         if match:
             return match.group(1)
     return None
+
+
+def _primary_import_name(distribution_name: str, imports: tuple[str, ...]) -> str:
+    normalized = re.sub(r"[-.]+", "_", distribution_name)
+    return normalized if normalized in imports else imports[0]
+
+
+def _source_import_names(package_dir: Path) -> tuple[str, ...]:
+    if (package_dir / "__init__.py").is_file():
+        return (package_dir.name,)
+    packages = sorted(item.name for item in package_dir.iterdir() if item.is_dir() and (item / "__init__.py").is_file())
+    modules = sorted(
+        item.stem for item in package_dir.glob("*.py") if item.name not in {"setup.py", "conftest.py", "__init__.py"}
+    )
+    imports = tuple(dict.fromkeys([*packages, *modules]))
+    if not imports:
+        raise RuntimeError(f"No importable Python package or module was found in {package_dir}")
+    return imports
 
 
 def _validate_imports(

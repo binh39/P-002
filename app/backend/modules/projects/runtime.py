@@ -110,7 +110,9 @@ class RuntimePreparationService:
             raise AppError(409, "RUNTIME_ENVIRONMENT_REQUIRED", "Choose a runtime environment first")
         project.runtime_status = RuntimeStatus.QUEUED
         project.runtime_report = None
-        project.runtime_started_at = project.runtime_started_at or datetime.now(UTC)
+        # Every retry gets a fresh deadline. Reusing the previous attempt's
+        # timestamp makes a successful retry appear timed out immediately.
+        project.runtime_started_at = datetime.now(UTC)
         project.runtime_finished_at = None
         project.updated_at = datetime.now(UTC)
         await self.repository.save(project)
