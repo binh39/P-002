@@ -62,7 +62,16 @@ export default function CreateTestSuite() {
   });
   const projectsQuery = useQuery({
     queryKey: ["projects", "create-test-suite"],
-    queryFn: ({ signal }) => projects.list(signal),
+    queryFn: async ({ signal }) => {
+      const [samples, uploaded] = await Promise.all([
+        projects.listSamples(signal),
+        projects.list(signal),
+      ]);
+      return [
+        ...samples,
+        ...uploaded.filter((project) => !samples.some((sample) => sample.id === project.id)),
+      ];
+    },
   });
   const promptEntries = promptsQuery.data?.items ?? [];
   const projectEntries = useMemo(() => projectsQuery.data ?? [], [projectsQuery.data]);
