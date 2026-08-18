@@ -23,7 +23,10 @@ import type { PromptBundle } from "@/domain/experiments";
 
 const steps = ["Projects", "Functions", "Dataset", "Settings", "Review"];
 const splitNames: DatasetSplit[] = ["train", "validation", "test"];
-const geminiModels = [
+const availableModels = [
+  "gemini/gemini-2.5-flash",
+  "gemini/gemini-2.5-flash-lite",
+  "gemini/gemini-2.5-pro",
   "vertex_ai/gemini-2.5-flash",
   "vertex_ai/gemini-2.5-flash-lite",
   "vertex_ai/gemini-2.5-pro",
@@ -861,7 +864,7 @@ function SettingsStep({
               value={settings.coverupModel}
               onChange={(event) => update("coverupModel", event.target.value)}
             >
-              {geminiModels.map((model) => (
+              {availableModels.map((model) => (
                 <option key={model} value={model}>
                   {model}
                 </option>
@@ -873,7 +876,7 @@ function SettingsStep({
               value={settings.optimizeModel}
               onChange={(event) => update("optimizeModel", event.target.value)}
             >
-              {geminiModels.map((model) => (
+              {availableModels.map((model) => (
                 <option key={model} value={model}>
                   {model}
                 </option>
