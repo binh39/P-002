@@ -204,7 +204,8 @@ export default function CreateTestSuite() {
 
   const chooseExperiment = (value: string) => {
     setExperimentId(value);
-    setName("");
+    // The suite name describes the user's intended output, not the prompt source.
+    // Keep it intact when they compare or switch Prompt Registry experiments.
   };
   const chooseEnvironment = (value: string) => {
     setEnvironmentId(value);
