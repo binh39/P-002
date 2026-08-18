@@ -21,6 +21,7 @@ const ProjectDetail = lazy(() => import("@/pages/ProjectDetail"));
 const Projects = lazy(() => import("@/pages/Projects"));
 const Settings = lazy(() => import("@/pages/Settings"));
 const TestCases = lazy(() => import("@/pages/TestCases"));
+const TestCaseDetail = lazy(() => import("@/pages/TestCaseDetail"));
 
 const legacyPagePaths = {
   dashboard: "/dashboard",
@@ -123,6 +124,9 @@ function RoutedApplication() {
           </Route>
           <Route path="/test-cases">
             <TestCases />
+          </Route>
+          <Route path="/test-cases/:runId">
+            <TestCaseDetail />
           </Route>
           <Route path="/settings">
             <Settings />

@@ -1,4 +1,4 @@
-import { apiRequest } from "@/api/client";
+import { apiDownload, apiRequest } from "@/api/client";
 import type {
   TestGenerationMetrics,
   TestGenerationRun,
@@ -33,12 +33,28 @@ interface ApiTestGenerationRun {
   prompt_role: TestGenerationRun["promptRole"];
   status: TestGenerationRun["status"];
   project_ids: string[];
+  source_snapshot_digest: string;
+  dataset_digest: string;
   scope: TestGenerationRun["scope"];
+  source_files: string[];
+  function_ids: string[];
+  target_ids: string[];
   model: string;
+  random_seed: number;
+  repeat_tests: number;
+  max_attempts: number;
+  max_concurrency: number;
+  rate_limit: number | null;
+  cost_ceiling_usd: number | null;
+  runner_protocol_version: number;
   metrics: ApiTestGenerationMetrics;
   estimated_cost_usd: number;
+  token_usage: Record<string, number>;
+  artifact_objects: Record<string, string>;
   error_message: string | null;
   created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
 }
 
 interface ApiTestGenerationRunList {
@@ -75,12 +91,28 @@ function mapRun(run: ApiTestGenerationRun): TestGenerationRun {
     promptRole: run.prompt_role,
     status: run.status,
     projectIds: run.project_ids,
+    sourceSnapshotDigest: run.source_snapshot_digest,
+    datasetDigest: run.dataset_digest,
     scope: run.scope,
+    sourceFiles: run.source_files,
+    functionIds: run.function_ids,
+    targetIds: run.target_ids,
     model: run.model,
+    randomSeed: run.random_seed,
+    repeatTests: run.repeat_tests,
+    maxAttempts: run.max_attempts,
+    maxConcurrency: run.max_concurrency,
+    rateLimit: run.rate_limit,
+    costCeilingUsd: run.cost_ceiling_usd,
+    runnerProtocolVersion: run.runner_protocol_version,
     metrics: mapMetrics(run.metrics),
     estimatedCostUsd: run.estimated_cost_usd,
+    tokenUsage: run.token_usage,
+    artifactObjects: run.artifact_objects,
     errorMessage: run.error_message,
     createdAt: run.created_at,
+    startedAt: run.started_at,
+    finishedAt: run.finished_at,
   };
 }
 
@@ -90,6 +122,16 @@ export class HttpTestGenerationRepository implements TestGenerationRepository {
       signal,
     });
     return { ...response, items: response.items.map(mapRun) };
+  }
+
+  async get(runId: string, signal?: AbortSignal): Promise<TestGenerationRun> {
+    return mapRun(
+      await apiRequest<ApiTestGenerationRun>(`/test-generation-runs/${runId}`, { signal }),
+    );
+  }
+
+  async downloadArtifact(runId: string, artifactName: string): Promise<Blob> {
+    return apiDownload(`/test-generation-runs/${runId}/artifacts/${artifactName}`);
   }
 
   async create(

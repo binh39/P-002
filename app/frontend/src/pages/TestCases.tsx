@@ -160,7 +160,18 @@ export default function TestCases() {
               </thead>
               <tbody>
                 {items.map((run) => (
-                  <tr key={run.id}>
+                  <tr
+                    key={run.id}
+                    className="registry-row"
+                    tabIndex={0}
+                    onClick={() => navigate(`/test-cases/${run.id}`)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        navigate(`/test-cases/${run.id}`);
+                      }
+                    }}
+                  >
                     <td>
                       <strong>{run.experimentId}</strong>
                       <small>{run.projectIds.join(", ")}</small>

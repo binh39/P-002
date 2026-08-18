@@ -257,12 +257,28 @@ export interface TestGenerationRun {
   promptRole: PromptRole;
   status: TestGenerationStatus;
   projectIds: string[];
+  sourceSnapshotDigest: string;
+  datasetDigest: string;
   scope: "project" | "modules" | "functions";
+  sourceFiles: string[];
+  functionIds: string[];
+  targetIds: string[];
   model: string;
+  randomSeed: number;
+  repeatTests: number;
+  maxAttempts: number;
+  maxConcurrency: number;
+  rateLimit: number | null;
+  costCeilingUsd: number | null;
+  runnerProtocolVersion: number;
   metrics: TestGenerationMetrics;
   estimatedCostUsd: number;
+  tokenUsage: Record<string, number>;
+  artifactObjects: Record<string, string>;
   errorMessage: string | null;
   createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
 }
 
 export interface TestGenerationRunList {

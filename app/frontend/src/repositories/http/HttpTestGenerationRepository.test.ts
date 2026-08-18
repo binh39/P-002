@@ -96,4 +96,78 @@ describe("HttpTestGenerationRepository", () => {
     );
     expect(result).toMatchObject({ items: [], total: 0, limit: 100 });
   });
+
+  it("retrieves a run and downloads its owner-scoped artifact", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              id: "test-run-1",
+              experiment_id: "experiment-1",
+              prompt_snapshot_id: "experiment-1:baseline",
+              prompt_digest: "baseline-digest",
+              prompt_role: "baseline",
+              status: "completed",
+              project_ids: ["sample:isort"],
+              source_snapshot_digest: "source-digest",
+              dataset_digest: "dataset-digest",
+              scope: "project",
+              source_files: [],
+              function_ids: [],
+              target_ids: ["target-1"],
+              model: "gemini/gemini-2.5-flash",
+              random_seed: 7,
+              repeat_tests: 1,
+              max_attempts: 3,
+              max_concurrency: 5,
+              rate_limit: null,
+              cost_ceiling_usd: null,
+              runner_protocol_version: 1,
+              metrics: {
+                test_file_count: 1,
+                test_count: 2,
+                passed: 2,
+                failed: 0,
+                skipped: 0,
+                project_statement_coverage: 0.7,
+                project_branch_coverage: 0.6,
+                target_statement_coverage: 0.8,
+                target_branch_coverage: 0.7,
+                target_score: 0.75,
+                target_count: 1,
+                completed_target_count: 1,
+                failed_target_count: 0,
+              },
+              estimated_cost_usd: 0.01,
+              token_usage: { input_tokens: 10, output_tokens: 20 },
+              artifact_objects: { manifest: "private/object" },
+              error_message: null,
+              created_at: "2026-08-18T00:00:00Z",
+              started_at: "2026-08-18T00:00:01Z",
+              finished_at: "2026-08-18T00:00:02Z",
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        )
+        .mockResolvedValueOnce(new Response("artifact", { status: 200 })),
+    );
+    const repository = new HttpTestGenerationRepository();
+
+    const run = await repository.get("test-run-1");
+    const artifact = await repository.downloadArtifact("test-run-1", "manifest");
+
+    expect(run).toMatchObject({
+      sourceSnapshotDigest: "source-digest",
+      maxAttempts: 3,
+      artifactObjects: { manifest: "private/object" },
+    });
+    expect(await artifact.text()).toBe("artifact");
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/v1/test-generation-runs/test-run-1/artifacts/manifest",
+      expect.objectContaining({ headers: expect.objectContaining({ Accept: "application/json" }) }),
+    );
+  });
 });

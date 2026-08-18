@@ -788,7 +788,7 @@ Create experiment
 - [X]  Danh sách hiển thị run, project, experiment, prompt role, model, target count, tests, passed/failed,
   statement/branch coverage, status và created time.
 - [ ]  Thêm filter theo project, experiment, prompt role, model, status và khoảng thời gian.
-- [ ]  Click run mở detail có prompt snapshot, project/source digest, config, metrics, cost và artifact downloads.
+- [X]  Click run mở detail có prompt snapshot, project/source digest, config, metrics, cost và artifact downloads.
 - [ ]  Tạo cây chọn project -> file -> function để xem source và generated tests tương ứng.
 - [ ]  Thêm toggle `Source function`, `Baseline tests`, `Optimized tests`, `Coverage` và `Pytest output`;
   panel không được chọn phải ẩn hoàn toàn.
