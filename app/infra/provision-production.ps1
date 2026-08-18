@@ -23,8 +23,11 @@ $RunnerObjectRole = "promptoptRunnerObjectIO"
 $RunnerObjectRoleResource = "projects/$ProjectId/roles/$RunnerObjectRole"
 $ApiOperationRole = "promptoptJobOperationPoller"
 $ApiOperationRoleResource = "projects/$ProjectId/roles/$ApiOperationRole"
+$ProviderSecretRole = "promptoptProviderSecretManager"
+$ProviderSecretRoleResource = "projects/$ProjectId/roles/$ProviderSecretRole"
 $RunnerObjectRoleFile = Join-Path $PSScriptRoot "runner-object-role.yaml"
 $ApiOperationRoleFile = Join-Path $PSScriptRoot "api-job-operation-role.yaml"
+$ProviderSecretRoleFile = Join-Path $PSScriptRoot "provider-secret-role.yaml"
 $StorageCorsFile = Join-Path $PSScriptRoot "storage-cors.json"
 
 function Invoke-Gcloud {
@@ -87,6 +90,7 @@ Invoke-Gcloud services enable `
     iamcredentials.googleapis.com `
     identitytoolkit.googleapis.com `
     run.googleapis.com `
+    secretmanager.googleapis.com `
     serviceusage.googleapis.com `
     storage.googleapis.com `
     sts.googleapis.com `
@@ -140,11 +144,19 @@ if (-not (Test-GcloudResource iam roles describe $ApiOperationRole --project $Pr
 else {
     Invoke-Gcloud iam roles update $ApiOperationRole --project $ProjectId --file $ApiOperationRoleFile --quiet
 }
+if (-not (Test-GcloudResource iam roles describe $ProviderSecretRole --project $ProjectId)) {
+    Invoke-Gcloud iam roles create $ProviderSecretRole --project $ProjectId --file $ProviderSecretRoleFile --quiet
+}
+else {
+    Invoke-Gcloud iam roles update $ProviderSecretRole --project $ProjectId --file $ProviderSecretRoleFile --quiet
+}
 
 Write-Host "[7/10] Assigning runtime and deployment IAM..."
 Add-ProjectRole "serviceAccount:$ApiAccount" "roles/cloudtasks.enqueuer"
 Add-ProjectRole "serviceAccount:$ApiAccount" "roles/datastore.user"
 Add-ProjectRole "serviceAccount:$ApiAccount" "roles/firebaseauth.viewer"
+Add-ProjectRole "serviceAccount:$ApiAccount" $ProviderSecretRoleResource
+Add-ProjectRole "serviceAccount:$RunnerAccount" "roles/secretmanager.secretAccessor"
 Add-ProjectRole "serviceAccount:$ApiAccount" $ApiOperationRoleResource
 Invoke-Gcloud projects add-iam-policy-binding $ModelProjectId `
     --member "serviceAccount:$RunnerAccount" `

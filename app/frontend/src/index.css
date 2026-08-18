@@ -973,6 +973,25 @@ body {
   color: #9ca3af;
   font-size: 10.5px;
 }
+.provider-key-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(340px, 1.4fr);
+  gap: 16px;
+  align-items: center;
+}
+.provider-key-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.provider-key-actions input {
+  min-width: 0;
+  flex: 1;
+}
+.provider-key-row .form-error {
+  grid-column: 1 / -1;
+  margin: 0;
+}
 .toggle-row input {
   width: 36px;
   height: 18px;
