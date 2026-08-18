@@ -180,6 +180,7 @@ def build_services(settings: Settings) -> ServiceContainer:
         samples=samples,
         admin_vertexai_project=settings.admin_vertexai_project,
         provider_credentials=provider_credentials,
+        runtime_bundle_protocol_version=settings.runtime_bundle_protocol_version,
     )
     dashboard = DashboardService(experiment_repository)
     if settings.experiment_dispatcher == "cloud_tasks":

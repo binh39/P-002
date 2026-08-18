@@ -20,8 +20,8 @@ SUPPORTED_MODELS = (
     "openai/gpt-4.1",
     "openai/gpt-5-mini",
     "openai/gpt-5",
-    "deepseek/deepseek-chat",
-    "deepseek/deepseek-reasoner",
+    "deepseek/deepseek-v4-flash",
+    "deepseek/deepseek-v4-pro",
 )
 
 
@@ -120,6 +120,7 @@ class ProjectSnapshot(StrictModel):
     runtime_artifact_prefix: str | None = None
     runtime_environment_id: str | None = None
     runtime_bundle_object: str | None = None
+    runtime_protocol_version: int = 1
 
 
 class CreateExperimentRequest(StrictModel):

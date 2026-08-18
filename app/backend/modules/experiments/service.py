@@ -90,6 +90,7 @@ class ExperimentService:
         samples: SampleProjectCatalog | None = None,
         admin_vertexai_project: str = "",
         provider_credentials=None,
+        runtime_bundle_protocol_version: int = 1,
     ):
         self.repository, self.projects, self.functions = repository, projects, functions
         self.storage = storage
@@ -97,6 +98,7 @@ class ExperimentService:
         self.samples = samples
         self.admin_vertexai_project = admin_vertexai_project.strip()
         self.provider_credentials = provider_credentials
+        self.runtime_bundle_protocol_version = runtime_bundle_protocol_version
         self.optimization_dispatcher: OptimizationDispatcher | None = None
         self.comparison_dispatcher: ComparisonDispatcher | None = None
 
@@ -186,6 +188,7 @@ class ExperimentService:
                     runtime_artifact_prefix=project.runtime_artifact_prefix,
                     runtime_environment_id=project.runtime_environment_id,
                     runtime_bundle_object=project.runtime_bundle_object,
+                    runtime_protocol_version=(project.runtime_report.protocol_version if project.runtime_report else 1),
                 )
             )
             for function in await self._list_functions(project.id):
@@ -288,6 +291,15 @@ class ExperimentService:
                 409,
                 "OPTIMIZATION_DATASET_TOO_SMALL",
                 "Optimization requires non-empty train, validation, and locked test splits",
+            )
+        if any(
+            snapshot.archive_object and snapshot.runtime_protocol_version != self.runtime_bundle_protocol_version
+            for snapshot in item.project_snapshots
+        ):
+            raise AppError(
+                409,
+                "RUNTIME_BUNDLE_STALE",
+                "Runtime dependencies changed; prepare the uploaded project runtime again before running this experiment",
             )
         if self.optimization_dispatcher is None:
             raise RuntimeError("Optimization dispatcher is not configured")
