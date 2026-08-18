@@ -10,6 +10,7 @@ from pathlib import Path
 import dspy
 from dotenv import load_dotenv
 
+from .costs import build_cost_report
 from .dataset import load_targets, validate_project_stratification
 from .gepa import (
     build_coverage_report,
@@ -435,6 +436,13 @@ def tune(args: argparse.Namespace) -> None:
         evaluation_replicates=args.evaluation_replicates,
     )
     artifacts.mkdir(parents=True, exist_ok=True)
+    cost_report_path = artifacts / "cost_report.json"
+
+    def write_cost_report() -> None:
+        report = build_cost_report(artifacts / "candidates", dspy_history=getattr(lm, "history", []))
+        cost_report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"Saved cost report to {cost_report_path}")
+
     program_path = artifacts / "optimized_program.json"
     program_path.write_text(
         json.dumps(optimized.as_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
@@ -479,6 +487,7 @@ def tune(args: argparse.Namespace) -> None:
         report_path.write_text(
             json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
         )
+        write_cost_report()
         print(f"Saved optimized program to {program_path}")
         print(
             "GEPA retained the unchanged baseline; skipped final "
@@ -561,6 +570,7 @@ def tune(args: argparse.Namespace) -> None:
     )
     print(f"Saved coverage report to {coverage_report_path}")
     _print_coverage_report(coverage_report)
+    write_cost_report()
 
 
 def _target_key(value: SymbolTarget | dict) -> tuple[str, str, str, str]:

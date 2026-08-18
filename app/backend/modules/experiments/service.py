@@ -694,6 +694,10 @@ class ExperimentService:
                     json.dumps(result.gepa_result, ensure_ascii=False, indent=2, default=str).encode(),
                     "application/json",
                 ),
+                "cost_report.json": (
+                    json.dumps(result.gepa_result.get("cost_report", {}), ensure_ascii=False, indent=2).encode(),
+                    "application/json",
+                ),
             }
             if run.cloud_artifact_prefix and hasattr(self.cloud_optimizer, "evolution"):
                 evolution = await self.cloud_optimizer.evolution(
@@ -718,6 +722,15 @@ class ExperimentService:
             run.candidate_count = result.candidate_count
             run.metric_calls = result.metric_calls
             run.final_validation = _compact_final_validation(result.gepa_result.get("final_validation", {}))
+            run.cost_report = result.gepa_result.get("cost_report", {})
+            total_cost = (run.cost_report.get("total") or {}).get("estimated_cost_usd", 0.0)
+            run.estimated_cost_usd = float(total_cost or 0.0)
+            raw_usage = (run.cost_report.get("total") or {}).get("token_usage", {})
+            run.token_usage = {
+                str(key): int(value)
+                for key, value in raw_usage.items()
+                if isinstance(value, int | float) and value >= 0
+            }
             run.artifact_objects = artifact_objects
             run.finished_at = datetime.now(UTC)
             item.status = ExperimentStatus.OPTIMIZATION_SUCCEEDED
@@ -994,6 +1007,27 @@ class ExperimentService:
             if item.comparison_run_id
             else None
         )
+        optimization = (
+            await self.repository.get_optimization_run(item.optimization_run_id)
+            if item.optimization_run_id
+            else None
+        )
+        cost_report = optimization.cost_report if optimization else {}
+        per_prompt_cost = cost_report.get("coverup_by_prompt") or {}
+        baseline_cost = float(
+            (per_prompt_cost.get(baseline.prompt_digest) or {}).get("estimated_cost_usd") or 0.0
+        )
+        optimized_cost = float(optimization.estimated_cost_usd) if optimization else 0.0
+        baseline_response = PromptSnapshotResponse.model_validate(baseline).model_copy(
+            update={"estimated_cost_usd": baseline_cost}
+        )
+        optimized_response = (
+            PromptSnapshotResponse.model_validate(optimized).model_copy(
+                update={"estimated_cost_usd": optimized_cost}
+            )
+            if optimized
+            else None
+        )
         project_names = [snapshot.name for snapshot in item.project_snapshots] or list(item.project_ids)
         return PromptRegistryEntryResponse(
             experiment_id=item.id,
@@ -1001,8 +1035,8 @@ class ExperimentService:
             project_ids=list(item.project_ids),
             project_names=project_names,
             status=item.status,
-            baseline=PromptSnapshotResponse.model_validate(baseline),
-            optimized=PromptSnapshotResponse.model_validate(optimized) if optimized else None,
+            baseline=baseline_response,
+            optimized=optimized_response,
             baseline_metrics=self._coverage_metrics(comparison.baseline_metrics if comparison else None),
             optimized_metrics=optimized.metrics if optimized else PromptCoverageMetrics(),
             absolute_gain=comparison.absolute_gain if comparison else None,
@@ -1225,6 +1259,13 @@ class ExperimentService:
             artifacts = result.get("artifacts") or {}
             prefix = run.cloud_artifact_prefix.rstrip("/")
             run.metrics = metrics
+            run.estimated_cost_usd = float(result.get("estimated_cost_usd") or 0.0)
+            raw_usage = result.get("token_usage") or {}
+            run.token_usage = {
+                str(key): int(value)
+                for key, value in raw_usage.items()
+                if isinstance(value, int | float) and value >= 0
+            }
             run.artifact_objects = {
                 "manifest": f"{prefix}/{artifacts.get('manifest', 'test_generation_result.json')}",
                 "suite_zip": f"{prefix}/{artifacts.get('suite_zip', 'generated_tests.zip')}",

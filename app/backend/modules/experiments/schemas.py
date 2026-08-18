@@ -219,6 +219,9 @@ class OptimizationRunResponse(StrictModel):
     candidate_validation_score: float | None = None
     candidate_count: int = 0
     metric_calls: int = 0
+    estimated_cost_usd: float = 0.0
+    token_usage: dict[str, int] = Field(default_factory=dict)
+    cost_report: dict = Field(default_factory=dict)
     final_validation: dict = Field(default_factory=dict)
     artifact_objects: dict[str, str] = Field(default_factory=dict)
     cloud_artifact_prefix: str | None = None
@@ -337,7 +340,8 @@ class PromptSnapshotResponse(StrictModel):
     coverup_model: str
     optimize_model: str
     metrics: PromptCoverageMetrics = Field(default_factory=PromptCoverageMetrics)
-    estimated_cost_usd: float | None = None
+    # Historical records predate token accounting and intentionally render as $0.
+    estimated_cost_usd: float = 0.0
     created_at: datetime
 
 
@@ -464,7 +468,7 @@ class TestGenerationRunResponse(StrictModel):
     cost_ceiling_usd: float | None = None
     runner_protocol_version: int
     metrics: TestGenerationMetrics = Field(default_factory=TestGenerationMetrics)
-    estimated_cost_usd: float | None = None
+    estimated_cost_usd: float = 0.0
     token_usage: dict[str, int] = Field(default_factory=dict)
     artifact_objects: dict[str, str] = Field(default_factory=dict)
     cloud_artifact_prefix: str | None = None

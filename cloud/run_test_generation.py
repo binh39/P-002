@@ -20,6 +20,7 @@ from pathlib import Path
 from cloud.run_job import _download_object, _upload_dir
 from cloud.runtime_workspace import detect_layout, find_project_root, safe_extract_runtime_bundle, safe_extract_zip
 from src.optimization.coveragepy import load_report, run_coverage
+from src.optimization.costs import aggregate_usage_events
 from src.optimization.models import ExperimentConfig, ProjectLayout, SymbolTarget
 from src.optimization.runner import CoverUpExperimentRunner, _test_environment
 
@@ -171,6 +172,12 @@ def _run(args, artifacts: Path) -> dict:
         workspace_kind="candidate",
     )
     target = _target_metrics(batch)
+    cost = aggregate_usage_events(
+        event
+        for result in batch.results
+        for event in result.attempt_traces
+        if isinstance(event, dict)
+    )
     workspaces = {target.project: Path(batch.tests_workspace)}
     if len({target.project for target in targets}) > 1:
         root_workspace = Path(batch.tests_workspace)
@@ -216,6 +223,13 @@ def _run(args, artifacts: Path) -> dict:
             "test_count": _count_tests(generated_files),
             "project_statement_coverage": sum(project_statements) / len(project_statements) if project_statements else None,
             "project_branch_coverage": sum(project_branches) / len(project_branches) if project_branches else None,
+        },
+        "estimated_cost_usd": cost["estimated_cost_usd"],
+        "token_usage": cost["token_usage"],
+        "cost_accounting": {
+            "priced_request_count": cost["priced_request_count"],
+            "unpriced_request_count": cost["unpriced_request_count"],
+            "by_model": cost["by_model"],
         },
         "projects": per_project,
         "generated_tests": [path.relative_to(artifacts).as_posix() for path in generated_files],

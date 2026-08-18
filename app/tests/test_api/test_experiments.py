@@ -414,6 +414,7 @@ async def test_prompt_registry_is_experiment_centric_and_owner_scoped(client, ap
     assert entry["experiment_id"] == "owned-registry"
     assert entry["baseline"]["role"] == "baseline"
     assert entry["baseline"]["prompt"] == prompt.as_candidate()
+    assert entry["baseline"]["estimated_cost_usd"] == 0
     assert entry["optimized"] is None
     assert detail.status_code == 200
     assert detail.json()["experiment_name"] == "owned-registry prompt optimization"

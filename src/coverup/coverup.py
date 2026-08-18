@@ -973,6 +973,7 @@ def main():
             chatter = llm.Chatter(model=args.model)
             chatter.set_log_msg(lambda ctx, msg: log_write(args, ctx, msg))
             chatter.set_log_json(lambda ctx, j: log_write(args, ctx, json.dumps(j, indent=2)))
+            chatter.set_log_usage(lambda ctx, event: trace_write(args, ctx, event))
             chatter.set_signal_retry(lambda: state.inc_counter('R'))
 
             chatter.set_model_temperature(args.model_temperature)
