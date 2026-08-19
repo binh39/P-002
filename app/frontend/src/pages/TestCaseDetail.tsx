@@ -189,17 +189,29 @@ const samplingLabels: Record<TestGenerationRun["samplingMethod"], string> = {
 };
 
 function TestSuiteSettings({ run }: { run: TestGenerationRun }) {
+  const environment =
+    run.runtimeEnvironmentId === "sample-runtime"
+      ? "Bundled sample environment · sample-runtime"
+      : run.runtimeEnvironmentId || "Cloud Run isolated runner";
+  const prompt = run.promptRole === "baseline" ? "Baseline Prompt" : "Final Prompt";
   const values: Array<[string, string]> = [
-    ["Environment", run.runtimeEnvironmentId || "Cloud Run isolated runner"],
+    ["Test Suite", run.name],
+    ["Experiment", run.experimentId],
+    ["Prompt", prompt],
+    ["Environment", environment],
+    ["Projects", run.projectIds.join(", ") || "All experiment projects"],
     ["Function selection", samplingLabels[run.samplingMethod]],
     ["Functions", String(run.targetIds.length)],
     ["Random seed", run.samplingMethod === "random" ? String(run.randomSeed) : "None Available"],
     ["Model", run.model],
+    ["Scope", run.scope],
     [
       "CoverUp",
       `${run.maxAttempts} attempts · ${run.repeatTests} repeats · concurrency ${run.maxConcurrency}`,
     ],
     ["Rate limit", run.rateLimit === null ? "Default" : `${run.rateLimit} requests/min`],
+    ["Cost ceiling", run.costCeilingUsd === null ? "Not set" : `$${run.costCeilingUsd.toFixed(2)}`],
+    ["Runner protocol", `v${run.runnerProtocolVersion}`],
   ];
   return (
     <section className="platform-card prompt-registry-settings-card">
