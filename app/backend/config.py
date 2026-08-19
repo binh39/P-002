@@ -1,13 +1,18 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+APP_DIRECTORY = Path(__file__).resolve().parents[1]
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # Keep configuration stable when uvicorn/pytest is launched from the
+        # repository root, an IDE, or the app directory.
+        env_file=APP_DIRECTORY / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -69,6 +74,19 @@ class Settings(BaseSettings):
     @property
     def optimize_model_allowlist_values(self) -> set[str]:
         return {model.strip() for model in self.optimize_model_allowlist.split(",") if model.strip()}
+
+    def resolve_app_path(self, value: str) -> Path:
+        """Resolve local app paths independently of the process working directory."""
+        path = Path(value).expanduser()
+        return path.resolve() if path.is_absolute() else (APP_DIRECTORY / path).resolve()
+
+    @property
+    def local_upload_path(self) -> Path:
+        return self.resolve_app_path(self.local_upload_dir)
+
+    @property
+    def sample_repos_path(self) -> Path:
+        return self.resolve_app_path(self.sample_repos_dir)
 
     @model_validator(mode="after")
     def validate_production_backends(self):

@@ -1,5 +1,6 @@
 import { apiRequest } from "@/api/client";
 import { getAccessToken } from "@/auth/tokenProvider";
+import { env } from "@/config/env";
 import type {
   CreateProjectInput,
   ProjectFunction,
@@ -140,6 +141,16 @@ function mapProject(project: ApiProject): PythonProject {
   };
 }
 
+export function resolveUploadUrl(
+  uploadUrl: string,
+  apiBaseUrl = env.apiBaseUrl,
+  browserOrigin = globalThis.location?.origin ?? "http://localhost",
+) {
+  if (/^https?:\/\//i.test(uploadUrl)) return uploadUrl;
+  const apiUrl = new URL(apiBaseUrl, `${browserOrigin.replace(/\/$/, "")}/`);
+  return new URL(uploadUrl, apiUrl.origin).toString();
+}
+
 export class HttpProjectRepository implements ProjectRepository {
   async list(signal?: AbortSignal) {
     const response = await apiRequest<ApiProjectList>("/projects", { signal });
@@ -195,8 +206,9 @@ export class HttpProjectRepository implements ProjectRepository {
         size_bytes: input.file.size,
       }),
     });
-    const token = upload.upload_url.startsWith("/") ? await getAccessToken() : null;
-    const uploadResponse = await fetch(upload.upload_url, {
+    const localUpload = !/^https?:\/\//i.test(upload.upload_url);
+    const token = localUpload ? await getAccessToken() : null;
+    const uploadResponse = await fetch(resolveUploadUrl(upload.upload_url), {
       method: upload.method,
       headers: {
         ...upload.headers,

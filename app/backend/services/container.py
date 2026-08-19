@@ -102,7 +102,7 @@ def build_services(settings: Settings) -> ServiceContainer:
             settings.gcp_service_account_email,
         )
     else:
-        storage = LocalObjectStorage(settings.local_upload_dir, settings.api_prefix)
+        storage = LocalObjectStorage(str(settings.local_upload_path), settings.api_prefix)
 
     uploads = UploadService(
         repository=upload_repository,
@@ -111,7 +111,7 @@ def build_services(settings: Settings) -> ServiceContainer:
         signed_url_ttl_seconds=settings.signed_url_ttl_seconds,
     )
     samples = SampleProjectCatalog(
-        settings.sample_repos_dir,
+        str(settings.sample_repos_path),
         settings.max_analysis_python_files,
         settings.max_analysis_uncompressed_bytes,
     )
