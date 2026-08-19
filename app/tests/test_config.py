@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from backend.config import Settings
+from backend.config import APP_DIRECTORY, Settings
 
 
 def production_settings(**overrides):
@@ -57,3 +57,11 @@ def test_production_requires_admin_vertexai_project():
 def test_production_requires_runtime_preparation_job():
     with pytest.raises(ValidationError, match="RUNTIME_EXECUTION_BACKEND=cloud_run_job"):
         production_settings(runtime_execution_backend="disabled")
+
+
+def test_local_paths_are_resolved_from_app_directory(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    settings = Settings(_env_file=None)
+
+    assert settings.local_upload_path == APP_DIRECTORY / "data" / "uploads"
+    assert settings.sample_repos_path == APP_DIRECTORY.parent / "src" / "sample_repo"

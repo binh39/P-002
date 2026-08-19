@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { setTokenProvider } from "@/auth/tokenProvider";
-import { HttpProjectRepository } from "@/repositories/http/HttpProjectRepository";
+import { HttpProjectRepository, resolveUploadUrl } from "@/repositories/http/HttpProjectRepository";
 
 function projectResponse() {
   return {
@@ -27,6 +27,16 @@ describe("HttpProjectRepository", () => {
   afterEach(() => {
     setTokenProvider(async () => null);
     vi.unstubAllGlobals();
+  });
+
+  it("resolves a local upload target against an absolute API origin", () => {
+    expect(
+      resolveUploadUrl(
+        "/api/v1/uploads/upload-1/content",
+        "http://127.0.0.1:8000/api/v1",
+        "http://127.0.0.1:5173",
+      ),
+    ).toBe("http://127.0.0.1:8000/api/v1/uploads/upload-1/content");
   });
 
   it("uploads an unknown browser ZIP MIME type and queues static analysis", async () => {
