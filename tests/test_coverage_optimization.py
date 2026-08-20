@@ -3138,6 +3138,33 @@ def test_coverup_matches_absolute_generated_coverage_to_relative_segment(tmp_pat
     assert result == {"executed_lines": [1, 2], "executed_branches": []}
 
 
+def test_coverup_matches_relative_generated_coverage_from_project_import_root(tmp_path, monkeypatch):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    coverup_module = importlib.import_module("coverup.coverup")
+    import_root = tmp_path / "uploaded-project"
+    source = import_root / "pkg" / "a.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("def target():\n    return 1\n", encoding="utf-8")
+    monkeypatch.chdir(import_root)
+    segment = SimpleNamespace(filename=str(source), path=source)
+
+    result = coverup_module._coverage_for_segment(
+        {
+            "files": {
+                "pkg/a.py": {
+                    "executed_lines": [1, 2],
+                    "executed_branches": [],
+                }
+            }
+        },
+        segment,
+    )
+
+    assert result == {"executed_lines": [1, 2], "executed_branches": []}
+
+
 def test_coverup_stops_after_no_gain_without_a_third_prompt_component(
     tmp_path,
     monkeypatch,
@@ -3221,6 +3248,7 @@ def test_coverup_stops_after_no_gain_without_a_third_prompt_component(
     assert chatter.calls == 1
     assert trace["component"] == "initial"
     assert trace["outcome"] == "no_coverage_gain_unrepairable"
+    assert trace["coverage_files"] == ["pkg/a.py"]
     assert "next_component" not in trace
 
 
@@ -3233,10 +3261,12 @@ def test_runner_partitions_targets_by_project(tmp_path, monkeypatch):
     prompt_path = tmp_path / "prompt.json"
     baseline_bundle().save(prompt_path)
     commands = []
+    coverup_working_directories = []
     coverage_outputs = []
 
     def fake_subprocess_run(command, **kwargs):
         commands.append(command)
+        coverup_working_directories.append(Path(kwargs["cwd"]).resolve())
         spec = json.loads(Path(command[command.index("--target-spec-file") + 1]).read_text(encoding="utf-8"))[0]
         trace_path = Path(command[command.index("--trace-file") + 1])
         trace_path.write_text(
@@ -3320,6 +3350,10 @@ def test_runner_partitions_targets_by_project(tmp_path, monkeypatch):
     )
     assert Path(alpha_command[alpha_command.index("--package-dir") + 1]).resolve() == alpha_pkg.resolve()
     assert Path(beta_command[beta_command.index("--package-dir") + 1]).resolve() == beta_pkg.resolve()
+    assert set(coverup_working_directories) == {
+        alpha_pkg.parent.resolve(),
+        beta_pkg.parent.resolve(),
+    }
     alpha_tests_dir = Path(alpha_command[alpha_command.index("--tests-dir") + 1])
     beta_tests_dir = Path(beta_command[beta_command.index("--tests-dir") + 1])
     assert alpha_tests_dir.parent.name == "target_workspaces"

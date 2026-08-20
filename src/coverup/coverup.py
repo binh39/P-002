@@ -898,6 +898,10 @@ async def improve_coverage(
                 "gained_branches": [],
                 "remaining_lines": sorted(seg.missing_lines),
                 "remaining_branches": sorted(seg.missing_branches),
+                # Preserve the bounded file provenance needed to distinguish
+                # a genuinely useless test from importing/instrumenting a
+                # different copy of an uploaded package.
+                "coverage_files": sorted(str(path) for path in coverage.get("files", {}))[:50],
                 "get_info_calls": get_info_calls,
             })
             break

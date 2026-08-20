@@ -419,6 +419,16 @@ class ExperimentService:
             raise AppError(422, "INVALID_EXPERIMENT_DATASET", str(exc)) from exc
         if not all(dataset_splits[name] for name in ("train", "validation", "test")):
             raise AppError(422, "DATASET_SPLIT_EMPTY", "Train, validation, and test must all be non-empty")
+        validation_size = len(dataset_splits["validation"])
+        if payload.settings.max_metric_calls <= validation_size:
+            raise AppError(
+                422,
+                "METRIC_BUDGET_TOO_SMALL",
+                (
+                    f"Max metric calls must be greater than the {validation_size} validation targets "
+                    "so GEPA can finish iteration 0 and start at least one proposal iteration"
+                ),
+            )
         now = datetime.now(UTC)
         item = ExperimentRecord(
             id=new_id(),
