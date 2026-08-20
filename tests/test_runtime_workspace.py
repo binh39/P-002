@@ -12,6 +12,7 @@ from cloud.runtime_workspace import (
     RUNTIME_TOOL_PACKAGES,
     RuntimeProjectSpec,
     _test_requirement_files,
+    _validate_project_python,
     create_runtime_bundle,
     detect_layout,
     prepare_environment,
@@ -58,7 +59,7 @@ def test_safe_extract_ignores_symbolic_links(tmp_path):
 
 
 def test_runtime_bundle_contains_every_pytest_plugin_used_by_gepa():
-    assert RUNTIME_PROTOCOL_VERSION == 7
+    assert RUNTIME_PROTOCOL_VERSION == 8
     assert "pytest-asyncio==1.4.0" in RUNTIME_TOOL_PACKAGES
     assert "pytest-repeat==0.9.4" in RUNTIME_TOOL_PACKAGES
     assert "pytest-timeout==2.4.0" in RUNTIME_TOOL_PACKAGES
@@ -74,6 +75,24 @@ def test_detect_layout_supports_lib_package_layout(tmp_path):
 
     assert source == package
     assert tests == project / "tests"
+
+
+def test_detect_layout_does_not_select_root_test_package_as_source(tmp_path):
+    project = tmp_path / "project"
+    package = project / "tqdm"
+    tests = project / "tests"
+    package.mkdir(parents=True)
+    tests.mkdir()
+    (package / "__init__.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (tests / "__init__.py").write_text("", encoding="utf-8")
+    (tests / "test_value.py").write_text("def test_value():\n    assert True\n", encoding="utf-8")
+
+    # A previous runtime protocol could persist ``tests`` as the configured
+    # source. Retrying must repair that stale value instead of trusting it.
+    source, detected_tests = detect_layout(project, configured_source="tests")
+
+    assert source == package
+    assert detected_tests == tests
 
 
 def test_prepare_runtime_collects_tests_and_baseline_coverage(tmp_path):
@@ -171,6 +190,46 @@ def test_test_requirements_follow_selected_suite_without_project_specific_mappin
     integration_requirements.write_text("docker\n", encoding="utf-8")
 
     assert _test_requirement_files(root, tests) == [unit_requirements.resolve()]
+
+
+def test_project_python_requirement_is_validated_before_runtime_commands(tmp_path):
+    archive = tmp_path / "incompatible-python.zip"
+    write_zip(
+        archive,
+        {
+            "demo/pyproject.toml": ('[project]\nname = "demo"\nversion = "1.0.0"\nrequires-python = ">=99"\n'),
+            "demo/pkg/__init__.py": "VALUE = 1\n",
+        },
+    )
+
+    result, python = prepare_runtime(
+        archive,
+        tmp_path / "incompatible-python-runtime",
+        configured_source="pkg",
+        timeout_seconds=120,
+    )
+
+    assert python is None
+    assert result.status == "runtime_failed"
+    assert "requires Python >=99" in (result.error or "")
+    assert "selected runtime provides Python" in (result.error or "")
+    assert result.commands == []
+
+
+def test_invalid_project_python_requirement_is_reported_as_project_metadata_error(tmp_path):
+    root = tmp_path / "invalid-metadata"
+    root.mkdir()
+    (root / "pyproject.toml").write_text(
+        '[project]\nname = "demo"\nversion = "1.0.0"\nrequires-python = "not a version"\n',
+        encoding="utf-8",
+    )
+
+    try:
+        _validate_project_python(root, "demo")
+    except ValueError as error:
+        assert "invalid requires-python specifier" in str(error)
+    else:
+        raise AssertionError("invalid project metadata must be rejected")
 
 
 def test_prepare_runtime_accepts_failing_upstream_tests_when_coverage_is_measurable(tmp_path):

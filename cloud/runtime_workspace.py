@@ -18,12 +18,15 @@ import zipfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path, PurePosixPath
 
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import Version
+
 from src.optimization.project_setup import prepare_project
 
 MAX_ARCHIVE_ENTRIES = 20_000
 MAX_UNCOMPRESSED_BYTES = 250 * 1024 * 1024
 MAX_FILE_BYTES = 25 * 1024 * 1024
-RUNTIME_PROTOCOL_VERSION = 7
+RUNTIME_PROTOCOL_VERSION = 8
 RUNTIME_TOOL_PACKAGES = (
     "pytest==9.1.1",
     "pytest-asyncio==1.4.0",
@@ -49,6 +52,15 @@ LEGACY_REQUIREMENT_FILES = (
     "test-requirements.txt",
 )
 _PACKAGE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_NON_SOURCE_PACKAGE_NAMES = {
+    "benchmarks",
+    "docs",
+    "examples",
+    "migrations",
+    "scripts",
+    "test",
+    "tests",
+}
 
 
 @dataclass(slots=True)
@@ -179,7 +191,14 @@ def find_project_root(extracted: Path) -> Path:
 
 def detect_layout(root: Path, configured_source: str = "src", configured_tests: str = "tests") -> tuple[Path, Path]:
     source = _safe_relative(root, configured_source)
-    if not source.is_dir() or not any(source.rglob("*.py")):
+    configured_parts = {
+        part.casefold() for part in PurePosixPath(configured_source.replace("\\", "/")).parts
+    }
+    if (
+        configured_parts.intersection(_NON_SOURCE_PACKAGE_NAMES)
+        or not source.is_dir()
+        or not any(source.rglob("*.py"))
+    ):
         source = _detect_source(root)
     tests = _safe_relative(root, configured_tests)
     if not tests.is_dir():
@@ -221,7 +240,10 @@ def _detect_source(root: Path) -> Path:
     packages = [
         item
         for item in root.iterdir()
-        if item.is_dir() and _PACKAGE_NAME.match(item.name) and (item / "__init__.py").is_file()
+        if item.is_dir()
+        and item.name.casefold() not in _NON_SOURCE_PACKAGE_NAMES
+        and _PACKAGE_NAME.match(item.name)
+        and (item / "__init__.py").is_file()
     ]
     if packages:
         return sorted(packages)[0]
@@ -246,6 +268,37 @@ def _dependency_group_names(pyproject: Path) -> list[str]:
         return []
     groups = payload.get("dependency-groups", {})
     return sorted(str(name) for name in groups) if isinstance(groups, dict) else []
+
+
+def _validate_project_python(root: Path, project_id: str) -> None:
+    """Fail before dependency installation when project metadata is incompatible."""
+    pyproject = root / "pyproject.toml"
+    if not pyproject.is_file():
+        return
+    try:
+        payload = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        # Dependency resolution will report malformed project metadata with its
+        # native diagnostic. Do not guess requirements from an unreadable file.
+        return
+    project = payload.get("project", {})
+    requirement = project.get("requires-python") if isinstance(project, dict) else None
+    if requirement is None:
+        return
+    if not isinstance(requirement, str) or not requirement.strip():
+        raise ValueError(f"Project {project_id} has an invalid [project].requires-python value")
+    try:
+        supported = SpecifierSet(requirement)
+    except InvalidSpecifier as exc:
+        raise ValueError(f"Project {project_id} has an invalid requires-python specifier: {requirement!r}") from exc
+
+    actual = Version(".".join(str(part) for part in sys.version_info[:3]))
+    if actual not in supported:
+        raise RuntimeError(
+            f"Project {project_id} requires Python {requirement}, but the selected runtime "
+            f"provides Python {actual}. Choose a runtime image with a compatible Python "
+            "version, or upload a project revision that supports this runtime."
+        )
 
 
 def _test_requirement_files(root: Path, tests: Path) -> list[Path]:
@@ -317,6 +370,7 @@ def prepare_environment(
             extracted = workspace / "projects" / spec.project_id
             safe_extract_zip(spec.archive, extracted)
             root = find_project_root(extracted).resolve()
+            _validate_project_python(root, spec.project_id)
             source, test_dir = detect_layout(root, spec.configured_source, spec.configured_tests)
             test_dir = _runtime_test_directory(root, test_dir)
             dependency_files = [name for name in DEPENDENCY_FILES if (root / name).is_file()]
