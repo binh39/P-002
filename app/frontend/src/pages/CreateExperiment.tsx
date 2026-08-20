@@ -168,6 +168,7 @@ export default function CreateExperiment() {
       (Number.isInteger(sampleLimit) && sampleLimit >= 3));
   const datasetValid =
     percentagesAreValid(percentages) && splitNames.every((name) => dataset[name].length > 0);
+  const minimumMetricCalls = Math.max(3, dataset.validation.length + 1);
   const settingsValid =
     settings.coverupModel.trim() !== "" &&
     settings.optimizeModel.trim() !== "" &&
@@ -175,7 +176,7 @@ export default function CreateExperiment() {
     settings.repeatTests >= 0 &&
     settings.maxConcurrency >= 1 &&
     settings.maxConcurrency <= 32 &&
-    settings.maxMetricCalls >= 3 &&
+    settings.maxMetricCalls >= minimumMetricCalls &&
     (hasFullAccess || settings.maxMetricCalls <= 2200) &&
     settings.evaluationReplicates >= 1 &&
     settings.reflectionTemperature >= 0 &&
@@ -319,6 +320,7 @@ export default function CreateExperiment() {
               settings={settings}
               setSettings={setSettings}
               hasFullAccess={hasFullAccess}
+              validationTargetCount={dataset.validation.length}
               baselineMode={baselineMode}
               setBaselineMode={setBaselineMode}
               customBaseline={customBaseline}
@@ -837,6 +839,7 @@ function SettingsStep({
   settings,
   setSettings,
   hasFullAccess,
+  validationTargetCount,
   baselineMode,
   setBaselineMode,
   customBaseline,
@@ -845,11 +848,13 @@ function SettingsStep({
   settings: CloudExperimentSettings;
   setSettings: (settings: CloudExperimentSettings) => void;
   hasFullAccess: boolean;
+  validationTargetCount: number;
   baselineMode: "preset" | "custom";
   setBaselineMode: (mode: "preset" | "custom") => void;
   customBaseline: PromptBundle;
   setCustomBaseline: (prompt: PromptBundle) => void;
 }) {
+  const minimumMetricCalls = Math.max(3, validationTargetCount + 1);
   const update = <Key extends keyof CloudExperimentSettings>(
     key: Key,
     value: CloudExperimentSettings[Key],
@@ -1029,10 +1034,11 @@ function SettingsStep({
           <NumberField
             label={hasFullAccess ? "Max metric calls · Full access" : "Max metric calls"}
             value={settings.maxMetricCalls}
-            min={3}
+            min={minimumMetricCalls}
             max={hasFullAccess ? undefined : 2200}
             disabled={settings.budgetMode !== "custom"}
             onChange={(value) => update("maxMetricCalls", value)}
+            hint={`At least ${minimumMetricCalls} for ${validationTargetCount} validation targets.`}
           />
           <NumberField
             label="Evaluation replicates"
@@ -1098,6 +1104,7 @@ function NumberField({
   min,
   max,
   disabled = false,
+  hint,
   onChange,
 }: {
   label: string;
@@ -1105,10 +1112,11 @@ function NumberField({
   min: number;
   max?: number;
   disabled?: boolean;
+  hint?: string;
   onChange: (value: number) => void;
 }) {
   return (
-    <Field label={label}>
+    <Field label={label} hint={hint}>
       <input
         type="number"
         min={min}

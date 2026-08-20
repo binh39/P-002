@@ -545,9 +545,19 @@ class CoverUpExperimentRunner:
             ))
 
         def evaluate_target(job: _TargetEvaluationJob) -> _TargetEvaluationOutcome:
+            # Run CoverUp from the target project's import root.  Uploaded
+            # projects are staged outside /app, while CoverUp measures the
+            # initial suite with ``--source`` and each generated test without
+            # it.  Keeping the working directory at the import root makes
+            # Python import the staged checkout and gives SlipCover one stable
+            # path basis for both measurements.  Running every project from
+            # /app can otherwise import an installed copy of the same package
+            # or report a different relative filename, turning a valid test
+            # into a false zero-coverage result.
+            coverup_cwd = self.config.import_root_for(job.target.project).resolve()
             completed = run_streamed(
                 job.command,
-                cwd=self.config.project_root.resolve(),
+                cwd=coverup_cwd,
                 env=environment,
                 label=f"CoverUp {job.target.source_file}::{job.target.symbol}",
                 echo=False,

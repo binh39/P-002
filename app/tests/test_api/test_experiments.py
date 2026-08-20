@@ -169,6 +169,24 @@ async def test_create_experiment_rejects_invalid_custom_baseline(client):
 
 
 @pytest.mark.asyncio
+async def test_create_experiment_requires_budget_beyond_iteration_zero_validation(client):
+    response = await client.post(
+        "/api/v1/experiments",
+        headers=AUTH_HEADERS,
+        json={
+            "project_ids": ["sample:isort"],
+            "name": "Insufficient GEPA search budget",
+            "max_targets": 12,
+            "settings": {"max_metric_calls": 3},
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "METRIC_BUDGET_TOO_SMALL"
+    assert "validation targets" in response.json()["error"]["message"]
+
+
+@pytest.mark.asyncio
 async def test_download_optimization_artifact_checks_run_manifest(client, app):
     repository = app.state.services.experiments.repository
     now = datetime.now(UTC)
