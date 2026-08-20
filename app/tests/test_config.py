@@ -2,6 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from backend.config import APP_DIRECTORY, Settings
+from backend.modules.projects.schemas import MINIMUM_RUNTIME_PROTOCOL_VERSION
 
 
 def production_settings(**overrides):
@@ -40,6 +41,7 @@ def test_production_cloud_run_job_configuration_is_valid():
     assert settings.optimization_execution_backend == "cloud_run_job"
     assert settings.cloud_run_gepa_timeout_seconds == 86400
     assert settings.runtime_execution_backend == "cloud_run_job"
+    assert settings.runtime_bundle_protocol_version == MINIMUM_RUNTIME_PROTOCOL_VERSION
     assert settings.gcp_project_id == "project-7df9f963-9fe0-4b76-b3d"
     assert settings.admin_vertexai_project == "vinbuildphase"
 

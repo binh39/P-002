@@ -164,7 +164,7 @@ class ExperimentService:
         samples: SampleProjectCatalog | None = None,
         admin_vertexai_project: str = "",
         provider_credentials=None,
-        runtime_bundle_protocol_version: int = 1,
+        runtime_bundle_protocol_version: int = MINIMUM_RUNTIME_PROTOCOL_VERSION,
     ):
         self.repository, self.projects, self.functions = repository, projects, functions
         self.storage = storage

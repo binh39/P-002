@@ -15,6 +15,7 @@ from backend.modules.experiments.schemas import (
     TargetReference,
 )
 from backend.modules.experiments.service import ExperimentService
+from backend.modules.projects.schemas import MINIMUM_RUNTIME_PROTOCOL_VERSION
 
 
 class FakeProjects:
@@ -39,6 +40,67 @@ class FakeSamples:
     @staticmethod
     def contains(project_id):
         return project_id == "project-1"
+
+
+class RecordingOptimizationDispatcher:
+    def __init__(self):
+        self.run_ids = []
+
+    async def dispatch(self, run_id: str, delay_seconds: int = 0) -> None:
+        self.run_ids.append(run_id)
+
+
+@pytest.mark.asyncio
+async def test_uploaded_experiment_accepts_the_current_runtime_protocol():
+    repository, storage = InMemoryExperimentRepository(), FakeStorage()
+    now = datetime.now(UTC)
+    refs = [
+        TargetReference(
+            project_id="uploaded-project",
+            function_id=name,
+            project="uploaded-project",
+            source_file="pkg/core.py",
+            symbol=f"pkg.{name}",
+        )
+        for name in ("train_fn", "validation_fn", "test_fn")
+    ]
+    keys = [ref.key for ref in refs]
+    experiment = ExperimentRecord(
+        id="uploaded-experiment",
+        owner_id="owner-1",
+        project_id="uploaded-project",
+        project_ids=["uploaded-project"],
+        project_snapshots=[
+            ProjectSnapshot(
+                project_id="uploaded-project",
+                name="Uploaded project",
+                source_directory="pkg",
+                test_directory="tests",
+                runner_project="uploaded-project",
+                archive_object="sources/project.zip",
+                runtime_bundle_object="runtime/current.tar.gz",
+                runtime_protocol_version=MINIMUM_RUNTIME_PROTOCOL_VERSION,
+            )
+        ],
+        targets=refs,
+        name="Uploaded GEPA search",
+        target_function_ids=keys,
+        dataset_splits={"train": [keys[0]], "validation": [keys[1]], "test": [keys[2]]},
+        optimization_eligible=True,
+        baseline_prompt=baseline_prompt().as_candidate(),
+        status=ExperimentStatus.DRAFT,
+        created_at=now,
+        updated_at=now,
+    )
+    await repository.create(experiment)
+    service = ExperimentService(repository, FakeProjects(), FakeFunctions(), storage)
+    dispatcher = RecordingOptimizationDispatcher()
+    service.set_optimization_dispatcher(dispatcher)
+
+    run = await service.request_optimization(experiment.id, experiment.owner_id, full_access=True)
+
+    assert run.status == ExperimentStatus.OPTIMIZATION_QUEUED
+    assert dispatcher.run_ids == [run.id]
 
 
 @pytest.mark.asyncio
