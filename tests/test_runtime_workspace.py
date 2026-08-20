@@ -11,6 +11,7 @@ from cloud.runtime_workspace import (
     RUNTIME_PROTOCOL_VERSION,
     RUNTIME_TOOL_PACKAGES,
     RuntimeProjectSpec,
+    _test_requirement_files,
     create_runtime_bundle,
     detect_layout,
     prepare_environment,
@@ -57,7 +58,7 @@ def test_safe_extract_ignores_symbolic_links(tmp_path):
 
 
 def test_runtime_bundle_contains_every_pytest_plugin_used_by_gepa():
-    assert RUNTIME_PROTOCOL_VERSION == 6
+    assert RUNTIME_PROTOCOL_VERSION == 7
     assert "pytest-asyncio==1.4.0" in RUNTIME_TOOL_PACKAGES
     assert "pytest-repeat==0.9.4" in RUNTIME_TOOL_PACKAGES
     assert "pytest-timeout==2.4.0" in RUNTIME_TOOL_PACKAGES
@@ -156,6 +157,49 @@ def test_prepare_runtime_prefers_unit_tests_over_integration_harnesses(tmp_path)
     assert python is not None
     assert result.collected_tests == 1
     assert result.test_directory == "test/units"
+
+
+def test_test_requirements_follow_selected_suite_without_project_specific_mapping(tmp_path):
+    root = tmp_path / "project"
+    tests = root / "test" / "units"
+    requirements = root / "test" / "tooling" / "requirements"
+    tests.mkdir(parents=True)
+    requirements.mkdir(parents=True)
+    unit_requirements = requirements / "units.txt"
+    integration_requirements = requirements / "integration.txt"
+    unit_requirements.write_text("pytest-mock\n", encoding="utf-8")
+    integration_requirements.write_text("docker\n", encoding="utf-8")
+
+    assert _test_requirement_files(root, tests) == [unit_requirements.resolve()]
+
+
+def test_prepare_runtime_accepts_failing_upstream_tests_when_coverage_is_measurable(tmp_path):
+    archive = tmp_path / "project-with-failing-test.zip"
+    write_zip(
+        archive,
+        {
+            "demo/pkg/__init__.py": "def value():\n    return 1\n",
+            "demo/tests/test_pkg.py": (
+                "from pkg import value\n\ndef test_upstream_assumption():\n"
+                "    assert value() == 2\n"
+            ),
+        },
+    )
+
+    result, python = prepare_runtime(
+        archive,
+        tmp_path / "runtime-with-failing-test",
+        configured_source="pkg",
+        configured_tests="tests",
+        timeout_seconds=120,
+    )
+
+    assert result.status == "runtime_ready", result.error
+    assert python is not None
+    assert result.collected_tests == 1
+    baseline = next(item for item in result.commands if item.name.startswith("baseline tests"))
+    assert baseline.return_code == 1
+    assert result.statement_coverage is not None
 
 
 def test_prepare_runtime_does_not_build_dynamic_version_project(tmp_path):

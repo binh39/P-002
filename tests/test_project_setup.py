@@ -106,6 +106,22 @@ def test_project_setup_validates_with_selected_runtime_interpreter(tmp_path: Pat
     assert observed["command"][0] == "prepared-python"
 
 
+def test_project_setup_uses_release_shaped_version_without_vcs_metadata(tmp_path: Path, monkeypatch):
+    project = tmp_path / "example"
+    package = project / "example"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        "src.optimization.project_setup.subprocess.run",
+        lambda command, **kwargs: subprocess.CompletedProcess(command, 0, stdout=""),
+    )
+
+    report, _ = prepare_project(project, package)
+
+    assert report.version == "0.0.0+local"
+    assert report.version.split("+", 1)[0].count(".") == 2
+
+
 def test_project_setup_uses_primary_import_for_multi_package_source(tmp_path: Path, monkeypatch):
     project = tmp_path / "example"
     source = project / "src"

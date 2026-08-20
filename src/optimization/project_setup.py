@@ -53,7 +53,11 @@ def prepare_project(
     distribution_name = str(profile.get("distribution_name") or _distribution_name(manifest_root, package))
     detected_imports = _source_import_names(package)
     import_name = str(profile.get("import_name") or _primary_import_name(distribution_name, detected_imports))
-    version = str(profile.get("version") or _project_version(manifest_root, package) or "0+local")
+    # Source archives frequently omit VCS metadata required by dynamic version
+    # backends. Keep the fallback PEP 440 compliant and release-shaped so code
+    # that reasonably parses major/minor/patch does not fail merely because the
+    # archive was detached from Git.
+    version = str(profile.get("version") or _project_version(manifest_root, package) or "0.0.0+local")
     # Do not eagerly import every top-level module. Some projects expose optional
     # modules whose dependencies are intentionally not part of the default install.
     required = tuple(dict.fromkeys([import_name, *profile.get("required_imports", [])]))
