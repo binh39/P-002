@@ -23,7 +23,7 @@ from src.optimization.project_setup import prepare_project
 MAX_ARCHIVE_ENTRIES = 20_000
 MAX_UNCOMPRESSED_BYTES = 250 * 1024 * 1024
 MAX_FILE_BYTES = 25 * 1024 * 1024
-RUNTIME_PROTOCOL_VERSION = 6
+RUNTIME_PROTOCOL_VERSION = 7
 RUNTIME_TOOL_PACKAGES = (
     "pytest==9.1.1",
     "pytest-asyncio==1.4.0",
@@ -248,6 +248,39 @@ def _dependency_group_names(pyproject: Path) -> list[str]:
     return sorted(str(name) for name in groups) if isinstance(groups, dict) else []
 
 
+def _test_requirement_files(root: Path, tests: Path) -> list[Path]:
+    """Return dependency manifests declared for the selected test suite.
+
+    Some repositories keep unit-test requirements in their test tooling tree
+    instead of a root ``requirements-test.txt`` (for example under a
+    ``requirements/units.txt`` directory). Select manifests by the actual test
+    suite name so runtime preparation does not install unrelated integration,
+    documentation, or release dependencies.
+    """
+    if tests.name == ".promptopt-empty-tests":
+        return []
+
+    suite = tests.name.casefold()
+    suite_names = {suite}
+    if suite.endswith("s"):
+        suite_names.add(suite[:-1])
+    else:
+        suite_names.add(f"{suite}s")
+
+    candidates = [tests / name for name in LEGACY_REQUIREMENT_FILES]
+    for requirements_dir in root.rglob("requirements"):
+        if not requirements_dir.is_dir():
+            continue
+        candidates.extend(requirements_dir / f"{name}.txt" for name in sorted(suite_names))
+
+    unique: dict[Path, None] = {}
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved.is_file() and resolved != (root / "requirements.txt").resolve():
+            unique[resolved] = None
+    return sorted(unique, key=lambda path: path.as_posix())
+
+
 def prepare_environment(
     specs: list[RuntimeProjectSpec],
     workspace: Path,
@@ -274,6 +307,7 @@ def prepare_environment(
         roots: dict[str, Path] = {}
         sources: dict[str, Path] = {}
         tests: dict[str, Path] = {}
+        test_requirements: dict[str, list[Path]] = {}
         digest = hashlib.sha256(f"runtime-v{RUNTIME_PROTOCOL_VERSION}|python-{actual_python}".encode())
         for spec in sorted(specs, key=lambda item: item.project_id):
             digest.update(spec.project_id.encode())
@@ -289,6 +323,10 @@ def prepare_environment(
             roots[spec.project_id] = root
             sources[spec.project_id] = source
             tests[spec.project_id] = test_dir
+            test_requirements[spec.project_id] = _test_requirement_files(root, test_dir)
+            dependency_files.extend(
+                path.relative_to(root).as_posix() for path in test_requirements[spec.project_id]
+            )
             result.projects[spec.project_id] = RuntimeProjectResult(
                 project_root=str(root),
                 source_directory=source.relative_to(root).as_posix() or ".",
@@ -349,6 +387,7 @@ def prepare_environment(
                     dependency_groups.extend(f"{pyproject}:{name}" for name in _dependency_group_names(pyproject))
             else:
                 requirements.extend(root / name for name in LEGACY_REQUIREMENT_FILES if (root / name).is_file())
+            requirements.extend(test_requirements[project_id])
 
         if requirements or uv:
             command = (
@@ -433,7 +472,9 @@ def prepare_environment(
                 roots[project_id],
                 deadline,
                 maximum_output_bytes,
-                allowed_return_codes=(0, 5),
+                # Test failures are diagnostic, not an invalid measurement.
+                # coverage.py still emits usable denominators for exit code 1.
+                allowed_return_codes=(0, 1, 5),
                 pytest_plugin_autoload=bool(uv),
                 extra_env=test_environment,
             )

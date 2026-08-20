@@ -139,7 +139,7 @@ async def test_uploaded_experiment_requires_current_runtime_and_only_uses_source
     assert outdated.status_code == 409
     assert outdated.json()["error"]["code"] == "RUNTIME_REBUILD_REQUIRED"
 
-    project.runtime_report = RuntimeReport(status=RuntimeStatus.READY, protocol_version=6)
+    project.runtime_report = RuntimeReport(status=RuntimeStatus.READY, protocol_version=7)
     await repository.save(project)
     created = await client.post("/api/v1/experiments", headers=AUTH_HEADERS, json=payload)
 
