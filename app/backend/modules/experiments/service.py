@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from backend.core.errors import AppError
 from backend.infrastructure.storage import ObjectStorage
 from backend.modules.analysis.repository import FunctionRepository
-from backend.modules.analysis.schemas import is_valid_optimization_function
+from backend.modules.analysis.schemas import is_valid_optimization_function, normalize_optimization_source_file
 from backend.modules.projects.samples import SampleProjectCatalog
 from backend.modules.projects.schemas import MINIMUM_RUNTIME_PROTOCOL_VERSION, RuntimeStatus
 from backend.modules.projects.service import ProjectService
@@ -1508,21 +1508,7 @@ class ExperimentService:
     def _runner_source_file(self, project, source_file: str) -> str | None:
         if self.projects.is_sample(project.id):
             return source_file
-        source = project.settings.runtime.source_directory.replace("\\", "/").strip("/")
-        normalized = source_file.replace("\\", "/").lstrip("./")
-        if source in {"", "."}:
-            return normalized
-        if normalized == source or normalized.startswith(f"{source}/"):
-            return normalized
-        # Backward compatibility for analysis records created before archive
-        # wrapper directories were stripped (for example repo-main/src/pkg.py).
-        marker = f"/{source}/"
-        if marker in f"/{normalized}":
-            suffix = f"/{normalized}".split(marker, 1)[1]
-            return f"{source}/{suffix}"
-        # setup.py, scripts/, misc/, and other files outside the detected
-        # coverage source cannot produce a measurable GEPA target.
-        return None
+        return normalize_optimization_source_file(project.settings.runtime.source_directory, source_file)
 
     @staticmethod
     def _comparison_metrics(coverage: dict | None) -> dict:

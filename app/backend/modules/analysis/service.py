@@ -11,10 +11,11 @@ from backend.modules.analysis.schemas import (
     ProjectFunctionListResponse,
     ProjectFunctionResponse,
     is_valid_optimization_function,
+    normalize_optimization_source_file,
 )
 from backend.modules.projects.repository import ProjectRepository
 from backend.modules.projects.samples import SampleProjectCatalog
-from backend.modules.projects.schemas import ProjectResponse, ProjectStatus
+from backend.modules.projects.schemas import ProjectResponse, ProjectStatus, RuntimeStatus
 from backend.modules.projects.service import ProjectService
 
 
@@ -117,6 +118,13 @@ class AnalysisService:
             else await self.functions.list_for_project(project_id)
         )
         functions = [function for function in functions if is_valid_optimization_function(function)]
+        if not (self.samples and self.samples.contains(project_id)) and project.runtime_status == RuntimeStatus.READY:
+            source_directory = project.settings.runtime.source_directory
+            functions = [
+                function
+                for function in functions
+                if normalize_optimization_source_file(source_directory, function.file) is not None
+            ]
         return ProjectFunctionListResponse(
             items=[
                 ProjectFunctionResponse.model_validate(item.model_dump(exclude={"source", "analyzed_at"}))

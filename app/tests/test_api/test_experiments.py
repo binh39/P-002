@@ -139,8 +139,11 @@ async def test_uploaded_experiment_requires_current_runtime_and_only_uses_source
     assert outdated.status_code == 409
     assert outdated.json()["error"]["code"] == "RUNTIME_REBUILD_REQUIRED"
 
-    project.runtime_report = RuntimeReport(status=RuntimeStatus.READY, protocol_version=7)
+    project.runtime_report = RuntimeReport(status=RuntimeStatus.READY, protocol_version=8)
     await repository.save(project)
+    listed = await client.get(f"/api/v1/projects/{project_id}/functions", headers=AUTH_HEADERS)
+    assert listed.status_code == 200
+    assert {item["file"] for item in listed.json()["items"]} == {"pkg/core.py"}
     created = await client.post("/api/v1/experiments", headers=AUTH_HEADERS, json=payload)
 
     assert created.status_code == 201, created.text
