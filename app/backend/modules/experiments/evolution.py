@@ -27,6 +27,13 @@ _NEW_PROGRAM_OBJECTIVES = re.compile(r"Objective aggregate scores for new progra
 _BEST_PROGRAM = re.compile(r"Best program as per aggregate score on valset:\s*(\d+)")
 _BEST_SCORE = re.compile(r"Best score on valset:\s*([-+\d.eE]+)")
 _NEW_PROGRAM_INDEX = re.compile(r"New program candidate index:\s*(\d+)")
+_NO_PROPOSAL = re.compile(r"Reflective mutation did not propose a new candidate")
+_NO_TRAJECTORIES = re.compile(r"No trajectories captured\.\s*Skipping")
+_ALL_SCORES_PERFECT = re.compile(r"All subsample scores perfect\.\s*Skipping")
+_REFLECTION_EXCEPTION = re.compile(r"Exception during reflection/proposal:\s*(.*)", re.DOTALL)
+_OPTIMIZATION_EXCEPTION = re.compile(r"Exception during optimization:\s*(.*)", re.DOTALL)
+_REFLECTION_FUNCTION_CALL = re.compile(r"Reflection function call:\s*status=(\S+)\s+selection=(\S+)\s+changed=(\S+)")
+_RUN_COMPLETE = re.compile(r"(?:Saved optimized program|Final comparison split:|Final comparison skipped)")
 
 
 @dataclass(frozen=True)
@@ -46,6 +53,7 @@ class _IterationState:
     parent_minibatch_sum: float | None = None
     candidate_minibatch_sum: float | None = None
     decision: str = "Pending"
+    outcome_detail: str | None = None
     full_validation: bool = False
     best_statement: float | None = None
     best_branch: float | None = None
@@ -88,6 +96,8 @@ def parse_evolution_log(entries: Iterable[CloudLogLine]) -> EvolutionResponse:
     """Build a best-effort evolution timeline from GEPA's stable display log."""
     states: dict[int, _IterationState] = {}
     proposal_iteration: int | None = None
+    active_iteration: int | None = None
+    run_complete = False
 
     def state(index: int) -> _IterationState:
         return states.setdefault(index, _IterationState(iteration=index))
@@ -98,7 +108,12 @@ def parse_evolution_log(entries: Iterable[CloudLogLine]) -> EvolutionResponse:
         if match:
             index = int(match.group(1))
             body = match.group(2).strip()
+            for previous_index, previous in states.items():
+                if previous_index < index and previous.decision == "Pending":
+                    previous.decision = "Skipped"
+                    previous.outcome_detail = "Iteration ended without a candidate outcome."
             current = state(index)
+            active_iteration = index
             proposal_iteration = None
 
             if baseline_metrics := _BASELINE_METRICS.search(body):
@@ -121,6 +136,33 @@ def parse_evolution_log(entries: Iterable[CloudLogLine]) -> EvolutionResponse:
                 current.strategy = "reflective mutation"
                 current.parent_program = f"Program {selected.group(1)}"
                 current.parent_validation_score = _number(selected.group(2))
+                continue
+            if reflection_error := _REFLECTION_EXCEPTION.search(body):
+                current.strategy = "reflective mutation"
+                current.decision = "Proposal failed"
+                current.outcome_detail = reflection_error.group(1).strip() or "Reflection/proposal failed."
+                continue
+            if optimization_error := _OPTIMIZATION_EXCEPTION.search(body):
+                current.decision = "Iteration failed"
+                current.outcome_detail = optimization_error.group(1).strip() or "Optimization iteration failed."
+                continue
+            if _NO_TRAJECTORIES.search(body):
+                current.strategy = "reflective mutation"
+                current.decision = "Skipped"
+                current.outcome_detail = "No evaluation trajectories were captured for reflection."
+                continue
+            if _ALL_SCORES_PERFECT.search(body):
+                current.strategy = "reflective mutation"
+                current.decision = "Skipped"
+                current.outcome_detail = "All sampled targets already had perfect scores."
+                continue
+            if _NO_PROPOSAL.search(body):
+                current.strategy = "reflective mutation"
+                if current.decision == "Pending":
+                    current.decision = "No proposal"
+                    current.outcome_detail = current.outcome_detail or (
+                        "Reflection did not produce a changed candidate."
+                    )
                 continue
             if proposal := _PROPOSAL.search(body):
                 current.strategy = "reflective mutation"
@@ -186,12 +228,32 @@ def parse_evolution_log(entries: Iterable[CloudLogLine]) -> EvolutionResponse:
                 continue
             continue
 
+        if reflection_call := _REFLECTION_FUNCTION_CALL.search(line):
+            if active_iteration is not None:
+                current = state(active_iteration)
+                status, selection, changed = reflection_call.groups()
+                if selection != "none" and current.component is None:
+                    current.component = selection
+                current.outcome_detail = f"Reflection status: {status}; selection: {selection}; changed: {changed}."
+            continue
+
+        if _RUN_COMPLETE.search(line):
+            run_complete = True
+            proposal_iteration = None
+            continue
+
         if proposal_iteration is not None:
             # tqdm/status lines delimit a multiline proposal but are not prompt text.
             if line.startswith("GEPA Optimization:") or line.startswith("Saved optimized program"):
                 proposal_iteration = None
             else:
                 states[proposal_iteration].proposed_prompt_parts.append(raw_line.rstrip())
+
+    if run_complete:
+        for current in states.values():
+            if current.decision == "Pending":
+                current.decision = "Skipped"
+                current.outcome_detail = "Run completed without a candidate outcome for this iteration."
 
     if not states:
         return EvolutionResponse(
@@ -253,6 +315,7 @@ def parse_evolution_log(entries: Iterable[CloudLogLine]) -> EvolutionResponse:
                 parent_minibatch_sum=current.parent_minibatch_sum,
                 candidate_minibatch_sum=current.candidate_minibatch_sum,
                 decision=current.decision,
+                outcome_detail=current.outcome_detail,
                 full_validation=current.full_validation,
                 best_statement=current.best_statement,
                 best_branch=current.best_branch,

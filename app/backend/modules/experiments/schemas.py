@@ -253,6 +253,7 @@ class EvolutionIteration(StrictModel):
     parent_minibatch_sum: float | None = None
     candidate_minibatch_sum: float | None = None
     decision: str
+    outcome_detail: str | None = None
     full_validation: bool = False
     best_statement: float | None = None
     best_branch: float | None = None

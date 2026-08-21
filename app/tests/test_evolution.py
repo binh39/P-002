@@ -152,6 +152,57 @@ def test_returns_waiting_state_before_iteration_logs_arrive():
     assert "not published" in result.message
 
 
+def test_closes_no_proposal_and_previous_iterations_instead_of_leaving_them_pending():
+    messages = [
+        "Iteration 0: Base program full valset score: 0.42 over 2 / 2 examples",
+        "Iteration 1: Selected program 0 score: 0.42",
+        "Iteration 1: Reflective mutation did not propose a new candidate",
+        "Iteration 2: Selected program 0 score: 0.42",
+        "Iteration 3: Selected program 0 score: 0.42",
+    ]
+
+    result = parse_evolution_log([CloudLogLine(timestamp=None, text=message) for message in messages])
+
+    assert result.iterations[1].decision == "No proposal"
+    assert result.iterations[1].outcome_detail == "Reflection did not produce a changed candidate."
+    assert result.iterations[2].decision == "Skipped"
+    assert result.iterations[3].decision == "Pending"
+
+
+def test_run_completion_closes_the_last_pending_iteration():
+    messages = [
+        "Iteration 0: Base program full valset score: 0.42 over 2 / 2 examples",
+        "Iteration 1: Selected program 0 score: 0.42",
+        "Saved optimized program to /tmp/artifacts/optimized_program.json",
+    ]
+
+    result = parse_evolution_log([CloudLogLine(timestamp=None, text=message) for message in messages])
+
+    assert result.iterations[1].decision == "Skipped"
+    assert result.iterations[1].outcome_detail == ("Run completed without a candidate outcome for this iteration.")
+
+
+def test_parses_reflection_failure_reason_and_component_selection():
+    messages = [
+        "Iteration 0: Base program full valset score: 0.42 over 2 / 2 examples",
+        "Iteration 1: Selected program 0 score: 0.42",
+        "Reflection function call: status=no_successful_test_experiment selection=error changed=none",
+        "Iteration 1: Reflective mutation did not propose a new candidate",
+        "Iteration 2: Selected program 0 score: 0.42",
+        "Iteration 2: Exception during reflection/proposal: model quota exhausted",
+    ]
+
+    result = parse_evolution_log([CloudLogLine(timestamp=None, text=message) for message in messages])
+
+    first = result.iterations[1]
+    assert first.component == "error"
+    assert first.decision == "No proposal"
+    assert "no_successful_test_experiment" in (first.outcome_detail or "")
+    second = result.iterations[2]
+    assert second.decision == "Proposal failed"
+    assert second.outcome_detail == "model quota exhausted"
+
+
 @pytest.mark.asyncio
 async def test_completed_run_backfills_and_reuses_evolution_snapshot():
     repository = InMemoryExperimentRepository()
@@ -197,6 +248,69 @@ async def test_completed_run_backfills_and_reuses_evolution_snapshot():
     assert first == second == evolution_result()
     assert cloud.calls == 1
     assert snapshot in storage.objects
+
+
+@pytest.mark.asyncio
+async def test_completed_run_refreshes_a_snapshot_with_stale_pending_iterations():
+    repository = InMemoryExperimentRepository()
+    storage = MemoryStorage()
+    now = datetime.now(UTC)
+    experiment = ExperimentRecord(
+        id="experiment-stale",
+        owner_id="owner-1",
+        project_id="project-1",
+        name="Stale GEPA history",
+        status=ExperimentStatus.OPTIMIZATION_SUCCEEDED,
+        created_at=now,
+        updated_at=now,
+    )
+    run = OptimizationRunRecord(
+        id="run-stale",
+        experiment_id=experiment.id,
+        status=ExperimentStatus.OPTIMIZATION_SUCCEEDED,
+        parent_prompt_digest="parent",
+        cloud_artifact_prefix="runner-jobs/gepa/stale123/artifacts",
+        artifact_objects={"evolution.json": "stale-evolution.json"},
+        created_at=now,
+        started_at=now,
+        finished_at=now,
+    )
+    stale = EvolutionResponse(
+        available=True,
+        iterations=[
+            EvolutionIteration(
+                iteration=1,
+                strategy="reflective mutation",
+                decision="Pending",
+            )
+        ],
+    )
+    await storage.write(
+        "stale-evolution.json",
+        stale.model_dump_json().encode(),
+        "application/json",
+    )
+    await repository.create(experiment)
+    await repository.create_optimization_run(run)
+
+    class CloudEvolution:
+        calls = 0
+
+        async def evolution(self, *args, **kwargs):
+            self.calls += 1
+            return evolution_result()
+
+    cloud = CloudEvolution()
+    service = ExperimentService(repository, object(), object(), storage, cloud_optimizer=cloud)
+
+    result = await service.get_optimization_evolution(run.id, experiment.owner_id)
+
+    assert result == evolution_result()
+    assert cloud.calls == 1
+    stored = await repository.get_optimization_run(run.id)
+    refreshed_object = stored.artifact_objects["evolution.json"]
+    refreshed = EvolutionResponse.model_validate_json(await storage.read(refreshed_object))
+    assert all(iteration.decision != "Pending" for iteration in refreshed.iterations)
 
 
 @pytest.mark.asyncio
