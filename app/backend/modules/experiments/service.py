@@ -615,19 +615,34 @@ class ExperimentService:
         if run is None:
             raise AppError(404, "OPTIMIZATION_RUN_NOT_FOUND", "Optimization run was not found")
         item = await self._owned(run.experiment_id, owner_id)
+        active_statuses = {
+            ExperimentStatus.OPTIMIZATION_QUEUED,
+            ExperimentStatus.OPTIMIZING,
+            ExperimentStatus.CANDIDATE_EVALUATING,
+        }
+        cached_evolution: EvolutionResponse | None = None
         snapshot_object = run.artifact_objects.get("evolution.json")
         if snapshot_object:
             try:
-                return EvolutionResponse.model_validate_json(await self.storage.read(snapshot_object))
+                cached_evolution = EvolutionResponse.model_validate_json(await self.storage.read(snapshot_object))
+                has_stale_pending = run.status not in active_statuses and any(
+                    iteration.decision == "Pending" for iteration in cached_evolution.iterations
+                )
+                if not has_stale_pending:
+                    return cached_evolution
             except Exception:
                 # A missing/corrupt cache must not hide logs that are still retained.
                 pass
         if self.cloud_optimizer is None or not hasattr(self.cloud_optimizer, "evolution"):
+            if cached_evolution is not None:
+                return cached_evolution
             return EvolutionResponse(
                 available=False,
                 message="Evolution logs are only available for Cloud Run GEPA jobs.",
             )
         if not run.cloud_artifact_prefix:
+            if cached_evolution is not None:
+                return cached_evolution
             return EvolutionResponse(
                 available=False,
                 message="The Cloud Run execution has not started yet.",
@@ -636,16 +651,9 @@ class ExperimentService:
             run.cloud_artifact_prefix,
             started_at=run.started_at,
         )
-        if (
-            evolution.available
-            and evolution.iterations
-            and run.status
-            not in {
-                ExperimentStatus.OPTIMIZATION_QUEUED,
-                ExperimentStatus.OPTIMIZING,
-                ExperimentStatus.CANDIDATE_EVALUATING,
-            }
-        ):
+        if not evolution.available and cached_evolution is not None:
+            return cached_evolution
+        if evolution.available and evolution.iterations and run.status not in active_statuses:
             try:
                 object_name = self._optimization_artifact_name(item, run, "evolution.json")
                 await self.storage.write(

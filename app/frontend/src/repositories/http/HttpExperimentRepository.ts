@@ -89,6 +89,7 @@ interface ApiOptimizationEvolution {
     parent_minibatch_sum: number | null;
     candidate_minibatch_sum: number | null;
     decision: string;
+    outcome_detail?: string | null;
     full_validation: boolean;
     best_statement: number | null;
     best_branch: number | null;
@@ -222,6 +223,7 @@ function mapOptimizationEvolution(item: ApiOptimizationEvolution): OptimizationE
       parentMinibatchSum: iteration.parent_minibatch_sum,
       candidateMinibatchSum: iteration.candidate_minibatch_sum,
       decision: iteration.decision,
+      outcomeDetail: iteration.outcome_detail ?? null,
       fullValidation: iteration.full_validation,
       bestStatement: iteration.best_statement,
       bestBranch: iteration.best_branch,

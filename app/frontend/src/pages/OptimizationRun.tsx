@@ -93,7 +93,7 @@ function metric(value: number | null) {
 
 function decisionTone(decision: string) {
   if (decision === "Accepted" || decision === "Baseline evaluated") return "success" as const;
-  if (decision === "Rejected") return "danger" as const;
+  if (decision === "Rejected" || decision.includes("failed")) return "danger" as const;
   return "info" as const;
 }
 
@@ -162,6 +162,7 @@ function IterationFlow({ iteration }: { iteration: EvolutionIteration }) {
           <dt>Decision</dt>
           <dd>
             <FlowValue>{iteration.decision}</FlowValue>
+            {iteration.outcomeDetail ? <small>{iteration.outcomeDetail}</small> : null}
           </dd>
         </div>
         <div>

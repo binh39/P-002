@@ -93,6 +93,7 @@ export interface EvolutionIteration {
   parentMinibatchSum: number | null;
   candidateMinibatchSum: number | null;
   decision: string;
+  outcomeDetail?: string | null;
   fullValidation: boolean;
   bestStatement: number | null;
   bestBranch: number | null;
