@@ -126,11 +126,11 @@ export default function CoverageGuide() {
     <div className="coverage-guide-page">
       <header className="coverage-guide-hero">
         <div>
-          <span className="coverage-guide-eyebrow">Coverage fundamentals</span>
-          <h1>Two core test coverage metrics</h1>
+          <span className="coverage-guide-eyebrow">PromptOpt documentation</span>
+          <h1>Prepare a Python project for prompt optimization</h1>
           <p>
-            Statement coverage measures executed statements. Branch coverage measures whether each
-            True/False path has been tested.
+            Package source, dependencies, and tests so PromptOpt can analyze the archive, build a
+            reusable runtime, and run GEPA without relying on local setup or live provider secrets.
           </p>
         </div>
         <div className="coverage-score-preview" aria-label="Coverage score formula">
@@ -142,6 +142,180 @@ export default function CoverageGuide() {
           </div>
         </div>
       </header>
+
+      <nav className="docs-jump-nav" aria-label="Documentation sections">
+        <a href="#upload-readiness">Upload readiness</a>
+        <a href="#runtime-preflight">Local preflight</a>
+        <a href="#coverage-fundamentals">Coverage metrics</a>
+      </nav>
+
+      <section className="project-readiness-section" id="upload-readiness">
+        <div className="coverage-section-heading">
+          <span>Before you upload</span>
+          <h2>Make the project analyzable and runtime-ready</h2>
+          <p>
+            You do not need to install PromptOpt, CoverUp, GEPA, UV, or pytest on the machine that
+            uploads the ZIP. The cloud worker supplies Python 3.12 and the evaluation tools; the
+            archive must supply valid source and complete project dependencies.
+          </p>
+        </div>
+
+        <div className="readiness-callout" role="note">
+          <strong>No credentials in the ZIP</strong>
+          <p>
+            Never upload <code>.env</code>, API keys, service-account files, certificates, or
+            production data. Unit tests should replace external providers with mocks or fakes.
+          </p>
+        </div>
+
+        <div className="readiness-grid">
+          <article className="readiness-card">
+            <span className="readiness-number">01</span>
+            <div>
+              <h3>Use a detectable Python layout</h3>
+              <p>
+                Put importable source under <code>src/</code>, <code>lib/</code>,{" "}
+                <code>python/</code>, or a top-level package. Keep at least three measurable
+                functions so train, validation, and test splits can be non-empty.
+              </p>
+              <pre>{`project/
+├─ pyproject.toml
+├─ uv.lock
+├─ src/my_package/__init__.py
+└─ tests/unit/`}</pre>
+            </div>
+          </article>
+
+          <article className="readiness-card">
+            <span className="readiness-number">02</span>
+            <div>
+              <h3>Declare every dependency</h3>
+              <p>
+                Prefer <code>pyproject.toml + uv.lock</code>. Requirements files are also accepted.
+                Include runtime packages, test dependencies, and pytest plugins such as{" "}
+                <code>pytest-mock</code> when project configuration uses them.
+              </p>
+              <ul>
+                <li>Current cloud runtime: Python 3.12.</li>
+                <li>
+                  <code>requires-python</code> must include Python 3.12.
+                </li>
+                <li>Dependencies must resolve together inside one environment.</li>
+              </ul>
+            </div>
+          </article>
+
+          <article className="readiness-card">
+            <span className="readiness-number">03</span>
+            <div>
+              <h3>Keep imports and unit tests isolated</h3>
+              <p>
+                Importing the primary package must not start a server, open a database, call a
+                provider, parse CLI arguments, or require production environment variables. Existing
+                tests should collect through pytest without external services.
+              </p>
+              <ul>
+                <li>
+                  Tests are optional, but unit tests under <code>tests/unit/</code> are preferred.
+                </li>
+                <li>Do not execute tests or application code at module import time.</li>
+                <li>Keep integration harnesses separate from the unit-test directory.</li>
+              </ul>
+            </div>
+          </article>
+
+          <article className="readiness-card">
+            <span className="readiness-number">04</span>
+            <div>
+              <h3>Wrap external providers</h3>
+              <p>
+                OpenAI, Gemini, Stripe, AWS, databases, and other providers are testable when their
+                SDK is declared and calls can be replaced with dependency injection,{" "}
+                <code>unittest.mock</code>, or <code>monkeypatch</code>.
+              </p>
+              <ul>
+                <li>Do not construct or call provider clients during import.</li>
+                <li>Do not make real network calls from unit tests.</li>
+                <li>Expose response and error paths through small, mockable functions.</li>
+              </ul>
+            </div>
+          </article>
+        </div>
+
+        <div className="archive-requirements">
+          <div>
+            <span>ZIP limits</span>
+            <strong>100 MB compressed</strong>
+            <p>Up to 20,000 entries, 250 MB extracted, and 25 MB per file.</p>
+          </div>
+          <div>
+            <span>Do not include</span>
+            <strong>Generated environments</strong>
+            <p>
+              Exclude <code>.venv</code>, <code>.git</code>, build output, caches, and large data.
+            </p>
+          </div>
+          <div>
+            <span>Not supported</span>
+            <strong>Custom infrastructure</strong>
+            <p>Do not require Docker, GPU, VPN, system services, or custom apt packages.</p>
+          </div>
+        </div>
+
+        <div className="runtime-preflight" id="runtime-preflight">
+          <div>
+            <span>Recommended local check</span>
+            <h3>Validate in a clean Python 3.12 environment</h3>
+            <p>
+              Run the matching command set before creating the ZIP. Replace <code>my_package</code>{" "}
+              with the package imported by your application.
+            </p>
+          </div>
+          <div className="preflight-command-grid">
+            <article>
+              <strong>UV project</strong>
+              <pre>{`uv sync --all-groups
+uv run python -c "import my_package"
+uv run pytest --collect-only -q
+uv run pytest -q`}</pre>
+            </article>
+            <article>
+              <strong>Requirements project</strong>
+              <pre>{`python -m pip install -r requirements.txt
+python -m pip install -r requirements-test.txt
+python -c "import my_package"
+python -m pytest --collect-only -q tests`}</pre>
+            </article>
+          </div>
+        </div>
+
+        <div className="runtime-sequence" aria-label="Runtime preparation sequence">
+          {[
+            "Static analysis",
+            "Safe extraction",
+            "Dependency resolution",
+            "Import preflight",
+            "Pytest collection",
+            "Baseline coverage",
+            "Runtime ready",
+            "GEPA",
+          ].map((step, index) => (
+            <div key={step}>
+              <span>{index + 1}</span>
+              <strong>{step}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="coverage-doc-heading" id="coverage-fundamentals">
+        <span className="coverage-guide-eyebrow">Coverage fundamentals</span>
+        <h2>Understand the metrics GEPA optimizes</h2>
+        <p>
+          Statement coverage measures executed statements. Branch coverage measures whether each
+          True/False path has been tested.
+        </p>
+      </div>
 
       <section className="coverage-primary-grid" aria-label="Two primary coverage metrics">
         <article className="coverage-primary-card statement-primary-card">

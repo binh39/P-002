@@ -9,6 +9,12 @@ describe("coverage guide", () => {
     const user = userEvent.setup();
     render(<CoverageGuide />);
 
+    expect(
+      screen.getByRole("heading", { name: "Make the project analyzable and runtime-ready" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("No credentials in the ZIP")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Wrap external providers" })).toBeInTheDocument();
+    expect(screen.getByText("uv sync --all-groups", { exact: false })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Statement coverage" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Branch coverage" })).toBeInTheDocument();
     expect(screen.getByText("30% + 70%")).toBeInTheDocument();
