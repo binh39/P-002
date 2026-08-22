@@ -27,12 +27,15 @@ from cloud.runtime_workspace import detect_layout, find_project_root, safe_extra
 
 
 def _run_cli(command: list[str]) -> tuple[int, str | None]:
-    """Stream CLI output to Cloud Logging while retaining a bounded traceback."""
+    """Stream CLI output to Cloud Logging with compact reflection diagnostics."""
     tail: deque[str] = deque(maxlen=200)
+    child_env = os.environ.copy()
+    child_env["PROMPTOPT_COMPACT_LOGS"] = "1"
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
+        env=child_env,
         text=True,
         encoding="utf-8",
         errors="replace",

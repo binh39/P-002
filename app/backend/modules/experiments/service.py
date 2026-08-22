@@ -330,6 +330,10 @@ class ExperimentService:
                 PromptBundle(
                     initial=payload.baseline_prompt.initial,
                     error=payload.baseline_prompt.error,
+                    missing_coverage=(
+                        payload.baseline_prompt.missing_coverage
+                        or baseline_prompt().missing_coverage
+                    ),
                 )
                 if payload.baseline_prompt is not None
                 else baseline_prompt()

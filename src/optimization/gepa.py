@@ -30,9 +30,11 @@ from .runner import CoverUpExperimentRunner
 
 INITIAL_PLACEHOLDERS = ("{filename}", "{coverage_targets}", "{source_excerpt}")
 ERROR_PLACEHOLDERS = ("{error}",)
+MISSING_COVERAGE_PLACEHOLDERS = ("{missing_coverage}",)
 COMPONENT_PLACEHOLDERS = {
     "initial": INITIAL_PLACEHOLDERS,
     "error": ERROR_PLACEHOLDERS,
+    "missing_coverage": MISSING_COVERAGE_PLACEHOLDERS,
 }
 COMPONENT_ROLES = {
     "initial": (
@@ -43,14 +45,18 @@ COMPONENT_ROLES = {
         "Reflect on execution or collection feedback, identify the concrete failed "
         "assumption, and repair the complete pytest module without losing useful behavior."
     ),
+    "missing_coverage": (
+        "Expand an existing valid test module to cover remaining lines and branches "
+        "without losing useful behavior."
+    ),
 }
-MIN_COMPONENT_CHAR_BUDGET = {"initial": 2_400, "error": 1_600}
+MIN_COMPONENT_CHAR_BUDGET = {"initial": 2_400, "error": 1_600, "missing_coverage": 1_600}
 UPDATE_PROMPT_COMPONENT_TOOL = {
     "type": "function",
     "function": {
         "name": "update_prompt_component",
         "description": (
-            "Select initial, error, or all and return complete replacement "
+            "Select initial, error, missing_coverage, or all and return complete replacement "
             "templates in the same call. Replacements must give a less-capable "
             "test model a detailed Reflexion procedure and an unambiguous reflection/code "
             "output contract. The all selection is always allowed."
@@ -60,13 +66,14 @@ UPDATE_PROMPT_COMPONENT_TOOL = {
             "properties": {
                 "component": {
                     "type": "string",
-                    "enum": ["initial", "error", "all"],
+                    "enum": ["initial", "error", "missing_coverage", "all"],
                 },
                 "replacements": {
                     "type": "object",
                     "properties": {
                         "initial": {"type": "string"},
                         "error": {"type": "string"},
+                        "missing_coverage": {"type": "string"},
                     },
                     "additionalProperties": False,
                 },
@@ -158,6 +165,20 @@ class BestParetoCandidateSelector:
 def log_reflection_request(request: Mapping[str, Any]) -> None:
     """Print the exact native-tool request sent to the optimization model."""
     print(REFLECTION_REQUEST_BEGIN, flush=True)
+    if os.environ.get("PROMPTOPT_COMPACT_LOGS", "").strip().lower() in {"1", "true", "yes", "on"}:
+        compact_request = dict(request)
+        if "messages" in compact_request:
+            compact_request["messages"] = [
+                (
+                    {**msg, "content": {"message_chars": len(msg["content"])}}
+                    if isinstance(msg.get("content"), str) and len(msg["content"]) > 1000
+                    else msg
+                )
+                for msg in compact_request["messages"]
+            ]
+        if "payload" in compact_request:
+            compact_request["payload"] = _log_value(compact_request["payload"])
+        request = compact_request
     print(json.dumps(request, indent=2, ensure_ascii=False), flush=True)
     print(REFLECTION_REQUEST_END, flush=True)
 
@@ -173,7 +194,11 @@ def _full_reflection_logs_enabled() -> bool:
 
 def _log_value(value: Any) -> Any:
     """Convert SDK response objects to JSON-compatible diagnostic output."""
-    if value is None or isinstance(value, str | int | float | bool):
+    if value is None or isinstance(value, int | float | bool):
+        return value
+    if isinstance(value, str):
+        if len(value) > 1000 and os.environ.get("PROMPTOPT_COMPACT_LOGS", "").strip().lower() in {"1", "true", "yes", "on"}:
+            return f"[...{len(value)} chars...]"
         return value
     if isinstance(value, Mapping):
         return {str(key): _log_value(item) for key, item in value.items()}
@@ -232,6 +257,7 @@ def validate_template(
             coverage_targets="line 1",
             source_excerpt="def f(): pass",
             error="pytest failed",
+            missing_coverage="line 2",
         )
     except (KeyError, ValueError) as exc:
         return f"Candidate is not a valid format template: {exc}."
@@ -242,6 +268,7 @@ def validate_bundle(bundle: PromptBundle) -> str | None:
     templates = (
         ("initial", bundle.initial, INITIAL_PLACEHOLDERS),
         ("error", bundle.error or "", ERROR_PLACEHOLDERS),
+        ("missing_coverage", bundle.missing_coverage or "", MISSING_COVERAGE_PLACEHOLDERS),
     )
     for name, template, placeholders in templates:
         if error := validate_template(template, placeholders):
@@ -250,7 +277,7 @@ def validate_bundle(bundle: PromptBundle) -> str | None:
 
 
 def bundle_digest(bundle: PromptBundle) -> str:
-    serialized = "\n---PROMPT---\n".join((bundle.initial, bundle.error or ""))
+    serialized = "\n---PROMPT---\n".join((bundle.initial, bundle.error or "", bundle.missing_coverage or ""))
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
 
 
@@ -564,10 +591,11 @@ def _build_execution_episodes(
             component = attempt.get("component")
             if component == "initial":
                 initial_attempts.append(_compact_attempt(attempt))
-            elif component == "error":
+            elif component in ("error", "missing_coverage"):
                 transition = {
                     "attempt": attempt.get("attempt"),
                     "replicate": replicate,
+                    "component": component,
                     "failing_test": _clip_text(
                         (previous_test_attempt or {}).get("generated_test", ""),
                         10_000,
@@ -1726,7 +1754,7 @@ Choose one case. Infer a concrete causal defect in the failed test, then call ru
             return proposals
         successful_ids = {str(item["result"]["experiment_id"]) for item in successful}
         prompt = f"""
-You are optimizing a reusable two-stage CoverUp pytest-generation system. The stages are `initial` test generation and conditional `error` repair.
+You are optimizing a reusable three-stage CoverUp pytest-generation system. The stages are `initial` test generation, conditional `error` repair, and `missing_coverage` extension.
 
 Current templates:
 <templates>{json.dumps(candidate, indent=2, ensure_ascii=False)}</templates>
@@ -1740,12 +1768,12 @@ Labelled end-to-end execution evidence by component:
 Optimizer-authored test experiments:
 <test_experiments>{json.dumps(experiments, indent=2, ensure_ascii=False)}</test_experiments>
 
-In one decision, choose `initial`, `error`, or `all`, then call `update_prompt_component` exactly once with every complete revised template selected. `all` is always allowed, even when direct evidence exists for only one stage. When selecting `all`, provide both `initial` and `error` replacements and change both; the update is rejected atomically otherwise. For a single component, provide only that component's replacement.
+In one decision, choose `initial`, `error`, `missing_coverage`, or `all`, then call `update_prompt_component` exactly once with every complete revised template selected. `all` is always allowed, even when direct evidence exists for only one stage. When selecting `all`, provide `initial`, `error`, and `missing_coverage` replacements and change all of them; the update is rejected atomically otherwise. For a single component, provide only that component's replacement.
 
 The successful diagnostic test is teacher evidence, not part of the candidate and not part of GEPA's score. Compare it with the failed generated test, identify the reusable causal lesson that made the experiment pass and cover more of the target, and turn that lesson into a detailed operational procedure suitable for a less-capable test-generation model. Do not compress away necessary intermediate checks merely to make the prompt short, and do not pad it with unrelated advice.
 
 Use one strategy consistently: Reflexion. The revised templates must explicitly tell the test model how to:
-1. OBSERVE the target source, requested missing lines/branches, dependencies, and (for `error`) the latest execution feedback.
+1. OBSERVE the target source, requested missing lines/branches, dependencies, and (for `error` or `missing_coverage`) the latest execution feedback.
 2. REFLECT by naming the concrete branch preconditions or failed assumption and deciding what evidence is still missing; call `get_info` for that evidence rather than guessing APIs.
 3. PLAN exact inputs, state setup, mocks/monkeypatch boundaries, invocation, and meaningful postconditions for each intended path.
 4. ACT by writing a complete deterministic pytest module, then CHECK imports, reachability, assertions, cleanup, and preservation of already-valid behavior before answering.

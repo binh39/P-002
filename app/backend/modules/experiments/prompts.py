@@ -7,6 +7,10 @@ from dataclasses import asdict, dataclass
 class PromptBundle:
     initial: str
     error: str
+    missing_coverage: str = """The tests still lack coverage: {missing_coverage} not execute.
+Modify the current test module to execute every remaining line and branch. Preserve passing
+behavior and assertions, use get_info when more source context is needed, and return the
+complete Python test module in a single Python markdown code block."""
 
     def digest(self) -> str:
         return hashlib.sha256(json.dumps(asdict(self), sort_keys=True).encode()).hexdigest()[:16]
@@ -19,12 +23,25 @@ class PromptBundle:
 
     @classmethod
     def from_candidate(cls, candidate: dict[str, str]) -> "PromptBundle":
-        if set(candidate) != {"initial", "error"}:
-            raise ValueError("candidate may only contain the initial and error prompt components")
-        return cls(initial=candidate.get("initial", ""), error=candidate.get("error", ""))
+        required = {"initial", "error"}
+        allowed = required | {"missing_coverage"}
+        if not required.issubset(candidate) or not set(candidate).issubset(allowed):
+            raise ValueError(
+                "candidate must contain initial and error and may optionally contain "
+                "the missing_coverage prompt component"
+            )
+        return cls(
+            initial=candidate.get("initial", ""),
+            error=candidate.get("error", ""),
+            missing_coverage=candidate.get("missing_coverage") or cls.missing_coverage,
+        )
 
     def validate(self) -> None:
-        required = {"initial": ("{filename}", "{coverage_targets}", "{source_excerpt}"), "error": ("{error}",)}
+        required = {
+            "initial": ("{filename}", "{coverage_targets}", "{source_excerpt}"),
+            "error": ("{error}",),
+            "missing_coverage": ("{missing_coverage}",),
+        }
         for name, placeholders in required.items():
             template = getattr(self, name)
             if not template or len(template.encode("utf-8")) > 32 * 1024:

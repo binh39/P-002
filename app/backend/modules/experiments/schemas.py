@@ -96,6 +96,7 @@ class ExperimentSettings(StrictModel):
 class BaselinePromptInput(StrictModel):
     initial: str = Field(min_length=1, max_length=32 * 1024)
     error: str = Field(min_length=1, max_length=32 * 1024)
+    missing_coverage: str | None = Field(default=None, max_length=32 * 1024)
 
 
 class TargetReference(StrictModel):
