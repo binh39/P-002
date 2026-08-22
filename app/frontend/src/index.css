@@ -7165,9 +7165,10 @@ textarea {
 }
 
 .test-case-file-buttons {
-  display: grid;
+  display: flex;
   flex: 1;
-  align-content: start;
+  flex-direction: column;
+  align-items: stretch;
   gap: 6px;
   min-height: 0;
   overflow-y: auto;
@@ -7176,7 +7177,9 @@ textarea {
 
 .test-case-file-buttons button {
   display: block;
+  flex: 0 0 auto;
   width: 100%;
+  min-height: 40px;
   overflow: hidden;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -7184,6 +7187,7 @@ textarea {
   background: transparent;
   color: var(--text, #1d2939);
   cursor: pointer;
+  line-height: 20px;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
