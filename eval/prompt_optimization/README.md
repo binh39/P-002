@@ -55,18 +55,19 @@ CoverUp được mở rộng bằng option:
 --prompt-template-file <prompt.json>
 ```
 
-Option này chỉ áp dụng cho prompt family `gpt-v2`. File JSON override hai
+Option này chỉ áp dụng cho prompt family `gpt-v2`. File JSON override ba
 template:
 
 ```json
 {
   "initial": "...",
-  "error": "..."
+  "error": "...",
+  "missing_coverage": "..."
 }
 ```
 
-Hai template đều bắt buộc đối với `evaluate` và `optimize`. Pipeline tối ưu vòng
-hội thoại sinh test lần đầu và sửa lỗi pytest.
+Ba template đều bắt buộc đối với `evaluate` và `optimize`. Pipeline tối ưu vòng
+hội thoại sinh test lần đầu, sửa lỗi pytest và mở rộng coverage còn thiếu.
 Candidate thiếu một template hoặc placeholder bắt buộc sẽ nhận score 0 trước khi
 CoverUp được gọi.
 
@@ -174,11 +175,12 @@ are missing or materially skewed across splits.
 
 ## Prompt baseline
 
-Prompt `gpt_v2_baseline.json` chứa hai template với placeholder bắt buộc:
+Prompt `gpt_v2_baseline.json` chứa ba template với placeholder bắt buộc:
 
 ```text
 initial:            {filename}, {coverage_targets}, {source_excerpt}
 error:              {error}
+missing_coverage:   {missing_coverage}
 ```
 
 Các placeholder của initial prompt là:
@@ -194,6 +196,9 @@ Trước khi chạy CoverUp, pipeline thay chúng bằng:
 - đường dẫn source file;
 - line và branch chưa được thực thi;
 - code excerpt của function/class đang xử lý.
+
+Đối với error prompt, `{error}` được thay bằng traceback lỗi khi pytest fail.
+Đối với missing_coverage prompt, `{missing_coverage}` được thay bằng danh sách các dòng/nhánh code còn thiếu khi test đã pass nhưng chưa đạt full coverage.
 
 Candidate thiếu placeholder hoặc có placeholder không hợp lệ nhận score 0 và không
 được chạy CoverUp.
@@ -400,8 +405,7 @@ python -m src.optimization.cli `
   --max-metric-calls 20
 ```
 
-GEPA tối ưu trực tiếp hai text component `initial` và `error`. Không còn component repair
-coverage hoặc một LLM trung gian viết lại cả bundle trước khi optimization bắt đầu. Baseline
+GEPA tối ưu trực tiếp ba text component `initial`, `error`, và `missing_coverage`. Không còn một LLM trung gian viết lại cả bundle trước khi optimization bắt đầu. Baseline
 chính là candidate số 0 và luôn nằm trong Pareto population.
 
 Trước khi GEPA bắt đầu search, pipeline chạy baseline preflight trên toàn train và
@@ -412,10 +416,10 @@ sửa/thay thế.
 
 Trong mỗi vòng reflection:
 
-1. Khi có failure evidence, GEPA chuyển cả `initial` và `error` cho reflection LM với
-   minibatch 8. Trong đúng một native `update_prompt_component` tool call, LM chọn `initial`, `error`, hoặc
+1. Khi có failure evidence, GEPA chuyển các component (`initial`, `error`, `missing_coverage`) cho reflection LM với
+   minibatch 5. Trong đúng một native `update_prompt_component` tool call, LM chọn `initial`, `error`, `missing_coverage` hoặc
    `all` và trả luôn complete replacement. `all` luôn được phép, kể cả khi direct evidence
-   chỉ có ở một stage; update này chỉ được áp dụng khi cả hai replacement hợp lệ và thực sự đổi.
+   chỉ có ở một stage; update này chỉ được áp dụng khi các replacement hợp lệ và thực sự đổi.
 2. Cả bundle được validate và hash để tạo candidate ID ổn định.
 3. Mỗi batch dùng một generated-tests workspace chung theo project; test của từng symbol
    được chọn chính xác bằng `source_file + qualname`. Sau generation, coverage/pytest của

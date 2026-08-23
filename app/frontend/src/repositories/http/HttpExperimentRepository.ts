@@ -33,7 +33,7 @@ interface ApiExperiment {
     evaluation_replicates: number;
     reflection_temperature: number;
   };
-  baseline_prompt?: { initial: string; error: string } | null;
+  baseline_prompt?: { initial: string; error: string; missing_coverage?: string } | null;
   optimization_eligible: boolean;
   status: ExperimentStatus;
   baseline_run_id: string | null;
@@ -54,7 +54,7 @@ interface ApiOptimizationRun {
   experiment_id: string;
   status: ExperimentStatus;
   parent_prompt_digest: string;
-  candidate_prompt: { initial: string; error: string } | null;
+  candidate_prompt: { initial: string; error: string; missing_coverage?: string } | null;
   candidate_prompt_digest: string | null;
   baseline_validation_score: number | null;
   candidate_validation_score: number | null;

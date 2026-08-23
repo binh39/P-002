@@ -6,19 +6,22 @@ terminal va diff Git.
 
 ## 1. Muc tieu toi uu
 
-Mot candidate runtime la mot `PromptBundle` gom dung hai text component:
+Mot candidate runtime la mot `PromptBundle` gom ba text component:
 
 ```text
 PromptBundle
 |
 +-- initial
-|   Prompt tao test o attempt dau tien.
+|   Prompt tao test o attempt dau tien ({filename}, {coverage_targets}, {source_excerpt}).
 |
 +-- error
-    Prompt sua test khi pytest/collection bi loi.
+|   Prompt sua test khi pytest/collection bi loi ({error}).
+|
++-- missing_coverage
+    Prompt mo rong test khi test pass nhung chua dat full coverage ({missing_coverage}).
 ```
 
-Baseline JSON chinh la candidate so 0. GEPA chi sua `initial` va `error`; khong co
+Baseline JSON chinh la candidate so 0. GEPA sua truc tiep cac component `initial`, `error`, va `missing_coverage` (hoac to hop); khong co
 mot lop prompt trung gian viet lai bundle truoc khi search.
 
 ## 2. Dau vao
@@ -34,7 +37,7 @@ CLI
 |   Split final: test; neu khong co test thi fallback validation.
 |
 +-- --prompt <baseline.json>
-|   Chua initial va error.
+|   Chua initial, error, va missing_coverage.
 |
 +-- --artifacts-dir <dir>
 |   Noi luu candidate, cache, generated tests, run log va final report.
@@ -79,7 +82,8 @@ Environment
                 | GEPA search                             |
                 | seed candidate = baseline               |
                 | 70% best / 30% Pareto + hybrid frontier|
-                | causal selector: initial or error       |
+                | causal selector: initial / error /      |
+                |                  missing_coverage / all |
                 | reflection <= 5 incomplete examples     |
                 | merge enabled                           |
                 +-------------------+---------------------+
@@ -369,7 +373,7 @@ counted as GEPA coverage. The candidate must improve only when CoverUp independe
 generates a new test from the revised prompt. Successful experiment lessons and prompt
 lineage are persisted for audit.
 
-Neu `initial` hoac `error` khong co trace thuc su trong trajectory, reflection dataset
+Neu `initial`, `error`, hoac `missing_coverage` khong co trace thuc su trong trajectory, reflection dataset
 cua component do rong va adapter giu nguyen text; model reflection khong duoc goi.
 
 ## 8. GEPA search va selection
@@ -380,7 +384,7 @@ Cau hinh hien tai:
 seed_candidate              = exact baseline bundle
 candidate_selection_strategy = 70% current aggregate best + 30% Pareto
 frontier_type               = hybrid
-module_selector             = causal(initial or exercised error)
+module_selector             = causal(initial, exercised error, or missing_coverage)
 reflection_minibatch_size   = min(5, number_of_incomplete_train_targets)
 reflection_trainset        = baseline train targets with coverage < 100%
 reflection_context         = current candidate targets with coverage < 100%

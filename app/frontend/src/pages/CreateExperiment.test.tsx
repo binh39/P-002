@@ -99,7 +99,7 @@ describe("create experiment wizard", () => {
           name: "isort prompt optimization",
           samplingMethod: "random",
           maxTargets: null,
-          randomSeed: 7,
+          randomSeed: 115,
         }),
       ),
     );

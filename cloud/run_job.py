@@ -56,12 +56,15 @@ def _run_cli(command: list[str]) -> tuple[int, str | None]:
 
 
 def _upload_dir(bucket: str, prefix: str, local_dir: Path) -> None:
-    """Recursively upload local_dir to gs://bucket/prefix/..."""
+    """Recursively upload local_dir to gs://bucket/prefix/..., uploading sentinel manifest files last."""
     from google.cloud import storage  # installed via litellm[google]
 
     client = storage.Client()
     bucket_obj = client.bucket(bucket)
-    files = [path for path in local_dir.rglob("*") if path.is_file()]
+    all_files = [path for path in local_dir.rglob("*") if path.is_file()]
+    regular_files = [path for path in all_files if path.name != "job_result.json"]
+    sentinel_files = [path for path in all_files if path.name == "job_result.json"]
+    files = regular_files + sentinel_files
     for index, path in enumerate(files, start=1):
         relative = path.relative_to(local_dir).as_posix()
         blob = bucket_obj.blob(f"{prefix}/{relative}" if prefix else relative)

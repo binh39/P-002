@@ -24,8 +24,7 @@ class PromptBundle:
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        values = self.as_candidate()
-        path.write_text(json.dumps(values, indent=2, ensure_ascii=False), encoding="utf-8")
+        path.write_text(json.dumps(asdict(self), indent=2, ensure_ascii=False), encoding="utf-8")
 
     def as_candidate(self) -> dict[str, str]:
         """Return the direct GEPA component mapping for this prompt bundle."""
@@ -34,11 +33,7 @@ class PromptBundle:
         return {
             "initial": self.initial,
             "error": self.error,
-            "missing_coverage": (
-                BASELINE_MISSING_COVERAGE
-                if self.missing_coverage is None
-                else self.missing_coverage
-            ),
+            "missing_coverage": self.missing_coverage if self.missing_coverage is not None else BASELINE_MISSING_COVERAGE,
         }
 
     @classmethod

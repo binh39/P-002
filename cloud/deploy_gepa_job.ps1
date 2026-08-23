@@ -81,7 +81,7 @@ if (-not $VertexProjectId -or $VertexProjectId -eq "your-google-cloud-project") 
     throw "VertexProjectId not set. Pass -VertexProjectId or set VERTEXAI_PROJECT in .env"
 }
 if (-not $Image) {
-    $Image = "gcr.io/$ProjectId/p002-gepa"
+    $Image = "asia-southeast1-docker.pkg.dev/$ProjectId/promptopt/gepa:dev"
 }
 
 Write-Host "==> Deploy project : $ProjectId"
@@ -155,7 +155,7 @@ if ($SkipBuild) {
     Write-Host "==> Skipping build (-SkipBuild); using $Image"
 } else {
     Write-Host "==> Building image $Image (can take several minutes)..."
-    Invoke-Gcloud builds submit --tag $Image --project $ProjectId .
+    Invoke-Gcloud builds submit --config cloud/cloudbuild.web.yaml --substitutions="_IMAGE=$Image" --project $ProjectId .
 }
 
 # ---------------------------------------------------------------------------

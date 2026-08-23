@@ -1,6 +1,6 @@
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 
 import { useRepositories } from "@/app/providers";
@@ -54,6 +54,10 @@ Return a complete test module in a Python markdown code block.
   error: `Fix the test error and return the complete Python test module.
 Use get_info(name) for missing symbol details from the traceback before revising.
 {error}`,
+  missing_coverage: `The tests still lack coverage: {missing_coverage} not execute.
+Modify the current test module to execute every remaining line and branch. Preserve passing
+behavior and assertions, use get_info when more source context is needed, and return the
+complete Python test module in a single Python markdown code block.`,
 };
 function projectFunctionKey(projectId: string, functionId: string) {
   return `${projectId}::${functionId}`;
@@ -79,7 +83,8 @@ export default function CreateExperiment() {
   const [experimentName, setExperimentName] = useState("");
   const [samplingMethod, setSamplingMethod] = useState<SamplingMethod>("random");
   const [sampleLimit, setSampleLimit] = useState<number | null>(null);
-  const [randomSeed, setRandomSeed] = useState(7);
+  const [randomSeed, setRandomSeed] = useState(115);
+  const [isMetricCallsCustomized, setIsMetricCallsCustomized] = useState(false);
   const [manualAssignments, setManualAssignments] = useState<Record<string, DatasetSplit>>({});
   const [percentages, setPercentages] = useState<DatasetPercentages>(defaultDatasetPercentages);
   const [settings, setSettings] = useState<CloudExperimentSettings>(defaultCloudSettings);
@@ -157,6 +162,15 @@ export default function CreateExperiment() {
     return splitFunctions(selectedFunctions, percentages, randomSeed);
   }, [manualAssignments, percentages, randomSeed, samplingMethod, selectedFunctions]);
 
+  useEffect(() => {
+    if (!isMetricCallsCustomized && dataset.test.length > 0) {
+      setSettings((prev) => ({
+        ...prev,
+        maxMetricCalls: dataset.test.length * 15,
+      }));
+    }
+  }, [dataset.test.length, isMetricCallsCustomized]);
+
   const functionsLoading = functionQueries.some((query) => query.isPending);
   const functionsError = functionQueries.find((query) => query.isError)?.error;
   const functionSelectionValid =
@@ -185,7 +199,27 @@ export default function CreateExperiment() {
       (customBaseline.initial.includes("{filename}") &&
         customBaseline.initial.includes("{coverage_targets}") &&
         customBaseline.initial.includes("{source_excerpt}") &&
-        customBaseline.error.includes("{error}")));
+        customBaseline.error.includes("{error}") &&
+        (!customBaseline.missing_coverage || customBaseline.missing_coverage.includes("{missing_coverage}"))));
+
+  const settingsValidationErrors = [];
+  if (settings.coverupModel.trim() === "") settingsValidationErrors.push("CoverUp model is required.");
+  if (settings.optimizeModel.trim() === "") settingsValidationErrors.push("Optimize model is required.");
+  if (settings.maxAttempts < 1) settingsValidationErrors.push("Max attempts must be at least 1.");
+  if (settings.repeatTests < 0) settingsValidationErrors.push("Repeat tests cannot be negative.");
+  if (settings.maxConcurrency < 1 || settings.maxConcurrency > 32) settingsValidationErrors.push("Max concurrency must be between 1 and 32.");
+  if (settings.maxMetricCalls < minimumMetricCalls) settingsValidationErrors.push(`Max metric calls must be at least ${minimumMetricCalls}.`);
+  if (!hasFullAccess && settings.maxMetricCalls > 2200) settingsValidationErrors.push("Max metric calls exceeds limit for your account.");
+  if (settings.evaluationReplicates < 1) settingsValidationErrors.push("Evaluation replicates must be at least 1.");
+  if (settings.reflectionTemperature < 0 || settings.reflectionTemperature > 2) settingsValidationErrors.push("Reflection temperature must be between 0 and 2.");
+  if (baselineMode === "custom") {
+    if (!customBaseline.initial.includes("{filename}")) settingsValidationErrors.push("Initial prompt must include {filename}.");
+    if (!customBaseline.initial.includes("{coverage_targets}")) settingsValidationErrors.push("Initial prompt must include {coverage_targets}.");
+    if (!customBaseline.initial.includes("{source_excerpt}")) settingsValidationErrors.push("Initial prompt must include {source_excerpt}.");
+    if (!customBaseline.error.includes("{error}")) settingsValidationErrors.push("Error prompt must include {error}.");
+    if (customBaseline.missing_coverage && !customBaseline.missing_coverage.includes("{missing_coverage}")) settingsValidationErrors.push("Missing coverage prompt must include {missing_coverage}.");
+  }
+
   const canContinue = [
     environmentSelectionValid,
     !functionsLoading && !functionsError && functionSelectionValid,
@@ -321,6 +355,8 @@ export default function CreateExperiment() {
               setSettings={setSettings}
               hasFullAccess={hasFullAccess}
               validationTargetCount={dataset.validation.length}
+              testTargetCount={dataset.test.length}
+              onCustomizedMaxMetricCalls={() => setIsMetricCallsCustomized(true)}
               baselineMode={baselineMode}
               setBaselineMode={setBaselineMode}
               customBaseline={customBaseline}
@@ -362,6 +398,11 @@ export default function CreateExperiment() {
       )}
 
       <div className="wizard-actions">
+        {step === 3 && settingsValidationErrors.length > 0 && (
+          <div className="inline-validation-error" style={{ position: "absolute", top: "-40px", right: "20px" }}>
+            {settingsValidationErrors[0]}
+          </div>
+        )}
         <button
           className="secondary-button"
           disabled={step === 0 || startOptimization.isPending}
@@ -840,6 +881,8 @@ function SettingsStep({
   setSettings,
   hasFullAccess,
   validationTargetCount,
+  testTargetCount,
+  onCustomizedMaxMetricCalls,
   baselineMode,
   setBaselineMode,
   customBaseline,
@@ -849,6 +892,8 @@ function SettingsStep({
   setSettings: (settings: CloudExperimentSettings) => void;
   hasFullAccess: boolean;
   validationTargetCount: number;
+  testTargetCount: number;
+  onCustomizedMaxMetricCalls: () => void;
   baselineMode: "preset" | "custom";
   setBaselineMode: (mode: "preset" | "custom") => void;
   customBaseline: PromptBundle;
@@ -907,6 +952,15 @@ function SettingsStep({
                 value={customBaseline.error}
                 onChange={(event) =>
                   setCustomBaseline({ ...customBaseline, error: event.target.value })
+                }
+              />
+            </Field>
+            <Field label="Missing coverage prompt" hint="Optional, if provided must contain: {missing_coverage}">
+              <textarea
+                rows={9}
+                value={customBaseline.missing_coverage ?? ""}
+                onChange={(event) =>
+                  setCustomBaseline({ ...customBaseline, missing_coverage: event.target.value })
                 }
               />
             </Field>
@@ -1011,6 +1065,7 @@ function SettingsStep({
               value={settings.budgetMode}
               onChange={(event) => {
                 const mode = event.target.value as CloudExperimentSettings["budgetMode"];
+                onCustomizedMaxMetricCalls();
                 setSettings({
                   ...settings,
                   budgetMode: mode,
@@ -1037,8 +1092,11 @@ function SettingsStep({
             min={minimumMetricCalls}
             max={hasFullAccess ? undefined : 2200}
             disabled={settings.budgetMode !== "custom"}
-            onChange={(value) => update("maxMetricCalls", value)}
-            hint={`At least ${minimumMetricCalls} for ${validationTargetCount} validation targets.`}
+            onChange={(value) => {
+              onCustomizedMaxMetricCalls();
+              update("maxMetricCalls", value);
+            }}
+            hint={`Default: ${testTargetCount > 0 ? testTargetCount * 15 : "test count × 15"} (${testTargetCount} test targets × 15). At least ${minimumMetricCalls}.`}
           />
           <NumberField
             label="Evaluation replicates"

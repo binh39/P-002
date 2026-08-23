@@ -48,7 +48,13 @@ complete Python test module in a single Python markdown code block."""
                 raise ValueError(f"{name} prompt must be between 1 byte and 32 KiB")
             if any(value not in template for value in placeholders):
                 raise ValueError(f"{name} prompt is missing required placeholders")
-            template.format(filename="x.py", coverage_targets="line 1", source_excerpt="pass", error="failed")
+            template.format(
+                filename="x.py",
+                coverage_targets="line 1",
+                source_excerpt="pass",
+                error="failed",
+                missing_coverage="uncovered",
+            )
 
 
 def baseline_prompt() -> PromptBundle:

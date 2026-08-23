@@ -43,6 +43,7 @@ export interface Experiment {
 export interface PromptBundle {
   initial: string;
   error: string;
+  missing_coverage?: string;
 }
 
 export interface CreateExperimentInput {

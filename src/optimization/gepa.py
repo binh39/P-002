@@ -1193,7 +1193,9 @@ class CoverUpPromptAdapter:
         candidate: dict[str, str],
         capture_traces: bool = False,
     ) -> gepa_core.EvaluationBatch:
-        bundle = PromptBundle.from_candidate(candidate)
+        candidate_copy = dict(candidate)
+        candidate_copy["missing_coverage"] = candidate_copy.get("missing_coverage", self.baseline.missing_coverage)
+        bundle = PromptBundle.from_candidate(candidate_copy)
         if not batch:
             return gepa_core.EvaluationBatch(outputs=[], scores=[], trajectories=[])
         splits = {target.split for target in batch}

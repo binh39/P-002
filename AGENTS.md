@@ -4,7 +4,7 @@ Tài liệu này là ghi chú vận hành ngắn cho các agent/lần làm việ
 
 ## Mục tiêu
 
-Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và chỉ đưa prompt mới vào production khi nó **thực sự tốt hơn baseline trên holdout bị khóa**. Hệ thống phải ưu tiên khả năng khái quát, khả năng tái lập và không làm hỏng baseline đang tốt.
+Tối ưu ba thành phần `initial`, `error` và `missing_coverage` của CoverUp bằng GEPA và chỉ đưa prompt mới vào production khi nó **thực sự tốt hơn baseline trên holdout bị khóa**. Hệ thống phải ưu tiên khả năng khái quát, khả năng tái lập và không làm hỏng baseline đang tốt.
 
 ## Các file chính
 
@@ -18,14 +18,15 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
 
 ## Invariant không được phá
 
-1. Candidate GEPA phải là prompt thật dưới dạng dict chỉ gồm `initial` và `error`; không tối ưu một meta-prompt rồi rewrite toàn bộ bundle ngoài vòng lặp.
+1. Candidate GEPA phải là prompt thật dưới dạng dict gồm `initial`, `error`, và `missing_coverage`; không tối ưu một meta-prompt rồi rewrite toàn bộ bundle ngoài vòng lặp.
 2. `seed_candidate` phải đúng bằng baseline đầu vào. Baseline luôn nằm trong search space và là phương án fallback.
 3. Feedback theo example phải là score riêng của symbol đó. Không trả cùng một aggregate score cho mọi example. Trung bình các score theo symbol phải khớp final micro-average coverage.
 4. Reflection record phải có target path/symbol, source context được đánh số dòng, lỗi/coverage feedback và score của từng replicate. Nếu thiếu target context, proposer gần như chỉ đoán mò.
-5. Mỗi proposal có thể thay đổi `initial`, `error`, hoặc cả hai khi reflection chọn `all`; `all` luôn là lựa chọn hợp lệ dù direct failure evidence chỉ có ở một stage. Update `all` phải hợp lệ nguyên tử cho cả hai component. Không cho prompt phình vô hạn hoặc hard-code tên file, symbol hay số dòng từ tập train.
+5. Mỗi proposal có thể thay đổi `initial`, `error`, `missing_coverage`, hoặc cả ba khi reflection chọn `all`; `all` luôn là lựa chọn hợp lệ dù direct failure evidence chỉ có ở một stage. Update `all` phải hợp lệ nguyên tử cho cả ba component. Không cho prompt phình vô hạn hoặc hard-code tên file, symbol hay số dòng từ tập train.
 6. Giữ chính xác các placeholder bắt buộc:
    - `initial`: `{filename}`, `{coverage_targets}`, `{source_excerpt}`
    - `error`: `{error}`
+   - `missing_coverage`: `{missing_coverage}`
 7. Split `test` bị khóa: GEPA không được nhìn thấy hoặc dùng nó để chọn candidate. Chỉ đánh giá một lần ở promotion gate sau khi search kết thúc. Nếu không có test thì fallback sang validation và phải ghi rõ trong artifact.
 8. Chỉ promote proposal khi nó **strictly better** hơn paired generated baseline trên final split. Nếu hòa hoặc kém hơn, `gepa_optimized.json` phải chứa baseline; proposal vẫn được lưu riêng để chẩn đoán.
    Nếu GEPA chọn lại đúng baseline (bundle digest không đổi), bỏ toàn bộ final split evaluation vì không có proposal mới để so sánh; report phải ghi rõ evaluation đã được skip.
@@ -125,6 +126,32 @@ Prompt mới thường tệ hơn baseline vì pipeline cũ tối ưu meta-prompt
 - `src/optimization/cli.py`: cuối nhánh final comparison của `tune()` tự động ghi `coverage_report.json` vào artifacts và in bảng tóm tắt qua `_print_coverage_report()`.
 - Report không được tạo khi GEPA giữ nguyên baseline (không có prompt thứ hai để so sánh).
 - **Lưu ý budget:** GEPA đếm theo per-example; với valset 100, mỗi iteration được chấp nhận tốn ~116 calls (16 minibatch + 100 full eval), cộng seed eval 100. `MaxMetricCallsStopper` chỉ kiểm tra giữa các iteration và full eval là khối nguyên tử nên dễ vượt budget; `--max-metric-calls 150` chỉ cho phép đúng 1 iteration.
+
+## Quy trình Deploy Môi trường Dev Cloud
+
+Khi được yêu cầu deploy hệ thống lên môi trường Dev Cloud (Project `project-7df9f963-9fe0-4b76-b3d`, Region `asia-southeast1`), cần lưu ý hệ thống gồm **2 thành phần độc lập**:
+
+1. **GEPA Optimization Runner Job (`promptopt-gepa-runner-dev`)**:
+   - Dùng cho batch prompt optimization pipeline (`src/optimization/`, CoverUp).
+   - Script deploy (build Docker image + update Cloud Run Job):
+     ```powershell
+     powershell -ExecutionPolicy Bypass -File .\cloud\deploy_gepa_job.ps1 -JobName "promptopt-gepa-runner-dev"
+     ```
+   - Kích hoạt / theo dõi job:
+     ```powershell
+     .\cloud\run_gepa_job.ps1 -JobName "promptopt-gepa-runner-dev"
+     ```
+
+2. **Web Backend API Service (`promptopt-api-dev`)**:
+   - Dùng cho Web Backend REST API service (`app/backend/main.py`).
+   - Lệnh build & deploy Cloud Run Service:
+     ```powershell
+     gcloud builds submit --config cloud/cloudbuild.api.yaml --substitutions=_IMAGE=asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/api:dev --project project-7df9f963-9fe0-4b76-b3d .
+     gcloud run deploy promptopt-api-dev --image asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/api:dev --region asia-southeast1 --project project-7df9f963-9fe0-4b76-b3d
+     ```
+   - Kiểm tra sức khỏe: `https://promptopt-api-dev-861862240028.asia-southeast1.run.app/health`
+
+*Lưu ý:* Lệnh deploy Job `promptopt-gepa-runner-dev` không tự động deploy Service `promptopt-api-dev`. Khi được yêu cầu deploy lại toàn bộ môi trường dev, agent cần triển khai cả hai tài nguyên trên.
 
 ## Checklist bàn giao
 

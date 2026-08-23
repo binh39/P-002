@@ -230,16 +230,21 @@ class CloudRunJobGepaOptimizer:
                 )[-4000:]
             )
 
-        program = json.loads((await self.storage.read(f"{artifacts_prefix}/optimized_program.json")).decode())
-        final_validation = json.loads((await self.storage.read(f"{artifacts_prefix}/final_validation.json")).decode())
-        # ``gepa_optimized.json`` is the production decision and falls back to the
-        # baseline when the proposal does not win.  The web comparison must retain
-        # the actual proposal, which is always published separately.
-        proposed_prompt = json.loads(
-            (await self.storage.read(f"{artifacts_prefix}/prompts/gepa_proposed.json")).decode()
-        )
-        candidate = PromptBundle.from_candidate(proposed_prompt)
-        candidate.validate()
+        try:
+            program = json.loads((await self.storage.read(f"{artifacts_prefix}/optimized_program.json")).decode())
+            final_validation = json.loads((await self.storage.read(f"{artifacts_prefix}/final_validation.json")).decode())
+            # ``gepa_optimized.json`` is the production decision and falls back to the
+            # baseline when the proposal does not win.  The web comparison must retain
+            # the actual proposal, which is always published separately.
+            proposed_prompt = json.loads(
+                (await self.storage.read(f"{artifacts_prefix}/prompts/gepa_proposed.json")).decode()
+            )
+            candidate = PromptBundle.from_candidate(proposed_prompt)
+            candidate.validate()
+        except Exception:
+            # GCS NotFound or partial read indicates artifacts upload is still in progress.
+            # Returning None allows the poller to retry on the next cycle until all files arrive.
+            return None
         scores = [float(value) for value in program.get("validation_scores", [])]
         best_index = int(program.get("best_index", 0))
         score = scores[best_index] if 0 <= best_index < len(scores) else 0.0

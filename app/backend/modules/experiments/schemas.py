@@ -73,9 +73,9 @@ class DatasetPercentages(StrictModel):
 
 
 class ExperimentSettings(StrictModel):
-    coverup_model: str = "vertex_ai/gemini-3.6-flash"
+    coverup_model: str = "vertex_ai/gemini-3.5-flash-lite"
     optimize_model: str = "vertex_ai/gemini-3.6-flash"
-    max_attempts: int = Field(default=3, ge=1, le=20)
+    max_attempts: int = Field(default=4, ge=1, le=20)
     repeat_tests: int = Field(default=5, ge=0, le=20)
     max_concurrency: int = Field(default=10, ge=1, le=32)
     rate_limit: int | None = Field(default=None, ge=1)
@@ -133,7 +133,7 @@ class CreateExperimentRequest(StrictModel):
     name: str = Field(min_length=1, max_length=120)
     sampling_method: SamplingMethod = SamplingMethod.RANDOM
     max_targets: int | None = Field(default=None, ge=3)
-    random_seed: int = Field(default=7, ge=0)
+    random_seed: int = Field(default=115, ge=0)
     split_percentages: DatasetPercentages = Field(default_factory=DatasetPercentages)
     manual_splits: dict[str, list[str]] | None = None
     settings: ExperimentSettings = Field(default_factory=ExperimentSettings)
@@ -430,7 +430,7 @@ class CreateTestGenerationRequest(StrictModel):
     source_files: list[str] = Field(default_factory=list, max_length=200)
     function_ids: list[str] = Field(default_factory=list, max_length=500)
     model: str | None = None
-    random_seed: int = Field(default=7, ge=0)
+    random_seed: int = Field(default=115, ge=0)
     repeat_tests: int | None = Field(default=None, ge=0, le=20)
     max_attempts: int | None = Field(default=None, ge=1, le=20)
     max_concurrency: int | None = Field(default=None, ge=1, le=32)

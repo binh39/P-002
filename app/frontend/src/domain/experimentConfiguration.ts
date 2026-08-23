@@ -35,9 +35,9 @@ export const defaultDatasetPercentages: DatasetPercentages = {
 };
 
 export const defaultCloudSettings: CloudExperimentSettings = {
-  coverupModel: "vertex_ai/gemini-3.6-flash",
+  coverupModel: "vertex_ai/gemini-3.5-flash-lite",
   optimizeModel: "vertex_ai/gemini-3.6-flash",
-  maxAttempts: 3,
+  maxAttempts: 4,
   repeatTests: 5,
   maxConcurrency: 10,
   rateLimit: null,
