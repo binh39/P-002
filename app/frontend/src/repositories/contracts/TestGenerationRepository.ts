@@ -16,6 +16,7 @@ export interface CreateTestGenerationInput {
 export interface TestGenerationRepository {
   list(signal?: AbortSignal): Promise<TestGenerationRunList>;
   get(runId: string, signal?: AbortSignal): Promise<TestGenerationRun>;
+  delete(runId: string): Promise<void>;
   getManifest(runId: string, signal?: AbortSignal): Promise<Record<string, unknown>>;
   getTextArtifact(
     runId: string,

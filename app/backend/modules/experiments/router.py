@@ -200,6 +200,12 @@ async def get_test_generation_run(run_id: str, user: CurrentUser, request: Reque
     return await request.app.state.services.experiments.get_test_generation_run(run_id, user.uid)
 
 
+@test_generation_router.delete("/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_test_generation_run(run_id: str, user: CurrentUser, request: Request):
+    await request.app.state.services.experiments.delete_test_generation_run(run_id, user.uid)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @test_generation_router.get("/{run_id}/artifacts/manifest/content")
 async def get_test_generation_manifest(run_id: str, user: CurrentUser, request: Request):
     return await request.app.state.services.experiments.get_test_generation_manifest(run_id, user.uid)

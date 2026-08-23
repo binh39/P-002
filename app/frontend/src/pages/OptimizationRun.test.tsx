@@ -121,7 +121,7 @@ describe("optimization run", () => {
     render(<OptimizationRun />, { wrapper: Wrapper });
 
     expect(await screen.findByText("isort optimization")).toBeInTheDocument();
-    expect(screen.getByText("+0.500")).toBeInTheDocument();
+    expect(screen.getByText("+50.0%")).toBeInTheDocument();
     const resultsCard = screen.getByText("Evaluation results").closest("section");
     expect(resultsCard).not.toBeNull();
     expect(within(resultsCard!).getByText("Validation")).toBeInTheDocument();

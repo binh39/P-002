@@ -136,6 +136,10 @@ export class HttpTestGenerationRepository implements TestGenerationRepository {
     );
   }
 
+  async delete(runId: string): Promise<void> {
+    await apiRequest<void>(`/test-generation-runs/${runId}`, { method: "DELETE" });
+  }
+
   async getManifest(runId: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
     return apiRequest<Record<string, unknown>>(
       `/test-generation-runs/${runId}/artifacts/manifest/content`,

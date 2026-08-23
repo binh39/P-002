@@ -1326,6 +1326,19 @@ class ExperimentService:
             raise AppError(404, "TEST_GENERATION_RUN_NOT_FOUND", "Test generation run was not found")
         return TestGenerationRunResponse.model_validate(run)
 
+    async def delete_test_generation_run(self, run_id: str, owner_id: str) -> None:
+        run = await self.repository.get_test_generation_run(run_id)
+        if run is None or run.owner_id != owner_id:
+            raise AppError(404, "TEST_GENERATION_RUN_NOT_FOUND", "Test generation run was not found")
+        if run.status in {
+            TestGenerationStatus.QUEUED,
+            TestGenerationStatus.PREPARING,
+            TestGenerationStatus.GENERATING,
+            TestGenerationStatus.RUNNING_TESTS,
+        }:
+            raise AppError(409, "TEST_GENERATION_ACTIVE", "A running test suite cannot be deleted")
+        await self.repository.delete_test_generation_run(run.id)
+
     async def list_test_generation_runs(
         self, owner_id: str, offset: int = 0, limit: int = 50
     ) -> TestGenerationRunListResponse:
