@@ -240,7 +240,9 @@ export default function TestCases() {
                         {formatStatus(run.status)}
                       </StatusBadge>
                     </td>
-                    <td>{timestamp(run.createdAt)}</td>
+                    <td className="test-suite-created-cell">
+                      <time dateTime={run.createdAt}>{timestamp(run.createdAt)}</time>
+                    </td>
                   </tr>
                 ))}
               </tbody>
