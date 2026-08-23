@@ -40,7 +40,7 @@ export function StatCard({
   tone = "blue",
 }: {
   label: string;
-  value: string | number;
+  value: ReactNode;
   detail?: string;
   tone?: "blue" | "violet" | "green" | "orange";
 }) {

@@ -39,6 +39,7 @@ class ExperimentRepository(Protocol):
     async def list_prompt_snapshots(self, experiment_id: str) -> list[PromptSnapshotRecord]: ...
     async def create_test_generation_run(self, item: TestGenerationRunRecord) -> TestGenerationRunRecord: ...
     async def get_test_generation_run(self, run_id: str) -> TestGenerationRunRecord | None: ...
+    async def delete_test_generation_run(self, run_id: str) -> None: ...
     async def save_test_generation_run(self, item: TestGenerationRunRecord) -> TestGenerationRunRecord: ...
     async def list_test_generation_runs_for_owner(self, owner_id: str) -> list[TestGenerationRunRecord]: ...
 
@@ -168,6 +169,9 @@ class InMemoryExperimentRepository:
 
     async def get_test_generation_run(self, run_id):
         return self.test_generation_runs.get(run_id)
+
+    async def delete_test_generation_run(self, run_id):
+        self.test_generation_runs.pop(run_id, None)
 
     async def save_test_generation_run(self, item):
         self.test_generation_runs[item.id] = item
@@ -340,6 +344,9 @@ class FirestoreExperimentRepository:
     async def get_test_generation_run(self, run_id):
         snapshot = await self._test_generation_runs().document(run_id).get()
         return TestGenerationRunRecord.model_validate(snapshot.to_dict()) if snapshot.exists else None
+
+    async def delete_test_generation_run(self, run_id):
+        await self._test_generation_runs().document(run_id).delete()
 
     async def save_test_generation_run(self, item):
         await self._test_generation_runs().document(item.id).set(item.model_dump(mode="python"))

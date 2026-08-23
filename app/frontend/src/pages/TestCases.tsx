@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 
@@ -70,6 +70,15 @@ function runMatchesSearch(run: TestGenerationRun, value: string) {
 export default function TestCases() {
   const [, navigate] = useLocation();
   const { testGeneration } = useRepositories();
+  const queryClient = useQueryClient();
+  const [deleteTarget, setDeleteTarget] = useState<TestGenerationRun | null>(null);
+  const deleteMutation = useMutation({
+    mutationFn: (runId: string) => testGeneration.delete(runId),
+    onSuccess: async () => {
+      setDeleteTarget(null);
+      await queryClient.invalidateQueries({ queryKey: ["test-generation-runs"] });
+    },
+  });
   const [search, setSearch] = useState("");
   const [role, setRole] = useState<"all" | TestGenerationRun["promptRole"]>("all");
   const [status, setStatus] = useState<"all" | TestGenerationStatus>("all");
@@ -131,7 +140,6 @@ export default function TestCases() {
           />
         </label>
         <label className="registry-model-filter">
-          <span>Prompt</span>
           <select value={role} onChange={(event) => setRole(event.target.value as typeof role)}>
             <option value="all">All prompts</option>
             <option value="baseline">Baseline</option>
@@ -139,7 +147,6 @@ export default function TestCases() {
           </select>
         </label>
         <label className="registry-model-filter">
-          <span>Status</span>
           <select
             value={status}
             onChange={(event) => setStatus(event.target.value as typeof status)}
@@ -186,6 +193,7 @@ export default function TestCases() {
                   <th>Target coverage</th>
                   <th>Status</th>
                   <th>Created</th>
+                  <th aria-label="Actions" />
                 </tr>
               </thead>
               <tbody>
@@ -204,7 +212,6 @@ export default function TestCases() {
                   >
                     <td className="test-suite-name-cell">
                       <strong title={run.name}>{run.name}</strong>
-                      <small title={run.projectIds.join(", ")}>{run.projectIds.join(", ")}</small>
                     </td>
                     <td>{run.promptRole === "baseline" ? "Baseline" : "Final"}</td>
                     <td className="test-suite-model-cell">
@@ -243,6 +250,18 @@ export default function TestCases() {
                     <td className="test-suite-created-cell">
                       <time dateTime={run.createdAt}>{timestamp(run.createdAt)}</time>
                     </td>
+                    <td>
+                      <button
+                        className="table-action danger-action"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          deleteMutation.reset();
+                          setDeleteTarget(run);
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -250,6 +269,51 @@ export default function TestCases() {
           </div>
         )}
       </section>
+      {deleteTarget && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={() => setDeleteTarget(null)}
+        >
+          <section
+            className="delete-experiment-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-suite-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <span className="delete-dialog-icon">!</span>
+            <h2 id="delete-suite-title">Delete test suite?</h2>
+            <p>
+              <strong>{deleteTarget.name}</strong> and its saved run metadata will be permanently
+              removed.
+            </p>
+            {deleteMutation.isError && (
+              <div className="inline-validation-error" role="alert">
+                {deleteMutation.error instanceof Error
+                  ? deleteMutation.error.message
+                  : "The test suite could not be deleted."}
+              </div>
+            )}
+            <div className="delete-dialog-actions">
+              <button
+                className="secondary-button"
+                disabled={deleteMutation.isPending}
+                onClick={() => setDeleteTarget(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="danger-button"
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate(deleteTarget.id)}
+              >
+                {deleteMutation.isPending ? "Deleting…" : "Delete test suite"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

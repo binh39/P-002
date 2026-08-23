@@ -41,7 +41,17 @@ function statusTone(status: ExperimentStatus) {
 }
 
 function score(value: number | null) {
-  return value === null ? "—" : value.toFixed(3);
+  return value === null ? "—" : `${(value * 100).toFixed(1)}%`;
+}
+function GainValue({ value }: { value: number | null }) {
+  if (value === null) return <span>—</span>;
+  const positive = value >= 0;
+  return (
+    <span className={`optimization-gain ${positive ? "is-positive" : "is-negative"}`}>
+      <span aria-hidden="true">{positive ? "↑" : "↓"}</span>
+      {Math.abs(value * 100).toFixed(1)}%
+    </span>
+  );
 }
 
 function formatTimestamp(value: string | null) {
@@ -490,7 +500,7 @@ export default function OptimizationRun() {
             />
             <StatCard
               label="Gain"
-              value={gain === null ? "—" : `${gain >= 0 ? "+" : ""}${gain.toFixed(3)}`}
+              value={<GainValue value={gain} />}
               detail="Candidate minus baseline"
               tone="green"
             />
@@ -522,11 +532,7 @@ export default function OptimizationRun() {
               />
               <StatCard
                 label="Gain"
-                value={
-                  run.finalComparison.absoluteGain === null
-                    ? "—"
-                    : `${run.finalComparison.absoluteGain >= 0 ? "+" : ""}${run.finalComparison.absoluteGain.toFixed(3)}`
-                }
+                value={<GainValue value={run.finalComparison.absoluteGain} />}
                 detail="Optimized minus baseline"
                 tone="green"
               />
