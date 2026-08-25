@@ -11,6 +11,7 @@ from backend.modules.experiments.repository import InMemoryExperimentRepository
 from backend.modules.experiments.schemas import (
     ExperimentRecord,
     ExperimentStatus,
+    OptimizationRunRecord,
     ProjectSnapshot,
     TargetReference,
 )
@@ -101,6 +102,62 @@ async def test_uploaded_experiment_accepts_the_current_runtime_protocol():
 
     assert run.status == ExperimentStatus.OPTIMIZATION_QUEUED
     assert dispatcher.run_ids == [run.id]
+
+
+@pytest.mark.asyncio
+async def test_failed_optimization_can_be_retried_with_a_new_run():
+    repository, storage = InMemoryExperimentRepository(), FakeStorage()
+    now = datetime.now(UTC)
+    refs = [
+        TargetReference(
+            project_id="project-1",
+            function_id=name,
+            project="project",
+            source_file="src/pkg.py",
+            symbol=f"pkg.{name}",
+        )
+        for name in ("train_fn", "validation_fn", "test_fn")
+    ]
+    keys = [ref.key for ref in refs]
+    old_run = OptimizationRunRecord(
+        id="failed-run",
+        experiment_id="retry-experiment",
+        status=ExperimentStatus.FAILED,
+        parent_prompt_digest="parent",
+        error_message="old image rejected missing_coverage",
+        created_at=now,
+        finished_at=now,
+    )
+    experiment = ExperimentRecord(
+        id="retry-experiment",
+        owner_id="owner-1",
+        project_id="project-1",
+        project_ids=["project-1"],
+        targets=refs,
+        name="Retry GEPA search",
+        target_function_ids=keys,
+        dataset_splits={"train": [keys[0]], "validation": [keys[1]], "test": [keys[2]]},
+        optimization_eligible=True,
+        baseline_prompt=baseline_prompt().as_candidate(),
+        status=ExperimentStatus.FAILED,
+        optimization_run_id=old_run.id,
+        created_at=now,
+        updated_at=now,
+    )
+    await repository.create(experiment)
+    await repository.create_optimization_run(old_run)
+    service = ExperimentService(repository, FakeProjects(), FakeFunctions(), storage)
+    dispatcher = RecordingOptimizationDispatcher()
+    service.set_optimization_dispatcher(dispatcher)
+
+    retried = await service.request_optimization(experiment.id, experiment.owner_id, full_access=True)
+
+    assert retried.id != old_run.id
+    assert retried.status == ExperimentStatus.OPTIMIZATION_QUEUED
+    assert dispatcher.run_ids == [retried.id]
+    stored = await repository.get(experiment.id)
+    assert stored.optimization_run_id == retried.id
+    assert stored.status == ExperimentStatus.OPTIMIZATION_QUEUED
 
 
 @pytest.mark.asyncio

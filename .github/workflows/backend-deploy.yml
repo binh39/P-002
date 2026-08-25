@@ -33,7 +33,7 @@ concurrency:
 
 env:
   PROJECT_ID: project-7df9f963-9fe0-4b76-b3d
-  MODEL_PROJECT_ID: vinbuildphase
+  MODEL_PROJECT_ID: project-a2f7084e-90ac-4bfc-84b
   REGION: asia-southeast1
   REPOSITORY: promptopt
   SERVICE: promptopt-api

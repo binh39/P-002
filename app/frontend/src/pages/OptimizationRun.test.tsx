@@ -8,6 +8,7 @@ import OptimizationRun from "@/pages/OptimizationRun";
 const repositories = vi.hoisted(() => ({
   experiments: {
     getOptimizationRun: vi.fn(),
+    requestOptimization: vi.fn(),
     cancelOptimization: vi.fn(),
     getOptimizationEvolution: vi.fn(),
     get: vi.fn(),
@@ -187,5 +188,25 @@ describe("optimization run", () => {
     });
     expect(await screen.findByText("Cancelled")).toBeInTheDocument();
     confirm.mockRestore();
+  });
+
+  it("queues a new run when retrying a failed optimization", async () => {
+    repositories.experiments.getOptimizationRun.mockResolvedValueOnce({
+      ...(await repositories.experiments.getOptimizationRun()),
+      status: "failed",
+      errorMessage: "candidate may only contain the initial and error prompt components",
+    });
+    repositories.experiments.requestOptimization.mockResolvedValue({
+      id: "optimization-2",
+      experimentId: "experiment-1",
+      status: "optimization_queued",
+    });
+
+    render(<OptimizationRun />, { wrapper: Wrapper });
+    fireEvent.click(await screen.findByRole("button", { name: "Retry optimization" }));
+
+    await waitFor(() => {
+      expect(repositories.experiments.requestOptimization).toHaveBeenCalledWith("experiment-1");
+    });
   });
 });

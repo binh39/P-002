@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     storage_backend: Literal["local", "gcs"] = "local"
     analysis_dispatcher: Literal["inline", "cloud_tasks"] = "inline"
     gcp_project_id: str = "project-7df9f963-9fe0-4b76-b3d"
-    admin_vertexai_project: str = "vinbuildphase"
+    admin_vertexai_project: str = "project-a2f7084e-90ac-4bfc-84b"
     gcp_service_account_email: str = ""
     provider_secret_prefix: str = "promptopt-provider"
     gcs_bucket: str = ""

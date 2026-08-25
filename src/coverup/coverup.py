@@ -410,6 +410,12 @@ def check_whole_suite(args: argparse.Namespace) -> None:
             try:
                 reduction = reduce.reduce(tests_path=args.tests_dir, results=results,
                                           pytest_args=pytest_args, trace=args.debug)
+            except subprocess.TimeoutExpired as e:
+                print(
+                    "Coverage measurement timed out after "
+                    f"{getattr(e, 'timeout', 'the configured')} seconds."
+                )
+                return 1
             except subprocess.CalledProcessError as e:
                 print(str(e) + "\n" + str(e.stdout, 'UTF-8', errors='ignore'))
                 sys.exit(1)
@@ -489,6 +495,12 @@ def install_missing_imports(args: argparse.Namespace, seg: CodeSegment, modules:
             if args.write_requirements_to:
                 with args.write_requirements_to.open("a") as f:
                     f.write(f"{module}=={version}\n")
+        except subprocess.TimeoutExpired as e:
+            print(
+                "Coverage measurement timed out after "
+                f"{getattr(e, 'timeout', 'the configured')} seconds."
+            )
+            return 1
         except subprocess.CalledProcessError as e:
             log_write(args, seg, f"Unable to install module {module}:\n{str(e.stdout, 'UTF-8', errors='ignore')}")
             all_ok = False

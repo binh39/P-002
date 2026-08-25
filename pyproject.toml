@@ -43,6 +43,7 @@ dev = [
     "coverage==7.15.2",
     "pytest-cov==7.1.0",
     "pytest-repeat==0.9.4",
+    "pytest-timeout==2.4.0",
     "google-auth==2.56.2",
     "httpx==0.28.1",
     # src/coverup chạy "python -m slipcover" cho mọi phép đo coverage

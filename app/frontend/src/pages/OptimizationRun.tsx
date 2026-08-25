@@ -352,6 +352,13 @@ export default function OptimizationRun() {
       });
     },
   });
+  const retry = useMutation({
+    mutationFn: (experimentId: string) => experiments.requestOptimization(experimentId),
+    onSuccess: (newRun) => {
+      void queryClient.invalidateQueries({ queryKey: ["experiments", newRun.experimentId] });
+      navigate(`/optimization-runs/${newRun.id}`);
+    },
+  });
 
   if (runQuery.isPending) {
     return (
@@ -377,6 +384,7 @@ export default function OptimizationRun() {
   const run = runQuery.data;
   const experiment = experimentQuery.data;
   const active = optimizationRunIsActive(run.status);
+  const retryable = run.status === "failed" || run.status === "timed_out" || run.status === "cancelled";
   const gain =
     run.baselineValidationScore !== null && run.candidateValidationScore !== null
       ? run.candidateValidationScore - run.baselineValidationScore
@@ -440,6 +448,23 @@ export default function OptimizationRun() {
         <section className="baseline-error" role="alert">
           <strong>Optimization failed</strong>
           <pre>{run.errorMessage}</pre>
+          {retryable && (
+            <button
+              className="table-action"
+              type="button"
+              disabled={retry.isPending}
+              onClick={() => retry.mutate(run.experimentId)}
+            >
+              {retry.isPending ? "Queueing retry…" : "Retry optimization"}
+            </button>
+          )}
+        </section>
+      )}
+
+      {retry.isError && (
+        <section className="baseline-error" role="alert">
+          <strong>Could not retry optimization</strong>
+          <p>{retry.error instanceof Error ? retry.error.message : "Please try again."}</p>
         </section>
       )}
 

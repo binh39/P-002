@@ -1,6 +1,6 @@
 param(
     [string]$ProjectId = "project-7df9f963-9fe0-4b76-b3d",
-    [string]$ModelProjectId = "vinbuildphase",
+    [string]$ModelProjectId = "project-a2f7084e-90ac-4bfc-84b",
     [string]$Region = "asia-southeast1",
     [string]$Bucket = "project-7df9f963-9fe0-4b76-b3d-promptopt-sources",
     [string]$Queue = "promptopt-baseline"

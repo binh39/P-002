@@ -2,15 +2,17 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass
 
+DEFAULT_MISSING_COVERAGE_PROMPT = """The tests still lack coverage: {missing_coverage} not execute.
+Modify the current test module to execute every remaining line and branch. Preserve passing
+behavior and assertions, use get_info when more source context is needed, and return the
+complete Python test module in a single Python markdown code block."""
+
 
 @dataclass(frozen=True, slots=True)
 class PromptBundle:
     initial: str
     error: str
-    missing_coverage: str = """The tests still lack coverage: {missing_coverage} not execute.
-Modify the current test module to execute every remaining line and branch. Preserve passing
-behavior and assertions, use get_info when more source context is needed, and return the
-complete Python test module in a single Python markdown code block."""
+    missing_coverage: str = DEFAULT_MISSING_COVERAGE_PROMPT
 
     def digest(self) -> str:
         return hashlib.sha256(json.dumps(asdict(self), sort_keys=True).encode()).hexdigest()[:16]
@@ -33,7 +35,9 @@ complete Python test module in a single Python markdown code block."""
         return cls(
             initial=candidate.get("initial", ""),
             error=candidate.get("error", ""),
-            missing_coverage=candidate.get("missing_coverage") or cls.missing_coverage,
+            missing_coverage=(
+                candidate.get("missing_coverage") or DEFAULT_MISSING_COVERAGE_PROMPT
+            ),
         )
 
     def validate(self) -> None:

@@ -496,7 +496,23 @@ class ExperimentService:
     ) -> OptimizationRunResponse:
         item = await self._owned(experiment_id, owner_id)
         previous_status = item.status
-        if previous_status != ExperimentStatus.DRAFT:
+        previous_run_id = item.optimization_run_id
+        retryable_statuses = {
+            ExperimentStatus.FAILED,
+            ExperimentStatus.TIMED_OUT,
+            ExperimentStatus.CANCELLED,
+        }
+        previous_run = (
+            await self.repository.get_optimization_run(previous_run_id)
+            if previous_run_id
+            else None
+        )
+        retrying_failed_optimization = (
+            previous_status in retryable_statuses
+            and previous_run is not None
+            and previous_run.status in retryable_statuses
+        )
+        if previous_status != ExperimentStatus.DRAFT and not retrying_failed_optimization:
             raise AppError(409, "OPTIMIZATION_ALREADY_REQUESTED", "Optimization has already been requested")
         if not item.optimization_eligible:
             raise AppError(
@@ -548,7 +564,7 @@ class ExperimentService:
             run.error_message = "Optimization job could not be queued"
             run.finished_at = datetime.now(UTC)
             item.status = previous_status
-            item.optimization_run_id = None
+            item.optimization_run_id = previous_run_id
             item.updated_at = run.finished_at
             await self.repository.save_optimization_run(run)
             await self.repository.save(item)

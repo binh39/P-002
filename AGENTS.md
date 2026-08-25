@@ -151,6 +151,20 @@ Khi được yêu cầu deploy hệ thống lên môi trường Dev Cloud (Proje
      ```
    - Kiểm tra sức khỏe: `https://promptopt-api-dev-861862240028.asia-southeast1.run.app/health`
 
+### Checklist bắt buộc sau khi deploy Web Backend API dev
+
+- Không kết luận deploy thành công chỉ dựa vào `/health`: endpoint này không chạm Firebase Auth, Firestore hay repository thật.
+- `app/requirements.txt` phải giữ `google-api-core[grpc]>=2.25.0,<2.35.0` cho đến khi regression upstream được xác nhận đã sửa. `google-api-core==2.35.0` làm `path_template.expand()` percent-encode database đặc biệt `(default)` thành `%28default%29`; mọi Firestore query khi đó trả `400 Invalid database id %28default%29`.
+- Trong log Cloud Build, xác nhận resolver cài `google-api-core` phiên bản `<2.35.0`. Dependency dùng range có thể kéo bản mới gây lỗi dù source code không đổi.
+- Sau khi deploy, xác nhận revision mới ở trạng thái Ready và nhận 100% traffic; không chỉ xác nhận image đã build/push.
+- Chạy đủ ba smoke check trên URL public:
+  1. `GET /health` phải trả `200`.
+  2. `OPTIONS /api/v1/experiments` với `Origin: http://localhost:5173`, `Access-Control-Request-Method: GET` và header yêu cầu `authorization,content-type` phải trả `200` cùng `Access-Control-Allow-Origin: http://localhost:5173`.
+  3. `GET /api/v1/experiments` không token phải trả `401` có cùng CORS header; sau đó kiểm tra endpoint với Firebase ID token thật từ frontend hoặc theo dõi request có xác thực trong Cloud Run logs để chắc chắn repository Firestore không trả `500`.
+- Nếu browser báo thiếu `Access-Control-Allow-Origin` nhưng preflight đã pass, không vội sửa danh sách origin. Kiểm tra Cloud Run logs của đúng revision trước: một exception backend không được xử lý có thể tạo response `500` không qua CORS middleware và bị browser trình bày như lỗi CORS.
+- Middleware xử lý request phải chuyển unexpected exception thành JSON `INTERNAL_ERROR`, và CORS middleware phải nằm ngoài nó để cả response `500` vẫn có CORS headers. Test `app/tests/test_main.py::test_unexpected_error_response_keeps_cors_headers` phải pass.
+- Khi gặp `Invalid database id %28default%29`, kiểm tra phiên bản `google-api-core` và database path trước; database thật vẫn có thể tồn tại đúng dưới tên `(default)`, nên không xóa/tạo lại Firestore database để chữa triệu chứng này.
+
 *Lưu ý:* Lệnh deploy Job `promptopt-gepa-runner-dev` không tự động deploy Service `promptopt-api-dev`. Khi được yêu cầu deploy lại toàn bộ môi trường dev, agent cần triển khai cả hai tài nguyên trên.
 
 ## Checklist bàn giao
