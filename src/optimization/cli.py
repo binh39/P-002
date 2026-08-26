@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from .costs import build_cost_report
 from .dataset import load_targets, validate_project_stratification
 from .gepa import (
+    REFLECTION_MINIBATCH_SIZE,
     build_coverage_report,
     bundle_digest,
     evaluate_bundle_repeated,
@@ -91,6 +92,12 @@ def parser() -> argparse.ArgumentParser:
         help="Locked split used only for final promotion (falls back to validation if absent)",
     )
     tune.add_argument("--evaluation-replicates", type=int, default=1)
+    tune.add_argument(
+        "--reflection-minibatch-size",
+        type=int,
+        choices=range(1, REFLECTION_MINIBATCH_SIZE + 1),
+        default=REFLECTION_MINIBATCH_SIZE,
+    )
     tune.add_argument("--reflection-temperature", type=float, default=0.7)
     budget = tune.add_mutually_exclusive_group()
     budget.add_argument(
@@ -365,6 +372,12 @@ def tune(args: argparse.Namespace) -> None:
     runner = make_runner(args, projects=projects)
     final_targets = holdout or validation
     final_split = args.holdout_split if holdout else "validation"
+    print(
+        "Optimization dataset: "
+        f"train={len(train)}, validation={len(validation)}, "
+        f"{final_split}={len(final_targets)}",
+        flush=True,
+    )
     validate_project_stratification({
         "train": train,
         "validation": validation,
@@ -406,6 +419,11 @@ def tune(args: argparse.Namespace) -> None:
     # Measure the locked final-split baseline before starting GEPA. This result
     # is cached and reused at the promotion gate, so a broken holdout target
     # fails early instead of wasting the entire search budget first.
+    print(
+        f"Starting locked {final_split} baseline preflight for "
+        f"{len(final_targets)} targets...",
+        flush=True,
+    )
     baseline_evaluation = evaluate_bundle_repeated(
         runner,
         final_targets,
@@ -421,11 +439,19 @@ def tune(args: argparse.Namespace) -> None:
     )
     baseline_aggregate = baseline_evaluation["aggregate"]
     baseline_mean_score = float(baseline_aggregate["score"])
+    print(
+        f"Completed locked {final_split} baseline preflight; "
+        f"aggregate score={baseline_mean_score:.4f}",
+        flush=True,
+    )
 
     lm = dspy.LM(
         _model_from_env("OPTIMIZE_MODEL"),
         max_tokens=8192,
         temperature=args.reflection_temperature,
+        # Keep retries visible and controlled by the optimizer. Hidden DSPy
+        # retries cannot be attributed in Cloud Logging per provider call.
+        num_retries=0,
     )
 
     optimized = optimize(
@@ -434,6 +460,7 @@ def tune(args: argparse.Namespace) -> None:
         auto=args.auto or ("medium" if args.max_metric_calls is None else None),
         max_metric_calls=args.max_metric_calls,
         evaluation_replicates=args.evaluation_replicates,
+        reflection_minibatch_size=args.reflection_minibatch_size,
     )
     artifacts.mkdir(parents=True, exist_ok=True)
     cost_report_path = artifacts / "cost_report.json"
@@ -472,6 +499,7 @@ def tune(args: argparse.Namespace) -> None:
             "final_split": final_split,
             "used_locked_holdout": bool(holdout),
             "evaluation_replicates": args.evaluation_replicates,
+            "reflection_minibatch_size": args.reflection_minibatch_size,
             "prompt": str(proposed_path),
             "production_prompt": str(final_path),
             "baseline_prompt": str(args.prompt.resolve()),
@@ -529,6 +557,7 @@ def tune(args: argparse.Namespace) -> None:
         "final_split": final_split,
         "used_locked_holdout": bool(holdout),
         "evaluation_replicates": args.evaluation_replicates,
+        "reflection_minibatch_size": args.reflection_minibatch_size,
         "prompt": str(proposed_path),
         "production_prompt": str(final_path),
         "baseline_prompt": str(args.prompt.resolve()),

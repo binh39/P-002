@@ -15,6 +15,7 @@ from .schemas import (
     PromptVersionListResponse,
     PromptVersionResponse,
     PromptVersionStatus,
+    ResumeOptimizationRequest,
     ReviewPromptVersionRequest,
     TestGenerationRunListResponse,
     TestGenerationRunResponse,
@@ -66,6 +67,20 @@ async def get_optimization_run(run_id: str, user: CurrentUser, request: Request)
 @router.post("/optimization-runs/{run_id}/cancel", response_model=OptimizationRunResponse)
 async def cancel_optimization(run_id: str, user: CurrentUser, request: Request):
     return await request.app.state.services.experiments.cancel_optimization(run_id, user.uid)
+
+
+@router.post("/optimization-runs/{run_id}/resume", response_model=OptimizationRunResponse)
+async def resume_optimization(
+    run_id: str,
+    user: CurrentUser,
+    request: Request,
+    payload: ResumeOptimizationRequest | None = None,
+):
+    return await request.app.state.services.experiments.resume_optimization(
+        run_id,
+        user.uid,
+        max_concurrency=payload.max_concurrency if payload else None,
+    )
 
 
 @router.get("/optimization-runs/{run_id}/evolution", response_model=EvolutionResponse)

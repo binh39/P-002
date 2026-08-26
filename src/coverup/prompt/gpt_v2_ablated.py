@@ -63,6 +63,17 @@ Modify or rewrite the test to correct it; respond only with the complete Python 
         ]
 
 
+    def missing_coverage_prompt(
+        self,
+        segment: CodeSegment,
+        missing_lines: set,
+        missing_branches: set,
+    ) -> T.List[dict] | None:
+        if not self.with_coverage:
+            return None
+        return super().missing_coverage_prompt(segment, missing_lines, missing_branches)
+
+
     def get_info(self, ctx: CodeSegment, name: str) -> str:
         """
         {

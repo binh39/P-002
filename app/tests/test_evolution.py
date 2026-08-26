@@ -2,7 +2,11 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from backend.modules.experiments.evolution import CloudLogLine, parse_evolution_log
+from backend.modules.experiments.evolution import (
+    CloudLogLine,
+    merge_evolution_history,
+    parse_evolution_log,
+)
 from backend.modules.experiments.repository import InMemoryExperimentRepository
 from backend.modules.experiments.schemas import (
     EvolutionIteration,
@@ -101,6 +105,25 @@ def test_parses_reflective_mutation_and_carries_best_candidate_metrics_forward()
     assert second.best_score == first.best_score
 
 
+def test_coverup_lifecycle_lines_are_not_mixed_into_a_proposed_prompt():
+    messages = [
+        "Iteration 1: Selected program 0 score: 0.42",
+        "Iteration 1: Proposed new text for initial: Generate complete pytest unit tests.",
+        "Keep the tests deterministic.",
+        "==> [CoverUp mlxtend/frequent_patterns/fpmax.py::MFITree.contains] started (timeout 1200s)",
+        "==> [CoverUp mlxtend/frequent_patterns/fpmax.py::MFITree.contains] finished with exit code 0",
+    ]
+
+    result = parse_evolution_log(
+        [CloudLogLine(timestamp=None, text=message) for message in messages]
+    )
+
+    assert result.iterations[0].proposed_prompt == (
+        "Generate complete pytest unit tests.\nKeep the tests deterministic."
+    )
+    assert "CoverUp" not in result.iterations[0].proposed_prompt
+
+
 def test_full_validation_candidate_does_not_replace_metrics_when_not_best():
     messages = [
         "Iteration 0: Baseline validation aggregate metrics: {'score': 0.9, 'statement': 0.8, 'branch': 0.942857}",
@@ -150,6 +173,106 @@ def test_returns_waiting_state_before_iteration_logs_arrive():
     assert result.available is False
     assert result.iterations == []
     assert "not published" in result.message
+
+
+def test_appends_resumed_execution_iterations_without_replacing_earlier_history():
+    previous = EvolutionResponse(
+        available=True,
+        iterations=[
+            EvolutionIteration(
+                iteration=0,
+                strategy="baseline",
+                decision="Baseline evaluated",
+                best_statement=0.4,
+                best_branch=0.2,
+                best_score=0.3,
+            ),
+            EvolutionIteration(
+                iteration=1,
+                strategy="reflective mutation",
+                decision="Accepted",
+                best_statement=0.5,
+                best_branch=0.3,
+                best_score=0.4,
+            ),
+        ],
+    )
+    resumed = EvolutionResponse(
+        available=True,
+        iterations=[
+            EvolutionIteration(
+                iteration=0,
+                strategy="baseline",
+                decision="Baseline evaluated",
+            ),
+            EvolutionIteration(
+                iteration=1,
+                strategy="reflective mutation",
+                decision="Accepted",
+                best_score=0.6,
+            ),
+        ],
+    )
+
+    merged = merge_evolution_history(previous, resumed)
+
+    assert [item.iteration for item in merged.iterations] == [0, 1, 2]
+    assert merged.iterations[0].best_score == 0.3
+    assert merged.iterations[1].best_score == 0.4
+    assert merged.iterations[2].best_statement == 0.5
+    assert merged.iterations[2].best_branch == 0.3
+    assert merged.iterations[2].best_score == 0.6
+    assert [point.iteration for point in merged.metrics] == [0, 1, 2]
+
+
+def test_resumed_bootstrap_does_not_reset_score_or_create_iteration_gaps():
+    previous = EvolutionResponse(
+        available=True,
+        iterations=[
+            EvolutionIteration(
+                iteration=9,
+                strategy="reflective mutation",
+                decision="Iteration failed",
+                best_statement=0.82,
+                best_branch=0.84,
+                best_score=0.8342756738003491,
+            )
+        ],
+    )
+    current = parse_evolution_log(
+        [
+            CloudLogLine(
+                timestamp=None,
+                text=(
+                    "Iteration 0: Baseline validation aggregate metrics: "
+                    "{'score': 0.7209885109516461, 'statement': 0.7426820966643976, "
+                    "'branch': 0.7116912599318955}"
+                ),
+            ),
+            CloudLogLine(
+                timestamp=None,
+                text=(
+                    "Iteration 8: Base program full valset score: "
+                    "0.7209885109516462 over 100 / 100 examples"
+                ),
+            ),
+            CloudLogLine(
+                timestamp=None,
+                text="Iteration 9: Selected program 2 score: 0.8342756738003491",
+            ),
+        ]
+    )
+
+    merged = merge_evolution_history(previous, current)
+
+    assert [item.iteration for item in merged.iterations] == [9, 10]
+    resumed = merged.iterations[-1]
+    assert resumed.strategy == "reflective mutation"
+    assert resumed.parent_program == "Program 2"
+    assert resumed.parent_validation_score == 0.8342756738003491
+    assert resumed.best_statement == 0.82
+    assert resumed.best_branch == 0.84
+    assert resumed.best_score == 0.8342756738003491
 
 
 def test_closes_no_proposal_and_previous_iterations_instead_of_leaving_them_pending():
@@ -311,6 +434,82 @@ async def test_completed_run_refreshes_a_snapshot_with_stale_pending_iterations(
     refreshed_object = stored.artifact_objects["evolution.json"]
     refreshed = EvolutionResponse.model_validate_json(await storage.read(refreshed_object))
     assert all(iteration.decision != "Pending" for iteration in refreshed.iterations)
+
+
+@pytest.mark.asyncio
+async def test_active_resumed_run_combines_previous_snapshot_with_new_execution():
+    repository = InMemoryExperimentRepository()
+    storage = MemoryStorage()
+    now = datetime.now(UTC)
+    experiment = ExperimentRecord(
+        id="experiment-resumed",
+        owner_id="owner-1",
+        project_id="project-1",
+        name="Resumed GEPA history",
+        status=ExperimentStatus.OPTIMIZING,
+        created_at=now,
+        updated_at=now,
+    )
+    run = OptimizationRunRecord(
+        id="run-resumed",
+        experiment_id=experiment.id,
+        status=ExperimentStatus.OPTIMIZING,
+        parent_prompt_digest="parent",
+        cloud_artifact_prefix="runner-jobs/gepa/new123/artifacts",
+        evolution_snapshot_prefix="runner-jobs/gepa/old123/artifacts",
+        artifact_objects={"evolution.json": "resumed-evolution.json"},
+        created_at=now,
+        started_at=now,
+    )
+    previous = EvolutionResponse(
+        available=True,
+        iterations=[
+            EvolutionIteration(iteration=0, strategy="baseline", decision="Baseline evaluated"),
+            EvolutionIteration(iteration=1, strategy="reflective mutation", decision="Accepted"),
+        ],
+    )
+    await storage.write(
+        "resumed-evolution.json",
+        previous.model_dump_json().encode(),
+        "application/json",
+    )
+    await repository.create(experiment)
+    await repository.create_optimization_run(run)
+
+    class ResumedCloudEvolution:
+        async def evolution(self, *args, **kwargs):
+            return EvolutionResponse(
+                available=True,
+                iterations=[
+                    EvolutionIteration(
+                        iteration=0,
+                        strategy="baseline",
+                        decision="Baseline evaluated",
+                    ),
+                    EvolutionIteration(
+                        iteration=1,
+                        strategy="reflective mutation",
+                        decision="Pending",
+                    ),
+                ],
+            )
+
+    service = ExperimentService(
+        repository,
+        object(),
+        object(),
+        storage,
+        cloud_optimizer=ResumedCloudEvolution(),
+    )
+
+    result = await service.get_optimization_evolution(run.id, experiment.owner_id)
+
+    assert [iteration.iteration for iteration in result.iterations] == [0, 1, 2]
+    assert [iteration.decision for iteration in result.iterations] == [
+        "Baseline evaluated",
+        "Accepted",
+        "Pending",
+    ]
 
 
 @pytest.mark.asyncio

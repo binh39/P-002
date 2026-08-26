@@ -25,6 +25,7 @@ export interface CloudExperimentSettings {
   budgetMode: "light" | "medium" | "heavy" | "custom";
   maxMetricCalls: number;
   evaluationReplicates: number;
+  reflectionMinibatchSize: number;
   reflectionTemperature: number;
 }
 
@@ -35,7 +36,7 @@ export const defaultDatasetPercentages: DatasetPercentages = {
 };
 
 export const defaultCloudSettings: CloudExperimentSettings = {
-  coverupModel: "vertex_ai/gemini-3.6-flash",
+  coverupModel: "vertex_ai/gemini-3.5-flash-lite",
   optimizeModel: "vertex_ai/gemini-3.6-flash",
   maxAttempts: 3,
   repeatTests: 5,
@@ -45,6 +46,7 @@ export const defaultCloudSettings: CloudExperimentSettings = {
   budgetMode: "custom",
   maxMetricCalls: 30,
   evaluationReplicates: 1,
+  reflectionMinibatchSize: 3,
   reflectionTemperature: 0.7,
 };
 

@@ -5,6 +5,8 @@ import json
 import re
 from datetime import UTC, datetime, timedelta
 
+from google.api_core import exceptions as google_api_exceptions
+
 from backend.core.errors import AppError
 from backend.infrastructure.storage import ObjectStorage
 from backend.modules.analysis.repository import FunctionRepository
@@ -13,8 +15,10 @@ from backend.modules.projects.samples import SampleProjectCatalog
 from backend.modules.projects.schemas import MINIMUM_RUNTIME_PROTOCOL_VERSION, RuntimeStatus
 from backend.modules.projects.service import ProjectService
 
+from .cloud_optimizer import OptimizationPausedError
 from .dataset import select_targets, split_targets, validate_manual_splits
 from .dispatcher import ComparisonDispatcher, OptimizationDispatcher, TestGenerationDispatcher
+from .evolution import merge_evolution_history
 from .optimizer import OptimizationTarget
 from .prompts import PromptBundle, baseline_prompt
 from .repository import ExperimentRepository
@@ -56,6 +60,35 @@ from .schemas import (
 STANDARD_MAX_METRIC_CALLS = 2200
 MAX_TEST_GENERATION_MANIFEST_BYTES = 1_000_000
 MAX_TEST_GENERATION_ARTIFACT_FILES = 1_000
+
+_TRANSIENT_CLOUD_STATUS_CODES = {408, 429, 500, 502, 503, 504}
+
+
+def _is_transient_cloud_error(error: BaseException) -> bool:
+    """Return whether a cloud transport failure is safe to retry.
+
+    Cloud clients commonly wrap gRPC connection resets in ``GoogleAPICallError``
+    (for example ``503 Stream removed``). Those failures say nothing about the
+    underlying GEPA execution and must not turn a running optimization into a
+    terminal failure.
+    """
+    pending: list[BaseException] = [error]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, (ConnectionError, TimeoutError)):
+            return True
+        if isinstance(current, google_api_exceptions.GoogleAPICallError):
+            status_code = getattr(current, "code", None)
+            if status_code in _TRANSIENT_CLOUD_STATUS_CODES:
+                return True
+        for nested in (current.__cause__, current.__context__):
+            if isinstance(nested, BaseException):
+                pending.append(nested)
+    return False
 
 _FINAL_VALIDATION_SCALAR_FIELDS = (
     "mean_score",
@@ -330,6 +363,10 @@ class ExperimentService:
                 PromptBundle(
                     initial=payload.baseline_prompt.initial,
                     error=payload.baseline_prompt.error,
+                    missing_coverage=(
+                        payload.baseline_prompt.missing_coverage
+                        or baseline_prompt().missing_coverage
+                    ),
                 )
                 if payload.baseline_prompt is not None
                 else baseline_prompt()
@@ -492,7 +529,23 @@ class ExperimentService:
     ) -> OptimizationRunResponse:
         item = await self._owned(experiment_id, owner_id)
         previous_status = item.status
-        if previous_status != ExperimentStatus.DRAFT:
+        previous_run_id = item.optimization_run_id
+        retryable_statuses = {
+            ExperimentStatus.FAILED,
+            ExperimentStatus.TIMED_OUT,
+            ExperimentStatus.CANCELLED,
+        }
+        previous_run = (
+            await self.repository.get_optimization_run(previous_run_id)
+            if previous_run_id
+            else None
+        )
+        retrying_failed_optimization = (
+            previous_status in retryable_statuses
+            and previous_run is not None
+            and previous_run.status in retryable_statuses
+        )
+        if previous_status != ExperimentStatus.DRAFT and not retrying_failed_optimization:
             raise AppError(409, "OPTIMIZATION_ALREADY_REQUESTED", "Optimization has already been requested")
         if not item.optimization_eligible:
             raise AppError(
@@ -530,6 +583,7 @@ class ExperimentService:
                 environment: {"secret": reference.secret, "version": reference.version}
                 for environment, reference in provider_secret_refs.items()
             },
+            max_concurrency=item.settings.max_concurrency,
             created_at=now,
         )
         await self.repository.create_optimization_run(run)
@@ -544,7 +598,7 @@ class ExperimentService:
             run.error_message = "Optimization job could not be queued"
             run.finished_at = datetime.now(UTC)
             item.status = previous_status
-            item.optimization_run_id = None
+            item.optimization_run_id = previous_run_id
             item.updated_at = run.finished_at
             await self.repository.save_optimization_run(run)
             await self.repository.save(item)
@@ -610,6 +664,82 @@ class ExperimentService:
         await self.repository.save(item)
         return OptimizationRunResponse.model_validate(run)
 
+    async def resume_optimization(
+        self,
+        run_id: str,
+        owner_id: str,
+        *,
+        max_concurrency: int | None = None,
+    ) -> OptimizationRunResponse:
+        """Queue a new Cloud Run execution from a cooperatively paused checkpoint."""
+        run = await self.repository.get_optimization_run(run_id)
+        if run is None:
+            raise AppError(404, "OPTIMIZATION_RUN_NOT_FOUND", "Optimization run was not found")
+        item = await self._owned(run.experiment_id, owner_id)
+        if run.status != ExperimentStatus.PAUSED:
+            raise AppError(409, "OPTIMIZATION_NOT_PAUSED", "Only a paused optimization can be resumed")
+        if not run.cloud_artifact_prefix:
+            raise AppError(409, "OPTIMIZATION_CHECKPOINT_MISSING", "The paused checkpoint is unavailable")
+        if self.optimization_dispatcher is None:
+            raise AppError(503, "OPTIMIZATION_QUEUE_UNAVAILABLE", "Optimization dispatcher is not configured")
+        if max_concurrency is not None and not 1 <= max_concurrency <= 32:
+            raise AppError(422, "INVALID_MAX_CONCURRENCY", "Maximum concurrency must be between 1 and 32")
+
+        checkpoint_prefix = run.cloud_artifact_prefix
+        run.max_concurrency = max_concurrency or run.max_concurrency or item.settings.max_concurrency
+        run.resume_artifact_prefix = checkpoint_prefix
+        run.cloud_artifact_prefix = None
+        run.cloud_deadline_at = None
+        run.status = ExperimentStatus.OPTIMIZATION_QUEUED
+        run.pause_reason = None
+        run.error_message = None
+        run.finished_at = None
+        run.resume_count += 1
+        item.status = ExperimentStatus.OPTIMIZATION_QUEUED
+        item.updated_at = datetime.now(UTC)
+        await self.repository.save_optimization_run(run)
+        await self.repository.save(item)
+        try:
+            await self.optimization_dispatcher.dispatch(run.id)
+        except Exception as exc:
+            run.status = ExperimentStatus.PAUSED
+            run.cloud_artifact_prefix = checkpoint_prefix
+            run.pause_reason = "Could not queue the resume execution"
+            item.status = ExperimentStatus.PAUSED
+            item.updated_at = datetime.now(UTC)
+            await self.repository.save_optimization_run(run)
+            await self.repository.save(item)
+            raise AppError(503, "OPTIMIZATION_QUEUE_UNAVAILABLE", "Optimization could not be resumed") from exc
+        return OptimizationRunResponse.model_validate(run)
+
+    async def _load_evolution_snapshot(
+        self,
+        run: OptimizationRunRecord,
+    ) -> EvolutionResponse | None:
+        snapshot_object = run.artifact_objects.get("evolution.json")
+        if not snapshot_object:
+            return None
+        try:
+            return EvolutionResponse.model_validate_json(await self.storage.read(snapshot_object))
+        except Exception:
+            # A missing/corrupt cache must not hide logs that are still retained.
+            return None
+
+    async def _save_evolution_snapshot(
+        self,
+        item: ExperimentRecord,
+        run: OptimizationRunRecord,
+        evolution: EvolutionResponse,
+    ) -> None:
+        object_name = self._optimization_artifact_name(item, run, "evolution.json")
+        await self.storage.write(
+            object_name,
+            evolution.model_dump_json(indent=2).encode(),
+            "application/json",
+        )
+        run.artifact_objects["evolution.json"] = object_name
+        run.evolution_snapshot_prefix = run.cloud_artifact_prefix
+
     async def get_optimization_evolution(self, run_id: str, owner_id: str) -> EvolutionResponse:
         run = await self.repository.get_optimization_run(run_id)
         if run is None:
@@ -620,19 +750,13 @@ class ExperimentService:
             ExperimentStatus.OPTIMIZING,
             ExperimentStatus.CANDIDATE_EVALUATING,
         }
-        cached_evolution: EvolutionResponse | None = None
-        snapshot_object = run.artifact_objects.get("evolution.json")
-        if snapshot_object:
-            try:
-                cached_evolution = EvolutionResponse.model_validate_json(await self.storage.read(snapshot_object))
-                has_stale_pending = run.status not in active_statuses and any(
-                    iteration.decision == "Pending" for iteration in cached_evolution.iterations
-                )
-                if not has_stale_pending:
-                    return cached_evolution
-            except Exception:
-                # A missing/corrupt cache must not hide logs that are still retained.
-                pass
+        cached_evolution = await self._load_evolution_snapshot(run)
+        if cached_evolution is not None and run.status not in active_statuses:
+            has_stale_pending = any(
+                iteration.decision == "Pending" for iteration in cached_evolution.iterations
+            )
+            if not has_stale_pending:
+                return cached_evolution
         if self.cloud_optimizer is None or not hasattr(self.cloud_optimizer, "evolution"):
             if cached_evolution is not None:
                 return cached_evolution
@@ -647,21 +771,25 @@ class ExperimentService:
                 available=False,
                 message="The Cloud Run execution has not started yet.",
             )
-        evolution = await self.cloud_optimizer.evolution(
+        current_evolution = await self.cloud_optimizer.evolution(
             run.cloud_artifact_prefix,
             started_at=run.started_at,
         )
-        if not evolution.available and cached_evolution is not None:
-            return cached_evolution
+        append_history = bool(
+            cached_evolution is not None
+            and run.evolution_snapshot_prefix
+            and run.evolution_snapshot_prefix != run.cloud_artifact_prefix
+        )
+        evolution = (
+            merge_evolution_history(cached_evolution, current_evolution)
+            if append_history
+            else current_evolution
+        )
+        if not current_evolution.available and cached_evolution is not None:
+            evolution = cached_evolution
         if evolution.available and evolution.iterations and run.status not in active_statuses:
             try:
-                object_name = self._optimization_artifact_name(item, run, "evolution.json")
-                await self.storage.write(
-                    object_name,
-                    evolution.model_dump_json(indent=2).encode(),
-                    "application/json",
-                )
-                run.artifact_objects["evolution.json"] = object_name
+                await self._save_evolution_snapshot(item, run, evolution)
                 await self.repository.save_optimization_run(run)
             except Exception:
                 # Returning the parsed history is more important than caching it.
@@ -701,6 +829,11 @@ class ExperimentService:
             parent = self._baseline_for(item)
             if run.parent_prompt_digest != parent.digest():
                 raise RuntimeError("The candidate-zero baseline prompt has changed")
+            effective_max_concurrency = run.max_concurrency or item.settings.max_concurrency
+            run.max_concurrency = effective_max_concurrency
+            optimization_settings = item.settings.model_copy(
+                update={"max_concurrency": effective_max_concurrency}
+            )
             if polling_cloud_job:
                 result = await self.cloud_optimizer.collect(run.cloud_artifact_prefix)
                 if result is None:
@@ -739,13 +872,16 @@ class ExperimentService:
                     start_options = {}
                     if any(snapshot.archive_object for snapshot in item.project_snapshots):
                         start_options["projects"] = item.project_snapshots
+                    if run.resume_artifact_prefix:
+                        start_options["resume_artifacts_prefix"] = run.resume_artifact_prefix
                     run.cloud_artifact_prefix = await self.cloud_optimizer.start(
                         baseline=parent,
                         train=targets["train"],
                         validation=targets["validation"],
                         holdout=holdout,
-                        settings=item.settings,
+                        settings=optimization_settings,
                         vertexai_project=run.vertexai_project,
+                        provider_secret_refs=run.provider_secret_refs,
                         **start_options,
                     )
                     run.cloud_deadline_at = datetime.now(UTC) + timedelta(seconds=self.cloud_optimizer.timeout_seconds)
@@ -757,7 +893,7 @@ class ExperimentService:
                     train=targets["train"],
                     validation=targets["validation"],
                     holdout=holdout,
-                    settings=item.settings,
+                    settings=optimization_settings,
                     vertexai_project=run.vertexai_project,
                 )
             artifact_payloads = {
@@ -772,15 +908,29 @@ class ExperimentService:
                 ),
             }
             if run.cloud_artifact_prefix and hasattr(self.cloud_optimizer, "evolution"):
-                evolution = await self.cloud_optimizer.evolution(
+                previous_evolution = await self._load_evolution_snapshot(run)
+                current_evolution = await self.cloud_optimizer.evolution(
                     run.cloud_artifact_prefix,
                     started_at=run.started_at,
                 )
+                append_history = bool(
+                    previous_evolution is not None
+                    and run.evolution_snapshot_prefix
+                    and run.evolution_snapshot_prefix != run.cloud_artifact_prefix
+                )
+                evolution = (
+                    merge_evolution_history(previous_evolution, current_evolution)
+                    if append_history
+                    else current_evolution
+                )
+                if not current_evolution.available and previous_evolution is not None:
+                    evolution = previous_evolution
                 if evolution.available and evolution.iterations:
                     artifact_payloads["evolution.json"] = (
                         evolution.model_dump_json(indent=2).encode(),
                         "application/json",
                     )
+                    run.evolution_snapshot_prefix = run.cloud_artifact_prefix
             artifact_objects = {}
             for name, (content, content_type) in artifact_payloads.items():
                 object_name = self._optimization_artifact_name(item, run, name)
@@ -807,14 +957,79 @@ class ExperimentService:
             run.finished_at = datetime.now(UTC)
             item.status = ExperimentStatus.OPTIMIZATION_SUCCEEDED
             item.updated_at = run.finished_at
-        except Exception as exc:
-            run.status = ExperimentStatus.FAILED
-            run.error_message = str(exc)[-4000:]
-            run.finished_at = datetime.now(UTC)
+        except OptimizationPausedError as exc:
+            now = datetime.now(UTC)
+            run.status = ExperimentStatus.PAUSED
+            run.pause_reason = str(exc)[:1000]
+            run.paused_at = now
+            run.cloud_deadline_at = None
+            run.error_message = None
+            run.finished_at = None
             if item:
-                # A failed search does not invalidate candidate zero and may be retried.
-                item.status = ExperimentStatus.DRAFT
-                item.updated_at = run.finished_at
+                item.status = ExperimentStatus.PAUSED
+                item.updated_at = now
+                if run.cloud_artifact_prefix and hasattr(self.cloud_optimizer, "evolution"):
+                    try:
+                        previous_evolution = await self._load_evolution_snapshot(run)
+                        current_evolution = await self.cloud_optimizer.evolution(
+                            run.cloud_artifact_prefix,
+                            started_at=run.started_at,
+                        )
+                        append_history = bool(
+                            previous_evolution is not None
+                            and run.evolution_snapshot_prefix
+                            and run.evolution_snapshot_prefix != run.cloud_artifact_prefix
+                        )
+                        evolution = (
+                            merge_evolution_history(previous_evolution, current_evolution)
+                            if append_history
+                            else current_evolution
+                        )
+                        if not current_evolution.available and previous_evolution is not None:
+                            evolution = previous_evolution
+                        if evolution.available and evolution.iterations:
+                            await self._save_evolution_snapshot(item, run, evolution)
+                    except Exception:
+                        # Pausing must succeed even if Cloud Logging is delayed.
+                        pass
+        except Exception as exc:
+            now = datetime.now(UTC)
+            if (
+                polling_cloud_job
+                and self.optimization_dispatcher is not None
+                and _is_transient_cloud_error(exc)
+            ):
+                # The Cloud Run execution may still be healthy. Persist the
+                # non-terminal state before scheduling another collection pass.
+                run.status = ExperimentStatus.OPTIMIZING
+                run.error_message = None
+                run.finished_at = None
+                if item:
+                    item.status = ExperimentStatus.OPTIMIZING
+                    item.updated_at = now
+                await self.repository.save_optimization_run(run)
+                if item:
+                    await self.repository.save(item)
+                await self.optimization_dispatcher.dispatch(run.id, delay_seconds=60)
+                return
+            if run.resume_artifact_prefix and run.cloud_artifact_prefix is None:
+                run.status = ExperimentStatus.PAUSED
+                run.cloud_artifact_prefix = run.resume_artifact_prefix
+                run.pause_reason = f"Resume execution could not start: {str(exc)[-900:]}"
+                run.paused_at = now
+                run.error_message = None
+                run.finished_at = None
+                if item:
+                    item.status = ExperimentStatus.PAUSED
+                    item.updated_at = now
+            else:
+                run.status = ExperimentStatus.FAILED
+                run.error_message = str(exc)[-4000:]
+                run.finished_at = now
+                if item:
+                    # A failed search does not invalidate candidate zero and may be retried.
+                    item.status = ExperimentStatus.DRAFT
+                    item.updated_at = run.finished_at
         await self.repository.save_optimization_run(run)
         if item:
             await self.repository.save(item)

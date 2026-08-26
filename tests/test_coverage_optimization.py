@@ -8,6 +8,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
+import openai
 import pytest
 
 from src.optimization.cli import (
@@ -464,6 +466,46 @@ def test_run_streamed_can_capture_without_echoing_child_output(capsys):
     assert capsys.readouterr().out == ""
 
 
+def test_run_streamed_echoes_only_selected_child_lines(capsys):
+    completed = run_streamed(
+        [
+            sys.executable,
+            "-u",
+            "-c",
+            (
+                "print('hidden detail'); "
+                "print('PROMPTOPT_MODEL_ERROR {\"status_code\": 429}')"
+            ),
+        ],
+        echo=False,
+        echo_prefixes=("PROMPTOPT_MODEL_ERROR ",),
+    )
+
+    assert "hidden detail" in completed.stdout
+    visible = capsys.readouterr().out
+    assert "hidden detail" not in visible
+    assert 'PROMPTOPT_MODEL_ERROR {"status_code": 429}' in visible
+
+
+def test_run_streamed_stops_process_at_timeout(capsys):
+    started = time.monotonic()
+    completed = run_streamed(
+        [sys.executable, "-u", "-c", "import time; print('ready'); time.sleep(60)"],
+        label="hanging worker",
+        echo=False,
+        announce=True,
+        timeout=0.2,
+    )
+
+    assert time.monotonic() - started < 5
+    assert completed.returncode == 124
+    assert "ready" in completed.stdout
+    assert "timed out after 0.2 seconds" in completed.stdout
+    visible = capsys.readouterr().out
+    assert "[hanging worker] started (timeout 0.2s)" in visible
+    assert "[hanging worker] finished with exit code 124" in visible
+
+
 def test_reflection_request_log_contains_exact_model_payload(capsys):
     request = {
         "messages": [
@@ -581,6 +623,100 @@ def test_coverup_chatter_returns_get_info_calls_with_results(monkeypatch):
     ]
 
 
+def test_coverup_logs_every_failed_model_call(monkeypatch, capsys):
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / "src"))
+    import coverup.llm as llm_module
+
+    chatter = object.__new__(llm_module.Chatter)
+    chatter._model = "vertex_ai/test-model"
+    chatter._max_backoff = 4
+    chatter.token_rate_limit = None
+    chatter._log_msg = lambda ctx, message: None
+    chatter._signal_retry = lambda: None
+
+    request = httpx.Request("POST", "https://example.invalid/v1/models/test")
+    failures = iter(
+        [
+            openai.RateLimitError(
+                "Resource exhausted",
+                response=httpx.Response(429, request=request),
+                body=None,
+            ),
+            openai.RateLimitError(
+                "Resource exhausted",
+                response=httpx.Response(429, request=request),
+                body=None,
+            ),
+        ]
+    )
+    calls = 0
+
+    async def fake_acreate(**request_args):
+        nonlocal calls
+        del request_args
+        calls += 1
+        if calls <= 2:
+            raise next(failures)
+        return "ok"
+
+    async def no_sleep(delay):
+        del delay
+
+    monkeypatch.setattr(llm_module.litellm, "acreate", fake_acreate)
+    monkeypatch.setattr(llm_module.asyncio, "sleep", no_sleep)
+
+    response = asyncio.run(chatter._send_request({"messages": []}, ctx=None))
+
+    assert response == "ok"
+    events = [
+        json.loads(line.removeprefix("PROMPTOPT_MODEL_ERROR "))
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith("PROMPTOPT_MODEL_ERROR ")
+    ]
+    assert [event["attempt"] for event in events] == [1, 2]
+    assert all(event["model"] == "vertex_ai/test-model" for event in events)
+    assert all(event["status_code"] == 429 for event in events)
+    assert all(event["retrying"] is True for event in events)
+
+
+def test_coverup_requests_durable_pause_after_repeated_429(monkeypatch, tmp_path):
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / "src"))
+    import coverup.llm as llm_module
+
+    pause_path = tmp_path / "pause.json"
+    monkeypatch.setenv("PROMPTOPT_PAUSE_FILE", str(pause_path))
+    monkeypatch.setenv("PROMPTOPT_PAUSE_AFTER_429", "2")
+    chatter = object.__new__(llm_module.Chatter)
+    chatter._model = "vertex_ai/test-model"
+    chatter._max_backoff = 4
+    chatter.token_rate_limit = None
+    chatter._log_msg = lambda ctx, message: None
+    chatter._signal_retry = lambda: None
+    request = httpx.Request("POST", "https://example.invalid/v1/models/test")
+
+    async def fake_acreate(**request_args):
+        del request_args
+        raise openai.RateLimitError(
+            "Resource exhausted",
+            response=httpx.Response(429, request=request),
+            body=None,
+        )
+
+    async def no_sleep(delay):
+        del delay
+
+    monkeypatch.setattr(llm_module.litellm, "acreate", fake_acreate)
+    monkeypatch.setattr(llm_module.asyncio, "sleep", no_sleep)
+
+    with pytest.raises(llm_module.ModelRateLimitPauseError):
+        asyncio.run(chatter._send_request({"messages": []}, ctx=None))
+
+    pause = json.loads(pause_path.read_text(encoding="utf-8"))
+    assert pause["reason"] == "rate_limited"
+    assert pause["attempt"] == 2
+    assert pause["status_code"] == 429
+
+
 def test_full_reflection_event_prints_only_when_enabled(monkeypatch, capsys):
     from src.optimization.gepa import log_full_reflection_event
 
@@ -601,6 +737,33 @@ def test_full_reflection_event_prints_only_when_enabled(monkeypatch, capsys):
     assert decoded["event"] == "optimizer_test_execution"
     assert decoded["payload"]["test_module"] == "def test_x(): pass"
     assert decoded["payload"]["stdout"] == "1 passed"
+
+
+def test_cloud_reflection_logs_emit_compact_payloads(monkeypatch, capsys):
+    from src.optimization.gepa import log_full_reflection_event, log_reflection_request
+
+    monkeypatch.setenv("PROMPTOPT_COMPACT_LOGS", "true")
+    request = {
+        "messages": [{"role": "user", "content": "long evidence " + "x" * 5000}],
+        "tools": [{"type": "function", "function": {"name": "run_test_experiment"}}],
+        "tool_choice": {"type": "function", "function": {"name": "run_test_experiment"}},
+    }
+    log_reflection_request(request)
+    output = capsys.readouterr().out
+    assert "long evidence" not in output
+    assert '"message_chars": 5014' in output
+    assert '"run_test_experiment"' in output
+
+    monkeypatch.setenv("PROMPTOPT_FULL_REFLECTION_LOGS", "true")
+    log_full_reflection_event(
+        "optimizer_test_execution",
+        {"test_module": "def test_target():\n    " + "x" * 5000, "score": 0.5},
+    )
+    output = capsys.readouterr().out
+    assert len(output) < 1000
+    assert "xxxxx" not in output
+    assert '"score": 0.5' in output
+    assert '"test_module"' in output
 
 
 def test_run_coverage_does_not_mask_real_pytest_failures(tmp_path, monkeypatch):
@@ -799,6 +962,103 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
     assert len(record.results) == 2
     assert record.results[0].attempt_traces[0]["component"] == "initial"
     assert record.results[1].attempt_traces[0]["component"] == "initial"
+
+
+@pytest.mark.parametrize("multi_project", [False, True])
+def test_runner_resume_skips_targets_with_durable_checkpoints(
+    tmp_path, monkeypatch, multi_project
+):
+    from src.promptopt_pause import ModelRateLimitPauseError
+
+    package_dir = tmp_path / "sample_repo" / "pkg"
+    tests_dir = tmp_path / "sample_repo" / "tests"
+    artifacts_dir = tmp_path / "artifacts"
+    package_dir.mkdir(parents=True)
+    tests_dir.mkdir(parents=True)
+    projects = None
+    if multi_project:
+        alpha_package = tmp_path / "sample_repo" / "alpha" / "pkg"
+        beta_package = tmp_path / "sample_repo" / "beta" / "pkg"
+        alpha_tests = tmp_path / "sample_repo" / "alpha" / "tests"
+        beta_tests = tmp_path / "sample_repo" / "beta" / "tests"
+        for path in (alpha_package, beta_package, alpha_tests, beta_tests):
+            path.mkdir(parents=True)
+        projects = {
+            "alpha": ProjectLayout(alpha_package, alpha_tests),
+            "beta": ProjectLayout(beta_package, beta_tests),
+        }
+    prompt_path = tmp_path / "prompt.json"
+    baseline_bundle().save(prompt_path)
+    pause_path = artifacts_dir / "pause_signal.json"
+    monkeypatch.setenv("PROMPTOPT_PAUSE_FILE", str(pause_path))
+    phase = {"resuming": False}
+    calls = []
+
+    def fake_subprocess_run(command, **kwargs):
+        del kwargs
+        symbol = command[command.index("--target-symbols") + 1]
+        calls.append((phase["resuming"], symbol))
+        if symbol == "second" and not phase["resuming"]:
+            pause_path.parent.mkdir(parents=True, exist_ok=True)
+            pause_path.write_text(json.dumps({"reason": "rate_limited"}), encoding="utf-8")
+            return SimpleNamespace(returncode=1, stdout="HTTP 429")
+        workspace = Path(command[command.index("--tests-dir") + 1])
+        saved = workspace / "test_opt.py"
+        saved.write_text(f"def test_{symbol}(): pass\n", encoding="utf-8")
+        spec = json.loads(Path(command[command.index("--target-spec-file") + 1]).read_text(encoding="utf-8"))[0]
+        Path(command[command.index("--trace-file") + 1]).write_text(
+            json.dumps(
+                {
+                    "source_file": spec["source_file"],
+                    "symbol": symbol,
+                    "name": symbol,
+                    "component": "initial",
+                    "outcome": "coverage_gain_saved",
+                    "saved_test": str(saved),
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return SimpleNamespace(returncode=0, stdout="ok")
+
+    monkeypatch.setattr("src.optimization.runner.run_streamed", fake_subprocess_run)
+    monkeypatch.setattr(
+        "src.optimization.runner.run_coverage",
+        lambda **kwargs: SimpleNamespace(returncode=1, stdout="no coverage"),
+    )
+    runner = CoverUpExperimentRunner(
+        ExperimentConfig(
+            project_root=tmp_path,
+            package_dir=package_dir,
+            tests_dir=tests_dir,
+            artifacts_dir=artifacts_dir,
+            coverup_model="fake-model",
+            max_concurrency=1,
+            projects=projects,
+        )
+    )
+    target_projects = ("alpha", "beta") if multi_project else ("project", "project")
+    targets = [
+        SymbolTarget(target_projects[0], "pkg/a.py", "first", "train"),
+        SymbolTarget(target_projects[1], "pkg/b.py", "second", "train"),
+    ]
+
+    with pytest.raises(ModelRateLimitPauseError):
+        runner.evaluate_batch(targets, prompt_path, candidate_id="candidate", split="train")
+
+    checkpoint_files = list((artifacts_dir / "runs" / "candidate" / "train").rglob("target_checkpoints/*.json"))
+    assert len(checkpoint_files) == 1
+    assert calls == [(False, "first"), (False, "second")]
+
+    pause_path.unlink()
+    phase["resuming"] = True
+    monkeypatch.setenv("PROMPTOPT_RESUMING", "1")
+    record = runner.evaluate_batch(targets, prompt_path, candidate_id="candidate", split="train")
+
+    assert calls == [(False, "first"), (False, "second"), (True, "second")]
+    assert [result.target.symbol for result in record.results] == ["first", "second"]
+    assert len(list(Path(record.tests_workspace).rglob("test_opt_*.py"))) == 2
 
 
 @pytest.mark.parametrize("split", ["train", "validation", "test"])
@@ -1201,7 +1461,7 @@ def test_optimizer_test_experiment_runs_in_separate_teacher_workspace(tmp_path):
             tests_dir=tmp_path / "sample_repo" / "tests",
             artifacts_dir=artifacts,
             coverup_model="unused",
-            repeat_tests=1,
+            repeat_tests=0,
         )
     )
     target = SymbolTarget("project", "pkg/module.py", "target", "train")
@@ -1371,7 +1631,8 @@ def test_baseline_prompt_preserves_coverup_placeholders():
     assert validate_template(template) is None
     assert validate_bundle(bundle) is None
     assert "{error}" in bundle.error
-    assert set(bundle.as_candidate()) == {"initial", "error"}
+    assert "{missing_coverage}" in bundle.missing_coverage
+    assert set(bundle.as_candidate()) == {"initial", "error", "missing_coverage"}
     rendered = template.format(
         filename="pkg/module.py",
         coverage_targets="lines 4 and 5",
@@ -2178,7 +2439,7 @@ def test_llm_component_selector_always_exposes_both_after_any_failure():
 
     selected = selector(None, trajectories, [0.1], 0, candidate)
 
-    assert selected == ["initial", "error"]
+    assert selected == ["initial", "error", "missing_coverage"]
 
 
 def test_component_update_parser_accepts_native_tool_call_objects_only():
@@ -2240,6 +2501,7 @@ def test_prompt_mutation_runs_successful_test_before_updating_all_components(tmp
         "Analyze reachability first.\nCreate new pytest test functions",
     )
     improved_error = "Coordinate repair with initial constraints.\n" + baseline.error
+    improved_missing_coverage = "Improve missing coverage as well.\n" + baseline.missing_coverage
     calls = []
 
     def reflection_lm(**kwargs):
@@ -2248,7 +2510,7 @@ def test_prompt_mutation_runs_successful_test_before_updating_all_components(tmp
             return experiment_tool_call_response(requested_case_id(kwargs))
         return tool_call_response(
             "all",
-            {"initial": improved_initial, "error": improved_error},
+            {"initial": improved_initial, "error": improved_error, "missing_coverage": improved_missing_coverage},
             diagnosis="generation and repair use inconsistent constraints",
             evidence=["both stages have terminal failures"],
             successful_experiment_ids=[successful_experiment_id(kwargs)],
@@ -2268,17 +2530,18 @@ def test_prompt_mutation_runs_successful_test_before_updating_all_components(tmp
             "initial": [runnable_reflection_record()],
             "error": [],
         },
-        ["initial", "error"],
+        list(baseline.as_candidate().keys()),
     )
 
     assert proposals["initial"] == improved_initial
     assert proposals["error"] == improved_error
+    assert proposals["missing_coverage"] == improved_missing_coverage
     assert len(calls) == 2
     decision = json.loads((tmp_path / "reflection_decisions.jsonl").read_text(encoding="utf-8"))
     assert decision["experiment_first"] is True
     assert decision["optimizer_calls"] == 2
     assert decision["selection"] == "all"
-    assert decision["changed_components"] == ["initial", "error"]
+    assert decision["changed_components"] == ["initial", "error", "missing_coverage"]
     assert decision["status"] == "accepted"
     assert decision["successful_experiment_ids"]
     lesson = json.loads((tmp_path / "experiment_lessons.jsonl").read_text(encoding="utf-8"))
@@ -2316,7 +2579,7 @@ def test_prompt_mutation_rejects_partial_all_update_atomically(tmp_path):
             "initial": [runnable_reflection_record()],
             "error": [],
         },
-        ["initial", "error"],
+        list(baseline.as_candidate().keys()),
     )
 
     assert proposals == baseline.as_candidate()
@@ -2426,6 +2689,7 @@ def test_local_smoke_real_gepa_uses_one_call_all_flow(tmp_path):
     baseline = baseline_bundle()
     improved_initial = "Analyze branch reachability first.\n" + baseline.initial
     improved_error = "Preserve valid test behavior during repair.\n" + baseline.error
+    improved_missing_coverage = "Preserve valid test behavior during extension.\n" + baseline.missing_coverage
     lm_calls = []
 
     class FakeRunner:
@@ -2434,7 +2698,7 @@ def test_local_smoke_real_gepa_uses_one_call_all_flow(tmp_path):
             package_dir=package_dir,
             coverup_model="local-fake-coverup",
             max_attempts=2,
-            repeat_tests=1,
+            repeat_tests=0,
             pytest_args="",
             max_concurrency=1,
             rate_limit=None,
@@ -2522,7 +2786,7 @@ def test_local_smoke_real_gepa_uses_one_call_all_flow(tmp_path):
             return experiment_tool_call_response(requested_case_id(kwargs))
         return tool_call_response(
             "all",
-            {"initial": improved_initial, "error": improved_error},
+            {"initial": improved_initial, "error": improved_error, "missing_coverage": improved_missing_coverage},
             diagnosis="generation and repair need a coordinated contract",
             evidence=["both attempts terminate without full coverage"],
             successful_experiment_ids=[successful_experiment_id(kwargs)],
@@ -2544,11 +2808,12 @@ def test_local_smoke_real_gepa_uses_one_call_all_flow(tmp_path):
     assert len(lm_calls) == 2
     assert result.best_bundle.initial == improved_initial
     assert result.best_bundle.error == improved_error
+    assert result.best_bundle.missing_coverage == improved_missing_coverage
     decisions = (tmp_path / "artifacts" / "candidates" / "reflection_decisions.jsonl").read_text(encoding="utf-8")
     decision = json.loads(decisions.splitlines()[-1])
     assert decision["experiment_first"] is True
     assert decision["selection"] == "all"
-    assert decision["changed_components"] == ["initial", "error"]
+    assert decision["changed_components"] == ["initial", "error", "missing_coverage"]
     assert decision["status"] == "accepted"
 
 
@@ -2621,12 +2886,13 @@ def test_optimize_seeds_gepa_with_exact_baseline(tmp_path, monkeypatch):
         artifacts_dir=tmp_path,
         auto=None,
         max_metric_calls=2,
+        reflection_minibatch_size=3,
     )
 
     assert captured["seed_candidate"] == baseline.as_candidate()
-    assert set(captured["seed_candidate"]) == {"initial", "error"}
+    assert set(captured["seed_candidate"]) == {"initial", "error", "missing_coverage"}
     assert captured["cache_evaluation"] is False
-    assert captured["reflection_minibatch_size"] == 5
+    assert captured["reflection_minibatch_size"] == 3
     assert isinstance(captured["module_selector"], LLMReflectionComponentSelector)
     assert isinstance(captured["candidate_selection_strategy"], BestParetoCandidateSelector)
     assert captured["candidate_selection_strategy"].best_probability == 0.7
@@ -2781,6 +3047,7 @@ def test_tune_preflights_baseline_but_skips_proposal_when_gepa_keeps_it(
         dataset=tmp_path / "dataset.jsonl",
         holdout_split="test",
         reflection_temperature=0.7,
+        reflection_minibatch_size=5,
         auto=None,
         max_metric_calls=1,
         evaluation_replicates=1,
@@ -2794,6 +3061,7 @@ def test_tune_preflights_baseline_but_skips_proposal_when_gepa_keeps_it(
     assert report["final_evaluation_skipped"] is True
     assert report["skip_reason"].startswith("GEPA selected the unchanged baseline")
     assert report["final_split"] == "test"
+    assert report["reflection_minibatch_size"] == 5
     assert report["run_ids"] == []
     assert report["baseline_run_ids"] == ["baseline-preflight"]
     assert len(report["baseline_results"]) == 1
@@ -3111,6 +3379,136 @@ def test_coverup_trace_preserves_component_level_attempt_history(tmp_path, monke
     ]
     assert traces[1]["get_info_calls"][0]["arguments"]["name"] == "dependency_2"
     assert seen_pytest_args == ["--count 2", "--count 2"]
+
+
+def test_coverup_retries_passing_incomplete_coverage_with_lines_branches_and_context(
+    tmp_path,
+    monkeypatch,
+):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(Path("src").resolve()))
+    coverup_module = importlib.import_module("coverup.coverup")
+    prompt_module = importlib.import_module("coverup.prompt.gpt_v2")
+    monkeypatch.setattr(
+        coverup_module,
+        "state",
+        SimpleNamespace(inc_counter=lambda key: None),
+        raising=False,
+    )
+    monkeypatch.setattr(coverup_module, "test_seq", 1)
+
+    source = tmp_path / "pkg" / "a.py"
+    source.parent.mkdir()
+    source.write_text(
+        "def target(value):\n"
+        "    if value:\n"
+        "        return 1\n"
+        "    return 0\n",
+        encoding="utf-8",
+    )
+    segment = importlib.import_module("coverup.segment").CodeSegment(
+        source,
+        "target",
+        1,
+        5,
+        "target",
+        lines_of_interest={2, 3, 4},
+        missing_lines={3},
+        executed_lines=set(),
+        missing_branches={(2, 4)},
+        context=[],
+        imports=[],
+    )
+
+    coverage_calls = 0
+
+    async def fake_measure_test_coverage(**kwargs):
+        nonlocal coverage_calls
+        coverage_calls += 1
+        executed_lines = [1] if coverage_calls == 1 else [1, 2, 3]
+        executed_branches = [] if coverage_calls == 1 else [[2, 4]]
+        return {
+            "files": {
+                str(source.resolve()): {
+                    "executed_lines": executed_lines,
+                    "executed_branches": executed_branches,
+                }
+            }
+        }
+
+    monkeypatch.setattr(coverup_module, "measure_test_coverage", fake_measure_test_coverage)
+
+    args = SimpleNamespace(
+        dry_run=False,
+        max_attempts=2,
+        log_file=str(tmp_path / "coverup.log"),
+        trace_file=tmp_path / "attempt_trace.jsonl",
+        install_missing_modules=False,
+        pytest_args="",
+        repeat_tests=0,
+        tests_dir=tmp_path / "tests",
+        prefix="coverage",
+        isolate_tests=True,
+        branch_coverage=True,
+        show_details=False,
+        save_coverage_to=None,
+        src_base_dir=tmp_path,
+        prompt_template_file=None,
+    )
+    args.tests_dir.mkdir()
+    prompter = prompt_module.GptV2Prompter(args)
+
+    class Chatter:
+        def __init__(self):
+            self.calls = 0
+            self.messages = []
+
+        async def chat(self, messages, *, ctx=None):
+            self.calls += 1
+            self.messages.append([dict(message) for message in messages])
+            code = (
+                "def test_target():\n    assert True"
+                if self.calls == 1
+                else "def test_target():\n    assert target(True) == 1"
+            )
+            return {
+                "_coverup_tool_calls": [],
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {
+                            "role": "assistant",
+                            "content": f"```python\n{code}\n```",
+                        },
+                    }
+                ],
+            }
+
+    chatter = Chatter()
+    result = asyncio.run(coverup_module.improve_coverage(args, chatter, prompter, segment))
+    traces = [json.loads(line) for line in args.trace_file.read_text(encoding="utf-8").splitlines()]
+
+    assert result is True
+    assert coverage_calls == 2
+    assert chatter.calls == 2
+    assert traces[0]["outcome"] == "coverage_incomplete"
+    assert traces[0]["gained_lines"] == []
+    assert traces[0]["gained_branches"] == []
+    assert traces[0]["remaining_lines"] == [3]
+    assert traces[0]["remaining_branches"] == [[2, 4]]
+    assert traces[1]["outcome"] == "coverage_gain_saved"
+    assert traces[1]["gained_branches"] == [[2, 4]]
+    assert traces[1]["remaining_lines"] == []
+    assert traces[1]["remaining_branches"] == []
+
+    retry_messages = chatter.messages[1]
+    assert any(
+        message["role"] == "assistant" and "assert True" in message["content"]
+        for message in retry_messages
+    )
+    missing_prompt = retry_messages[-1]["content"]
+    assert "The tests still lack coverage: line 3 and branch 2->4 do not execute." in missing_prompt
 
 
 def test_coverup_matches_absolute_generated_coverage_to_relative_segment(tmp_path, monkeypatch):

@@ -34,6 +34,10 @@ _REFLECTION_EXCEPTION = re.compile(r"Exception during reflection/proposal:\s*(.*
 _OPTIMIZATION_EXCEPTION = re.compile(r"Exception during optimization:\s*(.*)", re.DOTALL)
 _REFLECTION_FUNCTION_CALL = re.compile(r"Reflection function call:\s*status=(\S+)\s+selection=(\S+)\s+changed=(\S+)")
 _RUN_COMPLETE = re.compile(r"(?:Saved optimized program|Final comparison split:|Final comparison skipped)")
+_COVERUP_LIFECYCLE = re.compile(
+    r"^==>\s+\[CoverUp\b.*\]\s+"
+    r"(?:started(?:\s+\(timeout\s+[\d.]+s\))?|finished with exit code\s+-?\d+)\s*$"
+)
 
 
 @dataclass(frozen=True)
@@ -90,6 +94,87 @@ def _clean_lines(entries: Iterable[CloudLogLine]) -> list[str]:
         text = _ANSI.sub("", str(entry.text)).replace("\r", "\n")
         lines.extend(text.splitlines())
     return lines
+
+
+def merge_evolution_history(
+    previous: EvolutionResponse | None,
+    current: EvolutionResponse,
+) -> EvolutionResponse:
+    """Append a resumed execution's timeline to its persisted history."""
+    if previous is None or not previous.available or not previous.iterations:
+        return current
+    if not current.available or not current.iterations:
+        return previous
+
+    previous_iterations = [item.model_copy(deep=True) for item in previous.iterations]
+    current_iterations = sorted(
+        (item.model_copy(deep=True) for item in current.iterations),
+        key=lambda value: value.iteration,
+    )
+    previous_max = max(item.iteration for item in previous_iterations)
+
+    # Every resumed process repeats baseline preflight output before GEPA loads
+    # its durable state.  The parser can therefore expose rows such as iteration
+    # 0 (preflight metrics) and iteration N ("Base program" evaluation) ahead of
+    # the first real resumed mutation.  They are execution bootstrap records,
+    # not new search iterations.  Including them caused histories like
+    # 9 -> 10 -> 18 -> 19 and temporarily reset the chart to baseline.
+    first_search_index = next(
+        (
+            index
+            for index, item in enumerate(current_iterations)
+            if item.strategy in {"reflective mutation", "merge"}
+        ),
+        None,
+    )
+    if first_search_index is None:
+        return previous
+    current_iterations = current_iterations[first_search_index:]
+
+    last_statement = previous_iterations[-1].best_statement
+    last_branch = previous_iterations[-1].best_branch
+    last_score = previous_iterations[-1].best_score
+    appended: list[EvolutionIteration] = []
+    for sequence, item in enumerate(current_iterations, start=previous_max + 1):
+        current_score = item.best_score
+        keeps_previous_best = (
+            last_score is not None
+            and (current_score is None or current_score < last_score)
+        )
+        if keeps_previous_best:
+            statement, branch, score = last_statement, last_branch, last_score
+        else:
+            statement = item.best_statement if item.best_statement is not None else last_statement
+            branch = item.best_branch if item.best_branch is not None else last_branch
+            score = current_score if current_score is not None else last_score
+        shifted = item.model_copy(
+            update={
+                "iteration": sequence,
+                "best_statement": statement,
+                "best_branch": branch,
+                "best_score": score,
+            }
+        )
+        appended.append(shifted)
+        last_statement, last_branch, last_score = statement, branch, score
+
+    iterations = previous_iterations + appended
+    metrics = [
+        EvolutionMetricPoint(
+            iteration=item.iteration,
+            statement=item.best_statement,
+            branch=item.best_branch,
+            score=item.best_score,
+        )
+        for item in iterations
+    ]
+    return EvolutionResponse(
+        available=True,
+        source=current.source,
+        message="Combined GEPA evolution history across resumed Cloud Run executions.",
+        iterations=iterations,
+        metrics=metrics,
+    )
 
 
 def parse_evolution_log(entries: Iterable[CloudLogLine]) -> EvolutionResponse:
@@ -235,6 +320,12 @@ def parse_evolution_log(entries: Iterable[CloudLogLine]) -> EvolutionResponse:
                 if selection != "none" and current.component is None:
                     current.component = selection
                 current.outcome_detail = f"Reflection status: {status}; selection: {selection}; changed: {changed}."
+            continue
+
+        if _COVERUP_LIFECYCLE.fullmatch(line):
+            # Concurrent worker lifecycle output is not part of a proposed
+            # prompt and marks the end of its multiline text in UI logs.
+            proposal_iteration = None
             continue
 
         if _RUN_COMPLETE.search(line):

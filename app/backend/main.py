@@ -52,21 +52,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     application.state.settings = settings
     application.state.services = build_services(settings)
-    application.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origin_list,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID"],
-        expose_headers=["X-Request-ID"],
-    )
-
     @application.middleware("http")
     async def request_context(request: Request, call_next):
         request_id = request.headers.get("X-Request-ID") or str(uuid4())
         request.state.request_id = request_id
         started = time.perf_counter()
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            logger.exception("unhandled_exception", extra={"request_id": request_id})
+            response = error_response(request, 500, "INTERNAL_ERROR", "An unexpected error occurred")
         response.headers["X-Request-ID"] = request_id
         logger.info(
             "request_completed",
@@ -80,12 +75,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         return response
 
+    # Keep CORS outside request processing so even an unexpected 500 response
+    # remains readable by browser clients.
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origin_list,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID"],
+        expose_headers=["X-Request-ID"],
+    )
+
     @application.exception_handler(AppError)
     async def handle_app_error(request: Request, exc: AppError):
         return error_response(request, exc.status_code, exc.code, exc.message)
 
     @application.exception_handler(RequestValidationError)
     async def handle_validation_error(request: Request, exc: RequestValidationError):
+        body = await request.body()
+        logger.error(f"Validation error for request {request.url}: {exc.errors()}\nBody: {body.decode()}")
         details = [
             {"location": list(error["loc"]), "message": error["msg"], "type": error["type"]} for error in exc.errors()
         ]

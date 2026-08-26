@@ -4,7 +4,7 @@ Tài liệu này là ghi chú vận hành ngắn cho các agent/lần làm việ
 
 ## Mục tiêu
 
-Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và chỉ đưa prompt mới vào production khi nó **thực sự tốt hơn baseline trên holdout bị khóa**. Hệ thống phải ưu tiên khả năng khái quát, khả năng tái lập và không làm hỏng baseline đang tốt.
+Tối ưu ba thành phần `initial`, `error` và `missing_coverage` của CoverUp bằng GEPA và chỉ đưa prompt mới vào production khi nó **thực sự tốt hơn baseline trên holdout bị khóa**. Hệ thống phải ưu tiên khả năng khái quát, khả năng tái lập và không làm hỏng baseline đang tốt.
 
 ## Các file chính
 
@@ -18,14 +18,15 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
 
 ## Invariant không được phá
 
-1. Candidate GEPA phải là prompt thật dưới dạng dict chỉ gồm `initial` và `error`; không tối ưu một meta-prompt rồi rewrite toàn bộ bundle ngoài vòng lặp.
+1. Candidate GEPA phải là prompt thật dưới dạng dict gồm `initial`, `error`, và `missing_coverage`; không tối ưu một meta-prompt rồi rewrite toàn bộ bundle ngoài vòng lặp.
 2. `seed_candidate` phải đúng bằng baseline đầu vào. Baseline luôn nằm trong search space và là phương án fallback.
 3. Feedback theo example phải là score riêng của symbol đó. Không trả cùng một aggregate score cho mọi example. Trung bình các score theo symbol phải khớp final micro-average coverage.
 4. Reflection record phải có target path/symbol, source context được đánh số dòng, lỗi/coverage feedback và score của từng replicate. Nếu thiếu target context, proposer gần như chỉ đoán mò.
-5. Mỗi proposal có thể thay đổi `initial`, `error`, hoặc cả hai khi reflection chọn `all`; `all` luôn là lựa chọn hợp lệ dù direct failure evidence chỉ có ở một stage. Update `all` phải hợp lệ nguyên tử cho cả hai component. Không cho prompt phình vô hạn hoặc hard-code tên file, symbol hay số dòng từ tập train.
+5. Mỗi proposal có thể thay đổi `initial`, `error`, `missing_coverage`, hoặc cả ba khi reflection chọn `all`; `all` luôn là lựa chọn hợp lệ dù direct failure evidence chỉ có ở một stage. Update `all` phải hợp lệ nguyên tử cho cả ba component. Không cho prompt phình vô hạn hoặc hard-code tên file, symbol hay số dòng từ tập train.
 6. Giữ chính xác các placeholder bắt buộc:
    - `initial`: `{filename}`, `{coverage_targets}`, `{source_excerpt}`
    - `error`: `{error}`
+   - `missing_coverage`: `{missing_coverage}`
 7. Split `test` bị khóa: GEPA không được nhìn thấy hoặc dùng nó để chọn candidate. Chỉ đánh giá một lần ở promotion gate sau khi search kết thúc. Nếu không có test thì fallback sang validation và phải ghi rõ trong artifact.
 8. Chỉ promote proposal khi nó **strictly better** hơn paired generated baseline trên final split. Nếu hòa hoặc kém hơn, `gepa_optimized.json` phải chứa baseline; proposal vẫn được lưu riêng để chẩn đoán.
    Nếu GEPA chọn lại đúng baseline (bundle digest không đổi), bỏ toàn bộ final split evaluation vì không có proposal mới để so sánh; report phải ghi rõ evaluation đã được skip.
@@ -125,6 +126,54 @@ Prompt mới thường tệ hơn baseline vì pipeline cũ tối ưu meta-prompt
 - `src/optimization/cli.py`: cuối nhánh final comparison của `tune()` tự động ghi `coverage_report.json` vào artifacts và in bảng tóm tắt qua `_print_coverage_report()`.
 - Report không được tạo khi GEPA giữ nguyên baseline (không có prompt thứ hai để so sánh).
 - **Lưu ý budget:** GEPA đếm theo per-example; với valset 100, mỗi iteration được chấp nhận tốn ~116 calls (16 minibatch + 100 full eval), cộng seed eval 100. `MaxMetricCallsStopper` chỉ kiểm tra giữa các iteration và full eval là khối nguyên tử nên dễ vượt budget; `--max-metric-calls 150` chỉ cho phép đúng 1 iteration.
+
+## Quy trình Deploy Môi trường Dev Cloud
+
+Khi được yêu cầu deploy hệ thống lên môi trường Dev Cloud (Project `project-7df9f963-9fe0-4b76-b3d`, Region `asia-southeast1`), cần lưu ý hệ thống gồm **2 thành phần độc lập**:
+
+1. **GEPA Optimization Runner Job (`promptopt-gepa-runner-dev`)**:
+   - Dùng cho batch prompt optimization pipeline (`src/optimization/`, CoverUp).
+   - Script deploy (build Docker image + update Cloud Run Job):
+     ```powershell
+     powershell -ExecutionPolicy Bypass -File .\cloud\deploy_gepa_job.ps1 -JobName "promptopt-gepa-runner-dev"
+     ```
+   - Kích hoạt / theo dõi job:
+     ```powershell
+     .\cloud\run_gepa_job.ps1 -JobName "promptopt-gepa-runner-dev"
+     ```
+
+2. **Web Backend API Service (`promptopt-api-dev`)**:
+   - Dùng cho Web Backend REST API service (`app/backend/main.py`).
+   - Lệnh build & deploy Cloud Run Service:
+     ```powershell
+     gcloud builds submit --config cloud/cloudbuild.api.yaml --substitutions=_IMAGE=asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/api:dev --project project-7df9f963-9fe0-4b76-b3d .
+     gcloud run deploy promptopt-api-dev --image asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/api:dev --region asia-southeast1 --project project-7df9f963-9fe0-4b76-b3d
+     ```
+   - Kiểm tra sức khỏe: `https://promptopt-api-dev-861862240028.asia-southeast1.run.app/health`
+
+### Checklist bắt buộc sau khi deploy Web Backend API dev
+
+- Không kết luận deploy thành công chỉ dựa vào `/health`: endpoint này không chạm Firebase Auth, Firestore hay repository thật.
+- `app/requirements.txt` phải giữ `google-api-core[grpc]>=2.25.0,<2.35.0` cho đến khi regression upstream được xác nhận đã sửa. `google-api-core==2.35.0` làm `path_template.expand()` percent-encode database đặc biệt `(default)` thành `%28default%29`; mọi Firestore query khi đó trả `400 Invalid database id %28default%29`.
+- Trong log Cloud Build, xác nhận resolver cài `google-api-core` phiên bản `<2.35.0`. Dependency dùng range có thể kéo bản mới gây lỗi dù source code không đổi.
+- Sau khi deploy, xác nhận revision mới ở trạng thái Ready và nhận 100% traffic; không chỉ xác nhận image đã build/push.
+- Chạy đủ ba smoke check trên URL public:
+  1. `GET /health` phải trả `200`.
+  2. `OPTIONS /api/v1/experiments` với `Origin: http://localhost:5173`, `Access-Control-Request-Method: GET` và header yêu cầu `authorization,content-type` phải trả `200` cùng `Access-Control-Allow-Origin: http://localhost:5173`.
+  3. `GET /api/v1/experiments` không token phải trả `401` có cùng CORS header; sau đó kiểm tra endpoint với Firebase ID token thật từ frontend hoặc theo dõi request có xác thực trong Cloud Run logs để chắc chắn repository Firestore không trả `500`.
+- Nếu browser báo thiếu `Access-Control-Allow-Origin` nhưng preflight đã pass, không vội sửa danh sách origin. Kiểm tra Cloud Run logs của đúng revision trước: một exception backend không được xử lý có thể tạo response `500` không qua CORS middleware và bị browser trình bày như lỗi CORS.
+- Middleware xử lý request phải chuyển unexpected exception thành JSON `INTERNAL_ERROR`, và CORS middleware phải nằm ngoài nó để cả response `500` vẫn có CORS headers. Test `app/tests/test_main.py::test_unexpected_error_response_keeps_cors_headers` phải pass.
+- Khi gặp `Invalid database id %28default%29`, kiểm tra phiên bản `google-api-core` và database path trước; database thật vẫn có thể tồn tại đúng dưới tên `(default)`, nên không xóa/tạo lại Firestore database để chữa triệu chứng này.
+
+### Pause/resume khi model bị rate limit
+
+- CoverUp tự yêu cầu pause sau 5 phản hồi HTTP 429 liên tiếp cho cùng model request; reflection request pause sau khi retry của provider đã cạn. Worker phải ghi `pause_signal.json`, dừng hợp tác và upload toàn bộ artifacts với `job_result.json` có `status=paused`; không coi đây là run failed.
+- Mỗi target đã hoàn tất được checkpoint nguyên tử trong `runs/.../target_checkpoints/`. Khi resume, không gọi model hoặc chấm lại target đó; chỉ target đang dở/chưa chạy được thực hiện lại.
+- GEPA tự resume Pareto/search state từ `gepa_direct_logs/<digest>/gepa_state.bin`. Cloud Run execution mới phải tải artifact prefix cũ về local disk trước khi gọi CLI; không chạy trực tiếp trên gcsfuse.
+- Backend giữ cùng logical optimization run, trạng thái `paused`, và endpoint `POST /api/v1/experiments/optimization-runs/{run_id}/resume`. Mỗi lần resume tạo Cloud Run execution/prefix output mới và dùng prefix paused làm `--resume-artifacts-name`, tránh đọc nhầm sentinel cũ.
+- UI chỉ hiển thị **Resume optimization** khi trạng thái là `paused`. Dataset, baseline prompt, model và evaluation config phải giữ nguyên; digest mismatch phải dừng thay vì resume sai state.
+
+*Lưu ý:* Lệnh deploy Job `promptopt-gepa-runner-dev` không tự động deploy Service `promptopt-api-dev`. Khi được yêu cầu deploy lại toàn bộ môi trường dev, agent cần triển khai cả hai tài nguyên trên.
 
 ## Checklist bàn giao
 

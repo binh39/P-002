@@ -514,6 +514,8 @@ def test_sample_gepa_run_keeps_bundled_layout_and_trusted_python(tmp_path, monke
             "inputs/dataset.jsonl",
             "--prompt-object",
             "inputs/prompt.json",
+            "--reflection-minibatch-size",
+            "3",
             "--sample-repos-dir",
             str(sample_repos),
         ],
@@ -524,5 +526,6 @@ def test_sample_gepa_run_keeps_bundled_layout_and_trusted_python(tmp_path, monke
     assert command[0] == sys.executable
     assert captured["test_python"] is None
     assert "--project-layouts-file" not in command
+    assert command[command.index("--reflection-minibatch-size") + 1] == "3"
     assert command[command.index("--sample-repos-dir") + 1] == str(sample_repos.resolve())
     assert command[command.index("--package-dir") + 1] == str((sample_repos / "isort" / "isort").resolve())

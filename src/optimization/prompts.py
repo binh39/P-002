@@ -9,18 +9,22 @@ from pathlib import Path
 class PromptBundle:
     initial: str
     error: str | None = None
+    missing_coverage: str | None = None
 
     @classmethod
     def load(cls, path: Path) -> PromptBundle:
         with path.open(encoding="utf-8") as file:
             values = json.load(file)
         # Select active fields explicitly so legacy prompt keys are harmless.
-        return cls(initial=values["initial"], error=values.get("error"))
+        return cls(
+            initial=values["initial"],
+            error=values.get("error"),
+            missing_coverage=values.get("missing_coverage", BASELINE_MISSING_COVERAGE),
+        )
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        values = {key: value for key, value in asdict(self).items() if value is not None}
-        path.write_text(json.dumps(values, indent=2, ensure_ascii=False), encoding="utf-8")
+        path.write_text(json.dumps(asdict(self), indent=2, ensure_ascii=False), encoding="utf-8")
 
     def as_candidate(self) -> dict[str, str]:
         """Return the direct GEPA component mapping for this prompt bundle."""
@@ -29,6 +33,7 @@ class PromptBundle:
         return {
             "initial": self.initial,
             "error": self.error,
+            "missing_coverage": self.missing_coverage if self.missing_coverage is not None else BASELINE_MISSING_COVERAGE,
         }
 
     @classmethod
@@ -37,6 +42,7 @@ class PromptBundle:
         return cls(
             initial=candidate.get("initial", ""),
             error=candidate.get("error", ""),
+            missing_coverage=candidate.get("missing_coverage", BASELINE_MISSING_COVERAGE),
         )
 
 
@@ -60,8 +66,14 @@ Respond only with Python code enclosed in a python markdown code block.
 
 {error}"""
 
+BASELINE_MISSING_COVERAGE = """The tests still lack coverage: {missing_coverage} not execute.
+Modify the current test module to execute every remaining line and branch. Preserve passing
+behavior and assertions, use get_info when more source context is needed, and return the
+complete Python test module in a single Python markdown code block."""
+
 def baseline_bundle() -> PromptBundle:
     return PromptBundle(
         initial=BASELINE_INITIAL,
         error=BASELINE_ERROR,
+        missing_coverage=BASELINE_MISSING_COVERAGE,
     )

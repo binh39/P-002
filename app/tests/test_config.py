@@ -43,7 +43,7 @@ def test_production_cloud_run_job_configuration_is_valid():
     assert settings.runtime_execution_backend == "cloud_run_job"
     assert settings.runtime_bundle_protocol_version == MINIMUM_RUNTIME_PROTOCOL_VERSION
     assert settings.gcp_project_id == "project-7df9f963-9fe0-4b76-b3d"
-    assert settings.admin_vertexai_project == "vinbuildphase"
+    assert settings.admin_vertexai_project == "project-a2f7084e-90ac-4bfc-84b"
 
 
 def test_production_requires_cloud_gepa_execution_backend():

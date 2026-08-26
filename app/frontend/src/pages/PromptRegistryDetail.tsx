@@ -124,6 +124,14 @@ function PromptCode({
             <code>{prompt.error}</code>
           </pre>
         </section>
+        {prompt.missing_coverage && (
+          <section>
+            <h3>Missing coverage prompt</h3>
+            <pre className="prompt-registry-code">
+              <code>{prompt.missing_coverage}</code>
+            </pre>
+          </section>
+        )}
       </div>
     </section>
   );
@@ -158,6 +166,7 @@ function ExperimentSettings({ experiment }: { experiment: Experiment }) {
       "GEPA budget",
       `${settings.maxMetricCalls} metric calls · ${settings.evaluationReplicates} replicate(s)`,
     ],
+    ["Reflection minibatch size", String(settings.reflectionMinibatchSize)],
     ["Reflection temperature", String(settings.reflectionTemperature)],
     ["Pytest arguments", settings.pytestArgs || "Default"],
   ];

@@ -16,6 +16,7 @@ ENV PYTHONPATH="/app/src"
 RUN useradd --create-home appuser
 COPY src/coverup ./src/coverup
 COPY src/optimization ./src/optimization
+COPY src/promptopt_pause.py ./src/promptopt_pause.py
 COPY src/sample_repo ./sample_repo
 COPY cloud/run_job.py cloud/run_test_generation.py cloud/prepare_runtime.py cloud/runtime_workspace.py ./cloud/
 RUN test -d /app/sample_repo/isort/isort \

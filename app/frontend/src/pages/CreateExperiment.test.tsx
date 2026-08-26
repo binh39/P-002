@@ -99,7 +99,12 @@ describe("create experiment wizard", () => {
           name: "isort prompt optimization",
           samplingMethod: "random",
           maxTargets: null,
-          randomSeed: 7,
+          randomSeed: 115,
+          settings: expect.objectContaining({
+            maxAttempts: 3,
+            maxMetricCalls: 10,
+            reflectionMinibatchSize: 3,
+          }),
         }),
       ),
     );

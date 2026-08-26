@@ -22,6 +22,12 @@ class Prompter(abc.ABC):
         """Returns prompts(s) in response to an error."""
 
 
+    @abc.abstractmethod
+    def missing_coverage_prompt(self, segment: CodeSegment,
+                                missing_lines: set, missing_branches: set) -> T.List[dict] | None:
+        """Returns prompts(s) when a passing test still lacks coverage."""
+
+
     def get_functions(self) -> T.List[T.Callable]:
         """Returns a list of functions to be made available to the LLM.
            Each function's docstring must consist of its schema in JSON format."""

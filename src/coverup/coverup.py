@@ -18,7 +18,7 @@ from .segment import *
 from .prompt.prompter import Prompter
 from .testrunner import *
 from .version import __version__
-from .utils import summary_coverage
+from .utils import lines_branches_do, summary_coverage
 
 
 def get_prompters() -> dict[str, T.Callable[[T.Any], Prompter]]:
@@ -410,6 +410,12 @@ def check_whole_suite(args: argparse.Namespace) -> None:
             try:
                 reduction = reduce.reduce(tests_path=args.tests_dir, results=results,
                                           pytest_args=pytest_args, trace=args.debug)
+            except subprocess.TimeoutExpired as e:
+                print(
+                    "Coverage measurement timed out after "
+                    f"{getattr(e, 'timeout', 'the configured')} seconds."
+                )
+                return 1
             except subprocess.CalledProcessError as e:
                 print(str(e) + "\n" + str(e.stdout, 'UTF-8', errors='ignore'))
                 sys.exit(1)
@@ -489,6 +495,12 @@ def install_missing_imports(args: argparse.Namespace, seg: CodeSegment, modules:
             if args.write_requirements_to:
                 with args.write_requirements_to.open("a") as f:
                     f.write(f"{module}=={version}\n")
+        except subprocess.TimeoutExpired as e:
+            print(
+                "Coverage measurement timed out after "
+                f"{getattr(e, 'timeout', 'the configured')} seconds."
+            )
+            return 1
         except subprocess.CalledProcessError as e:
             log_write(args, seg, f"Unable to install module {module}:\n{str(e.stdout, 'UTF-8', errors='ignore')}")
             all_ok = False
@@ -682,6 +694,25 @@ async def improve_coverage(
     messages = prompter.initial_prompt(seg)
     component = "initial"
     attempts = 0
+    best_partial: dict[str, T.Any] | None = None
+
+    def save_generated_test(
+        test: str,
+        gained_lines: set[int],
+        gained_branches: set[tuple[int, int]],
+        coverage: dict | None,
+    ) -> Path:
+        asked = {'lines': sorted(seg.missing_lines), 'branches': sorted(seg.missing_branches)}
+        gained = {'lines': sorted(gained_lines), 'branches': sorted(gained_branches)}
+        new_test = new_test_file(args)
+        new_test.write_text(f"# file: {seg.identify()}\n" +\
+                            f"# asked: {json.dumps(asked)}\n" +\
+                            f"# gained: {json.dumps(gained)}\n\n" +\
+                            test, encoding="utf-8")
+        if args.save_coverage_to and coverage is not None:
+            with (args.save_coverage_to / (new_test.stem + ".json")).open("w") as f:
+                json.dump(coverage, f)
+        return new_test
 
     if args.dry_run:
         return True
@@ -690,11 +721,39 @@ async def improve_coverage(
         attempts += 1
         if (attempts > args.max_attempts):
             log_write(args, seg, "Too many attempts, giving up")
-            trace_write(args, seg, {
-                "attempt": attempts - 1,
-                "component": component,
-                "outcome": "max_attempts_exhausted",
-            })
+            if best_partial is not None:
+                new_test = save_generated_test(
+                    best_partial["test"],
+                    best_partial["gained_lines"],
+                    best_partial["gained_branches"],
+                    best_partial["coverage"],
+                )
+                trace_write(args, seg, {
+                    "attempt": attempts - 1,
+                    "component": best_partial["component"],
+                    "prompt_input": best_partial["prompt_input"],
+                    "outcome": "max_attempts_exhausted",
+                    "generated_test": best_partial["test"],
+                    **best_partial["response_context"],
+                    "gained_lines": sorted(best_partial["gained_lines"]),
+                    "gained_branches": sorted(best_partial["gained_branches"]),
+                    "remaining_lines": sorted(best_partial["remaining_lines"]),
+                    "remaining_branches": sorted(best_partial["remaining_branches"]),
+                    "saved_test": str(new_test),
+                    "get_info_calls": best_partial["get_info_calls"],
+                })
+                log_write(
+                    args,
+                    seg,
+                    f"Max attempts reached before full coverage; saved best partial test as {new_test}\n",
+                )
+                state.inc_counter('G')
+            else:
+                trace_write(args, seg, {
+                    "attempt": attempts - 1,
+                    "component": component,
+                    "outcome": "max_attempts_exhausted",
+                })
             break
 
         prompt_input = next(
@@ -876,6 +935,28 @@ async def improve_coverage(
                        else set()
         gained_lines = seg.missing_lines.intersection(new_lines)
         gained_branches = seg.missing_branches.intersection(new_branches)
+        remaining_lines = seg.missing_lines - gained_lines
+        remaining_branches = seg.missing_branches - gained_branches
+
+        gain_count = len(gained_lines) + len(gained_branches)
+        best_gain_count = (
+            len(best_partial["gained_lines"]) + len(best_partial["gained_branches"])
+            if best_partial is not None
+            else 0
+        )
+        if gain_count > best_gain_count:
+            best_partial = {
+                "test": last_test,
+                "component": component,
+                "prompt_input": prompt_input,
+                "response_context": response_context,
+                "gained_lines": set(gained_lines),
+                "gained_branches": set(gained_branches),
+                "remaining_lines": set(remaining_lines),
+                "remaining_branches": set(remaining_branches),
+                "coverage": coverage,
+                "get_info_calls": get_info_calls,
+            }
 
         if args.show_details:
             print(seg.identify())
@@ -884,36 +965,66 @@ async def improve_coverage(
             print(f"Gained:             {sorted(gained_lines)}")
             print(f"                    {list(format_branches(gained_branches))}")
 
-        if not gained_lines and not gained_branches:
-            state.inc_counter('U')
-            log_write(args, seg, "Test doesn't improve coverage")
+        if remaining_lines or remaining_branches:
+            if not gained_lines and not gained_branches:
+                state.inc_counter('U')
+
+            missing_coverage_prompt = getattr(prompter, "missing_coverage_prompt", None)
+            prompts = (
+                missing_coverage_prompt(seg, remaining_lines, remaining_branches)
+                if callable(missing_coverage_prompt)
+                else None
+            )
+            if not prompts:
+                log_write(args, seg, "Test still lacks coverage; no coverage repair prompt available")
+                trace_write(args, seg, {
+                    "attempt": attempts,
+                    "component": component,
+                    "prompt_input": prompt_input,
+                    "outcome": "no_coverage_gain_unrepairable",
+                    "generated_test": last_test,
+                    **response_context,
+                    "gained_lines": sorted(gained_lines),
+                    "gained_branches": sorted(gained_branches),
+                    "remaining_lines": sorted(remaining_lines),
+                    "remaining_branches": sorted(remaining_branches),
+                    # Preserve the bounded file provenance needed to distinguish
+                    # a genuinely useless test from importing/instrumenting a
+                    # different copy of an uploaded package.
+                    "coverage_files": sorted(str(path) for path in coverage.get("files", {}))[:50],
+                    "get_info_calls": get_info_calls,
+                })
+                break
+
+            log_write(
+                args,
+                seg,
+                f"This test still lacks coverage: "
+                f"{lines_branches_do(remaining_lines, set(), remaining_branches)} not execute",
+            )
             trace_write(args, seg, {
                 "attempt": attempts,
                 "component": component,
+                "next_component": "missing_coverage",
                 "prompt_input": prompt_input,
-                "outcome": "no_coverage_gain_unrepairable",
+                "outcome": "coverage_incomplete",
                 "generated_test": last_test,
                 **response_context,
-                "gained_lines": [],
-                "gained_branches": [],
-                "remaining_lines": sorted(seg.missing_lines),
-                "remaining_branches": sorted(seg.missing_branches),
-                # Preserve the bounded file provenance needed to distinguish
-                # a genuinely useless test from importing/instrumenting a
-                # different copy of an uploaded package.
+                "gained_lines": sorted(gained_lines),
+                "gained_branches": sorted(gained_branches),
+                "remaining_lines": sorted(remaining_lines),
+                "remaining_branches": sorted(remaining_branches),
                 "coverage_files": sorted(str(path) for path in coverage.get("files", {}))[:50],
                 "get_info_calls": get_info_calls,
             })
-            break
+            # Keep the previous assistant responses and tool results in
+            # `messages`; the next request can repair the currently passing
+            # but incomplete test instead of starting from scratch.
+            messages.extend(prompts)
+            component = "missing_coverage"
+            continue
 
-        asked = {'lines': sorted(seg.missing_lines), 'branches': sorted(seg.missing_branches)}
-        gained = {'lines': sorted(gained_lines), 'branches': sorted(gained_branches)}
-
-        new_test = new_test_file(args)
-        new_test.write_text(f"# file: {seg.identify()}\n" +\
-                            f"# asked: {json.dumps(asked)}\n" +\
-                            f"# gained: {json.dumps(gained)}\n\n" +\
-                    last_test, encoding="utf-8")
+        new_test = save_generated_test(last_test, gained_lines, gained_branches, coverage)
 
         trace_write(args, seg, {
             "attempt": attempts,
@@ -932,10 +1043,6 @@ async def improve_coverage(
 
         log_write(args, seg, f"Saved as {new_test}\n")
         state.inc_counter('G')
-
-        if args.save_coverage_to:
-            with (args.save_coverage_to / (new_test.stem + ".json")).open("w") as f:
-                json.dump(coverage, f)
 
         # TODO re-add segment with remaining missing coverage?
         break

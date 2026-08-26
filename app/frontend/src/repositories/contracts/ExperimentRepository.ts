@@ -14,6 +14,7 @@ export interface ExperimentRepository {
   requestOptimization(experimentId: string): Promise<OptimizationRun>;
   getOptimizationRun(runId: string, signal?: AbortSignal): Promise<OptimizationRun>;
   cancelOptimization(runId: string): Promise<OptimizationRun>;
+  resumeOptimization(runId: string, maxConcurrency: number): Promise<OptimizationRun>;
   getOptimizationEvolution(runId: string, signal?: AbortSignal): Promise<OptimizationEvolution>;
   downloadOptimizationArtifact(runId: string, artifactName: string): Promise<Blob>;
   requestComparison(experimentId: string): Promise<ComparisonRun>;

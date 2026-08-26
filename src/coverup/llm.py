@@ -1,12 +1,14 @@
-import typing as T
-import openai
-import logging
 import asyncio
-import warnings
-import textwrap
 import json
+import logging
+import textwrap
+import threading
 import traceback
+import typing as T
+import warnings
 from uuid import uuid4
+
+import openai
 from aiolimiter import AsyncLimiter
 
 with warnings.catch_warnings():
@@ -14,12 +16,54 @@ with warnings.catch_warnings():
     warnings.simplefilter('ignore')
     import litellm  # type: ignore
 
+try:
+    from promptopt_pause import ModelRateLimitPauseError, read_pause_request, request_rate_limit_pause
+except ModuleNotFoundError:  # Support ``python -m src.coverup`` from the repository root.
+    from src.promptopt_pause import ModelRateLimitPauseError, read_pause_request, request_rate_limit_pause
+
 # Turn off most logging
 litellm.set_verbose = False
 litellm.suppress_debug_info = True
 logging.getLogger().setLevel(logging.ERROR)
 # Ignore unavailable parameters
 litellm.drop_params = True
+
+_model_error_log_lock = threading.Lock()
+
+
+def _error_status_code(error: BaseException) -> T.Any:
+    status_code = getattr(error, "status_code", None)
+    if status_code is not None:
+        return status_code
+    response = getattr(error, "response", None)
+    return getattr(response, "status_code", None)
+
+
+def log_model_error(
+    *,
+    model: str,
+    attempt: int,
+    error: BaseException,
+    retrying: bool,
+    retry_delay_seconds: float | None = None,
+) -> None:
+    """Emit one redacted Cloud Logging line for every failed provider call."""
+    message = " ".join(str(error).split())[:2000]
+    event = {
+        "event": "model_call_error",
+        "model": model,
+        "attempt": attempt,
+        "error_type": type(error).__name__,
+        "status_code": _error_status_code(error),
+        "message": message,
+        "retrying": retrying,
+        "retry_delay_seconds": retry_delay_seconds,
+    }
+    with _model_error_log_lock:
+        print(
+            "PROMPTOPT_MODEL_ERROR " + json.dumps(event, ensure_ascii=True, default=str),
+            flush=True,
+        )
 
 # Tier 5 rate limits for models; tuples indicate limit and interval in seconds
 # Extracted from https://platform.openai.com/account/limits on 8/30/2024
@@ -227,8 +271,11 @@ class Chatter:
     async def _send_request(self, request: dict, ctx: object) -> litellm.ModelResponse | None:
         """Sends the LLM chat request, handling common failures and returning the response."""
         sleep = 1
+        attempt = 0
         while True:
             try:
+                if read_pause_request() is not None:
+                    raise ModelRateLimitPauseError("Optimization pause has already been requested")
                 # TODO also add request limit; could use 'await asyncio.gather(t.acquire(tokens), r.acquire())'
                 # to acquire both
                 if self.token_rate_limit:
@@ -238,32 +285,75 @@ class Chatter:
                         self._log_msg(ctx, f"Error: too many tokens for rate limit ({e})")
                         return None # gives up this segment
 
+                attempt += 1
                 return await litellm.acreate(**request)
 
             except (litellm.exceptions.ServiceUnavailableError,
                     openai.RateLimitError,
                     openai.APITimeoutError) as e:
 
+                is_rate_limit = _error_status_code(e) == 429 or isinstance(e, openai.RateLimitError)
+
                 # This message usually indicates out of money in account
                 if 'You exceeded your current quota' in str(e):
+                    log_model_error(
+                        model=self._model,
+                        attempt=attempt,
+                        error=e,
+                        retrying=False,
+                    )
                     self._log_msg(ctx, f"Failed: {type(e)} {e}")
+                    if is_rate_limit and request_rate_limit_pause(
+                        model=self._model,
+                        attempt=attempt,
+                        error=e,
+                        force=True,
+                    ):
+                        raise ModelRateLimitPauseError("Model quota exhausted; optimization paused") from e
                     raise
+
+                if is_rate_limit and request_rate_limit_pause(
+                    model=self._model,
+                    attempt=attempt,
+                    error=e,
+                ):
+                    log_model_error(
+                        model=self._model,
+                        attempt=attempt,
+                        error=e,
+                        retrying=False,
+                    )
+                    self._log_msg(ctx, "Paused after repeated HTTP 429 responses")
+                    raise ModelRateLimitPauseError("Repeated model rate limits; optimization paused") from e
 
                 import random
                 sleep = min(sleep * 2, self._max_backoff)
                 sleep_time = random.uniform(sleep / 2, sleep)
+
+                log_model_error(
+                    model=self._model,
+                    attempt=attempt,
+                    error=e,
+                    retrying=True,
+                    retry_delay_seconds=round(sleep_time, 3),
+                )
 
                 self._log_msg(ctx, f"Error: {type(e)} {e} {sleep=} {sleep_time=}")
 
                 self._signal_retry()
                 await asyncio.sleep(sleep_time)
 
+            except ModelRateLimitPauseError:
+                raise
+
             except openai.BadRequestError as e:
                 # usually "maximum context length" XXX check for this?
+                log_model_error(model=self._model, attempt=attempt, error=e, retrying=False)
                 self._log_msg(ctx, f"Error: {type(e)} {e}")
                 return None # gives up this segment
 
             except openai.AuthenticationError as e:
+                log_model_error(model=self._model, attempt=attempt, error=e, retrying=False)
                 self._log_msg(ctx, f"Failed: {type(e)} {e}")
                 raise
 
@@ -272,12 +362,20 @@ class Chatter:
                 # never recover by retrying. Surface them immediately instead
                 # of spinning thousands of times per second.
                 if "No module named" in str(e):
+                    log_model_error(model=self._model, attempt=attempt, error=e, retrying=False)
                     self._log_msg(ctx, f"Failed: {type(e)} {e}")
                     raise
 
                 import random
                 sleep = min(sleep * 2, self._max_backoff)
                 sleep_time = random.uniform(sleep / 2, sleep)
+                log_model_error(
+                    model=self._model,
+                    attempt=attempt,
+                    error=e,
+                    retrying=True,
+                    retry_delay_seconds=round(sleep_time, 3),
+                )
                 self._log_msg(
                     ctx,
                     f"Error: {type(e)} {e} {sleep=} {sleep_time=}",
@@ -288,9 +386,13 @@ class Chatter:
             except openai.APIError as e:
                 # APIError is the base class for all API errors;
                 # we may be missing a more specific handler.
-                print(f"Error: {type(e)} {e}; missing handler?")
+                log_model_error(model=self._model, attempt=attempt, error=e, retrying=False)
                 self._log_msg(ctx, f"Error: {type(e)} {e}")
                 return None # gives up this segment
+
+            except Exception as e:
+                log_model_error(model=self._model, attempt=attempt, error=e, retrying=False)
+                raise
 
     def _call_function(self, ctx: object, tool_call: litellm.ModelResponse) -> str:
         args = json.loads(tool_call.function.arguments)

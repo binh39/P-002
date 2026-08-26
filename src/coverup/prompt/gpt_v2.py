@@ -4,6 +4,7 @@ from collections.abc import Callable
 import coverup.codeinfo as codeinfo
 
 from ..segment import CodeSegment
+from ..utils import lines_branches_do
 from .prompter import Prompter, mk_message
 
 
@@ -65,6 +66,24 @@ Use the get_info tool function as necessary.
 
 {error}""")
         ]
+
+
+    def missing_coverage_prompt(
+        self,
+        segment: CodeSegment,
+        missing_lines: set,
+        missing_branches: set,
+    ) -> list[dict] | None:
+        del segment
+        missing_coverage = lines_branches_do(missing_lines, set(), missing_branches)
+        return [mk_message(self._render(
+            "missing_coverage",
+            """The tests still lack coverage: {missing_coverage} not execute.
+Modify the current test module to execute every remaining line and branch. Preserve passing
+behavior and assertions, use get_info when more source context is needed, and return the
+complete Python test module in a single Python markdown code block.""",
+            missing_coverage=missing_coverage,
+        ))]
 
 
     def get_info(self, ctx: CodeSegment, name: str) -> str:

@@ -1,6 +1,7 @@
 import typing as T
 from .prompter import *
 import coverup.codeinfo as codeinfo
+from ..utils import lines_branches_do
 
 
 class ClaudePrompter(Prompter):
@@ -59,6 +60,25 @@ Please revise the test to correct the error.
 
 Respond with only the complete revised Python test file, enclosed in triple backticks.
 You may use the `get_info` tool function if needed.
+""")
+        ]
+
+
+    def missing_coverage_prompt(
+        self,
+        segment: CodeSegment,
+        missing_lines: set,
+        missing_branches: set,
+    ) -> T.List[dict] | None:
+        return [
+            *self.system_prompt(),
+            mk_message(f"""\
+The tests still lack coverage: {lines_branches_do(missing_lines, set(), missing_branches)} not execute.
+
+Revise the test to ensure full coverage.
+
+Respond with only the complete revised Python test file, enclosed in triple backticks.
+You may use the `get_info` tool function if helpful.
 """)
         ]
 
