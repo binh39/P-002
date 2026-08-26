@@ -9,15 +9,19 @@ import shutil
 import sys
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+
+from src.promptopt_pause import ModelRateLimitPauseError, read_pause_request
 
 from .coveragepy import SymbolCoverage, load_report, run_coverage, symbol_coverage
 from .metrics import build_feedback, score_symbol
 from .models import BatchRunRecord, BatchTargetResult, ExperimentConfig, RunRecord, SymbolTarget
 from .subprocesses import run_streamed
+
+TARGET_EVALUATION_TIMEOUT_SECONDS = 20 * 60
 
 
 def _now() -> str:
@@ -202,6 +206,90 @@ class _TargetEvaluationOutcome:
     attempt_traces: list[dict]
     generated_tests: list[Path]
     coverage_after: Path
+
+
+def _checkpoint_path(path: Path, artifacts_root: Path) -> str:
+    return path.resolve().relative_to(artifacts_root.resolve()).as_posix()
+
+
+def _portable_attempt_traces(traces: list[dict], artifacts_root: Path) -> list[dict]:
+    portable = []
+    for original in traces:
+        trace = dict(original)
+        saved_test = trace.get("saved_test")
+        if saved_test:
+            try:
+                relative = _checkpoint_path(Path(str(saved_test)), artifacts_root)
+            except ValueError:
+                pass
+            else:
+                trace["saved_test"] = {"artifact_relative": relative}
+        portable.append(trace)
+    return portable
+
+
+def _restored_attempt_traces(traces: list[dict], artifacts_root: Path) -> list[dict]:
+    restored = []
+    for original in traces:
+        trace = dict(original)
+        saved_test = trace.get("saved_test")
+        if isinstance(saved_test, dict) and isinstance(saved_test.get("artifact_relative"), str):
+            trace["saved_test"] = str((artifacts_root / saved_test["artifact_relative"]).resolve())
+        restored.append(trace)
+    return restored
+
+
+def _save_target_checkpoint(
+    path: Path,
+    outcome: _TargetEvaluationOutcome,
+    *,
+    artifacts_root: Path,
+) -> None:
+    """Persist one completed target atomically so a paused batch can skip it."""
+    target_result = outcome.target_result.as_dict()
+    target_result["attempt_traces"] = _portable_attempt_traces(
+        target_result.get("attempt_traces", []), artifacts_root,
+    )
+    payload = {
+        "schema_version": 1,
+        "target_result": target_result,
+        "command": outcome.command,
+        "generator_exit_code": outcome.generator_exit_code,
+        "stdout": outcome.stdout,
+        "coverup_log": outcome.coverup_log,
+        "attempt_traces": _portable_attempt_traces(outcome.attempt_traces, artifacts_root),
+        "generated_tests": [
+            _checkpoint_path(path, artifacts_root) for path in outcome.generated_tests
+        ],
+        "coverage_after": _checkpoint_path(outcome.coverage_after, artifacts_root),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    os.replace(temporary, path)
+
+
+def _load_target_checkpoint(path: Path, *, artifacts_root: Path) -> _TargetEvaluationOutcome:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("schema_version") != 1:
+        raise RuntimeError(f"Unsupported target checkpoint schema: {path}")
+    result = payload["target_result"]
+    target_result = BatchTargetResult(
+        target=SymbolTarget(**result["target"]),
+        score=result.get("score"),
+        feedback=result.get("feedback", ""),
+        attempt_traces=_restored_attempt_traces(result.get("attempt_traces", []), artifacts_root),
+    )
+    return _TargetEvaluationOutcome(
+        target_result=target_result,
+        command=list(payload["command"]),
+        generator_exit_code=int(payload.get("generator_exit_code", 0)),
+        stdout=str(payload.get("stdout", "")),
+        coverup_log=str(payload.get("coverup_log", "")),
+        attempt_traces=_restored_attempt_traces(payload.get("attempt_traces", []), artifacts_root),
+        generated_tests=[(artifacts_root / item).resolve() for item in payload.get("generated_tests", [])],
+        coverage_after=(artifacts_root / payload["coverage_after"]).resolve(),
+    )
 
 
 def _prune_run_dir(run_dir: Path) -> None:
@@ -408,12 +496,16 @@ class CoverUpExperimentRunner:
             raise ValueError("split must contain at least one safe path character")
         projects = sorted({target.project for target in targets})
         project_label = projects[0] if len(projects) == 1 else "multi-project"
-        run_id = f"{project_label}-{safe_split}-batch-{uuid.uuid4().hex[:8]}"
         if candidate_id is None:
             candidate_id = hashlib.sha256(prompt_template.resolve().read_bytes()).hexdigest()[:16]
         safe_candidate_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", candidate_id).strip("._-")
         if not safe_candidate_id:
             raise ValueError("candidate_id must contain at least one safe path character")
+        run_id = f"{project_label}-{safe_split}-batch-{safe_candidate_id[:24]}"
+        artifacts_root = self.config.artifacts_dir.resolve()
+        run_dir = artifacts_root / "runs" / safe_candidate_id / safe_split / run_id
+        partial_dir = run_dir / "target_checkpoints"
+        has_target_checkpoints = partial_dir.is_dir() and any(partial_dir.glob("*.json"))
         workspace_prefixes = {
             "candidate": "tests_candidate",
             "baseline": "tests_base_line",
@@ -429,22 +521,25 @@ class CoverUpExperimentRunner:
         )
         if work_tests.exists():
             if any(work_tests.iterdir()):
-                raise RuntimeError(
-                    "Incomplete non-empty candidate workspace exists without a usable "
-                    f"batch cache: {work_tests}. Use a fresh artifacts directory and "
-                    "workspace, or archive the incomplete workspace before retrying."
-                )
-            work_tests.rmdir()
-        work_tests.mkdir(parents=True)
-
-        run_dir = (
-            self.config.artifacts_dir.resolve()
-            / "runs"
-            / safe_candidate_id
-            / safe_split
-            / run_id
-        )
-        run_dir.mkdir(parents=True, exist_ok=False)
+                if has_target_checkpoints:
+                    pass
+                elif os.environ.get("PROMPTOPT_RESUMING") == "1":
+                    shutil.rmtree(work_tests)
+                else:
+                    raise RuntimeError(
+                        "Incomplete non-empty candidate workspace exists without a usable "
+                        f"batch cache: {work_tests}. Use a fresh artifacts directory and "
+                        "workspace, or archive the incomplete workspace before retrying."
+                    )
+            if work_tests.exists() and not any(work_tests.iterdir()):
+                work_tests.rmdir()
+        work_tests.mkdir(parents=True, exist_ok=has_target_checkpoints)
+        if run_dir.exists() and not has_target_checkpoints:
+            if os.environ.get("PROMPTOPT_RESUMING") == "1":
+                shutil.rmtree(run_dir)
+            else:
+                raise RuntimeError(f"Incomplete batch run directory already exists: {run_dir}")
+        run_dir.mkdir(parents=True, exist_ok=has_target_checkpoints)
 
         stdout_file = run_dir / "coverup.stdout.log"
         attempt_trace = run_dir / "attempt_trace.jsonl"
@@ -478,18 +573,32 @@ class CoverUpExperimentRunner:
         for project in projects:
             workspace = work_tests if not multi_project else work_tests / project
             if multi_project:
-                workspace.mkdir(parents=True, exist_ok=False)
+                # A resumed multi-project batch restores these project
+                # directories together with its durable target checkpoints.
+                # Preserve completed targets' consolidated tests and allow
+                # unfinished targets to continue in the same workspace.
+                workspace.mkdir(parents=True, exist_ok=has_target_checkpoints)
             final_workspaces[project] = workspace.resolve()
 
         temporary_root = run_dir / "target_workspaces"
         pytest_temp_root = run_dir / "pytest_tmp"
+        shutil.rmtree(temporary_root, ignore_errors=True)
+        shutil.rmtree(pytest_temp_root, ignore_errors=True)
         temporary_root.mkdir(parents=True, exist_ok=False)
         pytest_temp_root.mkdir(parents=True, exist_ok=False)
         jobs: list[_TargetEvaluationJob] = []
+        restored_outcomes: dict[int, _TargetEvaluationOutcome] = {}
         for index, target in enumerate(targets):
             # Including the input position makes all paths collision-free even if
             # a malformed dataset contains the same target more than once.
             artifact_token = f"{_target_artifact_token(target)}_{index:04d}"
+            checkpoint = partial_dir / f"{artifact_token}.json"
+            if checkpoint.is_file():
+                restored = _load_target_checkpoint(checkpoint, artifacts_root=artifacts_root)
+                if restored.target_result.target != target:
+                    raise RuntimeError(f"Target checkpoint identity mismatch: {checkpoint}")
+                restored_outcomes[index] = restored
+                continue
             temporary_workspace = temporary_root / artifact_token
             temporary_workspace.mkdir(parents=True, exist_ok=False)
             target_spec = run_dir / f"target_spec_{artifact_token}.json"
@@ -561,7 +670,12 @@ class CoverUpExperimentRunner:
                 env=environment,
                 label=f"CoverUp {job.target.source_file}::{job.target.symbol}",
                 echo=False,
+                announce=True,
+                timeout=TARGET_EVALUATION_TIMEOUT_SECONDS,
+                echo_prefixes=("PROMPTOPT_MODEL_ERROR ",),
             )
+            if read_pause_request() is not None:
+                raise ModelRateLimitPauseError("Model rate limit pause requested")
             raw_traces = _load_attempt_traces(job.attempt_trace)
             try:
                 rewritten_traces, copied_tests = _consolidate_saved_tests(
@@ -680,16 +794,59 @@ class CoverUpExperimentRunner:
             if self.config.rate_limit is not None
             else min(len(jobs), max(1, self.config.max_concurrency))
         )
+        outcomes_by_index = dict(restored_outcomes)
+        job_positions = {
+            job.artifact_token: int(job.artifact_token.rsplit("_", 1)[1])
+            for job in jobs
+        }
+
+        def retain_outcome(job: _TargetEvaluationJob, outcome: _TargetEvaluationOutcome) -> None:
+            position = job_positions[job.artifact_token]
+            _save_target_checkpoint(
+                partial_dir / f"{job.artifact_token}.json",
+                outcome,
+                artifacts_root=artifacts_root,
+            )
+            outcomes_by_index[position] = outcome
+
         if worker_count == 1:
-            outcomes = [evaluate_target(job) for job in jobs]
+            for job in jobs:
+                outcome = evaluate_target(job)
+                retain_outcome(job, outcome)
         else:
+            pause_error: ModelRateLimitPauseError | None = None
+            first_error: BaseException | None = None
             with ThreadPoolExecutor(
                 max_workers=worker_count,
                 thread_name_prefix="target-evaluation",
             ) as executor:
-                # map preserves caller order while each complete target lifecycle
-                # (generation, consolidation and coverage) runs independently.
-                outcomes = list(executor.map(evaluate_target, jobs))
+                futures = {executor.submit(evaluate_target, job): job for job in jobs}
+                for future in as_completed(futures):
+                    job = futures[future]
+                    try:
+                        outcome = future.result()
+                    except CancelledError:
+                        continue
+                    except ModelRateLimitPauseError as exc:
+                        pause_error = pause_error or exc
+                        for pending in futures:
+                            pending.cancel()
+                    except BaseException as exc:  # noqa: BLE001 - re-raise after retaining peers
+                        first_error = first_error or exc
+                        for pending in futures:
+                            pending.cancel()
+                    else:
+                        retain_outcome(job, outcome)
+            if pause_error is not None:
+                raise pause_error
+            if first_error is not None:
+                raise first_error
+
+        if len(outcomes_by_index) != len(targets):
+            raise RuntimeError(
+                f"Batch checkpoint is incomplete: {len(outcomes_by_index)}/{len(targets)} targets"
+            )
+        outcomes = [outcomes_by_index[index] for index in range(len(targets))]
 
         results = [outcome.target_result for outcome in outcomes]
         after_jsons = [outcome.coverage_after for outcome in outcomes]

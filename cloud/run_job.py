@@ -80,6 +80,24 @@ def _download_object(bucket: str, object_name: str, destination: Path) -> None:
     storage.Client().bucket(bucket).blob(object_name).download_to_filename(str(destination))
 
 
+def _download_dir(bucket: str, prefix: str, destination: Path) -> int:
+    """Restore a previously uploaded artifact tree, excluding its terminal sentinel."""
+    from google.cloud import storage
+
+    normalized = prefix.strip("/")
+    marker = normalized + "/"
+    count = 0
+    for blob in storage.Client().list_blobs(bucket, prefix=marker):
+        relative = blob.name[len(marker):]
+        if not relative or relative in {"job_result.json", "pause_signal.json"}:
+            continue
+        target = destination / Path(relative)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        blob.download_to_filename(str(target))
+        count += 1
+    return count
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bucket", required=True)
@@ -88,15 +106,18 @@ def main() -> int:
     parser.add_argument("--dataset-object")
     parser.add_argument("--prompt-object")
     parser.add_argument("--project-manifest-object")
+    parser.add_argument("--resume-artifacts-name")
     parser.add_argument("--sample-repos-dir", default="/app/sample_repo")
     parser.add_argument("--metric-calls", type=int, default=30)
     parser.add_argument("--evaluation-replicates", type=int, default=1)
+    parser.add_argument("--reflection-minibatch-size", type=int, choices=range(1, 6), default=5)
     parser.add_argument("--max-concurrency", type=int, default=10)
     parser.add_argument("--repeat-tests", type=int, default=5)
     parser.add_argument("--max-attempts", type=int, default=3)
     parser.add_argument("--rate-limit", type=int)
     parser.add_argument("--pytest-args", default="")
     parser.add_argument("--reflection-temperature", type=float, default=0.7)
+    parser.add_argument("--pause-after-429", type=int, default=5)
     parser.add_argument("cli_args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     cli_args = list(args.cli_args)
@@ -110,12 +131,26 @@ def main() -> int:
         parser.error("dynamic web runs may not write to the protected prompt_optimization_v3 prefix")
 
     with tempfile.TemporaryDirectory(prefix="promptopt-gepa-job-") as temporary:
+        managed_environment = (
+            "PROMPTOPT_RESUMING",
+            "PROMPTOPT_PAUSE_FILE",
+            "PROMPTOPT_PAUSE_AFTER_429",
+        )
+        previous_environment = {name: os.environ.get(name) for name in managed_environment}
         temporary_root = Path(temporary).resolve()
         local_dir = (
             temporary_root / "artifacts" if dynamic_mode else (Path(args.local_root) / args.artifacts_name).resolve()
         )
         print(f"==> Artifacts will be written to {local_dir} (local disk)", flush=True)
         print(f"==> Upload target: gs://{args.bucket}/{args.artifacts_name}/", flush=True)
+        if args.resume_artifacts_name:
+            restored = _download_dir(args.bucket, args.resume_artifacts_name, local_dir)
+            os.environ["PROMPTOPT_RESUMING"] = "1"
+            print(
+                f"==> Restored {restored} checkpoint files from "
+                f"gs://{args.bucket}/{args.resume_artifacts_name}/",
+                flush=True,
+            )
 
         if dynamic_mode:
             sample_repos = Path(args.sample_repos_dir).resolve()
@@ -211,6 +246,8 @@ def main() -> int:
                     str(args.metric_calls),
                     "--evaluation-replicates",
                     str(args.evaluation_replicates),
+                    "--reflection-minibatch-size",
+                    str(args.reflection_minibatch_size),
                     "--reflection-temperature",
                     str(args.reflection_temperature),
                 ]
@@ -225,8 +262,19 @@ def main() -> int:
             str(local_dir),
             *cli_args,
         ]
+        pause_path = local_dir / "pause_signal.json"
+        pause_path.unlink(missing_ok=True)
+        os.environ["PROMPTOPT_PAUSE_FILE"] = str(pause_path)
+        os.environ["PROMPTOPT_PAUSE_AFTER_429"] = str(max(1, args.pause_after_429))
         print(f"==> Running: {' '.join(command)}", flush=True)
-        return_code, cli_error = _run_cli(command)
+        try:
+            return_code, cli_error = _run_cli(command)
+        finally:
+            for name, previous in previous_environment.items():
+                if previous is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = previous
         local_dir.mkdir(parents=True, exist_ok=True)
         required = (
             "optimized_program.json",
@@ -235,14 +283,25 @@ def main() -> int:
             "final_validation.json",
         )
         missing = [name for name in required if not (local_dir / name).is_file()]
-        status = "succeeded" if return_code == 0 and not missing else "failed"
+        pause_request = None
+        if pause_path.is_file():
+            try:
+                pause_request = json.loads(pause_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                pause_request = {"reason": "rate_limited", "message": "Model calls were rate limited"}
+        status = (
+            "paused"
+            if pause_request is not None
+            else ("succeeded" if return_code == 0 and not missing else "failed")
+        )
         (local_dir / "job_result.json").write_text(
             json.dumps(
                 {
                     "status": status,
                     "return_code": return_code,
                     "missing_artifacts": missing,
-                    "protocol_version": 2,
+                    "protocol_version": 3,
+                    "pause": pause_request,
                     "error": cli_error if status == "failed" else None,
                 },
                 indent=2,
@@ -256,7 +315,7 @@ def main() -> int:
         except Exception as error:  # noqa: BLE001 - surface upload failures clearly
             print(f"==> ERROR: upload failed: {error}", file=sys.stderr, flush=True)
             return 1
-        return 0 if status == "succeeded" else (return_code or 1)
+        return 0 if status in {"succeeded", "paused"} else (return_code or 1)
 
 
 if __name__ == "__main__":

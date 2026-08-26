@@ -19,6 +19,8 @@ from gepa.strategies.candidate_selector import (
     ParetoCandidateSelector,
 )
 
+from src.promptopt_pause import request_rate_limit_pause
+
 from .metrics import (
     BRANCH_SCORE_WEIGHT,
     STATEMENT_SCORE_WEIGHT,
@@ -181,6 +183,29 @@ def log_reflection_request(request: Mapping[str, Any]) -> None:
         request = compact_request
     print(json.dumps(request, indent=2, ensure_ascii=False), flush=True)
     print(REFLECTION_REQUEST_END, flush=True)
+
+
+def log_reflection_model_error(model: str, stage: str, error: BaseException) -> None:
+    """Emit a redacted structured error for one failed reflection-model call."""
+    payload = {
+        "event": "model_call_error",
+        "model": model,
+        "stage": stage,
+        "attempt": 1,
+        "error_type": type(error).__name__,
+        "status_code": getattr(error, "status_code", None),
+        "message": " ".join(str(error).split())[:2000],
+        "retrying": False,
+    }
+    print(
+        "PROMPTOPT_MODEL_ERROR " + json.dumps(payload, ensure_ascii=True, default=str),
+        flush=True,
+    )
+    status_code = getattr(error, "status_code", None)
+    if status_code is None:
+        status_code = getattr(getattr(error, "response", None), "status_code", None)
+    if status_code == 429:
+        request_rate_limit_pause(model=model, attempt=1, error=error, force=True)
 
 
 def _full_reflection_logs_enabled() -> bool:
@@ -1081,7 +1106,12 @@ class CoverUpPromptAdapter:
         baseline: PromptBundle,
         reflection_lm: Any,
         evaluation_replicates: int = 1,
+        reflection_minibatch_size: int = REFLECTION_MINIBATCH_SIZE,
     ) -> None:
+        if not 1 <= reflection_minibatch_size <= REFLECTION_MINIBATCH_SIZE:
+            raise ValueError(
+                f"reflection_minibatch_size must be between 1 and {REFLECTION_MINIBATCH_SIZE}"
+            )
         self.runner = runner
         self.candidate_dir = candidate_dir
         self.targets_by_split = targets_by_split
@@ -1089,6 +1119,7 @@ class CoverUpPromptAdapter:
         self.baseline_digest = bundle_digest(baseline)
         self.reflection_lm = reflection_lm
         self.evaluation_replicates = evaluation_replicates
+        self.reflection_minibatch_size = reflection_minibatch_size
         self.reference_units: dict[tuple[str, str, str, str], tuple[int, int]] = {}
         self.max_component_chars = {
             name: max(MIN_COMPONENT_CHAR_BUDGET[name], len(text) * 3) for name, text in baseline.as_candidate().items()
@@ -1571,7 +1602,7 @@ class CoverUpPromptAdapter:
         case_targets: Mapping[str, SymbolTarget],
     ) -> list[dict[str, Any]]:
         history: list[dict[str, Any]] = []
-        visible_cases = cases[:REFLECTION_MINIBATCH_SIZE]
+        visible_cases = cases[:self.reflection_minibatch_size]
         for attempt in range(1, MAX_OPTIMIZER_TEST_EXPERIMENTS + 1):
             prompt = f"""
 You are the diagnostic teacher for a reusable pytest-generation prompt. Do not rewrite the prompt yet. First prove a concrete strategy by repairing one failed case with an executable test.
@@ -1607,6 +1638,14 @@ Choose one case. Infer a concrete causal defect in the failed test, then call ru
             log_reflection_request(request)
             try:
                 response = self.reflection_lm(**request)
+            except Exception as exc:
+                log_reflection_model_error(
+                    str(getattr(self.reflection_lm, "model", "unknown")),
+                    "optimizer_test_experiment",
+                    exc,
+                )
+                raise
+            try:
                 log_full_reflection_event(
                     "optimizer_test_model_response",
                     {"attempt": attempt, "response": response},
@@ -1811,6 +1850,14 @@ Preserve useful instructions and required literal placeholders. Do not copy targ
         log_reflection_request(request)
         try:
             response = self.reflection_lm(**request)
+        except Exception as exc:
+            log_reflection_model_error(
+                str(getattr(self.reflection_lm, "model", "unknown")),
+                "prompt_component_update",
+                exc,
+            )
+            raise
+        try:
             log_full_reflection_event("prompt_update_model_response", response)
             update = self._extract_component_update(response)
         except (TypeError, ValueError) as exc:
@@ -1968,6 +2015,7 @@ def _optimization_run_digest(
     train_targets: list[SymbolTarget],
     validation_targets: list[SymbolTarget],
     evaluation_replicates: int,
+    reflection_minibatch_size: int = REFLECTION_MINIBATCH_SIZE,
 ) -> str:
     payload = {
         "optimizer_schema": 14,
@@ -1978,6 +2026,10 @@ def _optimization_run_digest(
         "train_evaluation": _evaluation_digest(runner, train_targets),
         "validation_evaluation": _evaluation_digest(runner, validation_targets),
     }
+    # Preserve the schema-14 digest for the historical/default value so an
+    # existing paused run can resume after this option is deployed.
+    if reflection_minibatch_size != REFLECTION_MINIBATCH_SIZE:
+        payload["reflection_minibatch_size"] = reflection_minibatch_size
     serialized = json.dumps(payload, sort_keys=True, ensure_ascii=True)
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:12]
 
@@ -2041,6 +2093,7 @@ def optimize(
     auto: str | None = "medium",
     max_metric_calls: int | None = None,
     evaluation_replicates: int = 1,
+    reflection_minibatch_size: int = REFLECTION_MINIBATCH_SIZE,
 ) -> PromptOptimizationResult:
     """Optimize the initial and error prompt components."""
     if error := validate_bundle(baseline):
@@ -2049,6 +2102,10 @@ def optimize(
         raise ValueError("GEPA requires at least one train and one validation target")
     if evaluation_replicates < 1:
         raise ValueError("evaluation_replicates must be at least 1")
+    if not 1 <= reflection_minibatch_size <= REFLECTION_MINIBATCH_SIZE:
+        raise ValueError(
+            f"reflection_minibatch_size must be between 1 and {REFLECTION_MINIBATCH_SIZE}"
+        )
     if auto is not None:
         max_metric_calls = AUTO_METRIC_BUDGETS[auto]
     if max_metric_calls is None or max_metric_calls < 1:
@@ -2061,6 +2118,7 @@ def optimize(
         baseline=baseline,
         reflection_lm=reflection_lm,
         evaluation_replicates=evaluation_replicates,
+        reflection_minibatch_size=reflection_minibatch_size,
     )
     validation_baseline_aggregate: dict[str, Any] | None = None
     reflection_train_targets = list(train_targets)
@@ -2115,7 +2173,14 @@ def optimize(
             validation_scores=[baseline_metrics["score"]],
             total_metric_calls=0,
         )
-    run_digest = _optimization_run_digest(runner, baseline, train_targets, validation_targets, evaluation_replicates)
+    run_digest = _optimization_run_digest(
+        runner,
+        baseline,
+        train_targets,
+        validation_targets,
+        evaluation_replicates,
+        reflection_minibatch_size,
+    )
     result = gepa_core.optimize(
         seed_candidate=baseline.as_candidate(),
         trainset=reflection_train_targets,
@@ -2128,7 +2193,7 @@ def optimize(
         ),
         frontier_type="hybrid",
         skip_perfect_score=False,
-        reflection_minibatch_size=min(REFLECTION_MINIBATCH_SIZE, len(reflection_train_targets)),
+        reflection_minibatch_size=min(reflection_minibatch_size, len(reflection_train_targets)),
         module_selector=LLMReflectionComponentSelector(),
         use_merge=True,
         max_merge_invocations=5,

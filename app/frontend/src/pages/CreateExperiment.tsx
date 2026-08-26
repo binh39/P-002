@@ -166,7 +166,7 @@ export default function CreateExperiment() {
     if (!isMetricCallsCustomized && dataset.test.length > 0) {
       setSettings((prev) => ({
         ...prev,
-        maxMetricCalls: dataset.test.length * 15,
+        maxMetricCalls: dataset.test.length * 10,
       }));
     }
   }, [dataset.test.length, isMetricCallsCustomized]);
@@ -193,6 +193,9 @@ export default function CreateExperiment() {
     settings.maxMetricCalls >= minimumMetricCalls &&
     (hasFullAccess || settings.maxMetricCalls <= 2200) &&
     settings.evaluationReplicates >= 1 &&
+    Number.isInteger(settings.reflectionMinibatchSize) &&
+    settings.reflectionMinibatchSize >= 1 &&
+    settings.reflectionMinibatchSize <= 5 &&
     settings.reflectionTemperature >= 0 &&
     settings.reflectionTemperature <= 2 &&
     (baselineMode === "preset" ||
@@ -200,24 +203,46 @@ export default function CreateExperiment() {
         customBaseline.initial.includes("{coverage_targets}") &&
         customBaseline.initial.includes("{source_excerpt}") &&
         customBaseline.error.includes("{error}") &&
-        (!customBaseline.missing_coverage || customBaseline.missing_coverage.includes("{missing_coverage}"))));
+        (!customBaseline.missing_coverage ||
+          customBaseline.missing_coverage.includes("{missing_coverage}"))));
 
   const settingsValidationErrors = [];
-  if (settings.coverupModel.trim() === "") settingsValidationErrors.push("CoverUp model is required.");
-  if (settings.optimizeModel.trim() === "") settingsValidationErrors.push("Optimize model is required.");
+  if (settings.coverupModel.trim() === "")
+    settingsValidationErrors.push("CoverUp model is required.");
+  if (settings.optimizeModel.trim() === "")
+    settingsValidationErrors.push("Optimize model is required.");
   if (settings.maxAttempts < 1) settingsValidationErrors.push("Max attempts must be at least 1.");
   if (settings.repeatTests < 0) settingsValidationErrors.push("Repeat tests cannot be negative.");
-  if (settings.maxConcurrency < 1 || settings.maxConcurrency > 32) settingsValidationErrors.push("Max concurrency must be between 1 and 32.");
-  if (settings.maxMetricCalls < minimumMetricCalls) settingsValidationErrors.push(`Max metric calls must be at least ${minimumMetricCalls}.`);
-  if (!hasFullAccess && settings.maxMetricCalls > 2200) settingsValidationErrors.push("Max metric calls exceeds limit for your account.");
-  if (settings.evaluationReplicates < 1) settingsValidationErrors.push("Evaluation replicates must be at least 1.");
-  if (settings.reflectionTemperature < 0 || settings.reflectionTemperature > 2) settingsValidationErrors.push("Reflection temperature must be between 0 and 2.");
+  if (settings.maxConcurrency < 1 || settings.maxConcurrency > 32)
+    settingsValidationErrors.push("Max concurrency must be between 1 and 32.");
+  if (settings.maxMetricCalls < minimumMetricCalls)
+    settingsValidationErrors.push(`Max metric calls must be at least ${minimumMetricCalls}.`);
+  if (!hasFullAccess && settings.maxMetricCalls > 2200)
+    settingsValidationErrors.push("Max metric calls exceeds limit for your account.");
+  if (settings.evaluationReplicates < 1)
+    settingsValidationErrors.push("Evaluation replicates must be at least 1.");
+  if (
+    !Number.isInteger(settings.reflectionMinibatchSize) ||
+    settings.reflectionMinibatchSize < 1 ||
+    settings.reflectionMinibatchSize > 5
+  )
+    settingsValidationErrors.push("Reflection minibatch size must be between 1 and 5.");
+  if (settings.reflectionTemperature < 0 || settings.reflectionTemperature > 2)
+    settingsValidationErrors.push("Reflection temperature must be between 0 and 2.");
   if (baselineMode === "custom") {
-    if (!customBaseline.initial.includes("{filename}")) settingsValidationErrors.push("Initial prompt must include {filename}.");
-    if (!customBaseline.initial.includes("{coverage_targets}")) settingsValidationErrors.push("Initial prompt must include {coverage_targets}.");
-    if (!customBaseline.initial.includes("{source_excerpt}")) settingsValidationErrors.push("Initial prompt must include {source_excerpt}.");
-    if (!customBaseline.error.includes("{error}")) settingsValidationErrors.push("Error prompt must include {error}.");
-    if (customBaseline.missing_coverage && !customBaseline.missing_coverage.includes("{missing_coverage}")) settingsValidationErrors.push("Missing coverage prompt must include {missing_coverage}.");
+    if (!customBaseline.initial.includes("{filename}"))
+      settingsValidationErrors.push("Initial prompt must include {filename}.");
+    if (!customBaseline.initial.includes("{coverage_targets}"))
+      settingsValidationErrors.push("Initial prompt must include {coverage_targets}.");
+    if (!customBaseline.initial.includes("{source_excerpt}"))
+      settingsValidationErrors.push("Initial prompt must include {source_excerpt}.");
+    if (!customBaseline.error.includes("{error}"))
+      settingsValidationErrors.push("Error prompt must include {error}.");
+    if (
+      customBaseline.missing_coverage &&
+      !customBaseline.missing_coverage.includes("{missing_coverage}")
+    )
+      settingsValidationErrors.push("Missing coverage prompt must include {missing_coverage}.");
   }
 
   const canContinue = [
@@ -399,7 +424,10 @@ export default function CreateExperiment() {
 
       <div className="wizard-actions">
         {step === 3 && settingsValidationErrors.length > 0 && (
-          <div className="inline-validation-error" style={{ position: "absolute", top: "-40px", right: "20px" }}>
+          <div
+            className="inline-validation-error"
+            style={{ position: "absolute", top: "-40px", right: "20px" }}
+          >
             {settingsValidationErrors[0]}
           </div>
         )}
@@ -955,7 +983,10 @@ function SettingsStep({
                 }
               />
             </Field>
-            <Field label="Missing coverage prompt" hint="Optional, if provided must contain: {missing_coverage}">
+            <Field
+              label="Missing coverage prompt"
+              hint="Optional, if provided must contain: {missing_coverage}"
+            >
               <textarea
                 rows={9}
                 value={customBaseline.missing_coverage ?? ""}
@@ -1096,7 +1127,7 @@ function SettingsStep({
               onCustomizedMaxMetricCalls();
               update("maxMetricCalls", value);
             }}
-            hint={`Default: ${testTargetCount > 0 ? testTargetCount * 15 : "test count × 15"} (${testTargetCount} test targets × 15). At least ${minimumMetricCalls}.`}
+            hint={`Default: ${testTargetCount > 0 ? testTargetCount * 10 : "test count × 10"} (${testTargetCount} test targets × 10). At least ${minimumMetricCalls}.`}
           />
           <NumberField
             label="Evaluation replicates"
@@ -1104,6 +1135,14 @@ function SettingsStep({
             min={1}
             max={10}
             onChange={(value) => update("evaluationReplicates", value)}
+          />
+          <NumberField
+            label="Reflection minibatch size"
+            value={settings.reflectionMinibatchSize}
+            min={1}
+            max={5}
+            onChange={(value) => update("reflectionMinibatchSize", value)}
+            hint="Number of incomplete train targets included in each reflection step."
           />
           <Field label="Reflection temperature" hint="0.7 is recommended for proposal diversity.">
             <input
@@ -1244,6 +1283,7 @@ function ReviewStep({
             ["CoverUp", settings.coverupModel],
             ["Optimizer", settings.optimizeModel],
             ["Evaluation replicates", String(settings.evaluationReplicates)],
+            ["Reflection minibatch", String(settings.reflectionMinibatchSize)],
           ]}
         />
         <ReviewCard

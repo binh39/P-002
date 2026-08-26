@@ -165,6 +165,14 @@ Khi được yêu cầu deploy hệ thống lên môi trường Dev Cloud (Proje
 - Middleware xử lý request phải chuyển unexpected exception thành JSON `INTERNAL_ERROR`, và CORS middleware phải nằm ngoài nó để cả response `500` vẫn có CORS headers. Test `app/tests/test_main.py::test_unexpected_error_response_keeps_cors_headers` phải pass.
 - Khi gặp `Invalid database id %28default%29`, kiểm tra phiên bản `google-api-core` và database path trước; database thật vẫn có thể tồn tại đúng dưới tên `(default)`, nên không xóa/tạo lại Firestore database để chữa triệu chứng này.
 
+### Pause/resume khi model bị rate limit
+
+- CoverUp tự yêu cầu pause sau 5 phản hồi HTTP 429 liên tiếp cho cùng model request; reflection request pause sau khi retry của provider đã cạn. Worker phải ghi `pause_signal.json`, dừng hợp tác và upload toàn bộ artifacts với `job_result.json` có `status=paused`; không coi đây là run failed.
+- Mỗi target đã hoàn tất được checkpoint nguyên tử trong `runs/.../target_checkpoints/`. Khi resume, không gọi model hoặc chấm lại target đó; chỉ target đang dở/chưa chạy được thực hiện lại.
+- GEPA tự resume Pareto/search state từ `gepa_direct_logs/<digest>/gepa_state.bin`. Cloud Run execution mới phải tải artifact prefix cũ về local disk trước khi gọi CLI; không chạy trực tiếp trên gcsfuse.
+- Backend giữ cùng logical optimization run, trạng thái `paused`, và endpoint `POST /api/v1/experiments/optimization-runs/{run_id}/resume`. Mỗi lần resume tạo Cloud Run execution/prefix output mới và dùng prefix paused làm `--resume-artifacts-name`, tránh đọc nhầm sentinel cũ.
+- UI chỉ hiển thị **Resume optimization** khi trạng thái là `paused`. Dataset, baseline prompt, model và evaluation config phải giữ nguyên; digest mismatch phải dừng thay vì resume sai state.
+
 *Lưu ý:* Lệnh deploy Job `promptopt-gepa-runner-dev` không tự động deploy Service `promptopt-api-dev`. Khi được yêu cầu deploy lại toàn bộ môi trường dev, agent cần triển khai cả hai tài nguyên trên.
 
 ## Checklist bàn giao

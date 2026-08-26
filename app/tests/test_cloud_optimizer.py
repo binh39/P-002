@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend.modules.experiments.cloud_optimizer import CloudRunJobGepaOptimizer
+from backend.modules.experiments.cloud_optimizer import CloudRunJobGepaOptimizer, OptimizationPausedError
 from backend.modules.experiments.optimizer import OptimizationTarget
 from backend.modules.experiments.prompts import baseline_prompt
 from backend.modules.experiments.schemas import ExperimentSettings, ProjectSnapshot
@@ -128,6 +128,7 @@ async def test_cloud_gepa_optimizer_uses_isolated_web_prefix_and_maps_result():
             coverup_model="vertex_ai/gemini-3.5-flash-lite",
             optimize_model="vertex_ai/gemini-3.1-pro-preview",
             max_metric_calls=30,
+            reflection_minibatch_size=3,
         ),
     )
 
@@ -140,6 +141,7 @@ async def test_cloud_gepa_optimizer_uses_isolated_web_prefix_and_maps_result():
     assert job_args[job_args.index("--metric-calls") + 1] == "30"
     assert job_args[job_args.index("--repeat-tests") + 1] == "5"
     assert job_args[job_args.index("--evaluation-replicates") + 1] == "1"
+    assert job_args[job_args.index("--reflection-minibatch-size") + 1] == "3"
     environment = {item["name"]: item["value"] for item in client.request["overrides"]["container_overrides"][0]["env"]}
     assert environment == {
         "COVERUP_MODEL": "vertex_ai/gemini-3.5-flash-lite",
@@ -168,6 +170,13 @@ async def test_cloud_gepa_optimizer_uses_isolated_web_prefix_and_maps_result():
         item["name"]: item["value"] for item in client.request["overrides"]["container_overrides"][0]["env"]
     }
     assert admin_environment["VERTEXAI_PROJECT"] == "project-7df9f963-9fe0-4b76-b3d"
+
+
+def test_experiment_settings_restrict_reflection_minibatch_size():
+    assert ExperimentSettings(reflection_minibatch_size=1).reflection_minibatch_size == 1
+    assert ExperimentSettings().reflection_minibatch_size == 5
+    with pytest.raises(ValueError, match="less than or equal to 5"):
+        ExperimentSettings(reflection_minibatch_size=6)
 
 
 @pytest.mark.asyncio
@@ -258,6 +267,58 @@ async def test_cloud_gepa_optimizer_surfaces_the_worker_root_cause():
 
     with pytest.raises(RuntimeError, match="baseline target could not be measured"):
         await optimizer.collect(prefix)
+
+
+@pytest.mark.asyncio
+async def test_cloud_gepa_optimizer_surfaces_resumable_pause_and_passes_checkpoint_prefix():
+    storage = FakeStorage()
+    prefix = "runner-jobs/gepa/paused/artifacts"
+    storage.objects[f"{prefix}/job_result.json"] = (
+        json.dumps(
+            {
+                "status": "paused",
+                "pause": {"reason": "rate_limited", "message": "Vertex returned HTTP 429"},
+            }
+        ).encode(),
+        "application/json",
+    )
+    client = FakeJobsClient(storage)
+    optimizer = CloudRunJobGepaOptimizer(
+        client=client,
+        storage=storage,
+        bucket="bucket",
+        job_name="projects/project/locations/region/jobs/promptopt-gepa-runner",
+        timeout_seconds=86400,
+    )
+
+    with pytest.raises(OptimizationPausedError, match="HTTP 429") as captured:
+        await optimizer.collect(prefix)
+    assert captured.value.pause["reason"] == "rate_limited"
+
+    target = OptimizationTarget(
+        id="target-1",
+        symbol="pkg.fn",
+        split="train",
+        source_file="pkg.py",
+        project="sample",
+    )
+    validation = OptimizationTarget(
+        id="target-2",
+        symbol="pkg.other",
+        split="validation",
+        source_file="pkg.py",
+        project="sample",
+    )
+    await optimizer.start(
+        baseline=baseline_prompt(),
+        train=[target],
+        validation=[validation],
+        holdout=None,
+        settings=ExperimentSettings(),
+        resume_artifacts_prefix=prefix,
+    )
+    args = client.request["overrides"]["container_overrides"][0]["args"]
+    assert args[args.index("--resume-artifacts-name") + 1] == prefix
 
 
 @pytest.mark.asyncio

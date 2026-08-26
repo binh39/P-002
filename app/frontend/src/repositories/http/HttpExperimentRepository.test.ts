@@ -33,6 +33,7 @@ describe("HttpExperimentRepository", () => {
           pytest_args: "",
           max_metric_calls: 30,
           evaluation_replicates: 1,
+          reflection_minibatch_size: 3,
           reflection_temperature: 0.7,
         },
         optimization_eligible: false,
@@ -76,6 +77,7 @@ describe("HttpExperimentRepository", () => {
         budgetMode: "custom",
         maxMetricCalls: 30,
         evaluationReplicates: 1,
+        reflectionMinibatchSize: 3,
         reflectionTemperature: 0.7,
       },
     });
@@ -104,6 +106,7 @@ describe("HttpExperimentRepository", () => {
             pytest_args: "",
             max_metric_calls: 30,
             evaluation_replicates: 1,
+            reflection_minibatch_size: 3,
             reflection_temperature: 0.7,
           },
         }),
@@ -183,6 +186,51 @@ describe("HttpExperimentRepository", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/experiments/optimization-runs/optimization-1/cancel",
       expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("resumes a paused optimization through the API", async () => {
+    const response = {
+      id: "optimization-1",
+      experiment_id: "experiment-1",
+      status: "optimization_queued",
+      parent_prompt_digest: "parent-digest",
+      candidate_prompt: null,
+      candidate_prompt_digest: null,
+      baseline_validation_score: null,
+      candidate_validation_score: null,
+      candidate_count: 0,
+      metric_calls: 5,
+      final_validation: {},
+      artifact_objects: {},
+      error_message: null,
+      pause_reason: null,
+      paused_at: "2026-08-06T00:00:30Z",
+      resume_count: 1,
+      max_concurrency: 3,
+      created_at: "2026-08-06T00:00:00Z",
+      started_at: "2026-08-06T00:00:01Z",
+      finished_at: null,
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const run = await new HttpExperimentRepository().resumeOptimization("optimization-1", 3);
+
+    expect(run.status).toBe("optimization_queued");
+    expect(run.resumeCount).toBe(1);
+    expect(run.maxConcurrency).toBe(3);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/experiments/optimization-runs/optimization-1/resume",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ max_concurrency: 3 }),
+      }),
     );
   });
 

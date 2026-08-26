@@ -16,6 +16,8 @@ from .subprocesses import run_streamed
 # pytest in the production coverage wrapper.
 _NO_TESTS_COLLECTED = 5
 _TESTS_FAILED = 1
+TEST_TIMEOUT_SECONDS = 120
+COVERAGE_PROCESS_TIMEOUT_SECONDS = 15 * 60
 
 
 def normalize_path(value: str | Path) -> str:
@@ -126,10 +128,16 @@ def run_coverage(
             if resolved_basetemp is not None else ()
         ),
         *(("--count", str(repeat_tests)) if repeat_tests else ()),
+        f"--timeout={TEST_TIMEOUT_SECONDS}",
         *shlex.split(pytest_args, posix=os.name != "nt"),
     ]
     completed = run_streamed(
-        run_cmd, cwd=project_root, env=run_env, label="coverage pytest", echo=False,
+        run_cmd,
+        cwd=project_root,
+        env=run_env,
+        label="coverage pytest",
+        echo=False,
+        timeout=COVERAGE_PROCESS_TIMEOUT_SECONDS,
     )
     # coverage.py writes usable execution data when pytest finishes with test
     # failures (exit 1), as well as when it passes or collects no tests.  Export
@@ -142,7 +150,11 @@ def run_coverage(
     # batch and is deleted afterwards, so pretty-printing just wastes disk.
     report = run_streamed(
         [test_python, "-m", "coverage", "json", "-o", str(output.resolve())],
-        cwd=project_root, env=run_env, label="coverage json", echo=False,
+        cwd=project_root,
+        env=run_env,
+        label="coverage json",
+        echo=False,
+        timeout=120,
     )
     if report.returncode:
         return report

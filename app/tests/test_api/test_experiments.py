@@ -102,6 +102,7 @@ async def test_uploaded_project_requires_runtime_before_experiment(client):
                 "pytest_args": "-m not_slow",
                 "max_metric_calls": 41,
                 "evaluation_replicates": 2,
+                "reflection_minibatch_size": 3,
                 "reflection_temperature": 0.5,
             },
         },

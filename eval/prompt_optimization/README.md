@@ -417,7 +417,8 @@ sửa/thay thế.
 Trong mỗi vòng reflection:
 
 1. Khi có failure evidence, GEPA chuyển các component (`initial`, `error`, `missing_coverage`) cho reflection LM với
-   minibatch 5. Trong đúng một native `update_prompt_component` tool call, LM chọn `initial`, `error`, `missing_coverage` hoặc
+   minibatch cấu hình bởi `--reflection-minibatch-size` (1–5, mặc định 5). Trong đúng một native
+   `update_prompt_component` tool call, LM chọn `initial`, `error`, `missing_coverage` hoặc
    `all` và trả luôn complete replacement. `all` luôn được phép, kể cả khi direct evidence
    chỉ có ở một stage; update này chỉ được áp dụng khi các replacement hợp lệ và thực sự đổi.
 2. Cả bundle được validate và hash để tạo candidate ID ổn định.
@@ -473,7 +474,9 @@ cùng protocol để tránh so sánh một historical lucky sample với một g
 
 `--auto light|medium|heavy` tương ứng budget 120/300/600 prompt-symbol calls. Dùng
 `--max-metric-calls` để override. Có thể thêm `--evaluation-replicates 2` hoặc `3` cho
-run quyết định; mỗi replicate làm tăng gần tuyến tính chi phí nhưng giảm variance.
+run quyết định; mỗi replicate làm tăng gần tuyến tính chi phí nhưng giảm variance. Dùng
+`--reflection-minibatch-size 1..5` để giới hạn số train target chưa đạt coverage hoàn hảo
+được đưa vào mỗi bước reflection.
 
 ## Artifact của từng run
 

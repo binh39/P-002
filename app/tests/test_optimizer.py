@@ -3,12 +3,16 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
+from google.api_core.exceptions import ServiceUnavailable
 
+from backend.modules.experiments.cloud_optimizer import OptimizationPausedError
 from backend.modules.experiments.dispatcher import InlineOptimizationDispatcher
 from backend.modules.experiments.optimizer import OptimizationResult
 from backend.modules.experiments.prompts import PromptBundle, baseline_prompt
 from backend.modules.experiments.repository import InMemoryExperimentRepository
 from backend.modules.experiments.schemas import (
+    EvolutionIteration,
+    EvolutionResponse,
     ExperimentRecord,
     ExperimentStatus,
     OptimizationRunRecord,
@@ -46,9 +50,11 @@ class FakeSamples:
 class RecordingOptimizationDispatcher:
     def __init__(self):
         self.run_ids = []
+        self.delays = []
 
     async def dispatch(self, run_id: str, delay_seconds: int = 0) -> None:
         self.run_ids.append(run_id)
+        self.delays.append(delay_seconds)
 
 
 @pytest.mark.asyncio
@@ -158,6 +164,226 @@ async def test_failed_optimization_can_be_retried_with_a_new_run():
     stored = await repository.get(experiment.id)
     assert stored.optimization_run_id == retried.id
     assert stored.status == ExperimentStatus.OPTIMIZATION_QUEUED
+
+
+@pytest.mark.asyncio
+async def test_paused_optimization_resumes_same_run_from_checkpoint():
+    repository, storage = InMemoryExperimentRepository(), FakeStorage()
+    now = datetime.now(UTC)
+    refs = [
+        TargetReference(
+            project_id="project-1",
+            function_id=name,
+            project="project",
+            source_file="src/pkg.py",
+            symbol=f"pkg.{name}",
+        )
+        for name in ("train_fn", "validation_fn", "test_fn")
+    ]
+    keys = [ref.key for ref in refs]
+    prompt = baseline_prompt()
+    run = OptimizationRunRecord(
+        id="paused-run",
+        experiment_id="paused-experiment",
+        status=ExperimentStatus.PAUSED,
+        parent_prompt_digest=prompt.digest(),
+        cloud_artifact_prefix="runner-jobs/gepa/old/artifacts",
+        pause_reason="HTTP 429",
+        paused_at=now,
+        created_at=now,
+        started_at=now,
+    )
+    experiment = ExperimentRecord(
+        id="paused-experiment",
+        owner_id="owner-1",
+        project_id="project-1",
+        project_ids=["project-1"],
+        targets=refs,
+        name="Paused GEPA search",
+        target_function_ids=keys,
+        dataset_splits={"train": [keys[0]], "validation": [keys[1]], "test": [keys[2]]},
+        optimization_eligible=True,
+        baseline_prompt=prompt.as_candidate(),
+        status=ExperimentStatus.PAUSED,
+        optimization_run_id=run.id,
+        created_at=now,
+        updated_at=now,
+    )
+    await repository.create(experiment)
+    await repository.create_optimization_run(run)
+
+    class ResumingCloudOptimizer:
+        timeout_seconds = 86400
+        calls = []
+
+        async def start(self, **kwargs):
+            self.calls.append(kwargs)
+            return "runner-jobs/gepa/new/artifacts"
+
+    cloud = ResumingCloudOptimizer()
+    dispatcher = RecordingOptimizationDispatcher()
+    service = ExperimentService(
+        repository,
+        FakeProjects(),
+        FakeFunctions(),
+        storage,
+        cloud_optimizer=cloud,
+        samples=FakeSamples(),
+    )
+    service.set_optimization_dispatcher(dispatcher)
+
+    resumed = await service.resume_optimization(
+        run.id,
+        experiment.owner_id,
+        max_concurrency=3,
+    )
+    assert resumed.id == run.id
+    assert resumed.status == ExperimentStatus.OPTIMIZATION_QUEUED
+    assert resumed.resume_count == 1
+    assert resumed.max_concurrency == 3
+    assert dispatcher.run_ids == [run.id]
+
+    await service.execute_optimization(run.id)
+
+    assert cloud.calls[0]["resume_artifacts_prefix"] == "runner-jobs/gepa/old/artifacts"
+    assert cloud.calls[0]["settings"].max_concurrency == 3
+    stored = await repository.get_optimization_run(run.id)
+    assert stored.status == ExperimentStatus.OPTIMIZING
+    assert stored.cloud_artifact_prefix == "runner-jobs/gepa/new/artifacts"
+    assert stored.max_concurrency == 3
+    assert dispatcher.run_ids == [run.id, run.id]
+
+
+@pytest.mark.asyncio
+async def test_cloud_rate_limit_result_marks_run_paused_instead_of_failed():
+    repository, storage = InMemoryExperimentRepository(), FakeStorage()
+    now = datetime.now(UTC)
+    prompt = baseline_prompt()
+    run = OptimizationRunRecord(
+        id="running-run",
+        experiment_id="running-experiment",
+        status=ExperimentStatus.OPTIMIZING,
+        parent_prompt_digest=prompt.digest(),
+        cloud_artifact_prefix="runner-jobs/gepa/checkpoint/artifacts",
+        created_at=now,
+        started_at=now,
+    )
+    experiment = ExperimentRecord(
+        id="running-experiment",
+        owner_id="owner-1",
+        project_id="project-1",
+        project_ids=["project-1"],
+        targets=[],
+        name="Running GEPA search",
+        target_function_ids=[],
+        dataset_splits={"train": [], "validation": [], "test": []},
+        baseline_prompt=prompt.as_candidate(),
+        status=ExperimentStatus.OPTIMIZING,
+        optimization_run_id=run.id,
+        created_at=now,
+        updated_at=now,
+    )
+    await repository.create(experiment)
+    await repository.create_optimization_run(run)
+
+    class PausingCloudOptimizer:
+        async def collect(self, prefix):
+            assert prefix == run.cloud_artifact_prefix
+            raise OptimizationPausedError("Vertex returned HTTP 429", {"reason": "rate_limited"})
+
+        async def evolution(self, prefix, *, started_at):
+            assert prefix == run.cloud_artifact_prefix
+            assert started_at == run.started_at
+            return EvolutionResponse(
+                available=True,
+                iterations=[
+                    EvolutionIteration(
+                        iteration=4,
+                        strategy="reflective mutation",
+                        decision="Pending",
+                    )
+                ],
+            )
+
+    service = ExperimentService(
+        repository,
+        FakeProjects(),
+        FakeFunctions(),
+        storage,
+        cloud_optimizer=PausingCloudOptimizer(),
+    )
+
+    await service.execute_optimization(run.id)
+
+    stored_run = await repository.get_optimization_run(run.id)
+    stored_experiment = await repository.get(experiment.id)
+    assert stored_run.status == ExperimentStatus.PAUSED
+    assert stored_run.pause_reason == "Vertex returned HTTP 429"
+    assert stored_run.finished_at is None
+    assert stored_run.evolution_snapshot_prefix == run.cloud_artifact_prefix
+    assert "evolution.json" in stored_run.artifact_objects
+    snapshot = json.loads(storage.objects[stored_run.artifact_objects["evolution.json"]][0])
+    assert snapshot["iterations"][0]["iteration"] == 4
+    assert stored_experiment.status == ExperimentStatus.PAUSED
+
+
+@pytest.mark.asyncio
+async def test_transient_cloud_poll_error_keeps_optimization_running():
+    repository, storage = InMemoryExperimentRepository(), FakeStorage()
+    now = datetime.now(UTC)
+    prompt = baseline_prompt()
+    run = OptimizationRunRecord(
+        id="running-transient-run",
+        experiment_id="running-transient-experiment",
+        status=ExperimentStatus.OPTIMIZING,
+        parent_prompt_digest=prompt.digest(),
+        cloud_artifact_prefix="runner-jobs/gepa/running/artifacts",
+        created_at=now,
+        started_at=now,
+    )
+    experiment = ExperimentRecord(
+        id=run.experiment_id,
+        owner_id="owner-1",
+        project_id="project-1",
+        project_ids=["project-1"],
+        targets=[],
+        name="Running GEPA search",
+        target_function_ids=[],
+        dataset_splits={"train": [], "validation": [], "test": []},
+        baseline_prompt=prompt.as_candidate(),
+        status=ExperimentStatus.OPTIMIZING,
+        optimization_run_id=run.id,
+        created_at=now,
+        updated_at=now,
+    )
+    await repository.create(experiment)
+    await repository.create_optimization_run(run)
+
+    class TransientCloudOptimizer:
+        async def collect(self, prefix):
+            assert prefix == run.cloud_artifact_prefix
+            raise ServiceUnavailable("Stream removed (recvmsg:Connection reset by peer (104))")
+
+    dispatcher = RecordingOptimizationDispatcher()
+    service = ExperimentService(
+        repository,
+        FakeProjects(),
+        FakeFunctions(),
+        storage,
+        cloud_optimizer=TransientCloudOptimizer(),
+    )
+    service.set_optimization_dispatcher(dispatcher)
+
+    await service.execute_optimization(run.id)
+
+    stored_run = await repository.get_optimization_run(run.id)
+    stored_experiment = await repository.get(experiment.id)
+    assert stored_run.status == ExperimentStatus.OPTIMIZING
+    assert stored_run.error_message is None
+    assert stored_run.finished_at is None
+    assert stored_experiment.status == ExperimentStatus.OPTIMIZING
+    assert dispatcher.run_ids == [run.id]
+    assert dispatcher.delays == [60]
 
 
 @pytest.mark.asyncio

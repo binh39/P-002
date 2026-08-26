@@ -10,6 +10,7 @@ const repositories = vi.hoisted(() => ({
     getOptimizationRun: vi.fn(),
     requestOptimization: vi.fn(),
     cancelOptimization: vi.fn(),
+    resumeOptimization: vi.fn(),
     getOptimizationEvolution: vi.fn(),
     get: vi.fn(),
     downloadOptimizationArtifact: vi.fn(),
@@ -145,6 +146,30 @@ describe("optimization run", () => {
     ).toBeInTheDocument();
   });
 
+  it("does not mix CoverUp worker lifecycle logs into the proposed prompt", async () => {
+    const evolution = await repositories.experiments.getOptimizationEvolution();
+    repositories.experiments.getOptimizationEvolution.mockResolvedValueOnce({
+      ...evolution,
+      iterations: evolution.iterations.map((iteration: { iteration: number }) =>
+        iteration.iteration === 2
+          ? {
+              ...iteration,
+              proposedPrompt: [
+                "Repair the failing test.",
+                "==> [CoverUp typesystem/formats.py::TimeFormat.validate] started (timeout 1200s)",
+                "==> [CoverUp typesystem/formats.py::TimeFormat.validate] finished with exit code 0",
+              ].join("\n"),
+            }
+          : iteration,
+      ),
+    });
+
+    render(<OptimizationRun />, { wrapper: Wrapper });
+
+    expect(await screen.findByText("Repair the failing test.")).toBeInTheDocument();
+    expect(screen.queryByText(/TimeFormat\.validate/)).not.toBeInTheDocument();
+  });
+
   it("shows the baseline as the final prompt when the proposal is not promoted", async () => {
     repositories.experiments.getOptimizationRun.mockResolvedValueOnce({
       ...(await repositories.experiments.getOptimizationRun()),
@@ -208,5 +233,39 @@ describe("optimization run", () => {
     await waitFor(() => {
       expect(repositories.experiments.requestOptimization).toHaveBeenCalledWith("experiment-1");
     });
+  });
+
+  it("resumes a rate-limited optimization from its checkpoint", async () => {
+    const pausedRun = {
+      ...(await repositories.experiments.getOptimizationRun()),
+      status: "paused",
+      pauseReason: "Vertex returned HTTP 429",
+      pausedAt: "2026-08-06T00:00:30Z",
+      resumeCount: 0,
+      maxConcurrency: 10,
+      finishedAt: null,
+    };
+    repositories.experiments.getOptimizationRun.mockResolvedValueOnce(pausedRun);
+    repositories.experiments.resumeOptimization.mockResolvedValue({
+      ...pausedRun,
+      status: "optimization_queued",
+      pauseReason: null,
+      resumeCount: 1,
+    });
+
+    render(<OptimizationRun />, { wrapper: Wrapper });
+    expect(await screen.findByText("Vertex returned HTTP 429")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Maximum concurrency for resumed optimization"), {
+      target: { value: "3" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Resume optimization" }));
+
+    await waitFor(() => {
+      expect(repositories.experiments.resumeOptimization).toHaveBeenCalledWith(
+        "optimization-1",
+        3,
+      );
+    });
+    expect(await screen.findAllByText("Queued")).toHaveLength(2);
   });
 });

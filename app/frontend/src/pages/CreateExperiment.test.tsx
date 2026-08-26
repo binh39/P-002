@@ -100,6 +100,11 @@ describe("create experiment wizard", () => {
           samplingMethod: "random",
           maxTargets: null,
           randomSeed: 115,
+          settings: expect.objectContaining({
+            maxAttempts: 3,
+            maxMetricCalls: 10,
+            reflectionMinibatchSize: 3,
+          }),
         }),
       ),
     );

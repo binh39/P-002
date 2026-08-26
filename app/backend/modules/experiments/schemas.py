@@ -41,6 +41,7 @@ class ExperimentStatus(StrEnum):
     OPTIMIZATION_QUEUED = "optimization_queued"
     OPTIMIZING = "optimizing"
     CANDIDATE_EVALUATING = "candidate_evaluating"
+    PAUSED = "paused"
     OPTIMIZATION_SUCCEEDED = "optimization_succeeded"
     COMPARISON_QUEUED = "comparison_queued"
     COMPARING = "comparing"
@@ -82,6 +83,7 @@ class ExperimentSettings(StrictModel):
     pytest_args: str = Field(default="", max_length=500)
     max_metric_calls: int = Field(default=30, ge=3)
     evaluation_replicates: int = Field(default=1, ge=1, le=10)
+    reflection_minibatch_size: int = Field(default=5, ge=1, le=5)
     reflection_temperature: float = Field(default=0.7, ge=0, le=2)
 
     @model_validator(mode="after")
@@ -91,6 +93,10 @@ class ExperimentSettings(StrictModel):
         if self.optimize_model not in SUPPORTED_MODELS:
             raise ValueError("Unsupported OPTIMIZE_MODEL")
         return self
+
+
+class ResumeOptimizationRequest(StrictModel):
+    max_concurrency: int | None = Field(default=None, ge=1, le=32)
 
 
 class BaselinePromptInput(StrictModel):
@@ -232,6 +238,10 @@ class OptimizationRunResponse(StrictModel):
     cloud_artifact_prefix: str | None = None
     cloud_deadline_at: datetime | None = None
     error_message: str | None = None
+    pause_reason: str | None = None
+    paused_at: datetime | None = None
+    resume_count: int = 0
+    max_concurrency: int | None = Field(default=None, ge=1, le=32)
     created_at: datetime
     started_at: datetime | None = None
     finished_at: datetime | None = None
@@ -242,6 +252,8 @@ class OptimizationRunRecord(OptimizationRunResponse):
     # omitted from OptimizationRunResponse so clients cannot choose a billing project.
     vertexai_project: str | None = None
     provider_secret_refs: dict[str, dict[str, str]] = Field(default_factory=dict)
+    resume_artifact_prefix: str | None = None
+    evolution_snapshot_prefix: str | None = None
 
 
 class EvolutionIteration(StrictModel):

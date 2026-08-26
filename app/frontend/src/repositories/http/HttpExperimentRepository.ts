@@ -31,6 +31,7 @@ interface ApiExperiment {
     pytest_args: string;
     max_metric_calls: number;
     evaluation_replicates: number;
+    reflection_minibatch_size: number;
     reflection_temperature: number;
   };
   baseline_prompt?: { initial: string; error: string; missing_coverage?: string } | null;
@@ -70,6 +71,10 @@ interface ApiOptimizationRun {
   };
   artifact_objects: Record<string, string>;
   error_message: string | null;
+  pause_reason: string | null;
+  paused_at: string | null;
+  resume_count: number;
+  max_concurrency?: number | null;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
@@ -162,6 +167,7 @@ function mapExperiment(item: ApiExperiment): Experiment {
       budgetMode: "custom",
       maxMetricCalls: item.settings.max_metric_calls,
       evaluationReplicates: item.settings.evaluation_replicates,
+      reflectionMinibatchSize: item.settings.reflection_minibatch_size,
       reflectionTemperature: item.settings.reflection_temperature,
     },
     baselinePrompt: item.baseline_prompt ?? null,
@@ -202,6 +208,10 @@ function mapOptimizationRun(item: ApiOptimizationRun): OptimizationRun {
         : null,
     artifacts: Object.keys(item.artifact_objects).sort(),
     errorMessage: item.error_message,
+    pauseReason: item.pause_reason,
+    pausedAt: item.paused_at,
+    resumeCount: item.resume_count,
+    maxConcurrency: item.max_concurrency ?? null,
     createdAt: item.created_at,
     startedAt: item.started_at,
     finishedAt: item.finished_at,
@@ -302,6 +312,7 @@ export class HttpExperimentRepository implements ExperimentRepository {
             pytest_args: input.settings.pytestArgs,
             max_metric_calls: input.settings.maxMetricCalls,
             evaluation_replicates: input.settings.evaluationReplicates,
+            reflection_minibatch_size: input.settings.reflectionMinibatchSize,
             reflection_temperature: input.settings.reflectionTemperature,
           },
         }),
@@ -337,6 +348,16 @@ export class HttpExperimentRepository implements ExperimentRepository {
     return mapOptimizationRun(
       await apiRequest<ApiOptimizationRun>(`/experiments/optimization-runs/${runId}/cancel`, {
         method: "POST",
+      }),
+    );
+  }
+
+  async resumeOptimization(runId: string, maxConcurrency: number) {
+    return mapOptimizationRun(
+      await apiRequest<ApiOptimizationRun>(`/experiments/optimization-runs/${runId}/resume`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ max_concurrency: maxConcurrency }),
       }),
     );
   }

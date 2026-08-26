@@ -26,6 +26,7 @@ const statusLabels: Partial<Record<ExperimentStatus, string>> = {
   optimization_queued: "Queued",
   optimizing: "Optimizing",
   candidate_evaluating: "Evaluating candidate",
+  paused: "Paused",
   optimization_succeeded: "Optimization succeeded",
   failed: "Failed",
   timed_out: "Timed out",
@@ -101,7 +102,21 @@ function FlowValue({ children }: { children: React.ReactNode }) {
   return <strong>{children ?? "—"}</strong>;
 }
 
+const coverUpLifecycleLine =
+  /^==>\s+\[CoverUp\b.*\]\s+(?:started(?:\s+\(timeout\s+[\d.]+s\))?|finished with exit code\s+-?\d+)\s*$/;
+
+function visibleProposedPrompt(value: string | null) {
+  if (!value) return null;
+  const visible = value
+    .split(/\r?\n/)
+    .filter((line) => !coverUpLifecycleLine.test(line.trim()))
+    .join("\n")
+    .trim();
+  return visible || null;
+}
+
 function IterationFlow({ iteration }: { iteration: EvolutionIteration }) {
+  const proposedPrompt = visibleProposedPrompt(iteration.proposedPrompt);
   return (
     <div className="evolution-flow" data-testid="evolution-flow">
       <div className="evolution-flow-title">
@@ -139,8 +154,8 @@ function IterationFlow({ iteration }: { iteration: EvolutionIteration }) {
         <div className="evolution-flow-prompt">
           <dt>Proposed prompt</dt>
           <dd>
-            {iteration.proposedPrompt ? (
-              <pre>{iteration.proposedPrompt}</pre>
+            {proposedPrompt ? (
+              <pre>{proposedPrompt}</pre>
             ) : (
               <FlowValue>—</FlowValue>
             )}
@@ -297,6 +312,60 @@ function EvolutionPanel({ evolution }: { evolution: OptimizationEvolution }) {
   );
 }
 
+function PausedOptimizationCard({
+  reason,
+  pausedAt,
+  resumeCount,
+  initialMaxConcurrency,
+  pending,
+  onResume,
+}: {
+  reason: string | null;
+  pausedAt: string | null;
+  resumeCount: number;
+  initialMaxConcurrency: number;
+  pending: boolean;
+  onResume: (maxConcurrency: number) => void;
+}) {
+  const [maxConcurrency, setMaxConcurrency] = useState(initialMaxConcurrency);
+
+  return (
+    <section className="baseline-running-card" role="status">
+      <div>
+        <h2>Optimization paused</h2>
+        <p>{reason ?? "Model requests were rate limited. The checkpoint is ready."}</p>
+        <small>
+          Paused {formatTimestamp(pausedAt)} · Resume attempts {resumeCount}
+        </small>
+      </div>
+      <form
+        className="paused-resume-controls"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onResume(maxConcurrency);
+        }}
+      >
+        <label className="platform-field">
+          <span>Maximum concurrency</span>
+          <input
+            aria-label="Maximum concurrency for resumed optimization"
+            type="number"
+            min={1}
+            max={32}
+            required
+            disabled={pending}
+            value={maxConcurrency}
+            onChange={(event) => setMaxConcurrency(Number(event.target.value))}
+          />
+        </label>
+        <button className="table-action" type="submit" disabled={pending}>
+          {pending ? "Resuming…" : "Resume optimization"}
+        </button>
+      </form>
+    </section>
+  );
+}
+
 export default function OptimizationRun() {
   const { runId = "" } = useParams<{ runId: string }>();
   const [, navigate] = useLocation();
@@ -359,6 +428,15 @@ export default function OptimizationRun() {
       navigate(`/optimization-runs/${newRun.id}`);
     },
   });
+  const resume = useMutation({
+    mutationFn: (maxConcurrency: number) =>
+      experiments.resumeOptimization(runId, maxConcurrency),
+    onSuccess: (resumedRun) => {
+      queryClient.setQueryData(["optimization-runs", runId], resumedRun);
+      void queryClient.invalidateQueries({ queryKey: ["experiments", resumedRun.experimentId] });
+      void queryClient.invalidateQueries({ queryKey: ["optimization-runs", runId, "evolution"] });
+    },
+  });
 
   if (runQuery.isPending) {
     return (
@@ -384,7 +462,8 @@ export default function OptimizationRun() {
   const run = runQuery.data;
   const experiment = experimentQuery.data;
   const active = optimizationRunIsActive(run.status);
-  const retryable = run.status === "failed" || run.status === "timed_out" || run.status === "cancelled";
+  const retryable =
+    run.status === "failed" || run.status === "timed_out" || run.status === "cancelled";
   const gain =
     run.baselineValidationScore !== null && run.candidateValidationScore !== null
       ? run.candidateValidationScore - run.baselineValidationScore
@@ -458,6 +537,26 @@ export default function OptimizationRun() {
               {retry.isPending ? "Queueing retry…" : "Retry optimization"}
             </button>
           )}
+        </section>
+      )}
+
+      {run.status === "paused" && (
+        <PausedOptimizationCard
+          reason={run.pauseReason}
+          pausedAt={run.pausedAt}
+          resumeCount={run.resumeCount}
+          initialMaxConcurrency={
+            run.maxConcurrency ?? experiment?.settings.maxConcurrency ?? 10
+          }
+          pending={resume.isPending}
+          onResume={(maxConcurrency) => resume.mutate(maxConcurrency)}
+        />
+      )}
+
+      {resume.isError && (
+        <section className="baseline-error" role="alert">
+          <strong>Could not resume optimization</strong>
+          <p>{resume.error instanceof Error ? resume.error.message : "Please try again."}</p>
         </section>
       )}
 

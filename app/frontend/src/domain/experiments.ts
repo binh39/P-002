@@ -6,6 +6,7 @@ export type ExperimentStatus =
   | "optimization_queued"
   | "optimizing"
   | "candidate_evaluating"
+  | "paused"
   | "optimization_succeeded"
   | "comparison_queued"
   | "comparing"
@@ -79,6 +80,10 @@ export interface OptimizationRun {
   } | null;
   artifacts: string[];
   errorMessage: string | null;
+  pauseReason: string | null;
+  pausedAt: string | null;
+  resumeCount: number;
+  maxConcurrency: number | null;
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;

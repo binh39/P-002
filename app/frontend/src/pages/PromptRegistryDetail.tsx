@@ -166,6 +166,7 @@ function ExperimentSettings({ experiment }: { experiment: Experiment }) {
       "GEPA budget",
       `${settings.maxMetricCalls} metric calls · ${settings.evaluationReplicates} replicate(s)`,
     ],
+    ["Reflection minibatch size", String(settings.reflectionMinibatchSize)],
     ["Reflection temperature", String(settings.reflectionTemperature)],
     ["Pytest arguments", settings.pytestArgs || "Default"],
   ];

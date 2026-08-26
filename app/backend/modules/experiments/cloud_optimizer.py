@@ -11,6 +11,14 @@ from .prompts import PromptBundle
 from .schemas import EvolutionResponse, ExperimentSettings
 
 
+class OptimizationPausedError(RuntimeError):
+    """The worker stopped cooperatively after publishing a resumable checkpoint."""
+
+    def __init__(self, message: str, pause: dict | None = None):
+        super().__init__(message)
+        self.pause = pause or {}
+
+
 class CloudRunJobGepaOptimizer:
     """Run Duy's full GEPA implementation in a dedicated Cloud Run Job.
 
@@ -77,6 +85,7 @@ class CloudRunJobGepaOptimizer:
         vertexai_project: str | None = None,
         projects: list | None = None,
         provider_secret_refs: dict[str, dict[str, str]] | None = None,
+        resume_artifacts_prefix: str | None = None,
     ) -> str:
         """Upload immutable inputs and trigger the job without waiting for completion."""
         if not train or not validation:
@@ -159,6 +168,8 @@ class CloudRunJobGepaOptimizer:
             str(settings.max_metric_calls),
             "--evaluation-replicates",
             str(settings.evaluation_replicates),
+            "--reflection-minibatch-size",
+            str(settings.reflection_minibatch_size),
             "--max-concurrency",
             str(settings.max_concurrency),
             "--repeat-tests",
@@ -168,6 +179,8 @@ class CloudRunJobGepaOptimizer:
             "--reflection-temperature",
             str(settings.reflection_temperature),
         ]
+        if resume_artifacts_prefix:
+            args.extend(["--resume-artifacts-name", resume_artifacts_prefix])
         if project_manifest_object:
             args.extend(["--project-manifest-object", project_manifest_object])
         if settings.rate_limit:
@@ -218,6 +231,10 @@ class CloudRunJobGepaOptimizer:
             manifest = json.loads((await self.storage.read(f"{artifacts_prefix}/job_result.json")).decode())
         except Exception:  # GCS NotFound means the job is still running.
             return None
+        if manifest.get("status") == "paused":
+            pause = manifest.get("pause") if isinstance(manifest.get("pause"), dict) else {}
+            detail = str(pause.get("message") or "Model requests were rate limited").strip()
+            raise OptimizationPausedError(detail[:1000], pause)
         if manifest.get("status") != "succeeded":
             missing = ", ".join(manifest.get("missing_artifacts", []))
             return_code = manifest.get("return_code", "unknown")
