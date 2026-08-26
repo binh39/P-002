@@ -261,10 +261,7 @@ describe("optimization run", () => {
     fireEvent.click(screen.getByRole("button", { name: "Resume optimization" }));
 
     await waitFor(() => {
-      expect(repositories.experiments.resumeOptimization).toHaveBeenCalledWith(
-        "optimization-1",
-        3,
-      );
+      expect(repositories.experiments.resumeOptimization).toHaveBeenCalledWith("optimization-1", 3);
     });
     expect(await screen.findAllByText("Queued")).toHaveLength(2);
   });

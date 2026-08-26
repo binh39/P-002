@@ -163,13 +163,7 @@ function IterationFlow({ iteration }: { iteration: EvolutionIteration }) {
         </div>
         <div className="evolution-flow-prompt">
           <dt>Proposed prompt</dt>
-          <dd>
-            {proposedPrompt ? (
-              <pre>{proposedPrompt}</pre>
-            ) : (
-              <FlowValue>—</FlowValue>
-            )}
-          </dd>
+          <dd>{proposedPrompt ? <pre>{proposedPrompt}</pre> : <FlowValue>—</FlowValue>}</dd>
         </div>
         <div>
           <dt>Parent minibatch sum</dt>
@@ -439,8 +433,7 @@ export default function OptimizationRun() {
     },
   });
   const resume = useMutation({
-    mutationFn: (maxConcurrency: number) =>
-      experiments.resumeOptimization(runId, maxConcurrency),
+    mutationFn: (maxConcurrency: number) => experiments.resumeOptimization(runId, maxConcurrency),
     onSuccess: (resumedRun) => {
       queryClient.setQueryData(["optimization-runs", runId], resumedRun);
       void queryClient.invalidateQueries({ queryKey: ["experiments", resumedRun.experimentId] });
@@ -555,9 +548,7 @@ export default function OptimizationRun() {
           reason={run.pauseReason}
           pausedAt={run.pausedAt}
           resumeCount={run.resumeCount}
-          initialMaxConcurrency={
-            run.maxConcurrency ?? experiment?.settings.maxConcurrency ?? 10
-          }
+          initialMaxConcurrency={run.maxConcurrency ?? experiment?.settings.maxConcurrency ?? 10}
           pending={resume.isPending}
           onResume={(maxConcurrency) => resume.mutate(maxConcurrency)}
         />
