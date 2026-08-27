@@ -249,7 +249,9 @@ class CloudRunJobGepaOptimizer:
 
         try:
             program = json.loads((await self.storage.read(f"{artifacts_prefix}/optimized_program.json")).decode())
-            final_validation = json.loads((await self.storage.read(f"{artifacts_prefix}/final_validation.json")).decode())
+            final_validation = json.loads(
+                (await self.storage.read(f"{artifacts_prefix}/final_validation.json")).decode()
+            )
             # ``gepa_optimized.json`` is the production decision and falls back to the
             # baseline when the proposal does not win.  The web comparison must retain
             # the actual proposal, which is always published separately.

@@ -120,11 +120,7 @@ def merge_evolution_history(
     # not new search iterations.  Including them caused histories like
     # 9 -> 10 -> 18 -> 19 and temporarily reset the chart to baseline.
     first_search_index = next(
-        (
-            index
-            for index, item in enumerate(current_iterations)
-            if item.strategy in {"reflective mutation", "merge"}
-        ),
+        (index for index, item in enumerate(current_iterations) if item.strategy in {"reflective mutation", "merge"}),
         None,
     )
     if first_search_index is None:
@@ -137,10 +133,7 @@ def merge_evolution_history(
     appended: list[EvolutionIteration] = []
     for sequence, item in enumerate(current_iterations, start=previous_max + 1):
         current_score = item.best_score
-        keeps_previous_best = (
-            last_score is not None
-            and (current_score is None or current_score < last_score)
-        )
+        keeps_previous_best = last_score is not None and (current_score is None or current_score < last_score)
         if keeps_previous_best:
             statement, branch, score = last_statement, last_branch, last_score
         else:

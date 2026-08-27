@@ -114,9 +114,7 @@ def test_coverup_lifecycle_lines_are_not_mixed_into_a_proposed_prompt():
         "==> [CoverUp mlxtend/frequent_patterns/fpmax.py::MFITree.contains] finished with exit code 0",
     ]
 
-    result = parse_evolution_log(
-        [CloudLogLine(timestamp=None, text=message) for message in messages]
-    )
+    result = parse_evolution_log([CloudLogLine(timestamp=None, text=message) for message in messages])
 
     assert result.iterations[0].proposed_prompt == (
         "Generate complete pytest unit tests.\nKeep the tests deterministic."
@@ -251,10 +249,7 @@ def test_resumed_bootstrap_does_not_reset_score_or_create_iteration_gaps():
             ),
             CloudLogLine(
                 timestamp=None,
-                text=(
-                    "Iteration 8: Base program full valset score: "
-                    "0.7209885109516462 over 100 / 100 examples"
-                ),
+                text=("Iteration 8: Base program full valset score: 0.7209885109516462 over 100 / 100 examples"),
             ),
             CloudLogLine(
                 timestamp=None,
