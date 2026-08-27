@@ -1,7 +1,10 @@
 import hashlib
+import io
+import zipfile
 from types import SimpleNamespace
 
-from cloud.run_test_generation import _artifact_index, _stage_projects, _workspaces_for_targets
+from cloud import run_test_generation
+from cloud.run_test_generation import _artifact_index, _run_remote, _stage_projects, _workspaces_for_targets
 from src.optimization.models import SymbolTarget
 
 
@@ -70,3 +73,114 @@ def test_bundled_sample_projects_get_independent_layouts(tmp_path):
     assert set(layouts) == {"isort", "mlxtend", "typesystem"}
     assert layouts["mlxtend"].package_dir == (sample_repos / "mlxtend" / "mlxtend").resolve()
     assert layouts["typesystem"].tests_dir == (sample_repos / "typesystem" / "tests").resolve()
+
+
+def test_cloud_final_generation_merges_independent_project_workers(tmp_path, monkeypatch):
+    objects: dict[str, bytes] = {}
+
+    def worker_archive(project: str) -> bytes:
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w") as archive:
+            archive.writestr(
+                "generated_tests/test_generated.py",
+                f"def test_{project}():\n    assert True\n",
+            )
+            archive.writestr("source/pkg/module.py", "VALUE = 1\n")
+            archive.writestr("coverage/project.json", '{"totals": {}}')
+        return output.getvalue()
+
+    class Backend:
+        def __init__(self, *, manifest, **kwargs):
+            del kwargs
+            self.projects = {item["project"]: item for item in manifest["projects"]}
+
+        def generate_final_project(self, project, targets, prompt, *, seed):
+            del prompt, seed
+            object_name = f"workers/{project}.zip"
+            objects[object_name] = worker_archive(project)
+            return {
+                "artifact_object": object_name,
+                "result": {
+                    "schema_version": 2,
+                    "status": "completed",
+                    "metrics": {
+                        "target_covered_statements": 3,
+                        "target_statement_count": 4,
+                        "target_covered_branches": 1,
+                        "target_branch_count": 2,
+                        "target_count": len(targets),
+                        "completed_target_count": len(targets),
+                        "failed_target_count": 0,
+                        "test_count": 1,
+                    },
+                    "estimated_cost_usd": 0.01,
+                    "token_usage": {"prompt_tokens": 10},
+                    "cost_accounting": {
+                        "priced_request_count": 1,
+                        "unpriced_request_count": 0,
+                        "by_model": {},
+                    },
+                    "projects": {
+                        project: {
+                            "pytest_exit_code": 0,
+                            "project_statement_coverage": 0.75,
+                            "project_branch_coverage": 0.5,
+                        }
+                    },
+                    "artifacts": {
+                        "files": [
+                            {"kind": "generated_test", "path": "generated_tests/test_generated.py"},
+                            {"kind": "source", "path": "source/pkg/module.py"},
+                            {"kind": "coverage", "path": "coverage/project.json"},
+                        ]
+                    },
+                },
+            }
+
+    def download(bucket, object_name, destination):
+        del bucket
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(objects[object_name])
+
+    monkeypatch.setattr(run_test_generation, "RemoteEvaluationBackend", Backend)
+    monkeypatch.setattr(run_test_generation, "_download_object", download)
+    artifacts = tmp_path / "artifacts"
+    artifacts.mkdir()
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    prompt = scratch / "prompt.json"
+    prompt.write_text('{"initial":"a","error":"b"}', encoding="utf-8")
+    targets = [
+        SymbolTarget("one", "pkg/a.py", "a", "final"),
+        SymbolTarget("two", "pkg/b.py", "b", "final"),
+    ]
+    manifest = {
+        "schema_version": 2,
+        "projects": [
+            {"kind": "uploaded", "project": "one", "runtime_digest": "digest-one"},
+            {"kind": "uploaded", "project": "two", "runtime_digest": "digest-two"},
+        ],
+    }
+    args = SimpleNamespace(
+        bucket="bucket",
+        artifacts_name="runs/final",
+        model="model",
+        max_attempts=2,
+        repeat_tests=1,
+        max_concurrency=2,
+        rate_limit=None,
+        pytest_args="",
+        evaluation_worker_timeout_seconds=600,
+        seed=7,
+    )
+
+    result = _run_remote(args, artifacts, scratch, prompt, targets, manifest, {})
+
+    assert result["status"] == "completed"
+    assert result["metrics"]["target_count"] == 2
+    assert result["metrics"]["target_statement_coverage"] == 0.75
+    assert result["metrics"]["target_branch_coverage"] == 0.5
+    assert result["estimated_cost_usd"] == 0.02
+    assert (artifacts / "generated_tests" / "one" / "test_generated.py").is_file()
+    assert (artifacts / "generated_tests" / "two" / "test_generated.py").is_file()
+    assert (artifacts / "generated_tests.zip").is_file()

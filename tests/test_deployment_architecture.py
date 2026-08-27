@@ -1,0 +1,48 @@
+from pathlib import Path
+
+
+def test_production_deploy_publishes_workers_before_the_shared_coordinator():
+    workflow = Path(".github/workflows/backend-deploy.yml").read_text(encoding="utf-8")
+
+    sample_worker = workflow.index("- name: Deploy bundled-sample evaluation worker")
+    runtime_workers = workflow.index("- name: Deploy isolated runtime preparation job")
+    runtime_factory = workflow.index("- name: Deploy trusted runtime image factory")
+    coordinator = workflow.index("- name: Deploy isolated GEPA coordinator")
+    api = workflow.index("- name: Deploy Cloud Run")
+    assert sample_worker < runtime_workers < runtime_factory < coordinator < api
+
+    runtime_step = workflow[runtime_workers:runtime_factory]
+    assert runtime_step.index('gcloud run jobs deploy "$VERSIONED_EVALUATION_JOB"') < runtime_step.index(
+        'gcloud run jobs deploy "$JOB_NAME"'
+    )
+
+
+def test_production_workers_and_coordinator_are_pinned_by_registry_digest():
+    workflow = Path(".github/workflows/backend-deploy.yml").read_text(encoding="utf-8")
+
+    assert 'GEPA_IMMUTABLE_IMAGE="${GEPA_IMAGE%:*}@${GEPA_DIGEST}"' in workflow
+    assert 'IMMUTABLE_RUNTIME_IMAGE="${RUNTIME_IMAGE%:*}@${RUNTIME_DIGEST}"' in workflow
+    assert 'JOB_VERSION="${GITHUB_SHA:0:20}"' in workflow
+    assert "GITHUB_SHA:0:8" not in workflow
+    for version in ("3.10", "3.11", "3.12", "3.13"):
+        assert version in workflow
+
+
+def test_production_deploy_includes_trusted_project_image_factory():
+    workflow = Path(".github/workflows/backend-deploy.yml").read_text(encoding="utf-8")
+
+    assert "cloud/Dockerfile.runtime-factory" in workflow
+    assert 'gcloud run jobs deploy "$RUNTIME_FACTORY_JOB"' in workflow
+    assert '--service-account "$RUNTIME_FACTORY_SERVICE_ACCOUNT"' in workflow
+    assert "cloud.runtime_image_factory" in workflow
+
+
+def test_provisioning_keeps_build_privileges_out_of_untrusted_preparer():
+    provisioning = Path("app/infra/provision-production.ps1").read_text(encoding="utf-8")
+
+    assert 'RuntimeFactoryAccountName = "promptopt-runtime-factory"' in provisioning
+    assert 'RuntimeBuilderAccountName = "promptopt-runtime-builder"' in provisioning
+    assert '"serviceAccount:$RuntimeFactoryAccount" "roles/cloudbuild.builds.editor"' in provisioning
+    assert '"serviceAccount:$RuntimeFactoryAccount" "roles/run.admin"' in provisioning
+    assert '"serviceAccount:$RuntimeBuilderAccount" "roles/logging.logWriter"' in provisioning
+    assert '"serviceAccount:$RuntimeAccount" "roles/cloudbuild.builds.editor"' not in provisioning

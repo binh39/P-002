@@ -13,10 +13,16 @@ $ErrorActionPreference = "Stop"
 
 $ApiAccountName = "promptopt-api"
 $RunnerAccountName = "promptopt-runner"
+$RuntimeAccountName = "promptopt-runtime"
+$RuntimeFactoryAccountName = "promptopt-runtime-factory"
+$RuntimeBuilderAccountName = "promptopt-runtime-builder"
 $BackendDeployAccountName = "github-backend-deploy"
 $FrontendDeployAccountName = "github-frontend-deploy"
 $ApiAccount = "$ApiAccountName@$ProjectId.iam.gserviceaccount.com"
 $RunnerAccount = "$RunnerAccountName@$ProjectId.iam.gserviceaccount.com"
+$RuntimeAccount = "$RuntimeAccountName@$ProjectId.iam.gserviceaccount.com"
+$RuntimeFactoryAccount = "$RuntimeFactoryAccountName@$ProjectId.iam.gserviceaccount.com"
+$RuntimeBuilderAccount = "$RuntimeBuilderAccountName@$ProjectId.iam.gserviceaccount.com"
 $BackendDeployAccount = "$BackendDeployAccountName@$ProjectId.iam.gserviceaccount.com"
 $FrontendDeployAccount = "$FrontendDeployAccountName@$ProjectId.iam.gserviceaccount.com"
 $RunnerObjectRole = "promptoptRunnerObjectIO"
@@ -82,6 +88,7 @@ Write-Host "[2/10] Enabling Google Cloud APIs..."
 Invoke-Gcloud services enable `
     artifactregistry.googleapis.com `
     cloudtasks.googleapis.com `
+    cloudbuild.googleapis.com `
     datastore.googleapis.com `
     firebase.googleapis.com `
     firebasehosting.googleapis.com `
@@ -100,6 +107,9 @@ Invoke-Gcloud services enable aiplatform.googleapis.com --project $ModelProjectI
 Write-Host "[3/10] Creating service accounts..."
 Ensure-ServiceAccount $ApiAccountName "PromptOpt API runtime"
 Ensure-ServiceAccount $RunnerAccountName "PromptOpt isolated runner"
+Ensure-ServiceAccount $RuntimeAccountName "PromptOpt untrusted runtime preparer"
+Ensure-ServiceAccount $RuntimeFactoryAccountName "PromptOpt trusted runtime image factory"
+Ensure-ServiceAccount $RuntimeBuilderAccountName "PromptOpt runtime image builder"
 Ensure-ServiceAccount $BackendDeployAccountName "GitHub backend production deploy"
 Ensure-ServiceAccount $FrontendDeployAccountName "GitHub frontend production deploy"
 
@@ -157,6 +167,10 @@ Add-ProjectRole "serviceAccount:$ApiAccount" "roles/datastore.user"
 Add-ProjectRole "serviceAccount:$ApiAccount" "roles/firebaseauth.viewer"
 Add-ProjectRole "serviceAccount:$ApiAccount" $ProviderSecretRoleResource
 Add-ProjectRole "serviceAccount:$RunnerAccount" "roles/secretmanager.secretAccessor"
+Add-ProjectRole "serviceAccount:$RunnerAccount" "roles/run.developer"
+Add-ProjectRole "serviceAccount:$RuntimeFactoryAccount" "roles/cloudbuild.builds.editor"
+Add-ProjectRole "serviceAccount:$RuntimeFactoryAccount" "roles/run.admin"
+Add-ProjectRole "serviceAccount:$RuntimeBuilderAccount" "roles/logging.logWriter"
 Add-ProjectRole "serviceAccount:$ApiAccount" $ApiOperationRoleResource
 Invoke-Gcloud projects add-iam-policy-binding $ModelProjectId `
     --member "serviceAccount:$RunnerAccount" `
@@ -179,6 +193,12 @@ Invoke-Gcloud artifacts repositories add-iam-policy-binding $Repository `
     --member "serviceAccount:$BackendDeployAccount" `
     --role roles/artifactregistry.writer `
     --quiet
+Invoke-Gcloud artifacts repositories add-iam-policy-binding $Repository `
+    --project $ProjectId `
+    --location $Region `
+    --member "serviceAccount:$RuntimeBuilderAccount" `
+    --role roles/artifactregistry.writer `
+    --quiet
 Invoke-Gcloud storage buckets add-iam-policy-binding "gs://$Bucket" `
     --member "serviceAccount:$ApiAccount" `
     --role roles/storage.objectAdmin `
@@ -186,6 +206,18 @@ Invoke-Gcloud storage buckets add-iam-policy-binding "gs://$Bucket" `
 $PrefixCondition = "expression=resource.name.startsWith('projects/_/buckets/$Bucket/objects/runner-jobs/'),title=PromptOptRunnerJobPrefix,description=Restrict runner access to opaque execution objects"
 Invoke-Gcloud storage buckets add-iam-policy-binding "gs://$Bucket" `
     --member "serviceAccount:$RunnerAccount" `
+    --role $RunnerObjectRoleResource `
+    --condition $PrefixCondition
+Invoke-Gcloud storage buckets add-iam-policy-binding "gs://$Bucket" `
+    --member "serviceAccount:$RuntimeAccount" `
+    --role $RunnerObjectRoleResource `
+    --condition $PrefixCondition
+Invoke-Gcloud storage buckets add-iam-policy-binding "gs://$Bucket" `
+    --member "serviceAccount:$RuntimeFactoryAccount" `
+    --role $RunnerObjectRoleResource `
+    --condition $PrefixCondition
+Invoke-Gcloud storage buckets add-iam-policy-binding "gs://$Bucket" `
+    --member "serviceAccount:$RuntimeBuilderAccount" `
     --role $RunnerObjectRoleResource `
     --condition $PrefixCondition
 
@@ -204,6 +236,22 @@ Invoke-Gcloud iam service-accounts add-iam-policy-binding $ApiAccount `
 Invoke-Gcloud iam service-accounts add-iam-policy-binding $RunnerAccount `
     --project $ProjectId `
     --member "serviceAccount:$BackendDeployAccount" `
+    --role roles/iam.serviceAccountUser
+Invoke-Gcloud iam service-accounts add-iam-policy-binding $RuntimeAccount `
+    --project $ProjectId `
+    --member "serviceAccount:$BackendDeployAccount" `
+    --role roles/iam.serviceAccountUser
+Invoke-Gcloud iam service-accounts add-iam-policy-binding $RuntimeFactoryAccount `
+    --project $ProjectId `
+    --member "serviceAccount:$BackendDeployAccount" `
+    --role roles/iam.serviceAccountUser
+Invoke-Gcloud iam service-accounts add-iam-policy-binding $RunnerAccount `
+    --project $ProjectId `
+    --member "serviceAccount:$RuntimeFactoryAccount" `
+    --role roles/iam.serviceAccountUser
+Invoke-Gcloud iam service-accounts add-iam-policy-binding $RuntimeBuilderAccount `
+    --project $ProjectId `
+    --member "serviceAccount:$RuntimeFactoryAccount" `
     --role roles/iam.serviceAccountUser
 
 Write-Host "[8/10] Creating Cloud Tasks queues..."

@@ -42,7 +42,10 @@ env:
   GEPA_JOB: promptopt-gepa-runner
   RUNNER_SERVICE_ACCOUNT: promptopt-runner@project-7df9f963-9fe0-4b76-b3d.iam.gserviceaccount.com
   RUNTIME_JOB: promptopt-runtime-preparer
+  RUNTIME_FACTORY_JOB: promptopt-runtime-image-factory
+  EVALUATION_JOB: promptopt-evaluation-worker
   RUNTIME_PREPARER_SERVICE_ACCOUNT: promptopt-runtime@project-7df9f963-9fe0-4b76-b3d.iam.gserviceaccount.com
+  RUNTIME_FACTORY_SERVICE_ACCOUNT: promptopt-runtime-factory@project-7df9f963-9fe0-4b76-b3d.iam.gserviceaccount.com
 
 jobs:
   deploy:
@@ -76,20 +79,148 @@ jobs:
         env:
           API_IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/api:${{ github.sha }}
           GEPA_IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/gepa-runner:${{ github.sha }}
+          FACTORY_IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/runtime-factory:${{ github.sha }}
         run: |
           docker build --file app/Dockerfile --tag "$API_IMAGE" .
           docker build --file cloud/Dockerfile.web --tag "$GEPA_IMAGE" .
+          docker build --file cloud/Dockerfile.runtime-factory --tag "$FACTORY_IMAGE" .
           docker push "$API_IMAGE"
           docker push "$GEPA_IMAGE"
-      - name: Deploy isolated GEPA job
+          docker push "$FACTORY_IMAGE"
+          for PYTHON_VERSION in 3.10 3.11 3.12 3.13; do
+            PYTHON_TAG="${PYTHON_VERSION/./}"
+            RUNTIME_IMAGE="asia-southeast1-docker.pkg.dev/$PROJECT_ID/promptopt/runtime-py${PYTHON_TAG}:${GITHUB_SHA}"
+            docker build --file cloud/Dockerfile.runtime \
+              --build-arg "PYTHON_VERSION=$PYTHON_VERSION" \
+              --tag "$RUNTIME_IMAGE" .
+            docker push "$RUNTIME_IMAGE"
+          done
+      - name: Deploy bundled-sample evaluation worker
         env:
           GEPA_IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/gepa-runner:${{ github.sha }}
         run: |
+          JOB_VERSION="${GITHUB_SHA:0:20}"
+          SAMPLE_EVALUATION_JOB="${EVALUATION_JOB}-sample-${JOB_VERSION}"
+          GEPA_DIGEST="$(gcloud artifacts docker images describe "$GEPA_IMAGE" --format='value(image_summary.digest)')"
+          test -n "$GEPA_DIGEST"
+          GEPA_IMMUTABLE_IMAGE="${GEPA_IMAGE%:*}@${GEPA_DIGEST}"
+          gcloud run jobs deploy "$SAMPLE_EVALUATION_JOB" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --image "$GEPA_IMMUTABLE_IMAGE" \
+            --service-account "$RUNNER_SERVICE_ACCOUNT" \
+            --command python \
+            --args=-m,cloud.run_evaluation_worker,--help \
+            --cpu 4 \
+            --memory 8Gi \
+            --tasks 1 \
+            --parallelism 1 \
+            --max-retries 0 \
+            --task-timeout 7200s \
+            --set-env-vars "COVERUP_MODEL=vertex_ai/gemini-3.6-flash,VERTEXAI_PROJECT=$MODEL_PROJECT_ID,VERTEXAI_LOCATION=global,PROMPTOPT_RUNTIME_IMAGE=$GEPA_IMMUTABLE_IMAGE,PROMPTOPT_RUNTIME_WORKER_JOB=projects/$PROJECT_ID/locations/$REGION/jobs/$SAMPLE_EVALUATION_JOB" \
+            --quiet
+          gcloud run jobs add-iam-policy-binding "$SAMPLE_EVALUATION_JOB" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --member "serviceAccount:$RUNNER_SERVICE_ACCOUNT" \
+            --role roles/run.developer \
+            --quiet
+      - name: Deploy isolated runtime preparation job
+        run: |
+          JOB_VERSION="${GITHUB_SHA:0:20}"
+          for PYTHON_VERSION in 3.10 3.11 3.12 3.13; do
+            PYTHON_TAG="${PYTHON_VERSION/./}"
+            JOB_NAME="${RUNTIME_JOB}-py${PYTHON_TAG}"
+            VERSIONED_EVALUATION_JOB="${EVALUATION_JOB}-py${PYTHON_TAG}-${JOB_VERSION}"
+            RUNTIME_IMAGE="asia-southeast1-docker.pkg.dev/$PROJECT_ID/promptopt/runtime-py${PYTHON_TAG}:${GITHUB_SHA}"
+            RUNTIME_DIGEST="$(gcloud artifacts docker images describe "$RUNTIME_IMAGE" --format='value(image_summary.digest)')"
+            test -n "$RUNTIME_DIGEST"
+            IMMUTABLE_RUNTIME_IMAGE="${RUNTIME_IMAGE%:*}@${RUNTIME_DIGEST}"
+            gcloud run jobs deploy "$VERSIONED_EVALUATION_JOB" \
+              --project "$PROJECT_ID" \
+              --region "$REGION" \
+              --image "$IMMUTABLE_RUNTIME_IMAGE" \
+              --service-account "$RUNNER_SERVICE_ACCOUNT" \
+              --command python \
+              --args=-m,cloud.run_evaluation_worker,--help \
+              --cpu 4 \
+              --memory 8Gi \
+              --tasks 1 \
+              --parallelism 1 \
+              --max-retries 0 \
+              --task-timeout 7200s \
+              --set-env-vars "COVERUP_MODEL=vertex_ai/gemini-3.6-flash,VERTEXAI_PROJECT=$MODEL_PROJECT_ID,VERTEXAI_LOCATION=global,PROMPTOPT_RUNTIME_IMAGE=$IMMUTABLE_RUNTIME_IMAGE,PROMPTOPT_RUNTIME_WORKER_JOB=projects/$PROJECT_ID/locations/$REGION/jobs/$VERSIONED_EVALUATION_JOB" \
+              --quiet
+            gcloud run jobs add-iam-policy-binding "$VERSIONED_EVALUATION_JOB" \
+              --project "$PROJECT_ID" \
+              --region "$REGION" \
+              --member "serviceAccount:$RUNNER_SERVICE_ACCOUNT" \
+              --role roles/run.developer \
+              --quiet
+            # Publish the mutable admission entry point only after the exact
+            # immutable evaluation job it records is ready.
+            gcloud run jobs deploy "$JOB_NAME" \
+              --project "$PROJECT_ID" \
+              --region "$REGION" \
+              --image "$IMMUTABLE_RUNTIME_IMAGE" \
+              --service-account "$RUNTIME_PREPARER_SERVICE_ACCOUNT" \
+              --command python \
+              --args=-m,cloud.prepare_runtime,--help \
+              --cpu 2 \
+              --memory 4Gi \
+              --tasks 1 \
+              --parallelism 1 \
+              --max-retries 0 \
+              --task-timeout 1800s \
+              --set-env-vars "PROMPTOPT_RUNTIME_IMAGE=$IMMUTABLE_RUNTIME_IMAGE,PROMPTOPT_RUNTIME_WORKER_JOB=projects/$PROJECT_ID/locations/$REGION/jobs/$VERSIONED_EVALUATION_JOB" \
+              --quiet
+            gcloud run jobs add-iam-policy-binding "$JOB_NAME" \
+              --project "$PROJECT_ID" \
+              --region "$REGION" \
+              --member "serviceAccount:$RUNTIME_SERVICE_ACCOUNT" \
+              --role roles/run.developer \
+              --quiet
+          done
+      - name: Deploy trusted runtime image factory
+        env:
+          FACTORY_IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/runtime-factory:${{ github.sha }}
+        run: |
+          FACTORY_DIGEST="$(gcloud artifacts docker images describe "$FACTORY_IMAGE" --format='value(image_summary.digest)')"
+          test -n "$FACTORY_DIGEST"
+          IMMUTABLE_FACTORY_IMAGE="${FACTORY_IMAGE%:*}@${FACTORY_DIGEST}"
+          gcloud run jobs deploy "$RUNTIME_FACTORY_JOB" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --image "$IMMUTABLE_FACTORY_IMAGE" \
+            --service-account "$RUNTIME_FACTORY_SERVICE_ACCOUNT" \
+            --command python \
+            --args=-m,cloud.runtime_image_factory,--help \
+            --cpu 1 \
+            --memory 1Gi \
+            --tasks 1 \
+            --parallelism 1 \
+            --max-retries 0 \
+            --task-timeout 3600s \
+            --quiet
+          gcloud run jobs add-iam-policy-binding "$RUNTIME_FACTORY_JOB" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --member "serviceAccount:$RUNTIME_SERVICE_ACCOUNT" \
+            --role roles/run.developer \
+            --quiet
+      - name: Deploy isolated GEPA coordinator
+        env:
+          GEPA_IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/gepa-runner:${{ github.sha }}
+        run: |
+          JOB_VERSION="${GITHUB_SHA:0:20}"
+          GEPA_DIGEST="$(gcloud artifacts docker images describe "$GEPA_IMAGE" --format='value(image_summary.digest)')"
+          test -n "$GEPA_DIGEST"
+          GEPA_IMMUTABLE_IMAGE="${GEPA_IMAGE%:*}@${GEPA_DIGEST}"
           for attempt in 1 2 3; do
             if gcloud run jobs deploy "$GEPA_JOB" \
               --project "$PROJECT_ID" \
               --region "$REGION" \
-              --image "$GEPA_IMAGE" \
+              --image "$GEPA_IMMUTABLE_IMAGE" \
               --service-account "$RUNNER_SERVICE_ACCOUNT" \
               --command python \
               --args=-m,cloud.run_job,--help \
@@ -99,7 +230,7 @@ jobs:
               --parallelism 1 \
               --max-retries 0 \
               --task-timeout 86400s \
-              --set-env-vars "COVERUP_MODEL=vertex_ai/gemini-3.6-flash,OPTIMIZE_MODEL=vertex_ai/gemini-3.6-flash,VERTEXAI_PROJECT=$MODEL_PROJECT_ID,VERTEXAI_LOCATION=global"; then
+              --set-env-vars "COVERUP_MODEL=vertex_ai/gemini-3.6-flash,OPTIMIZE_MODEL=vertex_ai/gemini-3.6-flash,VERTEXAI_PROJECT=$MODEL_PROJECT_ID,VERTEXAI_LOCATION=global,PROMPTOPT_CLOUD_PROJECT=$PROJECT_ID,PROMPTOPT_CLOUD_REGION=$REGION,PROMPTOPT_SAMPLE_RUNTIME_IMAGE=$GEPA_IMMUTABLE_IMAGE,PROMPTOPT_EVALUATION_JOB_SAMPLE=${EVALUATION_JOB}-sample-${JOB_VERSION},PROMPTOPT_EVALUATION_JOB_PY310=${EVALUATION_JOB}-py310-${JOB_VERSION},PROMPTOPT_EVALUATION_JOB_PY311=${EVALUATION_JOB}-py311-${JOB_VERSION},PROMPTOPT_EVALUATION_JOB_PY312=${EVALUATION_JOB}-py312-${JOB_VERSION},PROMPTOPT_EVALUATION_JOB_PY313=${EVALUATION_JOB}-py313-${JOB_VERSION}"; then
               break
             fi
             if [ "$attempt" -eq 3 ]; then exit 1; fi
@@ -107,30 +238,6 @@ jobs:
             sleep 30
           done
           gcloud run jobs add-iam-policy-binding "$GEPA_JOB" \
-            --project "$PROJECT_ID" \
-            --region "$REGION" \
-            --member "serviceAccount:$RUNTIME_SERVICE_ACCOUNT" \
-            --role roles/run.developer \
-            --quiet
-      - name: Deploy isolated runtime preparation job
-        env:
-          RUNTIME_IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/gepa-runner:${{ github.sha }}
-        run: |
-          gcloud run jobs deploy "$RUNTIME_JOB" \
-            --project "$PROJECT_ID" \
-            --region "$REGION" \
-            --image "$RUNTIME_IMAGE" \
-            --service-account "$RUNTIME_PREPARER_SERVICE_ACCOUNT" \
-            --command python \
-            --args=-m,cloud.prepare_runtime,--help \
-            --cpu 2 \
-            --memory 4Gi \
-            --tasks 1 \
-            --parallelism 1 \
-            --max-retries 0 \
-            --task-timeout 1800s \
-            --quiet
-          gcloud run jobs add-iam-policy-binding "$RUNTIME_JOB" \
             --project "$PROJECT_ID" \
             --region "$REGION" \
             --member "serviceAccount:$RUNTIME_SERVICE_ACCOUNT" \

@@ -13,6 +13,10 @@ $RunnerAccountName = "promptopt-runner"
 $RunnerAccount = "$RunnerAccountName@$ProjectId.iam.gserviceaccount.com"
 $RuntimeAccountName = "promptopt-runtime"
 $RuntimeAccount = "$RuntimeAccountName@$ProjectId.iam.gserviceaccount.com"
+$RuntimeFactoryAccountName = "promptopt-runtime-factory"
+$RuntimeFactoryAccount = "$RuntimeFactoryAccountName@$ProjectId.iam.gserviceaccount.com"
+$RuntimeBuilderAccountName = "promptopt-runtime-builder"
+$RuntimeBuilderAccount = "$RuntimeBuilderAccountName@$ProjectId.iam.gserviceaccount.com"
 $ApiAccount = "promptopt-api@$ProjectId.iam.gserviceaccount.com"
 $DeployAccount = "github-backend-deploy@$ProjectId.iam.gserviceaccount.com"
 $RunnerObjectRole = "promptoptRunnerObjectIO"
@@ -41,7 +45,7 @@ function Test-GcloudResource {
     return $Exists
 }
 
-Invoke-Gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudtasks.googleapis.com secretmanager.googleapis.com --project $ProjectId
+Invoke-Gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com cloudtasks.googleapis.com secretmanager.googleapis.com --project $ProjectId
 Invoke-Gcloud services enable aiplatform.googleapis.com --project $ModelProjectId
 
 if (-not (Test-GcloudResource iam service-accounts describe $RunnerAccount --project $ProjectId)) {
@@ -49,6 +53,12 @@ if (-not (Test-GcloudResource iam service-accounts describe $RunnerAccount --pro
 }
 if (-not (Test-GcloudResource iam service-accounts describe $RuntimeAccount --project $ProjectId)) {
     Invoke-Gcloud iam service-accounts create $RuntimeAccountName --project $ProjectId --display-name "PromptOpt untrusted project runtime"
+}
+if (-not (Test-GcloudResource iam service-accounts describe $RuntimeFactoryAccount --project $ProjectId)) {
+    Invoke-Gcloud iam service-accounts create $RuntimeFactoryAccountName --project $ProjectId --display-name "PromptOpt trusted runtime image factory"
+}
+if (-not (Test-GcloudResource iam service-accounts describe $RuntimeBuilderAccount --project $ProjectId)) {
+    Invoke-Gcloud iam service-accounts create $RuntimeBuilderAccountName --project $ProjectId --display-name "PromptOpt runtime image builder"
 }
 
 if (-not (Test-GcloudResource iam roles describe $RunnerObjectRole --project $ProjectId)) {
@@ -74,14 +84,24 @@ else {
 $PrefixCondition = "expression=resource.name.startsWith('projects/_/buckets/$Bucket/objects/runner-jobs/'),title=PromptOptRunnerJobPrefix,description=Restrict runner access to opaque execution objects"
 Invoke-Gcloud storage buckets add-iam-policy-binding "gs://$Bucket" --member "serviceAccount:$RunnerAccount" --role $RunnerObjectRoleResource --condition $PrefixCondition
 Invoke-Gcloud storage buckets add-iam-policy-binding "gs://$Bucket" --member "serviceAccount:$RuntimeAccount" --role $RunnerObjectRoleResource --condition $PrefixCondition
+Invoke-Gcloud storage buckets add-iam-policy-binding "gs://$Bucket" --member "serviceAccount:$RuntimeFactoryAccount" --role $RunnerObjectRoleResource --condition $PrefixCondition
+Invoke-Gcloud storage buckets add-iam-policy-binding "gs://$Bucket" --member "serviceAccount:$RuntimeBuilderAccount" --role $RunnerObjectRoleResource --condition $PrefixCondition
 Invoke-Gcloud projects add-iam-policy-binding $ModelProjectId --member "serviceAccount:$RunnerAccount" --role roles/aiplatform.user --condition None
 Invoke-Gcloud projects add-iam-policy-binding $ModelProjectId --member "serviceAccount:$RunnerAccount" --role roles/serviceusage.serviceUsageConsumer --condition None
 Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$ApiAccount" --role $ApiOperationRoleResource --condition None
 Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$ApiAccount" --role $ProviderSecretRoleResource --condition None
 Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$RunnerAccount" --role roles/secretmanager.secretAccessor --condition None
+Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$RunnerAccount" --role roles/run.developer --condition None
+Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$RuntimeFactoryAccount" --role roles/cloudbuild.builds.editor --condition None
+Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$RuntimeFactoryAccount" --role roles/run.admin --condition None
+Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$RuntimeBuilderAccount" --role roles/logging.logWriter --condition None
+Invoke-Gcloud artifacts repositories add-iam-policy-binding promptopt --project $ProjectId --location $Region --member "serviceAccount:$RuntimeBuilderAccount" --role roles/artifactregistry.writer --quiet
 Invoke-Gcloud projects add-iam-policy-binding $ProjectId --member "serviceAccount:$ApiAccount" --role roles/logging.viewer --condition None
 Invoke-Gcloud iam service-accounts add-iam-policy-binding $RunnerAccount --project $ProjectId --member "serviceAccount:$DeployAccount" --role roles/iam.serviceAccountUser
 Invoke-Gcloud iam service-accounts add-iam-policy-binding $RuntimeAccount --project $ProjectId --member "serviceAccount:$DeployAccount" --role roles/iam.serviceAccountUser
+Invoke-Gcloud iam service-accounts add-iam-policy-binding $RuntimeFactoryAccount --project $ProjectId --member "serviceAccount:$DeployAccount" --role roles/iam.serviceAccountUser
+Invoke-Gcloud iam service-accounts add-iam-policy-binding $RunnerAccount --project $ProjectId --member "serviceAccount:$RuntimeFactoryAccount" --role roles/iam.serviceAccountUser
+Invoke-Gcloud iam service-accounts add-iam-policy-binding $RuntimeBuilderAccount --project $ProjectId --member "serviceAccount:$RuntimeFactoryAccount" --role roles/iam.serviceAccountUser
 
 if (-not (Test-GcloudResource tasks queues describe $Queue --location $Region --project $ProjectId)) {
     Invoke-Gcloud tasks queues create $Queue --location $Region --project $ProjectId --max-concurrent-dispatches 1 --max-dispatches-per-second 1 --max-attempts 3 --max-retry-duration 3600s

@@ -212,6 +212,12 @@ async def test_cloud_gepa_optimizer_copies_uploaded_project_into_job_prefix():
         runtime_artifact_prefix="runner-jobs/runtime/ready",
         runtime_environment_id="environment-1",
         runtime_bundle_object="runner-jobs/runtime/ready/runtime.tar.gz",
+        runtime_digest="runtime-digest",
+        runtime_image="promptopt-runtime-py312@sha256:image",
+        runtime_worker_job="projects/project/locations/region/jobs/eval-project",
+        source_archive_sha256="a" * 64,
+        runtime_bundle_sha256="b" * 64,
+        python_version="3.12",
     )
 
     await optimizer.start(
@@ -237,9 +243,72 @@ async def test_cloud_gepa_optimizer_copies_uploaded_project_into_job_prefix():
     copied_name = manifest["projects"][0]["archive_object"]
     assert copied_name.startswith("runner-jobs/gepa/")
     assert storage.objects[copied_name][0] == b"zip-content"
-    copied_bundle = manifest["runtime_bundle_object"]
+    assert manifest["schema_version"] == 2
+    assert manifest["projects"][0]["runtime_digest"] == "runtime-digest"
+    assert manifest["projects"][0]["source_archive_sha256"] == "a" * 64
+    assert manifest["projects"][0]["runtime_bundle_sha256"] == "b" * 64
+    copied_bundle = manifest["projects"][0]["runtime_bundle_object"]
     assert copied_bundle.startswith("runner-jobs/gepa/")
     assert storage.objects[copied_bundle][0] == b"runtime-content"
+
+
+@pytest.mark.asyncio
+async def test_cloud_gepa_optimizer_gives_sample_project_the_same_worker_contract():
+    storage = FakeStorage()
+    client = FakeJobsClient(storage)
+    optimizer = CloudRunJobGepaOptimizer(
+        client=client,
+        storage=storage,
+        bucket="private-source-bucket",
+        job_name="projects/project/locations/region/jobs/promptopt-gepa-runner",
+        timeout_seconds=86400,
+    )
+    snapshot = ProjectSnapshot(
+        project_id="sample:isort",
+        name="isort",
+        commit="sample-commit",
+        source_directory="isort",
+        test_directory="tests",
+        runner_project="isort",
+        python_version="3.12",
+    )
+    train = OptimizationTarget(
+        id="train",
+        symbol="process",
+        split="train",
+        source_file="isort/core.py",
+        project="isort",
+    )
+    validation = OptimizationTarget(
+        id="validation",
+        symbol="process",
+        split="validation",
+        source_file="isort/core.py",
+        project="isort",
+    )
+
+    await optimizer.start(
+        baseline=baseline_prompt(),
+        train=[train],
+        validation=[validation],
+        holdout=None,
+        settings=ExperimentSettings(),
+        projects=[snapshot],
+    )
+
+    args = client.request["overrides"]["container_overrides"][0]["args"]
+    manifest_name = args[args.index("--project-manifest-object") + 1]
+    project = json.loads(storage.objects[manifest_name][0])["projects"][0]
+    assert project == {
+        "kind": "sample",
+        "project": "isort",
+        "sample_slug": "isort",
+        "runtime_digest": "sample:isort:sample-commit",
+        "runtime_image": "bundled-gepa-image",
+        "python_version": "3.12",
+        "source_directory": "isort",
+        "test_directory": "tests",
+    }
 
 
 @pytest.mark.asyncio

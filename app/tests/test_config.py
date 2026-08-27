@@ -61,6 +61,19 @@ def test_production_requires_runtime_preparation_job():
         production_settings(runtime_execution_backend="disabled")
 
 
+def test_production_requires_runtime_image_factory_job():
+    with pytest.raises(ValidationError, match="CLOUD_RUN_RUNTIME_FACTORY_JOB is required"):
+        production_settings(cloud_run_runtime_factory_job="")
+
+
+def test_project_runtime_resources_default_to_dedicated_accounts_and_repository():
+    settings = production_settings()
+
+    assert settings.project_runtime_image_repository.endswith("/promptopt/project-runtimes")
+    assert settings.project_runtime_worker_service_account.startswith("promptopt-runner@")
+    assert settings.project_runtime_build_service_account.startswith("promptopt-runtime-builder@")
+
+
 def test_local_paths_are_resolved_from_app_directory(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     settings = Settings(_env_file=None)

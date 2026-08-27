@@ -33,7 +33,11 @@ from backend.modules.projects.repository import (
     InMemoryProjectRepository,
     ProjectRepository,
 )
-from backend.modules.projects.runtime import CloudRunRuntimePreparer, RuntimePreparationService
+from backend.modules.projects.runtime import (
+    CloudRunRuntimeImageFactory,
+    CloudRunRuntimePreparer,
+    RuntimePreparationService,
+)
 from backend.modules.projects.samples import SampleProjectCatalog
 from backend.modules.projects.service import ProjectService
 from backend.modules.providers.service import (
@@ -117,6 +121,7 @@ def build_services(settings: Settings) -> ServiceContainer:
     )
     projects = ProjectService(project_repository, uploads, samples, function_repository)
     runtime_runner = None
+    runtime_image_factory = None
     if settings.runtime_execution_backend == "cloud_run_job":
         from google.cloud import run_v2
 
@@ -128,9 +133,30 @@ def build_services(settings: Settings) -> ServiceContainer:
                 f"projects/{settings.gcp_project_id}/locations/{settings.cloud_tasks_location}/jobs/"
                 f"{settings.cloud_run_runtime_job}"
             ),
+            job_names={
+                version: (f"projects/{settings.gcp_project_id}/locations/{settings.cloud_tasks_location}/jobs/{job}")
+                for version, job in settings.cloud_run_runtime_jobs.items()
+            },
             timeout_seconds=settings.cloud_run_runtime_timeout_seconds,
         )
-    runtime = RuntimePreparationService(project_repository, runtime_runner)
+        runtime_image_factory = CloudRunRuntimeImageFactory(
+            client=run_v2.JobsClient(),
+            storage=storage,
+            bucket=settings.gcs_bucket,
+            job_name=(
+                f"projects/{settings.gcp_project_id}/locations/{settings.cloud_tasks_location}/jobs/"
+                f"{settings.cloud_run_runtime_factory_job}"
+            ),
+            cloud_project_id=settings.gcp_project_id,
+            region=settings.cloud_tasks_location,
+            image_repository=settings.project_runtime_image_repository,
+            runner_service_account=settings.project_runtime_worker_service_account,
+            build_service_account=settings.project_runtime_build_service_account,
+            model_project_id=settings.admin_vertexai_project,
+            coverup_model=settings.runtime_worker_coverup_model,
+            timeout_seconds=settings.cloud_run_runtime_factory_timeout_seconds,
+        )
+    runtime = RuntimePreparationService(project_repository, runtime_runner, runtime_image_factory)
     projects.set_runtime_service(runtime)
     analysis = AnalysisService(
         project_repository,

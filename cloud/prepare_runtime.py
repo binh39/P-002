@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -55,9 +56,26 @@ def _prepare(args, bucket, root: Path) -> RuntimeResult:
         expected_python=args.python_version,
         persistent_venv=persistent_venv,
     )
+    result.runtime_image = args.runtime_image or os.environ.get("PROMPTOPT_RUNTIME_IMAGE")
+    result.runtime_worker_job = args.runtime_worker_job or os.environ.get("PROMPTOPT_RUNTIME_WORKER_JOB")
+    if result.runtime_digest and result.runtime_image and result.runtime_worker_job:
+        result.runtime_digest = hashlib.sha256(
+            json.dumps(
+                {
+                    "environment": result.runtime_digest,
+                    "image": result.runtime_image,
+                    "worker_job": result.runtime_worker_job,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
     if result.status == "runtime_ready" and python is not None:
         bundle = root / "runtime.tar.gz"
         create_runtime_bundle(persistent_venv, bundle)
+        if len(specs) == 1:
+            result.source_archive_sha256 = hashlib.sha256(specs[0].archive.read_bytes()).hexdigest()
+        result.runtime_bundle_sha256 = hashlib.sha256(bundle.read_bytes()).hexdigest()
         bucket.blob(args.bundle_object).upload_from_filename(
             str(bundle),
             content_type="application/gzip",
@@ -77,6 +95,8 @@ def main() -> int:
     parser.add_argument("--test-directory", default="tests")
     parser.add_argument("--timeout-seconds", type=int, default=900)
     parser.add_argument("--python-version", default="3.12")
+    parser.add_argument("--runtime-image")
+    parser.add_argument("--runtime-worker-job")
     parser.add_argument("--maximum-output-bytes", type=int, default=10 * 1024 * 1024)
     args = parser.parse_args()
     if not args.manifest_object and not args.archive_object:

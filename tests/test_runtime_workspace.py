@@ -3,7 +3,6 @@ import json
 import os
 import stat
 import sys
-import tarfile
 import zipfile
 from pathlib import Path
 
@@ -11,13 +10,12 @@ from cloud.runtime_workspace import (
     RUNTIME_PROTOCOL_VERSION,
     RUNTIME_TOOL_PACKAGES,
     RuntimeProjectSpec,
+    _legacy_metadata_requirements,
     _test_requirement_files,
     _validate_project_python,
-    create_runtime_bundle,
     detect_layout,
     prepare_environment,
     prepare_runtime,
-    safe_extract_runtime_bundle,
     safe_extract_zip,
 )
 
@@ -59,10 +57,45 @@ def test_safe_extract_ignores_symbolic_links(tmp_path):
 
 
 def test_runtime_bundle_contains_every_pytest_plugin_used_by_gepa():
-    assert RUNTIME_PROTOCOL_VERSION == 8
-    assert "pytest-asyncio==1.4.0" in RUNTIME_TOOL_PACKAGES
-    assert "pytest-repeat==0.9.4" in RUNTIME_TOOL_PACKAGES
-    assert "pytest-timeout==2.4.0" in RUNTIME_TOOL_PACKAGES
+    assert RUNTIME_PROTOCOL_VERSION == 11
+    assert "pytest-asyncio>=0.23,<2" in RUNTIME_TOOL_PACKAGES
+    assert "pytest-repeat>=0.9,<1" in RUNTIME_TOOL_PACKAGES
+    assert "pytest-timeout>=2.3,<3" in RUNTIME_TOOL_PACKAGES
+    assert "coverage>=7,<8" in RUNTIME_TOOL_PACKAGES
+
+
+def test_legacy_setup_metadata_dependencies_are_discovered_without_execution(tmp_path):
+    project = tmp_path / "legacy"
+    project.mkdir()
+    (project / "setup.py").write_text(
+        "from setuptools import setup\n"
+        "MARKER = '; python_version >= \"3.10\"'\n"
+        "RUNTIME = ['psutil>=5', 'colorama; platform_system == \"Windows\"']\n"
+        "TESTS = ['pytest-mock' + MARKER]\n"
+        "KWARGS = {'name': 'legacy'}\n"
+        "KWARGS['install_requires'] = RUNTIME\n"
+        "KWARGS['tests_require'] = TESTS\n"
+        "KWARGS['extras_require'] = {'test': ['freezegun'], 'docs': ['sphinx'], "
+        "': python_version >= \"3.10\"': ['decorator']}\n"
+        "setup(**KWARGS)\n",
+        encoding="utf-8",
+    )
+    (project / "setup.cfg").write_text(
+        "[options]\ninstall_requires =\n    requests>=2\n"
+        "[options.extras_require]\ntesting =\n    freezegun\ndocs =\n    mkdocs\n",
+        encoding="utf-8",
+    )
+
+    requirements = _legacy_metadata_requirements(project)
+
+    assert requirements == [
+        "requests>=2",
+        "freezegun",
+        "psutil>=5",
+        'colorama; platform_system == "Windows"',
+        'decorator; python_version >= "3.10"',
+        'pytest-mock; python_version >= "3.10"',
+    ]
 
 
 def test_detect_layout_supports_lib_package_layout(tmp_path):
@@ -128,9 +161,7 @@ def test_prepare_runtime_accepts_project_without_existing_tests(tmp_path):
             "demo/pkg/__init__.py": "def add(a, b):\n    return a + b\n",
             # This looks like a test to a project-root collection, but it is
             # an executable integration helper and must never be imported.
-            "demo/test/integration/library/async_test.py": (
-                "raise RuntimeError('project root was collected')\n"
-            ),
+            "demo/test/integration/library/async_test.py": ("raise RuntimeError('project root was collected')\n"),
         },
     )
 
@@ -149,15 +180,66 @@ def test_prepare_runtime_accepts_project_without_existing_tests(tmp_path):
     assert result.test_directory == ".promptopt-empty-tests"
 
 
+def test_prepare_runtime_treats_upstream_collection_failure_as_diagnostic(tmp_path):
+    archive = tmp_path / "project-with-broken-upstream-config.zip"
+    write_zip(
+        archive,
+        {
+            "demo/pkg/__init__.py": "def add(a, b):\n    return a + b\n",
+            "demo/tests/test_pkg.py": "from pkg import add\n\ndef test_add():\n    assert add(2, 3) == 5\n",
+            "demo/pytest.ini": "[pytest]\naddopts = --definitely-not-a-real-pytest-option\n",
+        },
+    )
+
+    result, python = prepare_runtime(
+        archive,
+        tmp_path / "runtime-with-broken-upstream-config",
+        configured_source="pkg",
+        configured_tests="tests",
+        timeout_seconds=120,
+    )
+
+    assert result.status == "runtime_ready", result.error
+    assert python is not None
+    collect = next(item for item in result.commands if item.name.startswith("collect tests"))
+    assert collect.return_code not in (0, 5)
+    assert any(item.name.startswith("zero baseline") for item in result.commands)
+    assert result.statement_coverage == 0.0
+
+
+def test_prepare_runtime_falls_back_when_upstream_collection_times_out(tmp_path):
+    archive = tmp_path / "project-with-hanging-collection.zip"
+    write_zip(
+        archive,
+        {
+            "demo/pkg/__init__.py": "VALUE = 1\n",
+            "demo/tests/test_hang.py": "import time\ntime.sleep(5)\n\ndef test_value():\n    assert True\n",
+        },
+    )
+
+    result, python = prepare_runtime(
+        archive,
+        tmp_path / "runtime-with-hanging-collection",
+        configured_source="pkg",
+        configured_tests="tests",
+        timeout_seconds=120,
+        admission_command_timeout_seconds=1,
+    )
+
+    assert result.status == "runtime_ready", result.error
+    assert python is not None
+    collect = next(item for item in result.commands if item.name.startswith("collect tests"))
+    assert collect.timed_out is True
+    assert any(item.name.startswith("zero baseline") for item in result.commands)
+
+
 def test_prepare_runtime_prefers_unit_tests_over_integration_harnesses(tmp_path):
     archive = tmp_path / "project-with-mixed-tests.zip"
     write_zip(
         archive,
         {
             "demo/pkg/__init__.py": "def add(a, b):\n    return a + b\n",
-            "demo/test/units/test_pkg.py": (
-                "from pkg import add\n\ndef test_add():\n    assert add(2, 3) == 5\n"
-            ),
+            "demo/test/units/test_pkg.py": ("from pkg import add\n\ndef test_add():\n    assert add(2, 3) == 5\n"),
             "demo/test/integration/library/async_test.py": (
                 "raise RuntimeError('integration harness was collected')\n"
             ),
@@ -239,8 +321,7 @@ def test_prepare_runtime_accepts_failing_upstream_tests_when_coverage_is_measura
         {
             "demo/pkg/__init__.py": "def value():\n    return 1\n",
             "demo/tests/test_pkg.py": (
-                "from pkg import value\n\ndef test_upstream_assumption():\n"
-                "    assert value() == 2\n"
+                "from pkg import value\n\ndef test_upstream_assumption():\n    assert value() == 2\n"
             ),
         },
     )
@@ -290,19 +371,19 @@ def test_prepare_runtime_does_not_build_dynamic_version_project(tmp_path):
     assert result.status == "runtime_ready", result.error
     assert python is not None
     resolve = next(
-        (item for item in result.commands if item.name == "resolve shared dependencies"),
+        (item for item in result.commands if item.name == "resolve project dependencies"),
         None,
     )
     if resolve is not None:
         assert "SETUPTOOLS_SCM_PRETEND_VERSION" not in resolve.output
-        assert result.install_strategy == "uv dependency-only shared resolution"
+        assert result.install_strategy == "uv dependency-only project resolution"
     else:
         # The local fallback uses the image's system packages when uv is not
         # installed; production runtime images always include uv.
         assert result.install_strategy == "PYTHONPATH (no dependency manifest)"
 
 
-def test_prepare_environment_builds_one_reusable_bundle_for_multiple_projects(tmp_path):
+def test_prepare_environment_rejects_multiple_projects_before_dependency_resolution(tmp_path):
     first = tmp_path / "first.zip"
     second = tmp_path / "second.zip"
     write_zip(
@@ -325,18 +406,14 @@ def test_prepare_environment_builds_one_reusable_bundle_for_multiple_projects(tm
             RuntimeProjectSpec("first", first, "alpha", "tests"),
             RuntimeProjectSpec("second", second, "beta", "tests"),
         ],
-        tmp_path / "shared",
+        tmp_path / "must-not-be-shared",
         timeout_seconds=120,
     )
 
-    assert result.status == "runtime_ready", result.error
-    assert python is not None
-    assert set(result.projects) == {"first", "second"}
-    assert all(item.collected_tests == 1 for item in result.projects.values())
-    bundle = tmp_path / "runtime.tar.gz"
-    create_runtime_bundle(python.parent.parent, bundle)
-    restored_python = safe_extract_runtime_bundle(bundle, tmp_path / "restored")
-    assert restored_python.is_file()
+    assert python is None
+    assert result.status == "runtime_failed"
+    assert result.error == "Runtime preparation requires exactly one project"
+    assert not result.projects
 
 
 def test_prepare_environment_reports_atomic_dependency_conflict(tmp_path, monkeypatch):
@@ -355,9 +432,9 @@ def test_prepare_environment_reports_atomic_dependency_conflict(tmp_path, monkey
     original_run = runtime_workspace._run
 
     def fail_resolution(result, name, command, cwd, deadline, output_limit, **kwargs):
-        if name == "resolve shared dependencies":
+        if name == "resolve project dependencies":
             raise RuntimeError(
-                "Dependency conflict prevented this project from joining the environment: "
+                "Dependency conflict prevented this project runtime from being prepared: "
                 "shared-dependency has incompatible constraints"
             )
         return original_run(result, name, command, cwd, deadline, output_limit, **kwargs)
@@ -374,7 +451,7 @@ def test_prepare_environment_reports_atomic_dependency_conflict(tmp_path, monkey
     assert "incompatible constraints" in (result.error or "")
 
 
-def test_uploaded_gepa_run_restores_bundle_without_reinstalling_dependencies(tmp_path, monkeypatch):
+def test_uploaded_gepa_run_never_restores_runtime_inside_coordinator(tmp_path, monkeypatch):
     from cloud import run_job
 
     project_archive = tmp_path / "uploaded.zip"
@@ -385,19 +462,20 @@ def test_uploaded_gepa_run_restores_bundle_without_reinstalling_dependencies(tmp
             "repo/tests/test_value.py": "from actual_package import VALUE\n",
         },
     )
-    runtime_tree = tmp_path / "runtime-tree" / ".venv"
-    executable = runtime_tree / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-    executable.parent.mkdir(parents=True)
-    executable.write_bytes(b"prepared interpreter")
-    bundle = tmp_path / "runtime.tar.gz"
-    with tarfile.open(bundle, "w:gz") as archive:
-        archive.add(runtime_tree, arcname=".venv")
     manifest = {
-        "runtime_bundle_object": "inputs/runtime.tar.gz",
+        "schema_version": 2,
         "projects": [
             {
+                "kind": "uploaded",
                 "project": "friendly-name",
                 "archive_object": "inputs/project.zip",
+                "runtime_bundle_object": "inputs/runtime.tar.gz",
+                "runtime_digest": "immutable-runtime-digest",
+                "runtime_image": "promptopt-runtime-py312@sha256:image",
+                "runtime_worker_job": "projects/p/locations/r/jobs/eval-project",
+                "source_archive_sha256": "a" * 64,
+                "runtime_bundle_sha256": "b" * 64,
+                "python_version": "3.12",
                 "source_directory": "src",
                 "test_directory": "tests",
             }
@@ -407,7 +485,9 @@ def test_uploaded_gepa_run_restores_bundle_without_reinstalling_dependencies(tmp
         "inputs/dataset.jsonl": b'{"project":"friendly-name"}\n',
         "inputs/prompt.json": b"{}",
         "inputs/projects.json": json.dumps(manifest).encode(),
-        "inputs/runtime.tar.gz": bundle.read_bytes(),
+        # Deliberately omit the runtime bundle.  The coordinator may inspect
+        # source context, but only the pinned project worker may restore and
+        # execute this environment.
         "inputs/project.zip": project_archive.read_bytes(),
     }
     captured = {}
@@ -418,7 +498,6 @@ def test_uploaded_gepa_run_restores_bundle_without_reinstalling_dependencies(tmp
 
     def run(command):
         captured["command"] = command
-        captured["test_python"] = os.environ.get("TESTGEN_PYTHON")
         layouts_path = Path(command[command.index("--project-layouts-file") + 1])
         captured["layouts"] = json.loads(layouts_path.read_text(encoding="utf-8"))
         artifacts = Path(command[command.index("--artifacts-dir") + 1])
@@ -436,8 +515,6 @@ def test_uploaded_gepa_run_restores_bundle_without_reinstalling_dependencies(tmp
     monkeypatch.setattr(run_job, "_download_object", download)
     monkeypatch.setattr(run_job, "_upload_dir", lambda *args: None)
     monkeypatch.setattr(run_job, "_run_cli", lambda command: (run(command), None))
-    monkeypatch.setenv("TESTGEN_PYTHON", "before")
-    monkeypatch.setenv("PROMPTOPT_RUNTIME_ROOT", str(tmp_path / "restored-runtime"))
     monkeypatch.setattr(
         sys,
         "argv",
@@ -460,10 +537,185 @@ def test_uploaded_gepa_run_restores_bundle_without_reinstalling_dependencies(tmp
     layout = captured["layouts"]["friendly-name"]
     assert layout["package_dir"].replace("\\", "/").endswith("/friendly-name/src")
     assert layout["import_root"] == layout["package_dir"]
-    assert captured["test_python"] != "before"
+    assert "python_executable" not in layout
+    assert layout["runtime_digest"] == "immutable-runtime-digest"
     assert captured["command"][0] == sys.executable
-    assert captured["command"][0] != captured["test_python"]
     assert "prepare_runtime" not in " ".join(captured["command"])
+
+
+def test_uploaded_gepa_run_uses_remote_worker_without_mounting_runtime_in_coordinator(tmp_path, monkeypatch):
+    from cloud import run_job
+
+    project_archive = tmp_path / "uploaded.zip"
+    write_zip(
+        project_archive,
+        {
+            "repo/src/pkg/__init__.py": "VALUE = 1\n",
+            "repo/tests/test_value.py": "from pkg import VALUE\n",
+        },
+    )
+    manifest = {
+        "schema_version": 2,
+        "projects": [
+            {
+                "kind": "uploaded",
+                "project": "uploaded",
+                "archive_object": "inputs/project.zip",
+                "runtime_bundle_object": "inputs/runtime.tar.gz",
+                "runtime_digest": "runtime-digest",
+                "runtime_image": "runtime-image@sha256:one",
+                "runtime_worker_job": "projects/project/locations/region/jobs/eval-project",
+                "source_archive_sha256": "a" * 64,
+                "runtime_bundle_sha256": "b" * 64,
+                "python_version": "3.13",
+                "source_directory": "src",
+                "test_directory": "tests",
+            }
+        ],
+    }
+    objects = {
+        "inputs/dataset.jsonl": b'{"project":"uploaded"}\n',
+        "inputs/prompt.json": b"{}",
+        "inputs/projects.json": json.dumps(manifest).encode(),
+        "inputs/project.zip": project_archive.read_bytes(),
+        # Deliberately omit runtime.tar.gz: only the independent worker may
+        # restore it, never the Python 3.12 GEPA coordinator.
+    }
+    captured = {}
+
+    def download(bucket, object_name, destination):
+        del bucket
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(objects[object_name])
+
+    def run(command):
+        layouts_path = Path(command[command.index("--project-layouts-file") + 1])
+        captured["layouts"] = json.loads(layouts_path.read_text(encoding="utf-8"))
+        captured["manifest"] = os.environ.get("PROMPTOPT_EVALUATION_MANIFEST")
+        captured["jobs"] = json.loads(os.environ["PROMPTOPT_EVALUATION_JOBS"])
+        artifacts = Path(command[command.index("--artifacts-dir") + 1])
+        for relative in (
+            "optimized_program.json",
+            "prompts/gepa_proposed.json",
+            "prompts/gepa_optimized.json",
+            "final_validation.json",
+        ):
+            path = artifacts / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("{}", encoding="utf-8")
+        return 0, None
+
+    monkeypatch.setattr(run_job, "_download_object", download)
+    monkeypatch.setattr(run_job, "_upload_dir", lambda *args: None)
+    monkeypatch.setattr(run_job, "_run_cli", run)
+    monkeypatch.setenv("PROMPTOPT_CLOUD_PROJECT", "project")
+    monkeypatch.setenv("PROMPTOPT_CLOUD_REGION", "region")
+    monkeypatch.setenv("PROMPTOPT_EVALUATION_JOB_PY313", "eval-py313")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_job",
+            "--bucket",
+            "bucket",
+            "--artifacts-name",
+            "runner-jobs/gepa/run/artifacts",
+            "--dataset-object",
+            "inputs/dataset.jsonl",
+            "--prompt-object",
+            "inputs/prompt.json",
+            "--project-manifest-object",
+            "inputs/projects.json",
+        ],
+    )
+
+    assert run_job.main() == 0
+    assert "python_executable" not in captured["layouts"]["uploaded"]
+    assert captured["manifest"].endswith("projects.json")
+    assert captured["jobs"] == {"3.13": "projects/project/locations/region/jobs/eval-py313"}
+
+
+def test_sample_gepa_remote_worker_is_pinned_in_execution_manifest(tmp_path, monkeypatch):
+    from cloud import run_job
+
+    sample_repos = tmp_path / "sample-repos"
+    (sample_repos / "isort" / "isort").mkdir(parents=True)
+    (sample_repos / "isort" / "tests").mkdir()
+    (sample_repos / "isort" / "isort" / "__init__.py").write_text("VALUE = 1\n", encoding="utf-8")
+    manifest = {
+        "schema_version": 2,
+        "projects": [
+            {
+                "kind": "sample",
+                "project": "isort",
+                "sample_slug": "isort",
+                "runtime_digest": "sample:isort:commit",
+                "runtime_image": "bundled-gepa-image",
+                "python_version": "3.12",
+                "source_directory": "isort",
+                "test_directory": "tests",
+            }
+        ],
+    }
+    objects = {
+        "inputs/dataset.jsonl": b'{"project":"isort"}\n',
+        "inputs/prompt.json": b"{}",
+        "inputs/projects.json": json.dumps(manifest).encode(),
+    }
+    captured = {}
+
+    def download(bucket, object_name, destination):
+        del bucket
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(objects[object_name])
+
+    def run(command):
+        effective = Path(os.environ["PROMPTOPT_EVALUATION_MANIFEST"])
+        captured["manifest"] = json.loads(effective.read_text(encoding="utf-8"))
+        artifacts = Path(command[command.index("--artifacts-dir") + 1])
+        for relative in (
+            "optimized_program.json",
+            "prompts/gepa_proposed.json",
+            "prompts/gepa_optimized.json",
+            "final_validation.json",
+        ):
+            path = artifacts / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("{}", encoding="utf-8")
+        return 0, None
+
+    monkeypatch.setattr(run_job, "_download_object", download)
+    monkeypatch.setattr(run_job, "_upload_dir", lambda *args: None)
+    monkeypatch.setattr(run_job, "_run_cli", run)
+    monkeypatch.setenv("PROMPTOPT_CLOUD_PROJECT", "project")
+    monkeypatch.setenv("PROMPTOPT_CLOUD_REGION", "region")
+    monkeypatch.setenv("PROMPTOPT_EVALUATION_JOB_SAMPLE", "eval-sample-deadbeef")
+    monkeypatch.setenv("PROMPTOPT_SAMPLE_RUNTIME_IMAGE", "registry/gepa@sha256:abc")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_job",
+            "--bucket",
+            "bucket",
+            "--artifacts-name",
+            "runner-jobs/gepa/sample-run/artifacts",
+            "--dataset-object",
+            "inputs/dataset.jsonl",
+            "--prompt-object",
+            "inputs/prompt.json",
+            "--project-manifest-object",
+            "inputs/projects.json",
+            "--sample-repos-dir",
+            str(sample_repos),
+        ],
+    )
+
+    assert run_job.main() == 0
+    project = captured["manifest"]["projects"][0]
+    assert project["runtime_image"] == "registry/gepa@sha256:abc"
+    assert project["runtime_worker_job"].endswith("/eval-sample-deadbeef")
+    assert project["runtime_digest"] != "sample:isort:commit"
 
 
 def test_sample_gepa_run_keeps_bundled_layout_and_trusted_python(tmp_path, monkeypatch):

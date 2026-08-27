@@ -3,7 +3,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
-MINIMUM_RUNTIME_PROTOCOL_VERSION = 8
+PREPARED_RUNTIME_PROTOCOL_VERSION = 11
+MINIMUM_RUNTIME_PROTOCOL_VERSION = 12
 
 
 class StrictModel(BaseModel):
@@ -47,6 +48,12 @@ class RuntimeReport(StrictModel):
     commands: list[dict] = Field(default_factory=list)
     projects: dict[str, RuntimeProjectReport] = Field(default_factory=dict)
     dependency_fingerprint: str | None = None
+    runtime_digest: str | None = None
+    python_version: str | None = None
+    runtime_image: str | None = None
+    runtime_worker_job: str | None = None
+    source_archive_sha256: str | None = None
+    runtime_bundle_sha256: str | None = None
     bundle_object: str | None = None
     error: str | None = None
     protocol_version: int = 1
@@ -187,9 +194,15 @@ class ProjectResponse(StrictModel):
     runtime_environment_name: str | None = None
     runtime_bundle_object: str | None = None
     runtime_dependency_fingerprint: str | None = None
+    runtime_digest: str | None = None
+    runtime_image: str | None = None
+    runtime_worker_job: str | None = None
+    source_archive_sha256: str | None = None
+    runtime_bundle_sha256: str | None = None
     runtime_status: RuntimeStatus = RuntimeStatus.NOT_REQUESTED
     runtime_report: RuntimeReport | None = None
     runtime_artifact_prefix: str | None = None
+    runtime_factory_prefix: str | None = None
     runtime_started_at: datetime | None = None
     runtime_finished_at: datetime | None = None
     created_at: datetime

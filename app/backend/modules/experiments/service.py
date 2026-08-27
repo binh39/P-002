@@ -90,6 +90,7 @@ def _is_transient_cloud_error(error: BaseException) -> bool:
                 pending.append(nested)
     return False
 
+
 _FINAL_VALIDATION_SCALAR_FIELDS = (
     "mean_score",
     "baseline_mean_score",
@@ -363,10 +364,7 @@ class ExperimentService:
                 PromptBundle(
                     initial=payload.baseline_prompt.initial,
                     error=payload.baseline_prompt.error,
-                    missing_coverage=(
-                        payload.baseline_prompt.missing_coverage
-                        or baseline_prompt().missing_coverage
-                    ),
+                    missing_coverage=(payload.baseline_prompt.missing_coverage or baseline_prompt().missing_coverage),
                 )
                 if payload.baseline_prompt is not None
                 else baseline_prompt()
@@ -383,13 +381,6 @@ class ExperimentService:
         if any(project.status not in {"ready", "warning"} for project in projects):
             raise AppError(409, "ANALYSIS_NOT_READY", "Every project must finish analysis first")
         uploaded = [project for project in projects if not self.projects.is_sample(project.id)]
-        environment_ids = {project.runtime_environment_id for project in projects}
-        if len(environment_ids) != 1:
-            raise AppError(
-                422,
-                "RUNTIME_ENVIRONMENT_MISMATCH",
-                "Every project in an experiment must belong to the same runtime environment",
-            )
         if any(project.runtime_status != RuntimeStatus.READY for project in uploaded):
             raise AppError(409, "RUNTIME_NOT_READY", "Every uploaded project must pass runtime preparation")
         outdated_runtime = [
@@ -397,6 +388,13 @@ class ExperimentService:
             for project in uploaded
             if project.runtime_report is None
             or project.runtime_report.protocol_version < MINIMUM_RUNTIME_PROTOCOL_VERSION
+            or not project.runtime_bundle_object
+            or not project.runtime_digest
+            or not project.runtime_image
+            or not project.runtime_worker_job
+            or not project.source_archive_sha256
+            or not project.runtime_bundle_sha256
+            or project.runtime_report.python_version != project.settings.runtime.python_version
         ]
         if outdated_runtime:
             raise AppError(
@@ -423,6 +421,12 @@ class ExperimentService:
                     runtime_environment_id=project.runtime_environment_id,
                     runtime_bundle_object=project.runtime_bundle_object,
                     runtime_protocol_version=(project.runtime_report.protocol_version if project.runtime_report else 1),
+                    runtime_digest=project.runtime_digest or project.runtime_dependency_fingerprint,
+                    runtime_image=project.runtime_image or project.settings.runtime.runtime_image,
+                    runtime_worker_job=project.runtime_worker_job,
+                    source_archive_sha256=project.source_archive_sha256,
+                    runtime_bundle_sha256=project.runtime_bundle_sha256,
+                    python_version=project.settings.runtime.python_version,
                 )
             )
             for function in await self._list_functions(project.id):
@@ -535,11 +539,7 @@ class ExperimentService:
             ExperimentStatus.TIMED_OUT,
             ExperimentStatus.CANCELLED,
         }
-        previous_run = (
-            await self.repository.get_optimization_run(previous_run_id)
-            if previous_run_id
-            else None
-        )
+        previous_run = await self.repository.get_optimization_run(previous_run_id) if previous_run_id else None
         retrying_failed_optimization = (
             previous_status in retryable_statuses
             and previous_run is not None
@@ -752,9 +752,7 @@ class ExperimentService:
         }
         cached_evolution = await self._load_evolution_snapshot(run)
         if cached_evolution is not None and run.status not in active_statuses:
-            has_stale_pending = any(
-                iteration.decision == "Pending" for iteration in cached_evolution.iterations
-            )
+            has_stale_pending = any(iteration.decision == "Pending" for iteration in cached_evolution.iterations)
             if not has_stale_pending:
                 return cached_evolution
         if self.cloud_optimizer is None or not hasattr(self.cloud_optimizer, "evolution"):
@@ -781,9 +779,7 @@ class ExperimentService:
             and run.evolution_snapshot_prefix != run.cloud_artifact_prefix
         )
         evolution = (
-            merge_evolution_history(cached_evolution, current_evolution)
-            if append_history
-            else current_evolution
+            merge_evolution_history(cached_evolution, current_evolution) if append_history else current_evolution
         )
         if not current_evolution.available and cached_evolution is not None:
             evolution = cached_evolution
@@ -831,9 +827,7 @@ class ExperimentService:
                 raise RuntimeError("The candidate-zero baseline prompt has changed")
             effective_max_concurrency = run.max_concurrency or item.settings.max_concurrency
             run.max_concurrency = effective_max_concurrency
-            optimization_settings = item.settings.model_copy(
-                update={"max_concurrency": effective_max_concurrency}
-            )
+            optimization_settings = item.settings.model_copy(update={"max_concurrency": effective_max_concurrency})
             if polling_cloud_job:
                 result = await self.cloud_optimizer.collect(run.cloud_artifact_prefix)
                 if result is None:
@@ -870,7 +864,11 @@ class ExperimentService:
                 ]
                 if hasattr(self.cloud_optimizer, "start"):
                     start_options = {}
-                    if any(snapshot.archive_object for snapshot in item.project_snapshots):
+                    # Samples and uploaded projects share the same immutable
+                    # evaluation-worker protocol.  Omitting sample snapshots
+                    # here would silently fall back to executing their tests
+                    # inside the GEPA coordinator.
+                    if item.project_snapshots:
                         start_options["projects"] = item.project_snapshots
                     if run.resume_artifact_prefix:
                         start_options["resume_artifacts_prefix"] = run.resume_artifact_prefix
@@ -895,6 +893,7 @@ class ExperimentService:
                     holdout=holdout,
                     settings=optimization_settings,
                     vertexai_project=run.vertexai_project,
+                    projects=item.project_snapshots or None,
                 )
             artifact_payloads = {
                 "candidate_prompt.json": (result.candidate.as_json().encode(), "application/json"),
@@ -994,11 +993,7 @@ class ExperimentService:
                         pass
         except Exception as exc:
             now = datetime.now(UTC)
-            if (
-                polling_cloud_job
-                and self.optimization_dispatcher is not None
-                and _is_transient_cloud_error(exc)
-            ):
+            if polling_cloud_job and self.optimization_dispatcher is not None and _is_transient_cloud_error(exc):
                 # The Cloud Run execution may still be healthy. Persist the
                 # non-terminal state before scheduling another collection pass.
                 run.status = ExperimentStatus.OPTIMIZING
@@ -1370,13 +1365,6 @@ class ExperimentService:
                 "TEST_GENERATION_PROJECT_NOT_IN_EXPERIMENT",
                 "A test suite can only use projects from the selected prompt's experiment",
             )
-        environments = {snapshots[project_id].runtime_environment_id for project_id in selected_project_ids}
-        if len(environments) != 1:
-            raise AppError(
-                422,
-                "RUNTIME_ENVIRONMENT_MISMATCH",
-                "Every selected Test Suite project must use the same runtime environment",
-            )
         available: dict[str, TargetReference] = {}
         for project_id in selected_project_ids:
             project = await self.projects.require_owned(project_id, owner_id)
@@ -1659,13 +1647,12 @@ class ExperimentService:
                         "pytest_args": item.settings.pytest_args,
                         "random_seed": run.random_seed,
                     },
-                    projects=[snapshot for snapshot in item.project_snapshots if snapshot.project_id in run.project_ids]
-                    if any(
-                        snapshot.archive_object
-                        for snapshot in item.project_snapshots
-                        if snapshot.project_id in run.project_ids
-                    )
-                    else None,
+                    projects=[
+                        project_snapshot
+                        for project_snapshot in item.project_snapshots
+                        if project_snapshot.project_id in run.project_ids
+                    ]
+                    or None,
                     provider_secret_refs=run.provider_secret_refs,
                 )
                 run.cloud_deadline_at = datetime.now(UTC) + timedelta(seconds=self.cloud_test_generator.timeout_seconds)

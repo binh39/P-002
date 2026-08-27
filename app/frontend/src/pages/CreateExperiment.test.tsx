@@ -45,6 +45,13 @@ const project = {
   runtimeEnvironmentId: "sample-runtime",
   runtimeEnvironmentName: "Bundled sample environment",
 };
+const uploadedProject = {
+  ...project,
+  id: "project-2",
+  name: "uploaded-project",
+  runtimeEnvironmentId: "uploaded-runtime",
+  runtimeEnvironmentName: "Uploaded Python 3.12 runtime",
+};
 const functions = Array.from({ length: 3 }, (_, index) => ({
   id: `fn-${index + 1}`,
   project: "project-1",
@@ -72,6 +79,7 @@ describe("create experiment wizard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     auth.user.email = "member@example.com";
+    repositories.projects.list.mockResolvedValue([]);
     repositories.projects.listSamples.mockResolvedValue([project]);
     repositories.projects.listFunctions.mockResolvedValue(functions);
     repositories.experiments.create.mockResolvedValue({ id: "experiment-1" });
@@ -81,9 +89,6 @@ describe("create experiment wizard", () => {
   it("creates an experiment and queues optimization with baseline as candidate zero", async () => {
     render(<CreateExperiment />, { wrapper: Wrapper });
 
-    fireEvent.change(await screen.findByLabelText(/Runtime environment/i), {
-      target: { value: "sample-runtime" },
-    });
     fireEvent.click(await screen.findByRole("button", { name: /isort/i }));
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     await screen.findByText(/3 valid functions available/i);
@@ -115,20 +120,26 @@ describe("create experiment wizard", () => {
   it("requires an analyzed project before continuing", async () => {
     render(<CreateExperiment />, { wrapper: Wrapper });
 
-    fireEvent.change(await screen.findByLabelText(/Runtime environment/i), {
-      target: { value: "sample-runtime" },
-    });
     await screen.findByRole("button", { name: /isort/i });
     expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
+  });
+
+  it("allows projects with independent runtime environments in one experiment", async () => {
+    repositories.projects.list.mockResolvedValue([uploadedProject]);
+
+    render(<CreateExperiment />, { wrapper: Wrapper });
+
+    fireEvent.click(await screen.findByRole("button", { name: /isort/i }));
+    fireEvent.click(screen.getByRole("button", { name: /uploaded-project/i }));
+
+    expect(screen.getByText("2 project(s) selected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
   });
 
   it("removes the metric budget ceiling for the full-access account", async () => {
     auth.user.email = "admin@gmail.com";
     render(<CreateExperiment />, { wrapper: Wrapper });
 
-    fireEvent.change(await screen.findByLabelText(/Runtime environment/i), {
-      target: { value: "sample-runtime" },
-    });
     fireEvent.click(await screen.findByRole("button", { name: /isort/i }));
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     await screen.findByText(/3 valid functions available/i);

@@ -78,7 +78,6 @@ export default function CreateExperiment() {
   const { projects, experiments } = useRepositories();
   const hasFullAccess = user?.email?.trim().toLowerCase() === "admin@gmail.com";
   const [step, setStep] = useState(0);
-  const [selectedEnvironmentId, setSelectedEnvironmentId] = useState("");
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const [experimentName, setExperimentName] = useState("");
   const [samplingMethod, setSamplingMethod] = useState<SamplingMethod>("random");
@@ -118,10 +117,7 @@ export default function CreateExperiment() {
     () => (projectsQuery.data ?? []).filter((project) => selectedProjectIds.includes(project.id)),
     [projectsQuery.data, selectedProjectIds],
   );
-  const environmentSelectionValid =
-    selectedProjects.length > 0 &&
-    selectedEnvironmentId !== "" &&
-    selectedProjects.every((project) => project.runtimeEnvironmentId === selectedEnvironmentId);
+  const projectSelectionValid = selectedProjects.length > 0;
   const availableFunctions = useMemo<ExperimentFunction[]>(
     () =>
       functionQueries.flatMap((query, index) => {
@@ -245,7 +241,7 @@ export default function CreateExperiment() {
   }
 
   const canContinue = [
-    environmentSelectionValid,
+    projectSelectionValid,
     !functionsLoading && !functionsError && functionSelectionValid,
     datasetValid,
     settingsValid,
@@ -284,9 +280,6 @@ export default function CreateExperiment() {
           ),
         );
         return current.filter((id) => id !== project.id);
-      }
-      if (selectedEnvironmentId !== "" && project.runtimeEnvironmentId !== selectedEnvironmentId) {
-        return current;
       }
       if (!experimentName.trim()) setExperimentName(`${project.name} prompt optimization`);
       return [...current, project.id];
@@ -334,12 +327,6 @@ export default function CreateExperiment() {
             <ProjectStep
               projects={projectsQuery.data}
               selectedProjectIds={selectedProjectIds}
-              selectedEnvironmentId={selectedEnvironmentId}
-              onEnvironmentChange={(environmentId) => {
-                setSelectedEnvironmentId(environmentId);
-                setSelectedProjectIds([]);
-                setManualAssignments({});
-              }}
               onToggle={toggleProject}
             />
           )}
@@ -454,7 +441,7 @@ export default function CreateExperiment() {
             disabled={
               startOptimization.isPending ||
               !experimentName.trim() ||
-              !environmentSelectionValid ||
+              !projectSelectionValid ||
               !settingsValid ||
               !datasetValid
             }
@@ -471,67 +458,34 @@ export default function CreateExperiment() {
 function ProjectStep({
   projects,
   selectedProjectIds,
-  selectedEnvironmentId,
-  onEnvironmentChange,
   onToggle,
 }: {
   projects: PythonProject[];
   selectedProjectIds: string[];
-  selectedEnvironmentId: string;
-  onEnvironmentChange: (environmentId: string) => void;
   onToggle: (project: PythonProject) => void;
 }) {
   const selectable = projects.filter((project) => ["ready", "warning"].includes(project.status));
-  const environments = Array.from(
-    new Map(
-      selectable
-        .filter((project) => project.runtimeEnvironmentId)
-        .map((project) => [
-          project.runtimeEnvironmentId as string,
-          project.runtimeEnvironmentName || "Unnamed environment",
-        ]),
-    ),
-  );
-  const compatible = selectable.filter(
-    (project) => project.runtimeEnvironmentId === selectedEnvironmentId,
-  );
   return (
     <>
       <WizardHeading
         step="Step 1"
         title="Choose projects"
-        description="Choose an environment, then select one or more projects prepared inside it."
+        description="Select one or more ready projects. Each project keeps its own immutable runtime and evaluation worker."
       />
-      <Field
-        label="Runtime environment"
-        hint="A run restores one prepared bundle and can use only its member projects."
-      >
-        <select
-          value={selectedEnvironmentId}
-          onChange={(event) => onEnvironmentChange(event.target.value)}
-        >
-          <option value="">Choose an environment</option>
-          {environments.map(([id, name]) => (
-            <option key={id} value={id}>
-              {name}
-            </option>
-          ))}
-        </select>
-      </Field>
       <div className="selection-toolbar">
         <span>{selectedProjectIds.length} project(s) selected</span>
         <button
           className="table-action"
           onClick={() =>
-            compatible.filter((item) => !selectedProjectIds.includes(item.id)).forEach(onToggle)
+            selectable.filter((item) => !selectedProjectIds.includes(item.id)).forEach(onToggle)
           }
-          disabled={selectedEnvironmentId === "" || selectedProjectIds.length === compatible.length}
+          disabled={selectedProjectIds.length === selectable.length}
         >
-          Select all in environment
+          Select all ready projects
         </button>
       </div>
       <div className="select-project-grid">
-        {compatible.map((project) => {
+        {selectable.map((project) => {
           const active = selectedProjectIds.includes(project.id);
           return (
             <button

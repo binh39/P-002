@@ -1,0 +1,26 @@
+ARG PYTHON_VERSION=3.12
+FROM python:${PYTHON_VERSION}-slim
+
+COPY --from=ghcr.io/astral-sh/uv:0.9.13 /uv /uvx /bin/
+WORKDIR /app
+
+# The project worker image intentionally contains no bundled sample repositories
+# and never owns GEPA search state. It includes only the code needed to prepare
+# one immutable runtime and execute that project's evaluation/generation requests.
+COPY cloud/requirements.evaluation.txt ./cloud/requirements.evaluation.txt
+RUN python -m pip install --no-cache-dir \
+    "packaging>=24,<26" \
+    "tomli>=2,<3; python_version < '3.11'" \
+    -r cloud/requirements.evaluation.txt
+
+COPY cloud/prepare_runtime.py cloud/runtime_workspace.py cloud/run_evaluation_worker.py \
+    cloud/run_test_generation.py cloud/run_job.py cloud/evaluation_dispatcher.py ./cloud/
+COPY src/coverup ./src/coverup
+COPY src/optimization ./src/optimization
+COPY src/promptopt_pause.py ./src/promptopt_pause.py
+RUN mkdir -p /tmp/promptopt-runtime && useradd --create-home appuser \
+    && chown -R appuser:appuser /app /tmp/promptopt-runtime
+
+ENV PYTHONPATH=/app/src:/app
+USER appuser
+CMD ["python", "-m", "cloud.prepare_runtime", "--help"]

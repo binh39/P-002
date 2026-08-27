@@ -118,26 +118,52 @@ class CloudRunJobGepaOptimizer:
         project_manifest_object = None
         if projects:
             manifest_projects = []
-            bundle_objects = {snapshot.runtime_bundle_object for snapshot in projects if snapshot.archive_object}
-            if len(bundle_objects) != 1 or None in bundle_objects:
-                raise ValueError("Uploaded projects must share one prepared runtime bundle")
-            source_bundle = bundle_objects.pop()
-            copied_bundle = f"{prefix}/inputs/runtime.tar.gz"
-            await self.storage.write(
-                copied_bundle,
-                await self.storage.read(source_bundle),
-                "application/gzip",
-            )
             for snapshot in projects:
                 if not snapshot.archive_object:
+                    manifest_projects.append(
+                        {
+                            "kind": "sample",
+                            "project": snapshot.runner_project,
+                            "sample_slug": snapshot.project_id.split(":", 1)[-1],
+                            "runtime_digest": snapshot.runtime_digest
+                            or f"{snapshot.project_id}:{snapshot.commit or 'bundled'}",
+                            "runtime_image": snapshot.runtime_image or "bundled-gepa-image",
+                            "python_version": snapshot.python_version,
+                            "source_directory": snapshot.source_directory,
+                            "test_directory": snapshot.test_directory,
+                        }
+                    )
                     continue
+                if (
+                    not snapshot.runtime_bundle_object
+                    or not snapshot.runtime_digest
+                    or not snapshot.runtime_worker_job
+                    or not snapshot.source_archive_sha256
+                    or not snapshot.runtime_bundle_sha256
+                ):
+                    raise ValueError(f"Uploaded project {snapshot.project_id} has no immutable runtime")
                 copied_archive = f"{prefix}/inputs/projects/{snapshot.runner_project}.zip"
+                copied_bundle = f"{prefix}/inputs/runtimes/{snapshot.runner_project}.tar.gz"
                 archive = await self.storage.read(snapshot.archive_object)
                 await self.storage.write(copied_archive, archive, "application/zip")
+                await self.storage.write(
+                    copied_bundle,
+                    await self.storage.read(snapshot.runtime_bundle_object),
+                    "application/gzip",
+                )
                 manifest_projects.append(
                     {
+                        "kind": "uploaded",
                         "project": snapshot.runner_project,
                         "archive_object": copied_archive,
+                        "runtime_bundle_object": copied_bundle,
+                        "runtime_digest": snapshot.runtime_digest,
+                        "runtime_image": snapshot.runtime_image,
+                        "runtime_worker_job": snapshot.runtime_worker_job,
+                        "runtime_protocol_version": snapshot.runtime_protocol_version,
+                        "source_archive_sha256": snapshot.source_archive_sha256,
+                        "runtime_bundle_sha256": snapshot.runtime_bundle_sha256,
+                        "python_version": snapshot.python_version,
                         "source_directory": snapshot.source_directory,
                         "test_directory": snapshot.test_directory,
                     }
@@ -147,7 +173,7 @@ class CloudRunJobGepaOptimizer:
                 await self.storage.write(
                     project_manifest_object,
                     json.dumps(
-                        {"projects": manifest_projects, "runtime_bundle_object": copied_bundle},
+                        {"schema_version": 2, "projects": manifest_projects},
                         separators=(",", ":"),
                     ).encode(),
                     "application/json",
@@ -249,7 +275,9 @@ class CloudRunJobGepaOptimizer:
 
         try:
             program = json.loads((await self.storage.read(f"{artifacts_prefix}/optimized_program.json")).decode())
-            final_validation = json.loads((await self.storage.read(f"{artifacts_prefix}/final_validation.json")).decode())
+            final_validation = json.loads(
+                (await self.storage.read(f"{artifacts_prefix}/final_validation.json")).decode()
+            )
             # ``gepa_optimized.json`` is the production decision and falls back to the
             # baseline when the proposal does not win.  The web comparison must retain
             # the actual proposal, which is always published separately.

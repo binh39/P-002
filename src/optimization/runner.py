@@ -18,7 +18,14 @@ from src.promptopt_pause import ModelRateLimitPauseError, read_pause_request
 
 from .coveragepy import SymbolCoverage, load_report, run_coverage, symbol_coverage
 from .metrics import build_feedback, score_symbol
-from .models import BatchRunRecord, BatchTargetResult, ExperimentConfig, RunRecord, SymbolTarget
+from .models import (
+    BatchRunRecord,
+    BatchTargetResult,
+    EvaluationBackend,
+    ExperimentConfig,
+    RunRecord,
+    SymbolTarget,
+)
 from .subprocesses import run_streamed
 
 TARGET_EVALUATION_TIMEOUT_SECONDS = 20 * 60
@@ -60,9 +67,7 @@ def _test_environment(
     environment = os.environ.copy()
     src_dir = project_root.resolve() / "src"
     roots = [str(src_dir), *(str(root.resolve()) for root in extra_roots)]
-    environment["PYTHONPATH"] = (
-        os.pathsep.join(roots) + os.pathsep + environment.get("PYTHONPATH", "")
-    )
+    environment["PYTHONPATH"] = os.pathsep.join(roots) + os.pathsep + environment.get("PYTHONPATH", "")
     environment["MPLBACKEND"] = "Agg"
     # Generated tests may iterate over sets or otherwise depend on Python's
     # randomized hash order. CoverUp validates a test in one subprocess and the
@@ -116,7 +121,10 @@ def _traces_for_target(traces: list[dict], target: SymbolTarget) -> list[dict]:
 
 
 def _saved_tests_for_target(
-    traces: list[dict], target: SymbolTarget, *, workspace: Path,
+    traces: list[dict],
+    target: SymbolTarget,
+    *,
+    workspace: Path,
 ) -> list[Path]:
     """Return only saved test modules attributed to one exact target."""
     workspace = workspace.resolve()
@@ -158,7 +166,9 @@ def _consolidate_saved_tests(
     source_workspace = source_workspace.resolve()
     destination_workspace = destination_workspace.resolve()
     sources = _saved_tests_for_target(
-        traces, target, workspace=source_workspace,
+        traces,
+        target,
+        workspace=source_workspace,
     )
     replacements: dict[Path, Path] = {}
     copied: list[Path] = []
@@ -194,6 +204,7 @@ class _TargetEvaluationJob:
     attempt_trace: Path
     command: list[str]
     artifact_token: str
+    environment: dict[str, str]
 
 
 @dataclass
@@ -248,7 +259,8 @@ def _save_target_checkpoint(
     """Persist one completed target atomically so a paused batch can skip it."""
     target_result = outcome.target_result.as_dict()
     target_result["attempt_traces"] = _portable_attempt_traces(
-        target_result.get("attempt_traces", []), artifacts_root,
+        target_result.get("attempt_traces", []),
+        artifacts_root,
     )
     payload = {
         "schema_version": 1,
@@ -258,9 +270,7 @@ def _save_target_checkpoint(
         "stdout": outcome.stdout,
         "coverup_log": outcome.coverup_log,
         "attempt_traces": _portable_attempt_traces(outcome.attempt_traces, artifacts_root),
-        "generated_tests": [
-            _checkpoint_path(path, artifacts_root) for path in outcome.generated_tests
-        ],
+        "generated_tests": [_checkpoint_path(path, artifacts_root) for path in outcome.generated_tests],
         "coverage_after": _checkpoint_path(outcome.coverage_after, artifacts_root),
     }
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -314,8 +324,14 @@ def _prune_run_dir(run_dir: Path) -> None:
 class CoverUpExperimentRunner:
     """Generate one prompt batch and score each symbol with only its traced tests."""
 
-    def __init__(self, config: ExperimentConfig) -> None:
+    def __init__(
+        self,
+        config: ExperimentConfig,
+        *,
+        evaluation_backend: EvaluationBackend | None = None,
+    ) -> None:
         self.config = config
+        self.evaluation_backend = evaluation_backend
 
     def evaluate(
         self,
@@ -325,9 +341,7 @@ class CoverUpExperimentRunner:
         candidate_id: str | None = None,
     ) -> RunRecord:
         """Compatibility wrapper for evaluating a single target as a one-item batch."""
-        batch = self.evaluate_batch(
-            [target], prompt_template, candidate_id=candidate_id, split=target.split
-        )
+        batch = self.evaluate_batch([target], prompt_template, candidate_id=candidate_id, split=target.split)
         result = batch.results[0]
         return RunRecord(
             run_id=batch.run_id,
@@ -362,6 +376,12 @@ class CoverUpExperimentRunner:
         candidate workspace, so GEPA still scores a prompt by asking CoverUp to
         generate a fresh test module from that prompt.
         """
+        if self.evaluation_backend is not None:
+            return self.evaluation_backend.evaluate_optimizer_test(
+                target,
+                test_module,
+                experiment_id=experiment_id,
+            )
         if not isinstance(test_module, str) or not test_module.strip():
             raise ValueError("Optimizer experiment requires a non-empty test module")
         if len(test_module.encode("utf-8")) > 64 * 1024:
@@ -379,8 +399,7 @@ class CoverUpExperimentRunner:
                 "stdout": "",
             }
         has_test = any(
-            isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
-            and node.name.startswith("test_")
+            isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name.startswith("test_")
             for node in ast.walk(tree)
         )
         if not has_test:
@@ -394,16 +413,10 @@ class CoverUpExperimentRunner:
                 "stdout": "",
             }
 
-        safe_id = re.sub(
-            r"[^A-Za-z0-9_.-]+", "_", experiment_id
-        ).strip("._-")
+        safe_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", experiment_id).strip("._-")
         if not safe_id:
             raise ValueError("experiment_id must contain a safe path character")
-        run_dir = (
-            self.config.artifacts_dir.resolve()
-            / "optimizer_experiments"
-            / safe_id
-        )
+        run_dir = self.config.artifacts_dir.resolve() / "optimizer_experiments" / safe_id
         run_dir.mkdir(parents=True, exist_ok=False)
         test_path = run_dir / "test_optimizer_experiment.py"
         test_path.write_text(test_module, encoding="utf-8")
@@ -413,6 +426,8 @@ class CoverUpExperimentRunner:
             self.config.project_root,
             (self.config.import_root_for(target.project),),
         )
+        if runtime_python := self.config.python_for(target.project):
+            environment["TESTGEN_PYTHON"] = str(runtime_python.resolve())
         completed = run_coverage(
             project_root=self.config.project_root.resolve(),
             package_dir=package_dir,
@@ -432,39 +447,33 @@ class CoverUpExperimentRunner:
             "score": 0.0,
             "stdout": (
                 completed.stdout
-                if os.environ.get(
-                    "PROMPTOPT_FULL_REFLECTION_LOGS", ""
-                ).strip().lower() in {"1", "true", "yes", "on"}
+                if os.environ.get("PROMPTOPT_FULL_REFLECTION_LOGS", "").strip().lower() in {"1", "true", "yes", "on"}
                 else completed.stdout[-6000:]
             ),
             "test_file": str(test_path),
         }
         if coverage_path.is_file():
             try:
-                measured = symbol_coverage(
-                    load_report(coverage_path), target.source_file, target.symbol
-                )
+                measured = symbol_coverage(load_report(coverage_path), target.source_file, target.symbol)
             except KeyError as exc:
                 result["coverage_error"] = str(exc)
             else:
                 metric = score_symbol(_zero_coverage_like(measured), measured)
-                result.update({
-                    "score": metric.score if completed.returncode == 0 else 0.0,
-                    "measured_score": metric.score,
-                    "covered_statements": metric.covered_statements,
-                    "num_statements": metric.num_statements,
-                    "covered_branches": metric.covered_branches,
-                    "num_branches": metric.num_branches,
-                    "gained_lines": list(metric.gained_lines),
-                    "gained_branches": [list(branch) for branch in metric.gained_branches],
-                    "remaining_lines": list(metric.remaining_lines),
-                    "remaining_branches": [
-                        list(branch) for branch in metric.remaining_branches
-                    ],
-                })
-        (run_dir / "result.json").write_text(
-            json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+                result.update(
+                    {
+                        "score": metric.score if completed.returncode == 0 else 0.0,
+                        "measured_score": metric.score,
+                        "covered_statements": metric.covered_statements,
+                        "num_statements": metric.num_statements,
+                        "covered_branches": metric.covered_branches,
+                        "num_branches": metric.num_branches,
+                        "gained_lines": list(metric.gained_lines),
+                        "gained_branches": [list(branch) for branch in metric.gained_branches],
+                        "remaining_lines": list(metric.remaining_lines),
+                        "remaining_branches": [list(branch) for branch in metric.remaining_branches],
+                    }
+                )
+        (run_dir / "result.json").write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
         coverage_path.unlink(missing_ok=True)
         coverage_path.with_suffix(".data").unlink(missing_ok=True)
         shutil.rmtree(run_dir / "pytest_tmp", ignore_errors=True)
@@ -480,6 +489,14 @@ class CoverUpExperimentRunner:
         workspace_kind: str = "candidate",
     ) -> BatchRunRecord:
         """Evaluate targets concurrently and retain one consolidated candidate suite."""
+        if self.evaluation_backend is not None:
+            return self.evaluation_backend.evaluate_batch(
+                targets,
+                prompt_template,
+                candidate_id=candidate_id,
+                split=split,
+                workspace_kind=workspace_kind,
+            )
         if not targets:
             raise ValueError("evaluate_batch requires at least one target")
         target_splits = {target.split for target in targets}
@@ -488,9 +505,7 @@ class CoverUpExperimentRunner:
                 raise ValueError(f"Batch targets must share one split, got {sorted(target_splits)}")
             split = next(iter(target_splits))
         elif target_splits != {split}:
-            raise ValueError(
-                f"Batch targets do not match requested split {split!r}: {sorted(target_splits)}"
-            )
+            raise ValueError(f"Batch targets do not match requested split {split!r}: {sorted(target_splits)}")
         safe_split = re.sub(r"[^A-Za-z0-9_.-]+", "_", split).strip("._-")
         if not safe_split:
             raise ValueError("split must contain at least one safe path character")
@@ -512,13 +527,8 @@ class CoverUpExperimentRunner:
         }
         if workspace_kind not in workspace_prefixes:
             raise ValueError(f"Unsupported workspace kind: {workspace_kind!r}")
-        generated_tests_root = (
-            self.config.artifacts_dir.resolve() / "generated_tests" / safe_split
-        )
-        work_tests = (
-            generated_tests_root
-            / f"{workspace_prefixes[workspace_kind]}_{safe_candidate_id}"
-        )
+        generated_tests_root = self.config.artifacts_dir.resolve() / "generated_tests" / safe_split
+        work_tests = generated_tests_root / f"{workspace_prefixes[workspace_kind]}_{safe_candidate_id}"
         if work_tests.exists():
             if any(work_tests.iterdir()):
                 if has_target_checkpoints:
@@ -554,20 +564,21 @@ class CoverUpExperimentRunner:
             grouped.setdefault(target.project, []).append(target)
         projects = sorted(grouped)
         multi_project = len(projects) > 1
-        package_dirs = {
-            project: self.config.package_dir_for(project).resolve()
-            for project in projects
-        }
+        package_dirs = {project: self.config.package_dir_for(project).resolve() for project in projects}
         missing_packages = [str(path) for path in package_dirs.values() if not path.is_dir()]
         if missing_packages:
             raise FileNotFoundError(
-                "Package directory does not exist for a target project: "
-                + ", ".join(missing_packages)
+                "Package directory does not exist for a target project: " + ", ".join(missing_packages)
             )
-        environment = _test_environment(
-            self.config.project_root,
-            tuple(sorted({self.config.import_root_for(project) for project in projects})),
-        )
+        environments: dict[str, dict[str, str]] = {}
+        for project in projects:
+            environment = _test_environment(
+                self.config.project_root,
+                (self.config.import_root_for(project),),
+            )
+            if runtime_python := self.config.python_for(project):
+                environment["TESTGEN_PYTHON"] = str(runtime_python.resolve())
+            environments[project] = environment
 
         final_workspaces: dict[str, Path] = {}
         for project in projects:
@@ -613,18 +624,32 @@ class CoverUpExperimentRunner:
             coverup_log = run_dir / f"coverup_{artifact_token}.log"
             target_trace = run_dir / f"attempt_trace_{artifact_token}.jsonl"
             command = [
-                sys.executable, "-u", "-m", "coverup",
-                "--package-dir", str(package_dirs[target.project]),
-                "--tests-dir", str(temporary_workspace),
-                "--target-symbols", target.symbol,
-                "--target-spec-file", str(target_spec),
-                "--prompt", "gpt-v2",
-                "--prompt-template-file", str(prompt_copy),
-                "--model", self.config.coverup_model,
-                "--max-attempts", str(self.config.max_attempts),
-                "--prefix", "opt",
-                "--log-file", str(coverup_log),
-                "--trace-file", str(target_trace),
+                sys.executable,
+                "-u",
+                "-m",
+                "coverup",
+                "--package-dir",
+                str(package_dirs[target.project]),
+                "--tests-dir",
+                str(temporary_workspace),
+                "--target-symbols",
+                target.symbol,
+                "--target-spec-file",
+                str(target_spec),
+                "--prompt",
+                "gpt-v2",
+                "--prompt-template-file",
+                str(prompt_copy),
+                "--model",
+                self.config.coverup_model,
+                "--max-attempts",
+                str(self.config.max_attempts),
+                "--prefix",
+                "opt",
+                "--log-file",
+                str(coverup_log),
+                "--trace-file",
+                str(target_trace),
                 "--no-checkpoint",
                 # Target-specific coverage below is authoritative. Avoid CoverUp's
                 # redundant final suite pass, especially expensive with repeats.
@@ -641,17 +666,20 @@ class CoverUpExperimentRunner:
             command.extend(["--max-concurrency", "1"])
             if self.config.rate_limit is not None:
                 command.extend(["--rate-limit", str(self.config.rate_limit)])
-            jobs.append(_TargetEvaluationJob(
-                target=target,
-                package_dir=package_dirs[target.project],
-                final_workspace=final_workspaces[target.project],
-                temporary_workspace=temporary_workspace,
-                target_spec=target_spec,
-                coverup_log=coverup_log,
-                attempt_trace=target_trace,
-                command=command,
-                artifact_token=artifact_token,
-            ))
+            jobs.append(
+                _TargetEvaluationJob(
+                    target=target,
+                    package_dir=package_dirs[target.project],
+                    final_workspace=final_workspaces[target.project],
+                    temporary_workspace=temporary_workspace,
+                    target_spec=target_spec,
+                    coverup_log=coverup_log,
+                    attempt_trace=target_trace,
+                    command=command,
+                    artifact_token=artifact_token,
+                    environment=environments[target.project],
+                )
+            )
 
         def evaluate_target(job: _TargetEvaluationJob) -> _TargetEvaluationOutcome:
             # Run CoverUp from the target project's import root.  Uploaded
@@ -667,7 +695,7 @@ class CoverUpExperimentRunner:
             completed = run_streamed(
                 job.command,
                 cwd=coverup_cwd,
-                env=environment,
+                env=job.environment,
                 label=f"CoverUp {job.target.source_file}::{job.target.symbol}",
                 echo=False,
                 announce=True,
@@ -692,7 +720,9 @@ class CoverUpExperimentRunner:
 
             target_traces = _traces_for_target(rewritten_traces, job.target)
             selected_tests = _saved_tests_for_target(
-                rewritten_traces, job.target, workspace=job.final_workspace,
+                rewritten_traces,
+                job.target,
+                workspace=job.final_workspace,
             )
             if not selected_tests:
                 empty_test = run_dir / f"empty_target_{job.artifact_token}.py"
@@ -711,21 +741,17 @@ class CoverUpExperimentRunner:
                 output=after_json,
                 pytest_args=self.config.pytest_args,
                 repeat_tests=self.config.repeat_tests,
-                env=environment,
+                env=job.environment,
             )
             if after.returncode:
                 feedback = (
-                    "Score: 0. The generated tests for this target failed under "
-                    "coverage.py:\n"
-                    f"{after.stdout[-4000:]}"
+                    f"Score: 0. The generated tests for this target failed under coverage.py:\n{after.stdout[-4000:]}"
                 )
                 report = load_report(after_json) if after_json.is_file() else None
                 score_data = None
                 if report is not None:
                     try:
-                        measured_cov = symbol_coverage(
-                            report, job.target.source_file, job.target.symbol
-                        )
+                        measured_cov = symbol_coverage(report, job.target.source_file, job.target.symbol)
                     except KeyError:
                         pass
                     else:
@@ -744,9 +770,7 @@ class CoverUpExperimentRunner:
             else:
                 report = load_report(after_json)
                 try:
-                    after_cov = symbol_coverage(
-                        report, job.target.source_file, job.target.symbol
-                    )
+                    after_cov = symbol_coverage(report, job.target.source_file, job.target.symbol)
                 except KeyError as exc:
                     target_result = BatchTargetResult(
                         target=job.target,
@@ -754,9 +778,7 @@ class CoverUpExperimentRunner:
                         attempt_traces=target_traces,
                     )
                 else:
-                    metric_result = score_symbol(
-                        _zero_coverage_like(after_cov), after_cov
-                    )
+                    metric_result = score_symbol(_zero_coverage_like(after_cov), after_cov)
                     score_data = metric_result.as_dict()
                     score_data["valid"] = True
                     score_data["generator_exit_code"] = completed.returncode
@@ -769,11 +791,7 @@ class CoverUpExperimentRunner:
                         ),
                         attempt_traces=target_traces,
                     )
-            coverup_log_text = (
-                job.coverup_log.read_text(encoding="utf-8")
-                if job.coverup_log.is_file()
-                else ""
-            )
+            coverup_log_text = job.coverup_log.read_text(encoding="utf-8") if job.coverup_log.is_file() else ""
             return _TargetEvaluationOutcome(
                 target_result=target_result,
                 command=job.command,
@@ -789,16 +807,9 @@ class CoverUpExperimentRunner:
         started = time.monotonic()
         # A configured limiter is process-local, so multiple CoverUp processes
         # would exceed it. Preserve its semantics by serializing that rare mode.
-        worker_count = (
-            1
-            if self.config.rate_limit is not None
-            else min(len(jobs), max(1, self.config.max_concurrency))
-        )
+        worker_count = 1 if self.config.rate_limit is not None else min(len(jobs), max(1, self.config.max_concurrency))
         outcomes_by_index = dict(restored_outcomes)
-        job_positions = {
-            job.artifact_token: int(job.artifact_token.rsplit("_", 1)[1])
-            for job in jobs
-        }
+        job_positions = {job.artifact_token: int(job.artifact_token.rsplit("_", 1)[1]) for job in jobs}
 
         def retain_outcome(job: _TargetEvaluationJob, outcome: _TargetEvaluationOutcome) -> None:
             position = job_positions[job.artifact_token]
@@ -843,28 +854,18 @@ class CoverUpExperimentRunner:
                 raise first_error
 
         if len(outcomes_by_index) != len(targets):
-            raise RuntimeError(
-                f"Batch checkpoint is incomplete: {len(outcomes_by_index)}/{len(targets)} targets"
-            )
+            raise RuntimeError(f"Batch checkpoint is incomplete: {len(outcomes_by_index)}/{len(targets)} targets")
         outcomes = [outcomes_by_index[index] for index in range(len(targets))]
 
         results = [outcome.target_result for outcome in outcomes]
         after_jsons = [outcome.coverage_after for outcome in outcomes]
-        merged_attempt_traces = [
-            trace for outcome in outcomes for trace in outcome.attempt_traces
-        ]
+        merged_attempt_traces = [trace for outcome in outcomes for trace in outcome.attempt_traces]
         project_root_resolved = self.config.project_root.resolve()
         generated_tests = [
-            _display_path(path, project_root_resolved)
-            for outcome in outcomes
-            for path in outcome.generated_tests
+            _display_path(path, project_root_resolved) for outcome in outcomes for path in outcome.generated_tests
         ]
         final_exit_code = next(
-            (
-                outcome.generator_exit_code
-                for outcome in outcomes
-                if outcome.generator_exit_code
-            ),
+            (outcome.generator_exit_code for outcome in outcomes if outcome.generator_exit_code),
             0,
         )
         elapsed = time.monotonic() - started
@@ -902,14 +903,10 @@ class CoverUpExperimentRunner:
             results=results,
             generated_tests=generated_tests,
             tests_workspace=str(work_tests),
-            coverage_after=(
-                str(after_jsons[0].relative_to(run_dir)) if after_jsons else None
-            ),
+            coverage_after=(str(after_jsons[0].relative_to(run_dir)) if after_jsons else None),
             stdout_file=str(stdout_file.relative_to(run_dir)),
             coverup_log_file=str(merged_coverup_log.relative_to(run_dir)),
-            attempt_trace_file=(
-                str(attempt_trace.relative_to(run_dir)) if attempt_trace.exists() else ""
-            ),
+            attempt_trace_file=(str(attempt_trace.relative_to(run_dir)) if attempt_trace.exists() else ""),
         )
         (run_dir / "record.json").write_text(
             json.dumps(record.as_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
@@ -934,28 +931,16 @@ class CoverUpExperimentRunner:
             raise FileNotFoundError(f"Baseline tests directory does not exist: {tests_dir}")
         safe_split = re.sub(r"[^A-Za-z0-9_.-]+", "_", split).strip("._-")
         run_id = f"baseline-existing-{safe_split}-{uuid.uuid4().hex[:8]}"
-        run_dir = (
-            self.config.artifacts_dir.resolve()
-            / "runs"
-            / "baseline-existing"
-            / safe_split
-            / run_id
-        )
+        run_dir = self.config.artifacts_dir.resolve() / "runs" / "baseline-existing" / safe_split / run_id
         run_dir.mkdir(parents=True, exist_ok=False)
-        environment = _test_environment(self.config.project_root)
         grouped: dict[str, list[SymbolTarget]] = {}
         for target in targets:
             grouped.setdefault(target.project, []).append(target)
         projects = sorted(grouped)
         multi_project = len(projects) > 1
         if multi_project:
-            per_project_tests = {
-                project: (tests_dir / project).resolve()
-                for project in projects
-            }
-            missing_tests = [
-                str(path) for path in per_project_tests.values() if not path.is_dir()
-            ]
+            per_project_tests = {project: (tests_dir / project).resolve() for project in projects}
+            missing_tests = [str(path) for path in per_project_tests.values() if not path.is_dir()]
             if missing_tests:
                 raise FileNotFoundError(
                     "Multi-project baseline evaluation requires one tests "
@@ -970,6 +955,12 @@ class CoverUpExperimentRunner:
         final_exit_code = 0
         for project in projects:
             group = grouped[project]
+            environment = _test_environment(
+                self.config.project_root,
+                (self.config.import_root_for(project),),
+            )
+            if runtime_python := self.config.python_for(project):
+                environment["TESTGEN_PYTHON"] = str(runtime_python.resolve())
             package_dir = self.config.package_dir_for(project).resolve()
             safe_project = re.sub(r"[^A-Za-z0-9_.-]+", "_", project).strip("._-")
             suffix = "" if not multi_project else f"_{safe_project}"
@@ -994,20 +985,24 @@ class CoverUpExperimentRunner:
                 try:
                     after_cov = symbol_coverage(report, target.source_file, target.symbol)
                 except KeyError as exc:
-                    results.append(BatchTargetResult(
-                        target=target,
-                        feedback=f"Score: 0. Coverage lookup failed: {exc}",
-                    ))
+                    results.append(
+                        BatchTargetResult(
+                            target=target,
+                            feedback=f"Score: 0. Coverage lookup failed: {exc}",
+                        )
+                    )
                     continue
                 metric_result = score_symbol(_zero_coverage_like(after_cov), after_cov)
                 score_data = metric_result.as_dict()
                 score_data["valid"] = True
                 score_data["generator_exit_code"] = 0
-                results.append(BatchTargetResult(
-                    target=target,
-                    score=score_data,
-                    feedback=build_feedback(metric_result),
-                ))
+                results.append(
+                    BatchTargetResult(
+                        target=target,
+                        score=score_data,
+                        feedback=build_feedback(metric_result),
+                    )
+                )
             after_jsons.append(after_json)
         elapsed = time.monotonic() - started
         record = BatchRunRecord(
@@ -1020,13 +1015,9 @@ class CoverUpExperimentRunner:
             exit_code=final_exit_code,
             elapsed_seconds=elapsed,
             results=results,
-            generated_tests=[
-                str(path) for path in sorted(tests_dir.rglob("test_*.py"))
-            ],
+            generated_tests=[str(path) for path in sorted(tests_dir.rglob("test_*.py"))],
             tests_workspace=str(tests_dir),
-            coverage_after=(
-                str(after_jsons[0].relative_to(run_dir)) if after_jsons else None
-            ),
+            coverage_after=(str(after_jsons[0].relative_to(run_dir)) if after_jsons else None),
         )
         (run_dir / "record.json").write_text(
             json.dumps(record.as_dict(), indent=2, ensure_ascii=False), encoding="utf-8"

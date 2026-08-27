@@ -26,6 +26,12 @@ CLOUD_RUN_GEPA_TIMEOUT_SECONDS: "86400"
 CLOUD_RUN_TEST_GENERATION_JOB: promptopt-gepa-runner-dev
 RUNTIME_EXECUTION_BACKEND: cloud_run_job
 CLOUD_RUN_RUNTIME_JOB: promptopt-runtime-preparer
+CLOUD_RUN_RUNTIME_JOB_PY310: promptopt-runtime-preparer-dev-py310
+CLOUD_RUN_RUNTIME_JOB_PY311: promptopt-runtime-preparer-dev-py311
+CLOUD_RUN_RUNTIME_JOB_PY312: promptopt-runtime-preparer-dev-py312
+CLOUD_RUN_RUNTIME_JOB_PY313: promptopt-runtime-preparer-dev-py313
+CLOUD_RUN_RUNTIME_FACTORY_JOB: promptopt-runtime-image-factory-dev
+CLOUD_RUN_RUNTIME_FACTORY_TIMEOUT_SECONDS: "3600"
 CLOUD_RUN_RUNTIME_TIMEOUT_SECONDS: "1800"
 GEPA_MAX_CONCURRENCY: "10"
 GEPA_REPEAT_TESTS: "5"
