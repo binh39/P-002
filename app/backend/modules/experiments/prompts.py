@@ -35,9 +35,7 @@ class PromptBundle:
         return cls(
             initial=candidate.get("initial", ""),
             error=candidate.get("error", ""),
-            missing_coverage=(
-                candidate.get("missing_coverage") or DEFAULT_MISSING_COVERAGE_PROMPT
-            ),
+            missing_coverage=(candidate.get("missing_coverage") or DEFAULT_MISSING_COVERAGE_PROMPT),
         )
 
     def validate(self) -> None:
