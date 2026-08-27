@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 from google.api_core.exceptions import ServiceUnavailable
 
+from backend.core.errors import AppError
 from backend.modules.experiments.cloud_optimizer import OptimizationPausedError
 from backend.modules.experiments.dispatcher import InlineOptimizationDispatcher
 from backend.modules.experiments.optimizer import OptimizationResult
@@ -55,6 +56,39 @@ class RecordingOptimizationDispatcher:
     async def dispatch(self, run_id: str, delay_seconds: int = 0) -> None:
         self.run_ids.append(run_id)
         self.delays.append(delay_seconds)
+
+
+@pytest.mark.asyncio
+async def test_standard_account_cannot_queue_a_second_active_experiment():
+    repository, storage = InMemoryExperimentRepository(), FakeStorage()
+    now = datetime.now(UTC)
+    active = ExperimentRecord(
+        id="active-experiment",
+        owner_id="owner-1",
+        project_id="project-1",
+        name="Already running",
+        status=ExperimentStatus.OPTIMIZING,
+        created_at=now,
+        updated_at=now,
+    )
+    pending = ExperimentRecord(
+        id="pending-experiment",
+        owner_id="owner-1",
+        project_id="project-1",
+        name="Pending experiment",
+        status=ExperimentStatus.DRAFT,
+        created_at=now,
+        updated_at=now,
+    )
+    await repository.create(active)
+    await repository.create(pending)
+    service = ExperimentService(repository, FakeProjects(), FakeFunctions(), storage)
+
+    with pytest.raises(AppError, match="only one experiment") as raised:
+        await service.request_optimization(pending.id, pending.owner_id)
+
+    assert raised.value.status_code == 409
+    assert raised.value.code == "ACTIVE_EXPERIMENT_LIMIT"
 
 
 @pytest.mark.asyncio

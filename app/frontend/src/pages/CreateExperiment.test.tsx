@@ -16,6 +16,7 @@ const repositories = vi.hoisted(() => ({
     listFunctions: vi.fn(),
   },
   experiments: {
+    list: vi.fn(),
     create: vi.fn(),
     requestOptimization: vi.fn(),
   },
@@ -74,6 +75,7 @@ describe("create experiment wizard", () => {
     auth.user.email = "member@example.com";
     repositories.projects.listSamples.mockResolvedValue([project]);
     repositories.projects.listFunctions.mockResolvedValue(functions);
+    repositories.experiments.list.mockResolvedValue([]);
     repositories.experiments.create.mockResolvedValue({ id: "experiment-1" });
     repositories.experiments.requestOptimization.mockResolvedValue({ id: "optimization-1" });
   });
@@ -98,7 +100,7 @@ describe("create experiment wizard", () => {
           projectIds: ["project-1"],
           name: "isort prompt optimization",
           samplingMethod: "random",
-          maxTargets: null,
+          maxTargets: 3,
           randomSeed: 115,
           settings: expect.objectContaining({
             maxAttempts: 3,
@@ -122,6 +124,51 @@ describe("create experiment wizard", () => {
     expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
   });
 
+  it("limits a standard account to twenty functions", async () => {
+    repositories.projects.listFunctions.mockResolvedValue(
+      Array.from({ length: 25 }, (_, index) => ({
+        ...functions[index % functions.length],
+        id: `fn-${index + 1}`,
+        name: `function_${index + 1}`,
+      })),
+    );
+    render(<CreateExperiment />, { wrapper: Wrapper });
+
+    fireEvent.change(await screen.findByLabelText(/Runtime environment/i), {
+      target: { value: "sample-runtime" },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: /isort/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByText(/25 valid functions available/i);
+    expect(screen.getByLabelText(/Candidate functions/i)).toHaveAttribute("max", "20");
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /create and optimize/i }));
+
+    await waitFor(() =>
+      expect(repositories.experiments.create).toHaveBeenCalledWith(
+        expect.objectContaining({ maxTargets: 20 }),
+      ),
+    );
+  });
+
+  it("blocks a standard account while another experiment is active", async () => {
+    repositories.experiments.list.mockResolvedValue([
+      { id: "active-experiment", name: "Current optimization", status: "optimizing" },
+    ]);
+    render(<CreateExperiment />, { wrapper: Wrapper });
+
+    expect(
+      await screen.findByText(/Standard accounts can run only one experiment at a time/i),
+    ).toBeInTheDocument();
+    fireEvent.change(await screen.findByLabelText(/Runtime environment/i), {
+      target: { value: "sample-runtime" },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: /isort/i }));
+    expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
+  });
+
   it("removes the metric budget ceiling for the full-access account", async () => {
     auth.user.email = "admin@gmail.com";
     render(<CreateExperiment />, { wrapper: Wrapper });
@@ -132,6 +179,7 @@ describe("create experiment wizard", () => {
     fireEvent.click(await screen.findByRole("button", { name: /isort/i }));
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     await screen.findByText(/3 valid functions available/i);
+    expect(screen.getByLabelText(/Candidate functions/i)).not.toHaveAttribute("max");
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
 

@@ -303,3 +303,9 @@ export const optimizationRunIsActive = (status: ExperimentStatus) =>
 
 export const comparisonRunIsActive = (status: ExperimentStatus) =>
   status === "comparison_queued" || status === "comparing";
+
+export const experimentIsActive = (status: ExperimentStatus) =>
+  status === "baseline_queued" ||
+  status === "baseline_running" ||
+  optimizationRunIsActive(status) ||
+  comparisonRunIsActive(status);

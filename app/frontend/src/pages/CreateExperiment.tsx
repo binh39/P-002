@@ -19,10 +19,11 @@ import {
   type SamplingMethod,
 } from "@/domain/experimentConfiguration";
 import type { PythonProject } from "@/domain/projects";
-import type { PromptBundle } from "@/domain/experiments";
+import { experimentIsActive, type PromptBundle } from "@/domain/experiments";
 
 const steps = ["Projects", "Functions", "Dataset", "Settings", "Review"];
 const splitNames: DatasetSplit[] = ["train", "validation", "test"];
+const standardMaxFunctions = 20;
 const availableModels = [
   "google/gemini-2.5-flash",
   "google/gemini-2.5-flash-lite",
@@ -106,6 +107,11 @@ export default function CreateExperiment() {
       ];
     },
   });
+  const experimentsQuery = useQuery({
+    queryKey: ["experiments"],
+    queryFn: ({ signal }) => experiments.list(signal),
+    enabled: !hasFullAccess,
+  });
   const functionQueries = useQueries({
     queries: selectedProjectIds.map((projectId) => ({
       queryKey: ["projects", projectId, "functions"],
@@ -143,13 +149,15 @@ export default function CreateExperiment() {
     if (samplingMethod === "manual") {
       return validFunctions.filter((item) => manualAssignments[item.key] !== undefined);
     }
+    const accountLimit = hasFullAccess ? null : standardMaxFunctions;
+    const requestedLimit = sampleLimit ?? accountLimit;
     return selectCandidateFunctions(
       validFunctions,
       samplingMethod,
-      sampleLimit === null ? null : Math.min(sampleLimit, validFunctions.length),
+      requestedLimit === null ? null : Math.min(requestedLimit, validFunctions.length),
       randomSeed,
     );
-  }, [manualAssignments, randomSeed, sampleLimit, samplingMethod, validFunctions]);
+  }, [hasFullAccess, manualAssignments, randomSeed, sampleLimit, samplingMethod, validFunctions]);
   const dataset = useMemo(() => {
     if (samplingMethod === "manual") {
       return Object.fromEntries(
@@ -172,13 +180,19 @@ export default function CreateExperiment() {
 
   const functionsLoading = functionQueries.some((query) => query.isPending);
   const functionsError = functionQueries.find((query) => query.isError)?.error;
+  const activeExperiment = experimentsQuery.data?.find((item) => experimentIsActive(item.status));
+  const accountCanStartExperiment =
+    hasFullAccess || (experimentsQuery.isSuccess && activeExperiment === undefined);
   const functionSelectionValid =
     selectedFunctions.length >= 3 &&
+    (hasFullAccess || selectedFunctions.length <= standardMaxFunctions) &&
     Number.isInteger(randomSeed) &&
     randomSeed >= 0 &&
     (samplingMethod === "manual" ||
       sampleLimit === null ||
-      (Number.isInteger(sampleLimit) && sampleLimit >= 3));
+      (Number.isInteger(sampleLimit) &&
+        sampleLimit >= 3 &&
+        (hasFullAccess || sampleLimit <= standardMaxFunctions)));
   const datasetValid =
     percentagesAreValid(percentages) && splitNames.every((name) => dataset[name].length > 0);
   const minimumMetricCalls = Math.max(3, dataset.validation.length + 1);
@@ -245,10 +259,10 @@ export default function CreateExperiment() {
   }
 
   const canContinue = [
-    environmentSelectionValid,
-    !functionsLoading && !functionsError && functionSelectionValid,
-    datasetValid,
-    settingsValid,
+    accountCanStartExperiment && environmentSelectionValid,
+    accountCanStartExperiment && !functionsLoading && !functionsError && functionSelectionValid,
+    accountCanStartExperiment && datasetValid,
+    accountCanStartExperiment && settingsValid,
     false,
   ][step];
 
@@ -258,7 +272,12 @@ export default function CreateExperiment() {
         projectIds: selectedProjectIds,
         name: experimentName.trim(),
         samplingMethod,
-        maxTargets: samplingMethod === "manual" ? null : sampleLimit,
+        maxTargets:
+          samplingMethod === "manual"
+            ? null
+            : hasFullAccess
+              ? sampleLimit
+              : selectedFunctions.length,
         randomSeed,
         splitPercentages: percentages,
         manualSplits:
@@ -297,6 +316,13 @@ export default function CreateExperiment() {
     setManualAssignments((current) => {
       if (!split)
         return Object.fromEntries(Object.entries(current).filter(([item]) => item !== key));
+      if (
+        !hasFullAccess &&
+        current[key] === undefined &&
+        Object.keys(current).length >= standardMaxFunctions
+      ) {
+        return current;
+      }
       return { ...current, [key]: split };
     });
   };
@@ -318,6 +344,18 @@ export default function CreateExperiment() {
         ← All experiments
       </button>
       <PageHeader eyebrow="New experiment" title="Configure prompt optimization" />
+
+      {!hasFullAccess && experimentsQuery.isError && (
+        <div className="inline-validation-error" role="alert">
+          Account limits could not be verified. Reload the page before creating an experiment.
+        </div>
+      )}
+      {!hasFullAccess && activeExperiment && (
+        <div className="inline-validation-error" role="alert">
+          Standard accounts can run only one experiment at a time. Finish or cancel “
+          {activeExperiment.name}” before starting another.
+        </div>
+      )}
 
       <ol className="wizard-steps experiment-wizard-steps">
         {steps.map((item, index) => (
@@ -362,6 +400,7 @@ export default function CreateExperiment() {
               projectFilter={projectFilter}
               setProjectFilter={setProjectFilter}
               retry={() => functionQueries.forEach((query) => void query.refetch())}
+              maxFunctionCount={hasFullAccess ? null : standardMaxFunctions}
             />
           )}
           {step === 2 && (
@@ -593,6 +632,7 @@ function FunctionsStep({
   projectFilter,
   setProjectFilter,
   retry,
+  maxFunctionCount,
 }: {
   projects: PythonProject[];
   functions: ExperimentFunction[];
@@ -611,6 +651,7 @@ function FunctionsStep({
   projectFilter: string;
   setProjectFilter: (project: string) => void;
   retry: () => void;
+  maxFunctionCount: number | null;
 }) {
   const methods: Array<{ id: SamplingMethod; title: string; description: string }> = [
     {
@@ -673,11 +714,16 @@ function FunctionsStep({
             {samplingMethod !== "manual" && (
               <Field
                 label="Candidate functions"
-                hint={`${functions.length} valid functions available; leave blank to use all.`}
+                hint={
+                  maxFunctionCount === null
+                    ? `${functions.length} valid functions available; leave blank to use all.`
+                    : `${functions.length} valid functions available; standard accounts can select up to ${maxFunctionCount}.`
+                }
               >
                 <input
                   type="number"
                   min={3}
+                  max={maxFunctionCount ?? undefined}
                   value={sampleLimit ?? ""}
                   placeholder="All valid functions"
                   onChange={(event) =>
@@ -715,12 +761,16 @@ function FunctionsStep({
                     </option>
                   ))}
                 </select>
-                <span>{Object.keys(assignments).length} assigned</span>
+                <span>
+                  {Object.keys(assignments).length}
+                  {maxFunctionCount === null ? "" : ` / ${maxFunctionCount}`} assigned
+                </span>
               </div>
               <FunctionTable
                 functions={filtered}
                 assignments={assignments}
                 setManualSplit={setManualSplit}
+                maxFunctionCount={maxFunctionCount}
               />
             </>
           )}
@@ -744,10 +794,12 @@ function FunctionTable({
   functions,
   assignments,
   setManualSplit,
+  maxFunctionCount,
 }: {
   functions: ExperimentFunction[];
   assignments: Record<string, DatasetSplit>;
   setManualSplit: (key: string, split: DatasetSplit | "") => void;
+  maxFunctionCount: number | null;
 }) {
   return (
     <div className="table-scroll function-selection-table">
@@ -784,9 +836,36 @@ function FunctionTable({
                   }
                 >
                   <option value="">Not selected</option>
-                  <option value="train">Train</option>
-                  <option value="validation">Validation</option>
-                  <option value="test">Test</option>
+                  <option
+                    value="train"
+                    disabled={
+                      assignments[item.key] === undefined &&
+                      maxFunctionCount !== null &&
+                      Object.keys(assignments).length >= maxFunctionCount
+                    }
+                  >
+                    Train
+                  </option>
+                  <option
+                    value="validation"
+                    disabled={
+                      assignments[item.key] === undefined &&
+                      maxFunctionCount !== null &&
+                      Object.keys(assignments).length >= maxFunctionCount
+                    }
+                  >
+                    Validation
+                  </option>
+                  <option
+                    value="test"
+                    disabled={
+                      assignments[item.key] === undefined &&
+                      maxFunctionCount !== null &&
+                      Object.keys(assignments).length >= maxFunctionCount
+                    }
+                  >
+                    Test
+                  </option>
                 </select>
               </td>
             </tr>

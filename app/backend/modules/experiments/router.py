@@ -80,6 +80,7 @@ async def resume_optimization(
         run_id,
         user.uid,
         max_concurrency=payload.max_concurrency if payload else None,
+        full_access=user.has_full_access,
     )
 
 
@@ -101,7 +102,11 @@ async def get_optimization_artifact(run_id: str, artifact_name: str, user: Curre
 
 @router.post("/{experiment_id}/compare", response_model=ComparisonRunResponse, status_code=status.HTTP_202_ACCEPTED)
 async def request_comparison(experiment_id: str, user: CurrentUser, request: Request):
-    return await request.app.state.services.experiments.request_comparison(experiment_id, user.uid)
+    return await request.app.state.services.experiments.request_comparison(
+        experiment_id,
+        user.uid,
+        full_access=user.has_full_access,
+    )
 
 
 @router.get("/comparison-runs/{run_id}", response_model=ComparisonRunResponse)

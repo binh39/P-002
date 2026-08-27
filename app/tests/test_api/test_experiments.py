@@ -74,6 +74,75 @@ async def test_only_full_access_account_can_exceed_metric_budget(client, app):
 
 
 @pytest.mark.asyncio
+async def test_only_full_access_account_can_select_more_than_twenty_functions(client, app):
+    payload = {
+        "project_ids": ["sample:isort"],
+        "name": "Large function dataset",
+        "max_targets": 21,
+    }
+
+    rejected = await client.post("/api/v1/experiments", headers=AUTH_HEADERS, json=payload)
+    assert rejected.status_code == 403
+    assert rejected.json()["error"]["code"] == "EXPERIMENT_TARGET_LIMIT"
+
+    app.state.services.token_verifier = AdminTokenVerifier()
+    accepted = await client.post(
+        "/api/v1/experiments",
+        headers={"Authorization": "Bearer admin-token"},
+        json=payload,
+    )
+    assert accepted.status_code == 201, accepted.text
+    assert len(accepted.json()["targets"]) == 21
+
+
+@pytest.mark.asyncio
+async def test_standard_account_cannot_create_while_an_experiment_is_active(client, app):
+    payload = {
+        "project_ids": ["sample:isort"],
+        "name": "First experiment",
+        "max_targets": 3,
+    }
+    first = await client.post("/api/v1/experiments", headers=AUTH_HEADERS, json=payload)
+    assert first.status_code == 201, first.text
+    repository = app.state.services.experiments.repository
+    stored = await repository.get(first.json()["id"])
+    stored.status = ExperimentStatus.OPTIMIZING
+    await repository.save(stored)
+
+    rejected = await client.post(
+        "/api/v1/experiments",
+        headers=AUTH_HEADERS,
+        json={**payload, "name": "Second experiment"},
+    )
+    assert rejected.status_code == 409
+    assert rejected.json()["error"]["code"] == "ACTIVE_EXPERIMENT_LIMIT"
+
+
+@pytest.mark.asyncio
+async def test_full_access_account_can_have_multiple_active_experiments(client, app):
+    app.state.services.token_verifier = AdminTokenVerifier()
+    headers = {"Authorization": "Bearer admin-token"}
+    payload = {
+        "project_ids": ["sample:isort"],
+        "name": "Admin experiment one",
+        "max_targets": 3,
+    }
+    first = await client.post("/api/v1/experiments", headers=headers, json=payload)
+    assert first.status_code == 201, first.text
+    repository = app.state.services.experiments.repository
+    stored = await repository.get(first.json()["id"])
+    stored.status = ExperimentStatus.OPTIMIZING
+    await repository.save(stored)
+
+    second = await client.post(
+        "/api/v1/experiments",
+        headers=headers,
+        json={**payload, "name": "Admin experiment two"},
+    )
+    assert second.status_code == 201, second.text
+
+
+@pytest.mark.asyncio
 async def test_uploaded_project_requires_runtime_before_experiment(client):
     project_id = await create_project(client, python_archive())
     await client.post(f"/api/v1/projects/{project_id}/analyze", headers=AUTH_HEADERS)

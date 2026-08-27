@@ -58,8 +58,21 @@ from .schemas import (
 )
 
 STANDARD_MAX_METRIC_CALLS = 2200
+STANDARD_MAX_EXPERIMENT_TARGETS = 20
 MAX_TEST_GENERATION_MANIFEST_BYTES = 1_000_000
 MAX_TEST_GENERATION_ARTIFACT_FILES = 1_000
+
+ACTIVE_EXPERIMENT_STATUSES = frozenset(
+    {
+        ExperimentStatus.BASELINE_QUEUED,
+        ExperimentStatus.BASELINE_RUNNING,
+        ExperimentStatus.OPTIMIZATION_QUEUED,
+        ExperimentStatus.OPTIMIZING,
+        ExperimentStatus.CANDIDATE_EVALUATING,
+        ExperimentStatus.COMPARISON_QUEUED,
+        ExperimentStatus.COMPARING,
+    }
+)
 
 _TRANSIENT_CLOUD_STATUS_CODES = {408, 429, 500, 502, 503, 504}
 
@@ -220,6 +233,30 @@ class ExperimentService:
     def set_test_generation_dispatcher(self, dispatcher: TestGenerationDispatcher) -> None:
         self.test_generation_dispatcher = dispatcher
 
+    async def _enforce_standard_account_concurrency(
+        self,
+        owner_id: str,
+        *,
+        full_access: bool,
+        exclude_experiment_id: str | None = None,
+    ) -> None:
+        if full_access:
+            return
+        active = next(
+            (
+                item
+                for item in await self.repository.list_for_owner(owner_id)
+                if item.id != exclude_experiment_id and item.status in ACTIVE_EXPERIMENT_STATUSES
+            ),
+            None,
+        )
+        if active is not None:
+            raise AppError(
+                409,
+                "ACTIVE_EXPERIMENT_LIMIT",
+                "Standard accounts can run only one experiment at a time",
+            )
+
     @staticmethod
     def _baseline_for(item: ExperimentRecord) -> PromptBundle:
         candidate = item.baseline_prompt
@@ -358,6 +395,7 @@ class ExperimentService:
                 "METRIC_BUDGET_LIMIT",
                 f"Metric-call budget is limited to {STANDARD_MAX_METRIC_CALLS}",
             )
+        await self._enforce_standard_account_concurrency(owner_id, full_access=full_access)
         try:
             parent = (
                 PromptBundle(
@@ -454,6 +492,12 @@ class ExperimentService:
                 dataset_splits = split_targets(selected, payload.split_percentages, payload.random_seed)
         except ValueError as exc:
             raise AppError(422, "INVALID_EXPERIMENT_DATASET", str(exc)) from exc
+        if not full_access and len(selected) > STANDARD_MAX_EXPERIMENT_TARGETS:
+            raise AppError(
+                403,
+                "EXPERIMENT_TARGET_LIMIT",
+                f"Standard accounts can select at most {STANDARD_MAX_EXPERIMENT_TARGETS} functions",
+            )
         if not all(dataset_splits[name] for name in ("train", "validation", "test")):
             raise AppError(422, "DATASET_SPLIT_EMPTY", "Train, validation, and test must all be non-empty")
         validation_size = len(dataset_splits["validation"])
@@ -507,16 +551,7 @@ class ExperimentService:
 
     async def delete(self, experiment_id: str, owner_id: str) -> None:
         item = await self._owned(experiment_id, owner_id)
-        active = {
-            ExperimentStatus.BASELINE_QUEUED,
-            ExperimentStatus.BASELINE_RUNNING,
-            ExperimentStatus.OPTIMIZATION_QUEUED,
-            ExperimentStatus.OPTIMIZING,
-            ExperimentStatus.CANDIDATE_EVALUATING,
-            ExperimentStatus.COMPARISON_QUEUED,
-            ExperimentStatus.COMPARING,
-        }
-        if item.status in active:
+        if item.status in ACTIVE_EXPERIMENT_STATUSES:
             raise AppError(409, "EXPERIMENT_ACTIVE", "A running experiment cannot be deleted")
         await self.repository.delete(item.id)
 
@@ -528,6 +563,11 @@ class ExperimentService:
         full_access: bool = False,
     ) -> OptimizationRunResponse:
         item = await self._owned(experiment_id, owner_id)
+        await self._enforce_standard_account_concurrency(
+            owner_id,
+            full_access=full_access,
+            exclude_experiment_id=item.id,
+        )
         previous_status = item.status
         previous_run_id = item.optimization_run_id
         retryable_statuses = {
@@ -670,12 +710,18 @@ class ExperimentService:
         owner_id: str,
         *,
         max_concurrency: int | None = None,
+        full_access: bool = False,
     ) -> OptimizationRunResponse:
         """Queue a new Cloud Run execution from a cooperatively paused checkpoint."""
         run = await self.repository.get_optimization_run(run_id)
         if run is None:
             raise AppError(404, "OPTIMIZATION_RUN_NOT_FOUND", "Optimization run was not found")
         item = await self._owned(run.experiment_id, owner_id)
+        await self._enforce_standard_account_concurrency(
+            owner_id,
+            full_access=full_access,
+            exclude_experiment_id=item.id,
+        )
         if run.status != ExperimentStatus.PAUSED:
             raise AppError(409, "OPTIMIZATION_NOT_PAUSED", "Only a paused optimization can be resumed")
         if not run.cloud_artifact_prefix:
@@ -1081,12 +1127,23 @@ class ExperimentService:
         await self.execute_comparison(comparison.id)
         return (await self.repository.get_comparison_run(comparison.id)) or comparison
 
-    async def request_comparison(self, experiment_id: str, owner_id: str) -> ComparisonRunResponse:
+    async def request_comparison(
+        self,
+        experiment_id: str,
+        owner_id: str,
+        *,
+        full_access: bool = False,
+    ) -> ComparisonRunResponse:
         item = await self._owned(experiment_id, owner_id)
         if item.comparison_run_id:
             existing = await self.repository.get_comparison_run(item.comparison_run_id)
             if existing is not None:
                 return ComparisonRunResponse.model_validate(existing)
+        await self._enforce_standard_account_concurrency(
+            owner_id,
+            full_access=full_access,
+            exclude_experiment_id=item.id,
+        )
         if item.status != ExperimentStatus.OPTIMIZATION_SUCCEEDED:
             raise AppError(409, "OPTIMIZATION_NOT_READY", "A successful optimization is required before comparison")
         if self.comparison_dispatcher is None:
