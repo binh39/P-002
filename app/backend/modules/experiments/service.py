@@ -103,6 +103,7 @@ def _is_transient_cloud_error(error: BaseException) -> bool:
                 pending.append(nested)
     return False
 
+
 _FINAL_VALIDATION_SCALAR_FIELDS = (
     "mean_score",
     "baseline_mean_score",
@@ -401,10 +402,7 @@ class ExperimentService:
                 PromptBundle(
                     initial=payload.baseline_prompt.initial,
                     error=payload.baseline_prompt.error,
-                    missing_coverage=(
-                        payload.baseline_prompt.missing_coverage
-                        or baseline_prompt().missing_coverage
-                    ),
+                    missing_coverage=(payload.baseline_prompt.missing_coverage or baseline_prompt().missing_coverage),
                 )
                 if payload.baseline_prompt is not None
                 else baseline_prompt()
@@ -575,11 +573,7 @@ class ExperimentService:
             ExperimentStatus.TIMED_OUT,
             ExperimentStatus.CANCELLED,
         }
-        previous_run = (
-            await self.repository.get_optimization_run(previous_run_id)
-            if previous_run_id
-            else None
-        )
+        previous_run = await self.repository.get_optimization_run(previous_run_id) if previous_run_id else None
         retrying_failed_optimization = (
             previous_status in retryable_statuses
             and previous_run is not None
@@ -798,9 +792,7 @@ class ExperimentService:
         }
         cached_evolution = await self._load_evolution_snapshot(run)
         if cached_evolution is not None and run.status not in active_statuses:
-            has_stale_pending = any(
-                iteration.decision == "Pending" for iteration in cached_evolution.iterations
-            )
+            has_stale_pending = any(iteration.decision == "Pending" for iteration in cached_evolution.iterations)
             if not has_stale_pending:
                 return cached_evolution
         if self.cloud_optimizer is None or not hasattr(self.cloud_optimizer, "evolution"):
@@ -827,9 +819,7 @@ class ExperimentService:
             and run.evolution_snapshot_prefix != run.cloud_artifact_prefix
         )
         evolution = (
-            merge_evolution_history(cached_evolution, current_evolution)
-            if append_history
-            else current_evolution
+            merge_evolution_history(cached_evolution, current_evolution) if append_history else current_evolution
         )
         if not current_evolution.available and cached_evolution is not None:
             evolution = cached_evolution
@@ -877,9 +867,7 @@ class ExperimentService:
                 raise RuntimeError("The candidate-zero baseline prompt has changed")
             effective_max_concurrency = run.max_concurrency or item.settings.max_concurrency
             run.max_concurrency = effective_max_concurrency
-            optimization_settings = item.settings.model_copy(
-                update={"max_concurrency": effective_max_concurrency}
-            )
+            optimization_settings = item.settings.model_copy(update={"max_concurrency": effective_max_concurrency})
             if polling_cloud_job:
                 result = await self.cloud_optimizer.collect(run.cloud_artifact_prefix)
                 if result is None:
@@ -1040,11 +1028,7 @@ class ExperimentService:
                         pass
         except Exception as exc:
             now = datetime.now(UTC)
-            if (
-                polling_cloud_job
-                and self.optimization_dispatcher is not None
-                and _is_transient_cloud_error(exc)
-            ):
+            if polling_cloud_job and self.optimization_dispatcher is not None and _is_transient_cloud_error(exc):
                 # The Cloud Run execution may still be healthy. Persist the
                 # non-terminal state before scheduling another collection pass.
                 run.status = ExperimentStatus.OPTIMIZING
