@@ -24,6 +24,7 @@ import { experimentIsActive, type PromptBundle } from "@/domain/experiments";
 const steps = ["Projects", "Functions", "Dataset", "Settings", "Review"];
 const splitNames: DatasetSplit[] = ["train", "validation", "test"];
 const standardMaxFunctions = 20;
+const fullAccessEmails = new Set(["admin@gmail.com", "admintest@gmail.com"]);
 const availableModels = [
   "google/gemini-2.5-flash",
   "google/gemini-2.5-flash-lite",
@@ -77,7 +78,7 @@ export default function CreateExperiment() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const { projects, experiments } = useRepositories();
-  const hasFullAccess = user?.email?.trim().toLowerCase() === "admin@gmail.com";
+  const hasFullAccess = fullAccessEmails.has(user?.email?.trim().toLowerCase() ?? "");
   const [step, setStep] = useState(0);
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState("");
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
@@ -345,6 +346,15 @@ export default function CreateExperiment() {
       </button>
       <PageHeader eyebrow="New experiment" title="Configure prompt optimization" />
 
+      {!hasFullAccess && (
+        <section className="api-compatibility-warning" role="status">
+          <strong>Standard account limits</strong>
+          <p>
+            Up to 20 functions per experiment, 2,200 metric calls, and one active experiment at a
+            time.
+          </p>
+        </section>
+      )}
       {!hasFullAccess && experimentsQuery.isError && (
         <div className="inline-validation-error" role="alert">
           Account limits could not be verified. Reload the page before creating an experiment.

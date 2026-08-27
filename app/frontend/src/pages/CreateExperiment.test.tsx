@@ -153,6 +153,14 @@ describe("create experiment wizard", () => {
     );
   });
 
+  it("shows the limits for a standard account", async () => {
+    render(<CreateExperiment />, { wrapper: Wrapper });
+
+    expect(await screen.findByText("Standard account limits")).toBeInTheDocument();
+    expect(screen.getByText(/2,200 metric calls/i)).toBeInTheDocument();
+    expect(screen.getByText(/one active experiment at a time/i)).toBeInTheDocument();
+  });
+
   it("blocks a standard account while another experiment is active", async () => {
     repositories.experiments.list.mockResolvedValue([
       { id: "active-experiment", name: "Current optimization", status: "optimizing" },
@@ -170,8 +178,10 @@ describe("create experiment wizard", () => {
   });
 
   it("removes the metric budget ceiling for the full-access account", async () => {
-    auth.user.email = "admin@gmail.com";
+    auth.user.email = "admintest@gmail.com";
     render(<CreateExperiment />, { wrapper: Wrapper });
+
+    expect(screen.queryByText("Standard account limits")).not.toBeInTheDocument();
 
     fireEvent.change(await screen.findByLabelText(/Runtime environment/i), {
       target: { value: "sample-runtime" },
