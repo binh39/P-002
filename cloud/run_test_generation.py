@@ -26,6 +26,20 @@ from src.optimization.models import ExperimentConfig, ProjectLayout, SymbolTarge
 from src.optimization.runner import CoverUpExperimentRunner, _test_environment
 
 
+def _load_prompt(path: Path) -> dict[str, str]:
+    prompt = json.loads(path.read_text(encoding="utf-8"))
+    required_components = {"initial", "error", "missing_coverage"}
+    if (
+        not isinstance(prompt, dict)
+        or set(prompt) != required_components
+        or not all(isinstance(prompt.get(component), str) for component in required_components)
+    ):
+        raise RuntimeError(
+            "Prompt snapshot must contain initial, error, and missing_coverage strings"
+        )
+    return prompt
+
+
 def _artifact_index(
     artifacts: Path, generated_files: list[Path], source_files: list[Path] | None = None
 ) -> list[dict[str, object]]:
@@ -227,9 +241,7 @@ def _run(args, artifacts: Path) -> dict:
     targets_path = scratch / "targets.json"
     _download_object(args.bucket, args.prompt_object, prompt_path)
     _download_object(args.bucket, args.targets_object, targets_path)
-    prompt = json.loads(prompt_path.read_text(encoding="utf-8"))
-    if set(prompt) != {"initial", "error"} or not all(isinstance(value, str) for value in prompt.values()):
-        raise RuntimeError("Prompt snapshot must contain only initial and error strings")
+    _load_prompt(prompt_path)
     raw_targets = json.loads(targets_path.read_text(encoding="utf-8"))
     if not isinstance(raw_targets, list) or not raw_targets:
         raise RuntimeError("Target manifest is empty")

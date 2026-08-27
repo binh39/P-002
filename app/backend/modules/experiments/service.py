@@ -1663,6 +1663,8 @@ class ExperimentService:
             snapshot = await self.repository.get_prompt_snapshot(item.id, run.prompt_role)
             if snapshot is None or snapshot.id != run.prompt_snapshot_id or snapshot.prompt_digest != run.prompt_digest:
                 raise RuntimeError("Immutable prompt snapshot is unavailable")
+            prompt = PromptBundle.from_candidate(snapshot.prompt)
+            prompt.validate()
             targets_by_id = {target.key: target for target in item.targets}
             targets_by_id.update({target.key: target for target in run.target_snapshots})
             targets = [targets_by_id[target_id] for target_id in run.target_ids if target_id in targets_by_id]
@@ -1686,7 +1688,7 @@ class ExperimentService:
                 run.status = TestGenerationStatus.GENERATING
                 await self.repository.save_test_generation_run(run)
                 run.cloud_artifact_prefix = await self.cloud_test_generator.start(
-                    prompt=snapshot.prompt,
+                    prompt=prompt.as_candidate(),
                     targets=[
                         {"project": target.project, "source_file": target.source_file, "symbol": target.symbol}
                         for target in targets
