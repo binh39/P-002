@@ -50,6 +50,10 @@ function formatTimestamp(value: string) {
   );
 }
 
+function formatCost(value: number | null | undefined) {
+  return value == null ? "—" : value.toFixed(2);
+}
+
 function statusTone(status: ExperimentStatus) {
   if (status === "failed" || status === "timed_out" || status === "rejected")
     return "danger" as const;
@@ -211,9 +215,9 @@ export default function Registry() {
                         )}
                       </td>
                       <td>
-                        {entry.optimized?.estimatedCostUsd ??
-                          entry.baseline.estimatedCostUsd ??
-                          "—"}
+                        {formatCost(
+                          entry.optimized?.estimatedCostUsd ?? entry.baseline.estimatedCostUsd,
+                        ) ?? "—"}
                       </td>
                       <td>{formatTimestamp(entry.updatedAt)}</td>
                     </tr>
