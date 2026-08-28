@@ -258,15 +258,11 @@ def _execute(bucket, request: dict[str, Any], root: Path) -> dict[str, Any]:
         )
         return {"optimizer_test": result}
     if request["operation"] == "final_generation":
-        from cloud.run_test_generation import generate_local_project
+        from cloud.run_test_generation import _load_prompt_snapshot, generate_local_project
 
         prompt = root / "final-prompt.json"
         _download(bucket, str(request["prompt_object"]), prompt)
-        prompt_payload = json.loads(prompt.read_text(encoding="utf-8"))
-        if set(prompt_payload) != {"initial", "error"} or not all(
-            isinstance(value, str) for value in prompt_payload.values()
-        ):
-            raise RuntimeError("Final prompt snapshot must contain initial and error strings")
+        _load_prompt_snapshot(prompt)
         targets = [SymbolTarget.from_dict(item) for item in request["targets"]]
         if not targets or {target.project for target in targets} != {project}:
             raise RuntimeError("Final-generation request crossed the project worker boundary")
