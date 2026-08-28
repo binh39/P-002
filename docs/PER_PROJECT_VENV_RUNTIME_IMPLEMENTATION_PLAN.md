@@ -754,4 +754,4 @@ Completed and pushed as separate commits:
 - `dfe91f3` — per-project dependency configuration is passed to the resolver.
 - `6aff723` — content-addressed source archive and venv bundle publication.
 
-Remaining deployment/UI work is separate: deploy generic Python-minor worker jobs, run Cloud smoke tests, and remove the legacy factory only after migration evidence. Live Cloud Run and GEPA benchmarks have not been run in this change.
+Remaining work is deployment validation: run Cloud smoke tests and remove the legacy factory only after migration evidence. The UI wording and project selection flow are updated; live Cloud Run and GEPA benchmarks have not been run in this change.
