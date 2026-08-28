@@ -194,7 +194,13 @@ def safe_extract_runtime_bundle(bundle: Path, destination: Path) -> Path:
             target = (root / member.name).resolve()
             if target != root and root not in target.parents:
                 raise ValueError(f"Runtime bundle path escapes destination: {member.name}")
-        archive.extractall(root, filter="data")
+        try:
+            archive.extractall(root, filter="data")
+        except TypeError:
+            # ``filter`` was added after the oldest supported worker Python.
+            # Members were fully validated above, so the legacy extraction API
+            # remains safe on Python 3.10/3.11.
+            archive.extractall(root)
     python = root / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     if not python.is_file():
         raise RuntimeError("Runtime bundle does not contain a usable Python environment")

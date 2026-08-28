@@ -3,6 +3,7 @@ import json
 import os
 import stat
 import sys
+import tarfile
 import zipfile
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from cloud.runtime_workspace import (
     detect_layout,
     prepare_environment,
     prepare_runtime,
+    safe_extract_runtime_bundle,
     safe_extract_zip,
 )
 
@@ -60,6 +62,28 @@ def test_runtime_preparer_rejects_credential_bearing_index_even_from_manifest():
             assert "must not contain credentials" in str(error)
         else:
             raise AssertionError("credential-bearing package index must be rejected")
+
+
+def test_runtime_bundle_restore_supports_legacy_tarfile_api(tmp_path, monkeypatch):
+    bundle = tmp_path / "runtime.tar.gz"
+    with tarfile.open(bundle, "w:gz") as archive:
+        payload = b"prepared-python"
+        executable = "Scripts/python.exe" if os.name == "nt" else "bin/python"
+        info = tarfile.TarInfo(f".venv/{executable}")
+        info.size = len(payload)
+        archive.addfile(info, io.BytesIO(payload))
+
+    original_extractall = tarfile.TarFile.extractall
+
+    def legacy_extractall(self, path=".", *args, **kwargs):
+        if "filter" in kwargs:
+            raise TypeError("legacy TarFile.extractall has no filter argument")
+        return original_extractall(self, path, *args, **kwargs)
+
+    monkeypatch.setattr(tarfile.TarFile, "extractall", legacy_extractall)
+    python = safe_extract_runtime_bundle(bundle, tmp_path / "restored")
+
+    assert python == tmp_path / "restored" / ".venv" / Path(executable)
 
 
 def test_safe_extract_ignores_symbolic_links(tmp_path):

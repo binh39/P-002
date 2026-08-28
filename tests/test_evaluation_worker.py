@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from cloud.run_evaluation_worker import _execute, _relocate_venv_scripts, _stage_project
+from cloud.run_evaluation_worker import _execute, _relocate_venv_scripts, _safe_extract_checkpoint, _stage_project
 from src.optimization.models import ProjectLayout
 
 
@@ -107,6 +107,28 @@ def test_restored_venv_console_script_shebang_is_relocated(tmp_path):
     _relocate_venv_scripts(python)
 
     assert script.read_bytes().startswith(f"#!{python}\n".encode())
+
+
+def test_checkpoint_restore_supports_legacy_tarfile_api(tmp_path, monkeypatch):
+    checkpoint = tmp_path / "checkpoint.tar.gz"
+    with tarfile.open(checkpoint, "w:gz") as archive:
+        payload = b"checkpoint"
+        info = tarfile.TarInfo("state.json")
+        info.size = len(payload)
+        archive.addfile(info, io.BytesIO(payload))
+
+    original_extractall = tarfile.TarFile.extractall
+
+    def legacy_extractall(self, path=".", *args, **kwargs):
+        if "filter" in kwargs:
+            raise TypeError("legacy TarFile.extractall has no filter argument")
+        return original_extractall(self, path, *args, **kwargs)
+
+    monkeypatch.setattr(tarfile.TarFile, "extractall", legacy_extractall)
+    destination = tmp_path / "restored-checkpoint"
+    _safe_extract_checkpoint(checkpoint, destination)
+
+    assert (destination / "state.json").read_bytes() == b"checkpoint"
 
 
 def test_worker_rejects_request_when_deployment_identity_is_not_pinned(tmp_path, monkeypatch):

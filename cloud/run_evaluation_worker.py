@@ -77,7 +77,12 @@ def _safe_extract_checkpoint(archive_path: Path, destination: Path) -> None:
             target = (root / member.name).resolve()
             if target != root and root not in target.parents:
                 raise ValueError(f"Worker checkpoint escapes destination: {member.name}")
-        archive.extractall(root, filter="data")
+        try:
+            archive.extractall(root, filter="data")
+        except TypeError:
+            # ``filter`` is unavailable on Python 3.10/3.11.  The archive's
+            # members were checked for links, devices and traversal above.
+            archive.extractall(root)
 
 
 def _upload_checkpoint(bucket, object_name: str, artifacts: Path) -> None:
