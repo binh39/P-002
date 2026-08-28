@@ -772,6 +772,9 @@ Completed and pushed as separate commits:
 - `c704638`, `2801712`, `49dcb82`, `a519364`, `650f69c` — runtime digest binding,
   Python-minor tar restore compatibility, immutable source admission, worker
   identity gating, and sample protocol provenance.
+- `d947176` — experiment snapshots now persist and prefer the immutable runtime
+  source archive object when coordinators upload project source for evaluation
+  and final test generation.
 
 Remaining work is deployment validation: run Cloud smoke tests and remove the legacy factory only after migration evidence. The UI wording and project selection flow are updated; live Cloud Run and GEPA benchmarks have not been run in this change.
 
@@ -789,6 +792,8 @@ independent commits:
   fallback: `5aee773`, `7999d87`, `508d654`.
 - Generic evaluation/final-generation dispatch, schema compatibility, and final
   runtime-object verification: `88a1e4d`, `3a1e2e6`.
+- Experiment source snapshots retain the immutable runtime source object rather
+  than relying on a mutable project archive pointer: `d947176`.
 - Final-suite artifacts now persist prompt/runtime/source provenance:
   `7e32d45`.
 - UI, deployment environment, and architecture/runbook documentation:
