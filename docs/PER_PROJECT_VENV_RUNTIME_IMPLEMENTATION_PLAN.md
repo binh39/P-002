@@ -744,7 +744,7 @@ Cloud dev smoke vẫn phải chứng minh preparer có egress cần thiết.
 - [ ] Giữ nguyên các invariant GEPA về baseline, per-symbol feedback, locked
       holdout, strict promotion và cache isolation.
 
-## Implementation progress (2026-08-28)
+## Implementation progress (2026-08-29)
 
 Completed and pushed as separate commits:
 
@@ -753,6 +753,18 @@ Completed and pushed as separate commits:
 - `88a1e4d` — schema 3 manifests, execution-mode routing, and schema 2 compatibility.
 - `dfe91f3` — per-project dependency configuration is passed to the resolver.
 - `6aff723` — content-addressed source archive and venv bundle publication.
+- `85a5dfc`, `471634e` — immutable object generation checks and resume source
+  verification.
+- `414b2a6`, `ff2791a` — dependency install-command policy and isolated fallback
+  venv behavior.
+- `7999d87`, `508d654` — relocatable venv scripts and minimal local toolchain
+  compatibility.
+- `3a1e2e6`, `7e32d45` — final-suite runtime verification and provenance.
+- `e938e30`, `d073f8b`, `27d4576` — network policy identity, index fingerprinting,
+  and credential-bearing index rejection.
+- `443eca9`, `cbef322`, `69ded9f`, `75f880c` — UI and environment defaults.
+- `bd7a28d` — deployment workflow defaults to generic workers; legacy factory
+  build/deploy is now an explicit migration-only flag.
 
 Remaining work is deployment validation: run Cloud smoke tests and remove the legacy factory only after migration evidence. The UI wording and project selection flow are updated; live Cloud Run and GEPA benchmarks have not been run in this change.
 
@@ -780,7 +792,8 @@ independent commits:
 
 The default upload path does not invoke Cloud Build, create a project-specific
 image, or create a project-specific Cloud Run Job. The legacy image factory is
-kept only for explicit `project_image` migration compatibility. Runtime objects
+kept only for explicit `project_image` migration compatibility and is disabled by
+default in the deployment workflow (`DEPLOY_RUNTIME_FACTORY=false`). Runtime objects
 are intentionally retained after project deletion; no cleanup path deletes an
 object that an experiment snapshot can reference. A future retention job must
 implement reference tracking before deleting content-addressed objects.
@@ -811,6 +824,9 @@ implement reference tracking before deleting content-addressed objects.
 - [x] Runtime-label metadata no longer imposes a shared Python version:
       project uploads with different Python/dependency graphs can reuse a label
       while retaining separate venvs (`75f880c`).
+- [x] Production workflow builds and deploys the generic Python-minor workers by
+      default; factory image build/deploy is guarded by the migration flag
+      `DEPLOY_RUNTIME_FACTORY=true` (`bd7a28d`).
 - [ ] Dev Cloud conflicting-Python E2E (including live GEPA, final suite,
       pause/resume and rerun) has not been run; it requires credentials and an
       approved cost window.
