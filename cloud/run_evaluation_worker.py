@@ -30,6 +30,22 @@ def _download(bucket, object_name: str, destination: Path) -> None:
     bucket.blob(object_name).download_to_filename(str(destination))
 
 
+def _verify_generation(bucket, object_name: str, expected: str | None) -> None:
+    """Verify the immutable GCS generation before downloading an input."""
+    if not expected:
+        return
+    blob = bucket.blob(object_name)
+    try:
+        blob.reload()
+    except TypeError:
+        blob.reload(client=getattr(bucket, "client", None))
+    actual = getattr(blob, "generation", None)
+    if actual is None or str(actual) != str(expected):
+        raise RuntimeError(
+            f"Runtime object generation changed for {object_name}; prepare the project runtime again"
+        )
+
+
 def _safe_extract_checkpoint(archive_path: Path, destination: Path) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     root = destination.resolve()
@@ -104,6 +120,12 @@ def _stage_project(bucket, request: dict[str, Any], root: Path) -> tuple[Path, P
             )
         protocol_version = int(spec.get("runtime_protocol_version") or 1)
         execution_mode = str(spec.get("execution_mode") or "")
+        if execution_mode not in {"", "generic_worker_bundle", "project_image"}:
+            raise RuntimeError(f"Unsupported project runtime execution mode: {execution_mode}")
+        if execution_mode == "generic_worker_bundle" and protocol_version < 13:
+            raise RuntimeError("Generic worker manifests require runtime protocol 13")
+        if execution_mode == "project_image" and protocol_version < 12:
+            raise RuntimeError("Project-image manifests require runtime protocol 12")
         # Schema 2 project-image workers baked both files into the image.
         # Schema 3 generic workers restore the content-addressed files into
         # the ephemeral task and execute through the project's venv.
@@ -120,6 +142,8 @@ def _stage_project(bucket, request: dict[str, Any], root: Path) -> tuple[Path, P
         else:
             archive = root / "project.zip"
             bundle = root / "runtime.tar.gz"
+            _verify_generation(bucket, str(spec["archive_object"]), spec.get("source_archive_generation"))
+            _verify_generation(bucket, str(spec["runtime_bundle_object"]), spec.get("runtime_bundle_generation"))
             _download(bucket, str(spec["archive_object"]), archive)
             _download(bucket, str(spec["runtime_bundle_object"]), bundle)
         expected_archive_hash = str(spec.get("source_archive_sha256") or "")

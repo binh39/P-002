@@ -56,7 +56,9 @@ class RuntimeReport(StrictModel):
     runtime_worker_job: str | None = None
     source_archive_sha256: str | None = None
     source_archive_object: str | None = None
+    source_archive_generation: str | None = None
     runtime_bundle_sha256: str | None = None
+    runtime_bundle_generation: str | None = None
     bundle_object: str | None = None
     error: str | None = None
     protocol_version: int = 1
@@ -204,7 +206,9 @@ class ProjectResponse(StrictModel):
     runtime_execution_mode: str | None = None
     source_archive_sha256: str | None = None
     runtime_source_archive_object: str | None = None
+    runtime_source_archive_generation: str | None = None
     runtime_bundle_sha256: str | None = None
+    runtime_bundle_generation: str | None = None
     runtime_status: RuntimeStatus = RuntimeStatus.NOT_REQUESTED
     runtime_report: RuntimeReport | None = None
     runtime_artifact_prefix: str | None = None

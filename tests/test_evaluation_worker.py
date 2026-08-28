@@ -27,12 +27,24 @@ class _Blob:
         self.values[self.name] = Path(source).read_bytes()
 
 
+class _GenerationBlob(_Blob):
+    generation = "7"
+
+    def reload(self, *args, **kwargs):
+        del args, kwargs
+
+
 class _Bucket:
     def __init__(self, values: dict[str, bytes]):
         self.values = values
 
     def blob(self, name: str) -> _Blob:
         return _Blob(self.values, name)
+
+
+class _GenerationBucket(_Bucket):
+    def blob(self, name: str) -> _Blob:
+        return _GenerationBlob(self.values, name)
 
 
 def _zip_bytes(files: dict[str, str]) -> bytes:
@@ -136,6 +148,32 @@ def test_uploaded_worker_rejects_changed_source_archive(tmp_path, monkeypatch):
             request,
             tmp_path / "worker",
         )
+
+
+def test_uploaded_worker_rejects_changed_object_generation(tmp_path, monkeypatch):
+    archive = _zip_bytes({"repo/src/pkg/__init__.py": "VALUE = 1\n"})
+    runtime = _runtime_bytes()
+    job = "projects/p/locations/r/jobs/uploaded-one"
+    monkeypatch.setenv("PROMPTOPT_RUNTIME_IMAGE", "image@sha256:one")
+    monkeypatch.setenv("PROMPTOPT_RUNTIME_WORKER_JOB", job)
+    request = {
+        "project": "uploaded",
+        "project_spec": {
+            "kind": "uploaded",
+            "project": "uploaded",
+            "archive_object": "project.zip",
+            "runtime_bundle_object": "runtime.tar.gz",
+            "runtime_digest": "digest",
+            "runtime_image": "image@sha256:one",
+            "runtime_worker_job": job,
+            "source_archive_sha256": hashlib.sha256(archive).hexdigest(),
+            "runtime_bundle_sha256": hashlib.sha256(runtime).hexdigest(),
+            "source_archive_generation": "8",
+            "python_version": f"{os.sys.version_info.major}.{os.sys.version_info.minor}",
+        },
+    }
+    with pytest.raises(RuntimeError, match="object generation changed"):
+        _stage_project(_GenerationBucket({"project.zip": archive, "runtime.tar.gz": runtime}), request, tmp_path / "worker")
 
 
 def test_uploaded_worker_restores_only_matching_runtime_capsule(tmp_path, monkeypatch):

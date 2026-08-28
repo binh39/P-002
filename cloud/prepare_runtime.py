@@ -18,6 +18,27 @@ from cloud.runtime_workspace import (
 )
 
 
+def _publish_immutable(blob, filename: str, *, content_type: str) -> str | None:
+    """Upload once with a GCS generation precondition and return its generation."""
+    try:
+        blob.upload_from_filename(filename, content_type=content_type, if_generation_match=0)
+    except TypeError:
+        # Lightweight local/test blob implementations do not expose GCS
+        # preconditions; production GCS always takes the branch above.
+        blob.upload_from_filename(filename, content_type=content_type)
+    except Exception:
+        # An existing content-addressed object is valid and must not be
+        # overwritten. Re-raise all other failures.
+        if not blob.exists():
+            raise
+    try:
+        blob.reload()
+    except Exception:
+        return None
+    generation = getattr(blob, "generation", None)
+    return str(generation) if generation is not None else None
+
+
 def _prepare(args, bucket, root: Path) -> RuntimeResult:
     specs = []
     if args.manifest_object:
@@ -61,18 +82,6 @@ def _prepare(args, bucket, root: Path) -> RuntimeResult:
     )
     result.runtime_image = args.runtime_image or os.environ.get("PROMPTOPT_RUNTIME_IMAGE")
     result.runtime_worker_job = args.runtime_worker_job or os.environ.get("PROMPTOPT_RUNTIME_WORKER_JOB")
-    if result.runtime_digest and result.runtime_image and result.runtime_worker_job:
-        result.runtime_digest = hashlib.sha256(
-            json.dumps(
-                {
-                    "environment": result.runtime_digest,
-                    "image": result.runtime_image,
-                    "worker_job": result.runtime_worker_job,
-                },
-                sort_keys=True,
-                separators=(",", ":"),
-            ).encode()
-        ).hexdigest()
     if result.status == "runtime_ready" and python is not None:
         bundle = root / "runtime.tar.gz"
         create_runtime_bundle(persistent_venv, bundle)
@@ -81,23 +90,34 @@ def _prepare(args, bucket, root: Path) -> RuntimeResult:
             result.source_archive_object = (
                 f"runner-jobs/source-archives/{result.source_archive_sha256}.zip"
             )
-            bucket.blob(result.source_archive_object).upload_from_filename(
+            result.source_archive_generation = _publish_immutable(
+                bucket.blob(result.source_archive_object),
                 str(specs[0].archive),
                 content_type="application/zip",
             )
         result.runtime_bundle_sha256 = hashlib.sha256(bundle.read_bytes()).hexdigest()
+        result.runtime_digest = hashlib.sha256(
+            json.dumps(
+                {
+                    "environment": result.runtime_digest,
+                    "source_archive_sha256": result.source_archive_sha256,
+                    "runtime_bundle_sha256": result.runtime_bundle_sha256,
+                    "image": result.runtime_image,
+                    "worker_job": result.runtime_worker_job,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
         # Keep the random per-execution object for diagnostics, but publish the
         # immutable capsule at a digest-addressed path for cross-run reuse.
-        if result.runtime_digest:
-            content_addressed = (
-                f"runner-jobs/runtime-bundles/{result.runtime_digest}/"
-                f"{result.runtime_bundle_sha256}.tar.gz"
-            )
-            bucket.blob(content_addressed).upload_from_filename(
-                str(bundle),
-                content_type="application/gzip",
-            )
-            result.bundle_object = content_addressed
+        content_addressed = f"runner-jobs/runtime-bundles/{result.runtime_bundle_sha256}/runtime.tar.gz"
+        result.runtime_bundle_generation = _publish_immutable(
+            bucket.blob(content_addressed),
+            str(bundle),
+            content_type="application/gzip",
+        )
+        result.bundle_object = content_addressed
         bucket.blob(args.bundle_object).upload_from_filename(
             str(bundle),
             content_type="application/gzip",

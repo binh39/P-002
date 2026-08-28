@@ -129,6 +129,7 @@ class ProjectSnapshot(StrictModel):
     runner_project: str
     archive_object: str | None = None
     source_archive_object: str | None = None
+    source_archive_generation: str | None = None
     runtime_artifact_prefix: str | None = None
     runtime_environment_id: str | None = None
     runtime_bundle_object: str | None = None
@@ -139,6 +140,7 @@ class ProjectSnapshot(StrictModel):
     runtime_execution_mode: str | None = None
     source_archive_sha256: str | None = None
     runtime_bundle_sha256: str | None = None
+    runtime_bundle_generation: str | None = None
     python_version: str = "3.12"
 
 

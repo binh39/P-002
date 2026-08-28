@@ -470,7 +470,9 @@ class ExperimentService:
                         project.runtime_report.execution_mode if project.runtime_report else None
                     ),
                     source_archive_sha256=project.source_archive_sha256,
+                    source_archive_generation=project.runtime_source_archive_generation,
                     runtime_bundle_sha256=project.runtime_bundle_sha256,
+                    runtime_bundle_generation=project.runtime_bundle_generation,
                     python_version=project.settings.runtime.python_version,
                 )
             )

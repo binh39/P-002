@@ -12,6 +12,17 @@ import json
 from uuid import uuid4
 
 
+async def _object_generation(storage, object_name: str) -> str | None:
+    getter = getattr(storage, "generation", None)
+    if getter is None:
+        return None
+    try:
+        value = await getter(object_name)
+    except Exception:  # noqa: BLE001 - generation is optional for local fakes
+        return None
+    return str(value) if value is not None else None
+
+
 class CloudRunJobTestGenerator:
     def __init__(self, *, client, storage, bucket: str, job_name: str, timeout_seconds: int):
         self.client = client
@@ -82,6 +93,8 @@ class CloudRunJobTestGenerator:
                     await self.storage.read(snapshot.runtime_bundle_object),
                     "application/gzip",
                 )
+                copied_archive_generation = await _object_generation(self.storage, copied_archive)
+                copied_bundle_generation = await _object_generation(self.storage, copied_bundle)
                 manifest_projects.append(
                     {
                         "kind": "uploaded",
@@ -95,6 +108,16 @@ class CloudRunJobTestGenerator:
                         "runtime_protocol_version": snapshot.runtime_protocol_version,
                         "source_archive_sha256": snapshot.source_archive_sha256,
                         "runtime_bundle_sha256": snapshot.runtime_bundle_sha256,
+                        **(
+                            {"source_archive_generation": copied_archive_generation}
+                            if copied_archive_generation
+                            else {}
+                        ),
+                        **(
+                            {"runtime_bundle_generation": copied_bundle_generation}
+                            if copied_bundle_generation
+                            else {}
+                        ),
                         "python_version": snapshot.python_version,
                         "source_directory": snapshot.source_directory,
                         "test_directory": snapshot.test_directory,
