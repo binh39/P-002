@@ -46,3 +46,9 @@ def test_provisioning_keeps_build_privileges_out_of_untrusted_preparer():
     assert '"serviceAccount:$RuntimeFactoryAccount" "roles/run.admin"' in provisioning
     assert '"serviceAccount:$RuntimeBuilderAccount" "roles/logging.logWriter"' in provisioning
     assert '"serviceAccount:$RuntimeAccount" "roles/cloudbuild.builds.editor"' not in provisioning
+
+
+def test_dev_runtime_mode_defaults_to_generic_worker_bundle():
+    environment = Path("app/infra/cloud-run-env.dev.yaml").read_text(encoding="utf-8")
+
+    assert "RUNTIME_PROJECT_IMAGE_MODE: generic_worker_bundle" in environment
