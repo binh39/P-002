@@ -75,6 +75,7 @@ class CloudRunRuntimePreparer:
                 "requirements_file": project.settings.dependencies.requirements_file,
                 "lock_file": project.settings.dependencies.lock_file,
                 "extra_package_index": project.settings.dependencies.extra_package_index,
+                "install_command": project.settings.dependencies.install_command,
             }
         ]
         await self.storage.write(

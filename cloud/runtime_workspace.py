@@ -95,6 +95,7 @@ class RuntimeProjectSpec:
     configured_requirements: str | None = None
     configured_lock: str | None = None
     extra_package_index: str | None = None
+    configured_install_command: str = "pip install -r requirements.txt"
 
 
 @dataclass(slots=True)
@@ -558,6 +559,11 @@ def prepare_environment(
             digest.update(spec.configured_tests.encode())
             digest.update((spec.configured_requirements or "").encode())
             digest.update((spec.configured_lock or "").encode())
+            if spec.configured_install_command != "pip install -r requirements.txt":
+                raise ValueError(
+                    "Custom install_command is not supported by the trusted runtime preparer; "
+                    "select a requirements or lock file instead"
+                )
             digest.update(spec.archive.read_bytes())
             extracted = workspace / "projects" / spec.project_id
             safe_extract_zip(spec.archive, extracted)
