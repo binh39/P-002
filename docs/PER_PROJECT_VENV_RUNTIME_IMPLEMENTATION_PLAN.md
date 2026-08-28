@@ -755,3 +755,38 @@ Completed and pushed as separate commits:
 - `6aff723` — content-addressed source archive and venv bundle publication.
 
 Remaining work is deployment validation: run Cloud smoke tests and remove the legacy factory only after migration evidence. The UI wording and project selection flow are updated; live Cloud Run and GEPA benchmarks have not been run in this change.
+
+## Implementation audit (2026-08-28)
+
+The code-level portions of this plan are now implemented and pushed as small,
+independent commits:
+
+- Runtime protocol 13 and generic-worker default: `393523b`, `88a1e4d`.
+- Per-project dependency selection and safe install policy: `dfe91f3`, `414b2a6`,
+  `ff2791a`.
+- Content-addressed source/runtime objects, generation checks, and digest identity:
+  `6aff723`, `85a5dfc`, `471634e`.
+- Project-venv interpreter routing, relocatable console scripts, and local toolchain
+  fallback: `5aee773`, `7999d87`, `508d654`.
+- Generic evaluation/final-generation dispatch, schema compatibility, and final
+  runtime-object verification: `88a1e4d`, `3a1e2e6`.
+- UI, deployment environment, and architecture/runbook documentation:
+  `9ea726e`, `f4a3a9b` plus the current documentation commit.
+
+The default upload path does not invoke Cloud Build, create a project-specific
+image, or create a project-specific Cloud Run Job. The legacy image factory is
+kept only for explicit `project_image` migration compatibility. Runtime objects
+are intentionally retained after project deletion; no cleanup path deletes an
+object that an experiment snapshot can reference. A future retention job must
+implement reference tracking before deleting content-addressed objects.
+
+### Evidence and remaining operational gates
+
+- Unit/integration evidence: root runtime/worker/final-suite tests, backend tests,
+  Ruff, Python compilation, and frontend type/lint checks are run before handoff.
+- Not run without Cloud credentials and an explicit cost window: Dev Cloud
+  upload of two conflicting-Python fixtures, live GEPA reflection, final-suite
+  rerun, pause/resume smoke, and production deployment smoke checks.
+- Do not remove the legacy factory IAM/job/code until the Dev Cloud migration
+  smoke passes and active protocol-12 runs are confirmed absent. Use a fresh
+  artifacts prefix for the first live protocol-13 benchmark.

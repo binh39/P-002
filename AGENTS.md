@@ -182,3 +182,22 @@ Khi được yêu cầu deploy hệ thống lên môi trường Dev Cloud (Proje
 - Dùng artifacts directory mới cho benchmark quyết định.
 - Báo rõ đã hay chưa chạy live benchmark; unit test pass không đồng nghĩa proposal đã thắng thực nghiệm.
 - Không sửa hoặc xóa các thay đổi không liên quan trong worktree của người dùng.
+## Runtime contract for uploaded projects (protocol 13)
+
+- New uploads default to `execution_mode=generic_worker_bundle` and
+  `runtime_protocol_version=13`. Each project is prepared in exactly one
+  project-only virtual environment; dependency resolution never receives more
+  than one project.
+- The generic worker image/job is pinned by Python minor and image digest. The
+  source archive and venv bundle are content-addressed objects with SHA-256 and,
+  when GCS provides it, object-generation checks. Workers verify both before
+  extraction and run CoverUp, diagnostic tests, pytest, SlipCover, and coverage
+  through the restored project's interpreter (`TESTGEN_PYTHON`, `VIRTUAL_ENV`,
+  and `PATH`). Final test-suite generation follows the same boundary.
+- GEPA/DSPy remains a control plane and must not import or execute uploaded
+  source. Its cache/request identity includes the project runtime digest and
+  worker identity. Runtime objects are immutable and are not deleted with the
+  project record while experiment snapshots may reference them.
+- Protocol 12 project-image workers remain dual-read only during migration. They
+  require the explicit `RUNTIME_PROJECT_IMAGE_MODE=project_image` flag; do not
+  make the image factory a dependency of the generic upload path.

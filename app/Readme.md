@@ -366,24 +366,30 @@ bundle or install UV themselves.
 The preparation job safely extracts one ZIP, resolves its `uv.lock`,
 `pyproject.toml`, and requirements metadata, creates a project-only virtual
 environment, runs bounded collection/baseline diagnostics, and publishes a
-content-addressed runtime capsule. A separate trusted image-factory job then
-packages that capsule and the exact source archive into a project-specific OCI
-image, resolves the image to `sha256`, and creates a uniquely named Cloud Run
-evaluation job for that immutable image. The untrusted preparation account never
-receives Cloud Build or Cloud Run administration privileges. Admission persists
-the project image digest, dedicated worker job, source ZIP hash, runtime bundle
-hash, Python minor, and combined runtime digest. A changed or incomplete identity
-must be rebuilt before it can run.
+content-addressed source archive plus runtime bundle. The default protocol is
+`runtime_protocol_version=13` with `execution_mode=generic_worker_bundle`:
+the bundle is restored by a versioned generic worker for the project's Python
+minor (3.10--3.13), after generation and SHA-256 checks are verified. The
+worker/job image is pinned by digest and is shared only as the immutable tool
+layer; the source and venv bundle are never shared between projects.
+
+The legacy trusted image-factory path remains available only when
+`RUNTIME_PROJECT_IMAGE_MODE=project_image` is explicitly selected during the
+migration period. It is not used by the default upload path. The untrusted
+preparation account never receives Cloud Build or Cloud Run administration
+privileges. Admission persists the worker image/job identity, source ZIP hash,
+runtime bundle hash, Python minor, object generations, and combined runtime
+digest. A changed or incomplete identity must be rebuilt before it can run.
 
 There is one GEPA coordinator for the whole experiment, but it never installs a
 user project or executes user tests. It groups each metric batch by project and
 dispatches the groups concurrently to the exact Cloud Run job recorded for each
-project. Each worker verifies the pinned image/job identity, reads only the source
-and capsule baked into its own image, and executes CoverUp/pytest/coverage for only
-that project's targets. Final test
-generation uses the same boundary. Therefore projects with different dependency
-graphs or supported Python minors can participate in one experiment without
-sharing a virtual environment.
+project. Each worker downloads and verifies only that project's source and venv
+bundle, restores the venv in an isolated task workspace, and executes
+CoverUp/pytest/coverage with that project's interpreter. Diagnostic reflection
+tests and final test-suite generation use the same boundary. Therefore projects
+with different dependency graphs or supported Python minors can participate in
+one experiment without sharing a virtual environment.
 
 Bundled sample projects use the same remote worker protocol in web experiments,
 with an immutable sample image and worker job. The standalone local CLI keeps its

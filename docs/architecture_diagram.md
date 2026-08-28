@@ -108,6 +108,33 @@ sequenceDiagram
 
 Local mode replaces Firestore/GCS/Cloud Tasks with in-memory repositories, local files and inline dispatch. Bundled samples are read-only and reconstructed from `src/sample_repo`; they are not copied into project documents.
 
+## Uploaded project execution boundary
+
+```text
+ZIP upload
+   |
+   +--> one runtime-preparation Job (per project, Python 3.10--3.13)
+          |
+          +--> source archive + project-only venv bundle
+          |    (content addressed, SHA-256 + GCS generation)
+          |
+          +--> protocol 13 runtime manifest
+                 (generic worker image/job pinned by digest)
+                              |
+                              v
+                 evaluation/final-generation worker
+                 - verify source and bundle identity
+                 - restore venv in ephemeral workspace
+                 - run CoverUp, pytest, SlipCover, coverage.py
+                   through that project's interpreter
+```
+
+The generic worker image is shared as an immutable tool layer only. Uploaded
+projects never share a virtual environment or dependency resolution. The
+project-image factory remains an explicit migration-only mode and is not used by
+the default upload path. Runtime source/bundle objects are retained independently
+of project deletion so experiment snapshots can continue to reference them.
+
 ## Dataflow: prompt optimization and promotion
 
 ```mermaid
