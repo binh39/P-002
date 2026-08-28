@@ -744,3 +744,14 @@ Cloud dev smoke vẫn phải chứng minh preparer có egress cần thiết.
 - [ ] Giữ nguyên các invariant GEPA về baseline, per-symbol feedback, locked
       holdout, strict promotion và cache isolation.
 
+## Implementation progress (2026-08-28)
+
+Completed and pushed as separate commits:
+
+- `f75a5f6` — implementation plan and acceptance checklist.
+- `393523b` — protocol 13 generic worker + per-project bundle is the default; project-image factory is opt-in.
+- `88a1e4d` — schema 3 manifests, execution-mode routing, and schema 2 compatibility.
+- `dfe91f3` — per-project dependency configuration is passed to the resolver.
+- `6aff723` — content-addressed source archive and venv bundle publication.
+
+Remaining deployment/UI work is separate: deploy generic Python-minor worker jobs, run Cloud smoke tests, and remove the legacy factory only after migration evidence. Live Cloud Run and GEPA benchmarks have not been run in this change.

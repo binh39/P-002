@@ -139,10 +139,6 @@ def _stage_project(bucket, request: dict[str, Any], root: Path) -> tuple[Path, P
             str(spec.get("source_directory") or "src"),
             str(spec.get("test_directory") or "tests"),
         )
-        venv = python.parent.parent
-        os.environ["VIRTUAL_ENV"] = str(venv)
-        os.environ["PATH"] = os.pathsep.join([str(python.parent), os.environ.get("PATH", "")])
-        os.environ["TESTGEN_PYTHON"] = str(python)
     tests.mkdir(parents=True, exist_ok=True)
     import_root = source.parent if (source / "__init__.py").is_file() else source
     return project_root, ProjectLayout(

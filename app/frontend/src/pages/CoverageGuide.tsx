@@ -130,7 +130,7 @@ export default function CoverageGuide() {
           <h1>Prepare a Python project for prompt optimization</h1>
           <p>
             Package source, dependencies, and tests so PromptOpt can analyze the archive, build a
-            reusable runtime, and run GEPA without relying on local setup or live provider secrets.
+            a private runtime for this project, and run GEPA without relying on local setup or live provider secrets.
           </p>
         </div>
         <div className="coverage-score-preview" aria-label="Coverage score formula">
@@ -200,7 +200,7 @@ export default function CoverageGuide() {
                 <li>
                   <code>requires-python</code> must include Python 3.12.
                 </li>
-                <li>Dependencies must resolve together inside one environment.</li>
+                <li>Dependencies resolve in this project&apos;s isolated virtual environment.</li>
               </ul>
             </div>
           </article>

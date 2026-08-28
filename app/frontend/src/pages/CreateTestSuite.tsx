@@ -13,7 +13,7 @@ import {
 import type { PromptRegistryEntry } from "@/domain/experiments";
 import type { PythonProject } from "@/domain/projects";
 
-const steps = ["Environments", "Setting", "Review"] as const;
+const steps = ["Projects & runtimes", "Setting", "Review"] as const;
 const functionMethods: Array<{ id: SamplingMethod; title: string; description: string }> = [
   { id: "random", title: "Random", description: "Shuffle valid functions with the saved seed." },
   {
@@ -127,10 +127,9 @@ export default function CreateTestSuite() {
     for (const project of allowedProjects) values.set(projectEnvironment(project), project);
     return [...values.entries()];
   }, [allowedProjects]);
-  const environmentProjects = useMemo(
-    () => allowedProjects.filter((project) => projectEnvironment(project) === environmentId),
-    [allowedProjects, environmentId],
-  );
+  // Every uploaded project owns its runtime. A suite may therefore combine
+  // projects with different Python/dependency environments.
+  const environmentProjects = allowedProjects;
   const selectedProjects = environmentProjects.filter((project) => projectIds.includes(project.id));
   const functionQueries = useQueries({
     queries: selectedProjects.map((project) => ({
@@ -190,7 +189,7 @@ export default function CreateTestSuite() {
     onSuccess: (run) => navigate(`/test-cases/${run.id}`),
   });
 
-  const environmentValid = Boolean(selectedEntry && environmentId && projectIds.length);
+  const environmentValid = Boolean(selectedEntry && projectIds.length);
   const selectionValid =
     !functionsLoading &&
     !functionsError &&
@@ -259,8 +258,8 @@ export default function CreateTestSuite() {
         <section className="platform-card wizard-panel">
           <div className="wizard-heading">
             <span className="eyebrow">Step 1</span>
-            <h2>Environments</h2>
-            <p>Select a prompt, its compatible environment, and the projects to test.</p>
+            <h2>Projects & runtimes</h2>
+            <p>Select a prompt and the projects to test. Each project runs in its own prepared venv.</p>
           </div>
           <Field
             label="Test Suite name"
@@ -301,14 +300,14 @@ export default function CreateTestSuite() {
           </div>
           <Field
             label="Environment"
-            hint="Only projects in the prompt experiment and the same runtime environment are available."
+            hint="Projects keep independent Python and dependency environments; grouping is optional."
           >
             <select
               value={environmentId}
               disabled={!selectedEntry}
               onChange={(event) => chooseEnvironment(event.target.value)}
             >
-              <option value="">Select an environment</option>
+              <option value="">All project runtimes</option>
               {environments.map(([id, project]) => (
                 <option key={id} value={id}>
                   {environmentLabel(project)}

@@ -77,6 +77,16 @@ def _test_environment(
     return environment
 
 
+def _configure_runtime_environment(environment: dict[str, str], runtime_python: Path | None) -> None:
+    """Route every project subprocess through its restored virtualenv."""
+    if runtime_python is None:
+        return
+    executable = runtime_python.resolve()
+    environment["TESTGEN_PYTHON"] = str(executable)
+    environment["VIRTUAL_ENV"] = str(executable.parent.parent)
+    environment["PATH"] = os.pathsep.join([str(executable.parent), environment.get("PATH", "")])
+
+
 def _zero_coverage_like(coverage: SymbolCoverage) -> SymbolCoverage:
     """Build the zero-coverage starting point for a from-scratch candidate."""
     return SymbolCoverage(
@@ -426,8 +436,7 @@ class CoverUpExperimentRunner:
             self.config.project_root,
             (self.config.import_root_for(target.project),),
         )
-        if runtime_python := self.config.python_for(target.project):
-            environment["TESTGEN_PYTHON"] = str(runtime_python.resolve())
+        _configure_runtime_environment(environment, self.config.python_for(target.project))
         completed = run_coverage(
             project_root=self.config.project_root.resolve(),
             package_dir=package_dir,
@@ -576,8 +585,7 @@ class CoverUpExperimentRunner:
                 self.config.project_root,
                 (self.config.import_root_for(project),),
             )
-            if runtime_python := self.config.python_for(project):
-                environment["TESTGEN_PYTHON"] = str(runtime_python.resolve())
+            _configure_runtime_environment(environment, self.config.python_for(project))
             environments[project] = environment
 
         final_workspaces: dict[str, Path] = {}
@@ -959,8 +967,7 @@ class CoverUpExperimentRunner:
                 self.config.project_root,
                 (self.config.import_root_for(project),),
             )
-            if runtime_python := self.config.python_for(project):
-                environment["TESTGEN_PYTHON"] = str(runtime_python.resolve())
+            _configure_runtime_environment(environment, self.config.python_for(project))
             package_dir = self.config.package_dir_for(project).resolve()
             safe_project = re.sub(r"[^A-Za-z0-9_.-]+", "_", project).strip("._-")
             suffix = "" if not multi_project else f"_{safe_project}"
