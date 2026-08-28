@@ -24,6 +24,7 @@ OPTIMIZATION_EXECUTION_BACKEND: cloud_run_job
 CLOUD_RUN_GEPA_JOB: promptopt-gepa-runner
 CLOUD_RUN_GEPA_TIMEOUT_SECONDS: "86400"
 RUNTIME_EXECUTION_BACKEND: cloud_run_job
+RUNTIME_PROJECT_IMAGE_MODE: generic_worker_bundle
 CLOUD_RUN_RUNTIME_JOB: promptopt-runtime-preparer
 CLOUD_RUN_RUNTIME_JOB_PY310: promptopt-runtime-preparer-py310
 CLOUD_RUN_RUNTIME_JOB_PY311: promptopt-runtime-preparer-py311
