@@ -699,6 +699,26 @@ def generate_local_project(
     }
 
 
+def _load_prompt_snapshot(prompt_path: Path) -> dict[str, str]:
+    """Load a legacy or GEPA three-component CoverUp prompt bundle."""
+    prompt = json.loads(prompt_path.read_text(encoding="utf-8"))
+    # GEPA candidates are real three-component CoverUp bundles.  Keep accepting
+    # legacy two-component snapshots because PromptBundle supplies the default
+    # missing-coverage template, but reject unknown keys and non-string values.
+    allowed_prompt_keys = {"initial", "error", "missing_coverage"}
+    if (
+        not isinstance(prompt, dict)
+        or not {"initial", "error"}.issubset(prompt)
+        or not set(prompt).issubset(allowed_prompt_keys)
+        or not all(isinstance(value, str) for value in prompt.values())
+    ):
+        raise RuntimeError(
+            "Prompt snapshot must contain initial/error strings and may contain "
+            "missing_coverage"
+        )
+    return prompt
+
+
 def _run(args, artifacts: Path) -> dict:
     scratch = artifacts.parent / "inputs"
     scratch.mkdir(parents=True, exist_ok=True)
@@ -706,9 +726,7 @@ def _run(args, artifacts: Path) -> dict:
     targets_path = scratch / "targets.json"
     _download_object(args.bucket, args.prompt_object, prompt_path)
     _download_object(args.bucket, args.targets_object, targets_path)
-    prompt = json.loads(prompt_path.read_text(encoding="utf-8"))
-    if set(prompt) != {"initial", "error"} or not all(isinstance(value, str) for value in prompt.values()):
-        raise RuntimeError("Prompt snapshot must contain only initial and error strings")
+    _load_prompt_snapshot(prompt_path)
     raw_targets = json.loads(targets_path.read_text(encoding="utf-8"))
     if not isinstance(raw_targets, list) or not raw_targets:
         raise RuntimeError("Target manifest is empty")

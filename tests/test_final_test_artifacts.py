@@ -10,6 +10,24 @@ from cloud.run_test_generation import _artifact_index, _run_remote, _stage_proje
 from src.optimization.models import SymbolTarget
 
 
+def test_prompt_snapshot_accepts_gepa_missing_coverage_component(tmp_path):
+    prompt = tmp_path / "prompt.json"
+    prompt.write_text(
+        '{"initial":"{source_excerpt}","error":"{error}",'
+        '"missing_coverage":"{missing_coverage}"}',
+        encoding="utf-8",
+    )
+
+    assert run_test_generation._load_prompt_snapshot(prompt)["missing_coverage"] == "{missing_coverage}"
+
+
+def test_prompt_snapshot_keeps_legacy_two_component_compatibility(tmp_path):
+    prompt = tmp_path / "prompt.json"
+    prompt.write_text('{"initial":"initial","error":"error"}', encoding="utf-8")
+
+    assert run_test_generation._load_prompt_snapshot(prompt) == {"initial": "initial", "error": "error"}
+
+
 def test_runtime_object_download_verifies_generation_and_checksum(tmp_path, monkeypatch):
     payload = b"immutable runtime input"
     calls = []
