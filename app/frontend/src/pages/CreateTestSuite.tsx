@@ -259,7 +259,9 @@ export default function CreateTestSuite() {
           <div className="wizard-heading">
             <span className="eyebrow">Step 1</span>
             <h2>Projects & runtimes</h2>
-            <p>Select a prompt and the projects to test. Each project runs in its own prepared venv.</p>
+            <p>
+              Select a prompt and the projects to test. Each project runs in its own prepared venv.
+            </p>
           </div>
           <Field
             label="Test Suite name"
@@ -299,7 +301,7 @@ export default function CreateTestSuite() {
             </Field>
           </div>
           <Field
-            label="Environment"
+            label="Runtime label"
             hint="Projects keep independent Python and dependency environments; grouping is optional."
           >
             <select
@@ -345,7 +347,9 @@ export default function CreateTestSuite() {
                 </label>
               ))}
               {!environmentId && (
-                <p className="muted-cell">Select an environment to view compatible projects.</p>
+                <p className="muted-cell">
+                  All project runtimes are available; choose a label to filter.
+                </p>
               )}
             </div>
           </div>
