@@ -41,7 +41,7 @@ async def test_experiment_accepts_projects_with_independent_runtime_environments
     project.runtime_bundle_object = "runner-jobs/runtime/uploaded/runtime.tar.gz"
     project.runtime_dependency_fingerprint = "dependency-digest"
     project.runtime_digest = "runtime-digest"
-    project.runtime_image = "promptopt-runtime-py312@sha256:image"
+    project.runtime_image = "promptopt-runtime-py312@sha256:" + "a" * 64
     project.runtime_worker_job = "projects/p/locations/r/jobs/eval-project"
     project.source_archive_sha256 = "a" * 64
     project.runtime_source_archive_object = "runner-jobs/source-archives/a.zip"
@@ -241,7 +241,7 @@ async def test_uploaded_experiment_requires_current_runtime_and_only_uses_source
         protocol_version=MINIMUM_RUNTIME_PROTOCOL_VERSION,
         runtime_digest="wrapped-runtime-digest",
         python_version="3.12",
-        runtime_image="promptopt-runtime-py312@sha256:image",
+        runtime_image="promptopt-runtime-py312@sha256:" + "a" * 64,
         runtime_worker_job="projects/p/locations/r/jobs/eval-wrapped",
         source_archive_sha256="c" * 64,
         source_archive_object="runner-jobs/source-archives/c.zip",
@@ -250,7 +250,7 @@ async def test_uploaded_experiment_requires_current_runtime_and_only_uses_source
     project.runtime_bundle_object = "runner-jobs/runtime/wrapped/runtime.tar.gz"
     project.runtime_dependency_fingerprint = "wrapped-dependency-digest"
     project.runtime_digest = "wrapped-runtime-digest"
-    project.runtime_image = "promptopt-runtime-py312@sha256:image"
+    project.runtime_image = "promptopt-runtime-py312@sha256:" + "a" * 64
     project.runtime_worker_job = "projects/p/locations/r/jobs/eval-wrapped"
     project.source_archive_sha256 = "c" * 64
     project.runtime_source_archive_object = "runner-jobs/source-archives/c.zip"

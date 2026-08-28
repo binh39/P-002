@@ -428,8 +428,14 @@ class ExperimentService:
             or project.runtime_report.protocol_version < MINIMUM_RUNTIME_PROTOCOL_VERSION
             or not project.runtime_bundle_object
             or not project.runtime_digest
-            or not project.runtime_image
-            or not project.runtime_worker_job
+            or not re.fullmatch(
+                r"[A-Za-z0-9._:/-]+@sha256:[0-9a-f]{64}",
+                str(project.runtime_image or ""),
+            )
+            or not re.fullmatch(
+                r"projects/[^/]+/locations/[^/]+/jobs/[^/]+",
+                str(project.runtime_worker_job or ""),
+            )
             or not project.source_archive_sha256
             or not project.runtime_source_archive_object
             or not project.runtime_bundle_sha256
