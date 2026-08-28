@@ -11,6 +11,7 @@ from cloud.runtime_workspace import (
     RUNTIME_TOOL_PACKAGES,
     RuntimeProjectSpec,
     _legacy_metadata_requirements,
+    _redact_text,
     _test_requirement_files,
     _validate_project_python,
     detect_layout,
@@ -38,6 +39,12 @@ def test_safe_extract_rejects_path_traversal(tmp_path):
         assert "Unsafe ZIP path" in str(error)
     else:
         raise AssertionError("path traversal must be rejected")
+
+
+def test_runtime_diagnostics_redact_private_index_credentials():
+    value = _redact_text("https://user:secret@example.test/simple/pkg")
+    assert "secret" not in value
+    assert value == "https://example.test/simple/pkg"
 
 
 def test_safe_extract_ignores_symbolic_links(tmp_path):

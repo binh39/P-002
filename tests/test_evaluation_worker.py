@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from cloud.run_evaluation_worker import _execute, _stage_project
+from cloud.run_evaluation_worker import _execute, _relocate_venv_scripts, _stage_project
 from src.optimization.models import ProjectLayout
 
 
@@ -95,6 +95,18 @@ def test_sample_worker_enforces_pinned_image_and_job(tmp_path, monkeypatch):
     request["project_spec"]["runtime_image"] = "image@sha256:other"
     with pytest.raises(RuntimeError, match="Runtime image changed"):
         _stage_project(_Bucket({}), request, tmp_path / "wrong-image")
+
+
+def test_restored_venv_console_script_shebang_is_relocated(tmp_path):
+    python = tmp_path / "runtime" / ".venv" / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    python.write_bytes(b"binary")
+    script = python.parent / "project-cli"
+    script.write_bytes(b"#!/old/build/path/.venv/bin/python\nprint('ok')\n")
+
+    _relocate_venv_scripts(python)
+
+    assert script.read_bytes().startswith(f"#!{python}\n".encode())
 
 
 def test_worker_rejects_request_when_deployment_identity_is_not_pinned(tmp_path, monkeypatch):

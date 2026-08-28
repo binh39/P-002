@@ -18,6 +18,7 @@ import venv
 import zipfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path, PurePosixPath
+from urllib.parse import urlsplit, urlunsplit
 
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import Version
@@ -927,11 +928,11 @@ def _run(
             timeout=remaining,
             check=False,
         )
-        output = completed.stdout[:output_limit].decode("utf-8", errors="replace")
-        item = CommandResult(name, command, completed.returncode, time.monotonic() - started, output=output)
+        output = _redact_text(completed.stdout[:output_limit].decode("utf-8", errors="replace"))
+        item = CommandResult(name, _redact_command(command), completed.returncode, time.monotonic() - started, output=output)
     except subprocess.TimeoutExpired as exc:
-        output = (exc.stdout or b"")[:output_limit].decode("utf-8", errors="replace")
-        item = CommandResult(name, command, None, time.monotonic() - started, timed_out=True, output=output)
+        output = _redact_text((exc.stdout or b"")[:output_limit].decode("utf-8", errors="replace"))
+        item = CommandResult(name, _redact_command(command), None, time.monotonic() - started, timed_out=True, output=output)
     result.commands.append(item)
     if item.timed_out and raise_on_timeout:
         raise RuntimeError(f"{name} timed out")
@@ -941,6 +942,28 @@ def _run(
             raise RuntimeError(f"Dependency conflict prevented this project runtime from being prepared: {detail}")
         raise RuntimeError(f"{name} failed with exit code {item.return_code}: {detail}")
     return item
+
+
+def _redact_text(value: str) -> str:
+    """Remove credentials from URLs before persisting command diagnostics."""
+    def replace(match: re.Match[str]) -> str:
+        raw = match.group(0)
+        try:
+            parsed = urlsplit(raw)
+            if parsed.username is None and parsed.password is None:
+                return raw
+            host = parsed.hostname or ""
+            if parsed.port:
+                host = f"{host}:{parsed.port}"
+            return urlunsplit((parsed.scheme, host, parsed.path, parsed.query, parsed.fragment))
+        except ValueError:
+            return "<redacted-url>"
+
+    return re.sub(r"https?://[^\s]+", replace, value)
+
+
+def _redact_command(command: list[str]) -> list[str]:
+    return [_redact_text(str(item)) for item in command]
 
 
 def _parse_collected_tests(output: str) -> int:

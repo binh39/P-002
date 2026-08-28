@@ -46,6 +46,27 @@ def _verify_generation(bucket, object_name: str, expected: str | None) -> None:
         )
 
 
+def _relocate_venv_scripts(python: Path) -> None:
+    """Rewrite POSIX console-script shebangs after bundle relocation."""
+    bin_dir = python.parent
+    if not bin_dir.is_dir() or bin_dir.name.lower() not in {"bin", "scripts"}:
+        return
+    interpreter = str(python)
+    for script in bin_dir.iterdir():
+        if not script.is_file() or script.name.startswith("python"):
+            continue
+        try:
+            content = script.read_bytes()
+            if not content.startswith(b"#!"):
+                continue
+            newline = content.find(b"\n")
+            if newline < 0:
+                continue
+            script.write_bytes(f"#!{interpreter}\n".encode() + content[newline + 1 :])
+        except (OSError, UnicodeError):
+            continue
+
+
 def _safe_extract_checkpoint(archive_path: Path, destination: Path) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     root = destination.resolve()
@@ -155,6 +176,7 @@ def _stage_project(bucket, request: dict[str, Any], root: Path) -> tuple[Path, P
         if hashlib.sha256(bundle.read_bytes()).hexdigest() != expected_bundle_hash:
             raise RuntimeError("Project runtime bundle no longer matches its admitted runtime")
         python = safe_extract_runtime_bundle(bundle, root / "runtime")
+        _relocate_venv_scripts(python)
         extracted = root / "source"
         safe_extract_zip(archive, extracted)
         project_root = find_project_root(extracted)
