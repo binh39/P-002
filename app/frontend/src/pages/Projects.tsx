@@ -78,7 +78,7 @@ function ProjectCard({
         <span>
           {sample
             ? "Bundled sample environment"
-            : project.runtimeEnvironmentName || "Private runtime environment"}
+            : `${project.runtimeEnvironmentName || "Project runtime"} · private venv`}
         </span>
         <button onClick={open}>Open project →</button>
       </div>
@@ -309,10 +309,11 @@ export default function Projects() {
 
       <div className="platform-callout">
         <div>
-          <strong>Reusable isolated runtime environments</strong>
+          <strong>Isolated runtime for every project</strong>
           <p>
-            Uploads are analyzed, resolved together with UV, and admitted only when the selected
-            environment remains compatible.
+            Each upload gets its own dependency-resolved venv. The optional runtime label is only
+            for organization; projects can be optimized together even when their dependencies
+            differ.
           </p>
         </div>
         <button className="secondary-button" onClick={() => navigate("/experiments/new")}>
@@ -334,8 +335,8 @@ export default function Projects() {
                 <span className="eyebrow">Private source archive</span>
                 <h2 id="import-project-title">Create project</h2>
                 <p>
-                  The archive is analyzed first, then admitted atomically into a reusable runtime
-                  environment.
+                  The archive is analyzed first, then admitted atomically into its own project
+                  runtime.
                 </p>
               </div>
               <button type="button" aria-label="Close project import" onClick={closeImport}>
@@ -355,7 +356,7 @@ export default function Projects() {
               </Field>
               <Field
                 label="Runtime environment"
-                hint="Only projects in the same environment can be optimized together."
+                hint="Optional grouping label; every project still gets an isolated venv."
               >
                 <select
                   value={environmentChoice}
