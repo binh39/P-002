@@ -773,7 +773,7 @@ independent commits:
 - Final-suite artifacts now persist prompt/runtime/source provenance:
   `7e32d45`.
 - UI, deployment environment, and architecture/runbook documentation:
-  `9ea726e`, `f4a3a9b`, `d79dbc8`, `443eca9`, `cbef322`, `69ded9f`.
+  `9ea726e`, `f4a3a9b`, `d79dbc8`, `443eca9`, `cbef322`, `69ded9f`, `75f880c`.
 - Network policy is included in runtime manifests and cache identity:
   `e938e30`, `d073f8b`; credential-bearing package indexes are rejected by
   `27d4576`.
@@ -807,7 +807,10 @@ implement reference tracking before deleting content-addressed objects.
 - [x] Generation/checksum verification, resume identity checks, dependency
       policy fingerprinting, credential redaction and UI/docs handoff are done.
 - [x] Root/backend test suites, required Python checks, frontend typecheck and
-      ESLint pass on this branch.
+      ESLint pass on this branch (171 root, 105 backend, 58 frontend tests).
+- [x] Runtime-label metadata no longer imposes a shared Python version:
+      project uploads with different Python/dependency graphs can reuse a label
+      while retaining separate venvs (`75f880c`).
 - [ ] Dev Cloud conflicting-Python E2E (including live GEPA, final suite,
       pause/resume and rerun) has not been run; it requires credentials and an
       approved cost window.
