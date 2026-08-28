@@ -81,6 +81,29 @@ def _download_object(bucket: str, object_name: str, destination: Path) -> None:
     storage.Client().bucket(bucket).blob(object_name).download_to_filename(str(destination))
 
 
+def _download_verified(
+    bucket: str,
+    object_name: str,
+    destination: Path,
+    *,
+    sha256: str | None = None,
+    generation: str | None = None,
+) -> None:
+    from google.cloud import storage
+
+    if generation:
+        blob = storage.Client().bucket(bucket).blob(object_name)
+        blob.reload()
+        actual = getattr(blob, "generation", None)
+        if actual is None or str(actual) != str(generation):
+            raise RuntimeError(f"Runtime object generation changed for {object_name}")
+    # Delegate the actual download so local/test adapters can provide an
+    # in-memory object store without having to emulate google-cloud-storage.
+    _download_object(bucket, object_name, destination)
+    if sha256 and hashlib.sha256(destination.read_bytes()).hexdigest() != sha256:
+        raise RuntimeError(f"Runtime source archive checksum changed for {object_name}")
+
+
 def _download_dir(bucket: str, prefix: str, destination: Path) -> int:
     """Restore a previously uploaded artifact tree, excluding its terminal sentinel."""
     from google.cloud import storage
@@ -212,6 +235,14 @@ def main() -> int:
                             "runtime_bundle_object",
                             "source_archive_sha256",
                             "runtime_bundle_sha256",
+                            "source_archive_generation",
+                            "runtime_bundle_generation",
+                            "runtime_digest",
+                            "runtime_image",
+                            "runtime_worker_job",
+                            "runtime_protocol_version",
+                            "execution_mode",
+                            "python_version",
                         ):
                             if saved.get(field) != incoming.get(field):
                                 raise RuntimeError(f"Resume project {project_name} changed immutable field {field}")
@@ -287,7 +318,17 @@ def main() -> int:
                             f"Uploaded project {name} has an incomplete immutable runtime: {missing_fields}"
                         )
                     archive = temporary_root / f"{name}.zip"
-                    _download_object(args.bucket, project["archive_object"], archive)
+                    _download_verified(
+                        args.bucket,
+                        project["archive_object"],
+                        archive,
+                        sha256=(
+                            project.get("source_archive_sha256")
+                            if project.get("execution_mode") or int(project.get("runtime_protocol_version") or 1) >= 13
+                            else None
+                        ),
+                        generation=project.get("source_archive_generation"),
+                    )
                     extracted = temporary_root / "projects" / name
                     safe_extract_zip(archive, extracted)
                     project_root = find_project_root(extracted)
