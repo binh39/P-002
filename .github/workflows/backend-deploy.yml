@@ -46,6 +46,9 @@ env:
   EVALUATION_JOB: promptopt-evaluation-worker
   RUNTIME_PREPARER_SERVICE_ACCOUNT: promptopt-runtime@project-7df9f963-9fe0-4b76-b3d.iam.gserviceaccount.com
   RUNTIME_FACTORY_SERVICE_ACCOUNT: promptopt-runtime-factory@project-7df9f963-9fe0-4b76-b3d.iam.gserviceaccount.com
+  # Protocol 13 uses generic workers and project bundles. Enable this only
+  # while migrating an active protocol-12 project-image runtime.
+  DEPLOY_RUNTIME_FACTORY: "false"
 
 jobs:
   deploy:
@@ -79,14 +82,11 @@ jobs:
         env:
           API_IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/api:${{ github.sha }}
           GEPA_IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/gepa-runner:${{ github.sha }}
-          FACTORY_IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/runtime-factory:${{ github.sha }}
         run: |
           docker build --file app/Dockerfile --tag "$API_IMAGE" .
           docker build --file cloud/Dockerfile.web --tag "$GEPA_IMAGE" .
-          docker build --file cloud/Dockerfile.runtime-factory --tag "$FACTORY_IMAGE" .
           docker push "$API_IMAGE"
           docker push "$GEPA_IMAGE"
-          docker push "$FACTORY_IMAGE"
           for PYTHON_VERSION in 3.10 3.11 3.12 3.13; do
             PYTHON_TAG="${PYTHON_VERSION/./}"
             RUNTIME_IMAGE="asia-southeast1-docker.pkg.dev/$PROJECT_ID/promptopt/runtime-py${PYTHON_TAG}:${GITHUB_SHA}"
@@ -95,6 +95,13 @@ jobs:
               --tag "$RUNTIME_IMAGE" .
             docker push "$RUNTIME_IMAGE"
           done
+      - name: Build and push legacy runtime image factory (migration only)
+        if: env.DEPLOY_RUNTIME_FACTORY == 'true'
+        env:
+          FACTORY_IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/runtime-factory:${{ github.sha }}
+        run: |
+          docker build --file cloud/Dockerfile.runtime-factory --tag "$FACTORY_IMAGE" .
+          docker push "$FACTORY_IMAGE"
       - name: Deploy bundled-sample evaluation worker
         env:
           GEPA_IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/gepa-runner:${{ github.sha }}
@@ -182,6 +189,7 @@ jobs:
               --quiet
           done
       - name: Deploy trusted runtime image factory
+        if: env.DEPLOY_RUNTIME_FACTORY == 'true'
         env:
           FACTORY_IMAGE: asia-southeast1-docker.pkg.dev/project-7df9f963-9fe0-4b76-b3d/promptopt/runtime-factory:${{ github.sha }}
         run: |

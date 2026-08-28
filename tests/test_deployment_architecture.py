@@ -31,10 +31,20 @@ def test_production_workers_and_coordinator_are_pinned_by_registry_digest():
 def test_production_deploy_includes_trusted_project_image_factory():
     workflow = Path(".github/workflows/backend-deploy.yml").read_text(encoding="utf-8")
 
+    assert 'if: env.DEPLOY_RUNTIME_FACTORY == \'true\'' in workflow
     assert "cloud/Dockerfile.runtime-factory" in workflow
     assert 'gcloud run jobs deploy "$RUNTIME_FACTORY_JOB"' in workflow
     assert '--service-account "$RUNTIME_FACTORY_SERVICE_ACCOUNT"' in workflow
     assert "cloud.runtime_image_factory" in workflow
+
+
+def test_production_deploy_defaults_to_generic_workers_without_factory_build():
+    workflow = Path(".github/workflows/backend-deploy.yml").read_text(encoding="utf-8")
+
+    assert 'DEPLOY_RUNTIME_FACTORY: "false"' in workflow
+    build_step = workflow[workflow.index("- name: Build and push images") : workflow.index("- name: Build and push legacy runtime")]
+    assert "Dockerfile.runtime-factory" not in build_step
+    assert 'docker push "$FACTORY_IMAGE"' not in build_step
 
 
 def test_provisioning_keeps_build_privileges_out_of_untrusted_preparer():
