@@ -355,7 +355,7 @@ export default function Projects() {
                 />
               </Field>
               <Field
-                label="Runtime environment"
+                label="Runtime label"
                 hint="Optional grouping label; every project still gets an isolated venv."
               >
                 <select

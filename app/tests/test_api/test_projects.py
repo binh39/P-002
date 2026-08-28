@@ -151,6 +151,48 @@ async def test_project_rejects_pending_upload(client):
 
 
 @pytest.mark.asyncio
+async def test_runtime_labels_allow_projects_with_different_python_versions(client):
+    async def upload(name: str) -> dict:
+        archive = f"{name}-archive".encode()
+        created = await client.post(
+            "/api/v1/uploads",
+            headers=AUTH_HEADERS,
+            json={"filename": f"{name}.zip", "content_type": "application/zip", "size_bytes": len(archive)},
+        )
+        upload = created.json()
+        await client.put(upload["upload_url"], headers=AUTH_HEADERS, content=archive)
+        completed = await client.post(f"/api/v1/uploads/{upload['id']}/complete", headers=AUTH_HEADERS)
+        assert completed.status_code == 200
+        return upload
+
+    first_upload = await upload("python312")
+    first = await client.post(
+        "/api/v1/projects",
+        headers=AUTH_HEADERS,
+        json={"name": "python312", "upload_id": first_upload["id"], "branch": "main"},
+    )
+    assert first.status_code == 201
+    first_project = first.json()
+
+    second_upload = await upload("python311")
+    second = await client.post(
+        "/api/v1/projects",
+        headers=AUTH_HEADERS,
+        json={
+            "name": "python311",
+            "upload_id": second_upload["id"],
+            "branch": "main",
+            "runtime_environment_id": first_project["runtime_environment_id"],
+            "settings": {"runtime": {"python_version": "3.11"}},
+        },
+    )
+
+    assert second.status_code == 201, second.text
+    assert second.json()["runtime_environment_id"] == first_project["runtime_environment_id"]
+    assert second.json()["settings"]["runtime"]["python_version"] == "3.11"
+
+
+@pytest.mark.asyncio
 async def test_upload_validation_uses_error_envelope(client):
     response = await client.post(
         "/api/v1/uploads",
