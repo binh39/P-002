@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shlex
@@ -27,6 +28,21 @@ def normalize_path(value: str | Path) -> str:
 def _test_python(environment: dict[str, str]) -> str:
     """Return the interpreter that owns the selected project environment."""
     return environment.get("TESTGEN_PYTHON", sys.executable)
+
+
+def _pytest_timeout_available(test_python: str) -> bool:
+    """Avoid passing the plugin flag when the local interpreter lacks it.
+
+    Prepared project runtimes install pytest-timeout as part of the immutable
+    toolchain. This fallback keeps local diagnostics usable with a minimal
+    development venv while preserving the flag for alternate interpreters.
+    """
+    try:
+        if Path(test_python).resolve() == Path(sys.executable).resolve():
+            return importlib.util.find_spec("pytest_timeout") is not None
+    except (OSError, ValueError):
+        pass
+    return True
 
 
 @dataclass(frozen=True)
@@ -128,7 +144,7 @@ def run_coverage(
             if resolved_basetemp is not None else ()
         ),
         *(("--count", str(repeat_tests)) if repeat_tests else ()),
-        f"--timeout={TEST_TIMEOUT_SECONDS}",
+        *( (f"--timeout={TEST_TIMEOUT_SECONDS}",) if _pytest_timeout_available(test_python) else () ),
         *shlex.split(pytest_args, posix=os.name != "nt"),
     ]
     completed = run_streamed(
