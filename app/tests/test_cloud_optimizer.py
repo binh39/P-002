@@ -306,6 +306,7 @@ async def test_cloud_gepa_optimizer_gives_sample_project_the_same_worker_contrac
         "runtime_digest": "sample:isort:sample-commit",
         "runtime_image": "bundled-gepa-image",
         "execution_mode": "generic_worker_bundle",
+        "runtime_protocol_version": 13,
         "python_version": "3.12",
         "source_directory": "isort",
         "test_directory": "tests",

@@ -140,6 +140,7 @@ class CloudRunJobGepaOptimizer:
                             or f"{snapshot.project_id}:{snapshot.commit or 'bundled'}",
                             "runtime_image": snapshot.runtime_image or "bundled-gepa-image",
                             "execution_mode": snapshot.runtime_execution_mode or "generic_worker_bundle",
+                            "runtime_protocol_version": max(13, snapshot.runtime_protocol_version),
                             "python_version": snapshot.python_version,
                             "source_directory": snapshot.source_directory,
                             "test_directory": snapshot.test_directory,

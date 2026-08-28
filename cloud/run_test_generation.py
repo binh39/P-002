@@ -238,9 +238,16 @@ def _pin_sample_workers(manifest: dict, jobs: dict[str, str]) -> dict:
         project["runtime_worker_job"] = sample_job
         project["runtime_image"] = sample_image
         project["execution_mode"] = project.get("execution_mode") or "generic_worker_bundle"
+        project["runtime_protocol_version"] = 13
         project["runtime_digest"] = hashlib.sha256(
             json.dumps(
-                {"sample": base_digest, "image": sample_image, "worker_job": sample_job},
+                {
+                    "sample": base_digest,
+                    "image": sample_image,
+                    "worker_job": sample_job,
+                    "runtime_protocol_version": 13,
+                    "execution_mode": project["execution_mode"],
+                },
                 sort_keys=True,
                 separators=(",", ":"),
             ).encode()
