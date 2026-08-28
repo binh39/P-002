@@ -160,6 +160,61 @@ def test_prepare_runtime_collects_tests_and_baseline_coverage(tmp_path):
     assert result.branch_coverage == 1.0
 
 
+def test_runtime_admission_exports_project_venv_to_console_entrypoints(tmp_path, monkeypatch):
+    archive = tmp_path / "console-entrypoint.zip"
+    write_zip(
+        archive,
+        {
+            "demo/pkg/__init__.py": "def value():\n    return 1\n",
+            "demo/tests/test_console.py": (
+                "import os\n"
+                "import subprocess\n"
+                "import sys\n\n"
+                "def test_console_entrypoint():\n"
+                "    completed = subprocess.run([\"promptopt-console\"], check=True, "
+                "capture_output=True, text=True)\n"
+                "    assert completed.stdout.strip() == \"runtime-ok\"\n"
+                "    assert os.environ[\"TESTGEN_PYTHON\"] == sys.executable\n"
+                "    assert os.environ[\"VIRTUAL_ENV\"]\n"
+            ),
+        },
+    )
+    runtime_dir = tmp_path / "runtime-with-console-entrypoint"
+    from cloud import runtime_workspace
+
+    original_run = runtime_workspace._run
+    created = False
+
+    def install_console_entrypoint(result, name, command, cwd, deadline, output_limit, **kwargs):
+        nonlocal created
+        if name != "create project runtime" and not created:
+            bin_dir = runtime_dir / ".venv" / ("Scripts" if os.name == "nt" else "bin")
+            bin_dir.mkdir(parents=True, exist_ok=True)
+            if os.name == "nt":
+                (bin_dir / "promptopt-console.cmd").write_text(
+                    "@echo off\r\necho runtime-ok\r\n", encoding="utf-8"
+                )
+            else:
+                script = bin_dir / "promptopt-console"
+                script.write_text("#!/bin/sh\necho runtime-ok\n", encoding="utf-8")
+                script.chmod(0o755)
+            created = True
+        return original_run(result, name, command, cwd, deadline, output_limit, **kwargs)
+
+    monkeypatch.setattr(runtime_workspace, "_run", install_console_entrypoint)
+    result, python = prepare_runtime(
+        archive,
+        runtime_dir,
+        configured_source="pkg",
+        configured_tests="tests",
+        timeout_seconds=120,
+    )
+
+    assert result.status == "runtime_ready", result.error
+    assert python is not None
+    assert created
+
+
 def test_prepare_runtime_accepts_project_without_existing_tests(tmp_path):
     archive = tmp_path / "project-without-tests.zip"
     write_zip(

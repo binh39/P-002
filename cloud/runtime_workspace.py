@@ -721,13 +721,24 @@ def prepare_environment(
         else:
             result.install_strategy = "PYTHONPATH (no dependency manifest)"
 
+        # Every project subprocess, including subprocesses spawned by an
+        # upstream test through a console entry point, must inherit the
+        # restored project's interpreter boundary.  Calling ``python -m``
+        # alone is insufficient because ``subprocess.run(["tool", ...])``
+        # resolves through PATH and entry-point shebangs.
+        runtime_environment = dict(os.environ)
+        runtime_environment["TESTGEN_PYTHON"] = str(python)
+        runtime_environment["VIRTUAL_ENV"] = str(venv_dir)
+        runtime_environment["PATH"] = os.pathsep.join(
+            [str(python.parent), runtime_environment.get("PATH", "")]
+        )
+
         site_packages = (
             venv_dir / "Lib" / "site-packages"
             if os.name == "nt"
             else venv_dir / "lib" / f"python{actual_python}" / "site-packages"
         )
-        prepared_environment = dict(os.environ)
-        prepared_environment["TESTGEN_PYTHON"] = str(python)
+        prepared_environment = runtime_environment
         import_roots = [source.parent if (source / "__init__.py").is_file() else source for source in sources.values()]
         prepared_environment["PYTHONPATH"] = os.pathsep.join(str(path) for path in import_roots)
         for project_id in roots:
@@ -737,7 +748,10 @@ def prepare_environment(
                 prepared_environment,
                 metadata_site=site_packages,
             )
-        test_environment = {"PYTHONPATH": prepared_environment["PYTHONPATH"]}
+        test_environment = {
+            key: prepared_environment[key]
+            for key in ("PATH", "VIRTUAL_ENV", "TESTGEN_PYTHON", "PYTHONPATH")
+        }
 
         for project_id in roots:
             project_result = result.projects[project_id]
