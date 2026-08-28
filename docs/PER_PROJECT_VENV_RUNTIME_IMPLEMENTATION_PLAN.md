@@ -792,3 +792,21 @@ implement reference tracking before deleting content-addressed objects.
 - Do not remove the legacy factory IAM/job/code until the Dev Cloud migration
   smoke passes and active protocol-12 runs are confirmed absent. Use a fresh
   artifacts prefix for the first live protocol-13 benchmark.
+
+### Checklist status at handoff
+
+- [x] Per-project venv, immutable source/bundle objects, digest and worker
+      identity are implemented and covered by tests.
+- [x] Generic protocol 13 is the default; protocol 12 factory workers remain
+      dual-read only behind an explicit migration flag.
+- [x] GEPA, diagnostic reflection, pytest/coverage and final-suite generation
+      route uploaded source execution through the project's restored venv.
+- [x] Generation/checksum verification, resume identity checks, dependency
+      policy fingerprinting, credential redaction and UI/docs handoff are done.
+- [x] Root/backend test suites, required Python checks, frontend typecheck and
+      ESLint pass on this branch.
+- [ ] Dev Cloud conflicting-Python E2E (including live GEPA, final suite,
+      pause/resume and rerun) has not been run; it requires credentials and an
+      approved cost window.
+- [ ] Remove legacy factory resources only after the preceding E2E evidence
+      confirms no active protocol-12 runtime depends on them.
