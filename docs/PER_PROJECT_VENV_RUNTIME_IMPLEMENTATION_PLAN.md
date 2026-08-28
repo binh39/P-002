@@ -771,7 +771,9 @@ independent commits:
 - Generic evaluation/final-generation dispatch, schema compatibility, and final
   runtime-object verification: `88a1e4d`, `3a1e2e6`.
 - UI, deployment environment, and architecture/runbook documentation:
-  `9ea726e`, `f4a3a9b` plus the current documentation commit.
+  `9ea726e`, `f4a3a9b`, `d79dbc8`.
+- Network policy is included in runtime manifests and cache identity:
+  `e938e30`.
 
 The default upload path does not invoke Cloud Build, create a project-specific
 image, or create a project-specific Cloud Run Job. The legacy image factory is
