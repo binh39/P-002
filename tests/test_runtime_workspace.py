@@ -385,8 +385,8 @@ def test_prepare_runtime_does_not_build_dynamic_version_project(tmp_path):
         assert "SETUPTOOLS_SCM_PRETEND_VERSION" not in resolve.output
         assert result.install_strategy == "uv dependency-only project resolution"
     else:
-        # The local fallback uses the image's system packages when uv is not
-        # installed; production runtime images always include uv.
+        # With no dependency manifest, the isolated venv remains the runtime
+        # boundary even when the local fallback is used.
         assert result.install_strategy == "PYTHONPATH (no dependency manifest)"
 
 

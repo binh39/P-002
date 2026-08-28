@@ -617,7 +617,9 @@ def prepare_environment(
                 maximum_output_bytes,
             )
         else:
-            venv.EnvBuilder(with_pip=True, system_site_packages=True).create(venv_dir)
+            # Never inherit the worker's site-packages: the venv is the
+            # isolation boundary between uploaded projects.
+            venv.EnvBuilder(with_pip=True, system_site_packages=False).create(venv_dir)
         python = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
         requirements: list[Path] = []
