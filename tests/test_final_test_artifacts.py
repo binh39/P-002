@@ -8,6 +8,57 @@ from cloud.run_test_generation import _artifact_index, _run_remote, _stage_proje
 from src.optimization.models import SymbolTarget
 
 
+def test_runtime_object_download_verifies_generation_and_checksum(tmp_path, monkeypatch):
+    payload = b"immutable runtime input"
+    calls = []
+
+    class Blob:
+        generation = "42"
+
+        def reload(self):
+            calls.append("reload")
+
+    class Bucket:
+        def blob(self, name):
+            assert name == "runtime/object"
+            return Blob()
+
+    def download(_bucket, _object_name, path):
+        calls.append("download")
+        path.write_bytes(payload)
+
+    monkeypatch.setattr(run_test_generation, "_download_object", download)
+    destination = tmp_path / "runtime.tar.gz"
+    run_test_generation._download_verified_runtime_object(
+        Bucket(),
+        "runtime/object",
+        destination,
+        expected_sha256=hashlib.sha256(payload).hexdigest(),
+        expected_generation="42",
+    )
+    assert calls == ["reload", "download"]
+
+
+def test_runtime_object_download_rejects_changed_checksum(tmp_path, monkeypatch):
+    destination = tmp_path / "runtime.tar.gz"
+    monkeypatch.setattr(
+        run_test_generation,
+        "_download_object",
+        lambda _bucket, _object_name, path: path.write_bytes(b"tampered"),
+    )
+    try:
+        run_test_generation._download_verified_runtime_object(
+            object(),
+            "runtime/object",
+            destination,
+            expected_sha256=hashlib.sha256(b"original").hexdigest(),
+        )
+    except RuntimeError as exc:
+        assert "checksum changed" in str(exc)
+    else:
+        raise AssertionError("tampered runtime object was accepted")
+
+
 def test_final_test_artifact_index_contains_generated_tests_source_and_coverage(tmp_path):
     artifacts = tmp_path / "artifacts"
     generated = artifacts / "generated_tests" / "tests_candidate" / "test_parse.py"

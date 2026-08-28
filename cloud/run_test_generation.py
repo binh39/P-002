@@ -28,6 +28,35 @@ from src.optimization.models import ExperimentConfig, ProjectLayout, SymbolTarge
 from src.optimization.runner import CoverUpExperimentRunner, _test_environment
 
 
+def _download_verified_runtime_object(
+    bucket,
+    object_name: str,
+    destination: Path,
+    *,
+    expected_sha256: str,
+    expected_generation: str | None = None,
+) -> None:
+    """Download a project runtime input and verify its immutable identity.
+
+    Final-suite generation is a second execution path beside GEPA evaluation;
+    it must enforce the same generation/checksum contract before extracting
+    user source or a project virtual environment.
+    """
+    if expected_generation:
+        blob = bucket.blob(object_name)
+        try:
+            blob.reload()
+        except Exception as exc:  # noqa: BLE001 - surface an actionable identity error
+            raise RuntimeError(f"Could not verify generation for runtime object {object_name}") from exc
+        actual_generation = getattr(blob, "generation", None)
+        if actual_generation is None or str(actual_generation) != str(expected_generation):
+            raise RuntimeError(f"Runtime object generation changed: {object_name}")
+    _download_object(bucket, object_name, destination)
+    actual_sha256 = hashlib.sha256(destination.read_bytes()).hexdigest()
+    if actual_sha256 != expected_sha256:
+        raise RuntimeError(f"Runtime object checksum changed: {object_name}")
+
+
 def _artifact_index(
     artifacts: Path, generated_files: list[Path], source_files: list[Path] | None = None
 ) -> list[dict[str, object]]:
@@ -489,10 +518,22 @@ def _stage_projects(args, root: Path, project_names: list[str] | None = None) ->
         if missing_fields:
             raise RuntimeError(f"Uploaded project {name} has an incomplete immutable runtime: {missing_fields}")
         runtime_bundle = root / "runtimes" / f"{name}.tar.gz"
-        _download_object(args.bucket, project["runtime_bundle_object"], runtime_bundle)
+        _download_verified_runtime_object(
+            args.bucket,
+            project["runtime_bundle_object"],
+            runtime_bundle,
+            expected_sha256=str(project["runtime_bundle_sha256"]),
+            expected_generation=project.get("runtime_bundle_generation"),
+        )
         runtime_python = safe_extract_runtime_bundle(runtime_bundle, root / "runtimes" / name)
         archive = root / "archives" / f"{name}.zip"
-        _download_object(args.bucket, project["archive_object"], archive)
+        _download_verified_runtime_object(
+            args.bucket,
+            project["archive_object"],
+            archive,
+            expected_sha256=str(project["source_archive_sha256"]),
+            expected_generation=project.get("source_archive_generation"),
+        )
         extracted = root / "projects" / name
         safe_extract_zip(archive, extracted)
         project_root = find_project_root(extracted)
