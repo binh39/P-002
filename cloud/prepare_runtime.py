@@ -44,6 +44,9 @@ def _prepare(args, bucket, root: Path) -> RuntimeResult:
                 archive,
                 project.get("source_directory", "src"),
                 project.get("test_directory", "tests"),
+                project.get("requirements_file"),
+                project.get("lock_file"),
+                project.get("extra_package_index"),
             )
         )
     runtime_root = Path(os.environ.get("PROMPTOPT_RUNTIME_ROOT", "/tmp/promptopt-runtime"))

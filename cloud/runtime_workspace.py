@@ -91,6 +91,9 @@ class RuntimeProjectSpec:
     archive: Path
     configured_source: str = "src"
     configured_tests: str = "tests"
+    configured_requirements: str | None = None
+    configured_lock: str | None = None
+    extra_package_index: str | None = None
 
 
 @dataclass(slots=True)
@@ -549,6 +552,8 @@ def prepare_environment(
             digest.update(spec.project_id.encode())
             digest.update(spec.configured_source.encode())
             digest.update(spec.configured_tests.encode())
+            digest.update((spec.configured_requirements or "").encode())
+            digest.update((spec.configured_lock or "").encode())
             digest.update(spec.archive.read_bytes())
             extracted = workspace / "projects" / spec.project_id
             safe_extract_zip(spec.archive, extracted)
@@ -557,6 +562,11 @@ def prepare_environment(
             source, test_dir = detect_layout(root, spec.configured_source, spec.configured_tests)
             test_dir = _runtime_test_directory(root, test_dir)
             dependency_files = [name for name in DEPENDENCY_FILES if (root / name).is_file()]
+            for configured in (spec.configured_requirements, spec.configured_lock):
+                if configured and configured not in dependency_files:
+                    configured_path = _safe_relative(root, configured)
+                    if configured_path.is_file():
+                        dependency_files.append(configured_path.relative_to(root).as_posix())
             roots[spec.project_id] = root
             sources[spec.project_id] = source
             tests[spec.project_id] = test_dir
@@ -604,8 +614,23 @@ def prepare_environment(
         dependency_groups: list[str] = []
         pyproject_requirements = False
         for project_id, root in roots.items():
-            if (root / "pyproject.toml").is_file() and uv:
-                if (root / "uv.lock").is_file():
+            spec = next(item for item in specs if item.project_id == project_id)
+            configured_lock = _safe_relative(root, spec.configured_lock) if spec.configured_lock else None
+            configured_requirements = (
+                _safe_relative(root, spec.configured_requirements) if spec.configured_requirements else None
+            )
+            if configured_lock and not configured_lock.is_file():
+                raise ValueError(f"Configured lock file does not exist: {spec.configured_lock}")
+            if (
+                configured_requirements
+                and not configured_requirements.is_file()
+                and spec.configured_requirements != "requirements.txt"
+            ):
+                raise ValueError(f"Configured requirements file does not exist: {spec.configured_requirements}")
+            if configured_requirements and not configured_requirements.is_file():
+                configured_requirements = None
+            if (root / "pyproject.toml").is_file() and uv and not configured_requirements:
+                if configured_lock or (root / "uv.lock").is_file():
                     exported = workspace / "resolved" / f"{project_id}.txt"
                     exported.parent.mkdir(parents=True, exist_ok=True)
                     _run(
@@ -632,6 +657,8 @@ def prepare_environment(
                     requirements.append(pyproject)
                     pyproject_requirements = True
                     dependency_groups.extend(f"{pyproject}:{name}" for name in _dependency_group_names(pyproject))
+            elif configured_requirements:
+                requirements.append(configured_requirements)
             else:
                 requirements.extend(root / name for name in LEGACY_REQUIREMENT_FILES if (root / name).is_file())
             legacy_metadata = _write_legacy_metadata_requirements(
@@ -656,6 +683,10 @@ def prepare_environment(
                 for group in dependency_groups:
                     command.extend(["--group", group])
                 command.extend(RUNTIME_TOOL_PACKAGES)
+                if spec.extra_package_index:
+                    command.extend(["--index", spec.extra_package_index])
+            elif spec.extra_package_index:
+                command.extend(["--extra-index-url", spec.extra_package_index])
             _run(
                 result,
                 "resolve project dependencies",

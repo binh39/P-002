@@ -11,13 +11,13 @@ from .repository import ProjectRepository
 from .schemas import (
     MINIMUM_RUNTIME_PROTOCOL_VERSION,
     PREPARED_RUNTIME_PROTOCOL_VERSION,
+    RUNTIME_EXECUTION_MODE_GENERIC,
+    RUNTIME_EXECUTION_MODE_PROJECT_IMAGE,
     ProjectRecord,
     ProjectResponse,
     RuntimeProjectReport,
     RuntimeReport,
     RuntimeStatus,
-    RUNTIME_EXECUTION_MODE_GENERIC,
-    RUNTIME_EXECUTION_MODE_PROJECT_IMAGE,
 )
 
 
@@ -72,6 +72,9 @@ class CloudRunRuntimePreparer:
                 "archive_object": archive_object,
                 "source_directory": project.settings.runtime.source_directory,
                 "test_directory": project.settings.tests.test_directory,
+                "requirements_file": project.settings.dependencies.requirements_file,
+                "lock_file": project.settings.dependencies.lock_file,
+                "extra_package_index": project.settings.dependencies.extra_package_index,
             }
         ]
         await self.storage.write(
