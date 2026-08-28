@@ -809,9 +809,11 @@ implement reference tracking before deleting content-addressed objects.
 
 - Unit/integration evidence: root runtime/worker/final-suite tests, backend tests,
   Ruff, Python compilation, workflow YAML parsing, and frontend type/lint checks
-  are run before handoff. The latest complete-suite evidence remains 171 root,
-  105 backend, and 58 frontend tests; targeted runtime/deployment additions are
-  recorded in the corresponding commits above.
+  are run before handoff. The latest complete-suite evidence is 178 root,
+  106 backend, and 58 frontend tests; targeted runtime/deployment additions are
+  recorded in the corresponding commits above. ESLint and TypeScript checks pass;
+  the repository-wide oxfmt check still reports pre-existing formatting drift in
+  32 frontend files, so no unrelated formatter rewrite was included.
 - Not run without Cloud credentials and an explicit cost window: Dev Cloud
   upload of two conflicting-Python fixtures, live GEPA reflection, final-suite
   rerun, pause/resume smoke, and production deployment smoke checks.
@@ -830,7 +832,7 @@ implement reference tracking before deleting content-addressed objects.
 - [x] Generation/checksum verification, resume identity checks, dependency
       policy fingerprinting, credential redaction and UI/docs handoff are done.
 - [x] Root/backend test suites, required Python checks, frontend typecheck and
-      ESLint pass on this branch (171 root, 105 backend, 58 frontend tests).
+      ESLint pass on this branch (178 root, 106 backend, 58 frontend tests).
 - [x] Runtime-label metadata no longer imposes a shared Python version:
       project uploads with different Python/dependency graphs can reuse a label
       while retaining separate venvs (`75f880c`).
