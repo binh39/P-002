@@ -78,12 +78,30 @@ def _prepare(args, bucket, root: Path) -> RuntimeResult:
         create_runtime_bundle(persistent_venv, bundle)
         if len(specs) == 1:
             result.source_archive_sha256 = hashlib.sha256(specs[0].archive.read_bytes()).hexdigest()
+            result.source_archive_object = (
+                f"runner-jobs/source-archives/{result.source_archive_sha256}.zip"
+            )
+            bucket.blob(result.source_archive_object).upload_from_filename(
+                str(specs[0].archive),
+                content_type="application/zip",
+            )
         result.runtime_bundle_sha256 = hashlib.sha256(bundle.read_bytes()).hexdigest()
+        # Keep the random per-execution object for diagnostics, but publish the
+        # immutable capsule at a digest-addressed path for cross-run reuse.
+        if result.runtime_digest:
+            content_addressed = (
+                f"runner-jobs/runtime-bundles/{result.runtime_digest}/"
+                f"{result.runtime_bundle_sha256}.tar.gz"
+            )
+            bucket.blob(content_addressed).upload_from_filename(
+                str(bundle),
+                content_type="application/gzip",
+            )
+            result.bundle_object = content_addressed
         bucket.blob(args.bundle_object).upload_from_filename(
             str(bundle),
             content_type="application/gzip",
         )
-        result.bundle_object = args.bundle_object
     return result
 
 

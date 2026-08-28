@@ -55,6 +55,7 @@ class RuntimeReport(StrictModel):
     runtime_image: str | None = None
     runtime_worker_job: str | None = None
     source_archive_sha256: str | None = None
+    source_archive_object: str | None = None
     runtime_bundle_sha256: str | None = None
     bundle_object: str | None = None
     error: str | None = None
@@ -202,6 +203,7 @@ class ProjectResponse(StrictModel):
     runtime_worker_job: str | None = None
     runtime_execution_mode: str | None = None
     source_archive_sha256: str | None = None
+    runtime_source_archive_object: str | None = None
     runtime_bundle_sha256: str | None = None
     runtime_status: RuntimeStatus = RuntimeStatus.NOT_REQUESTED
     runtime_report: RuntimeReport | None = None

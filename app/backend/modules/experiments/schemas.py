@@ -128,6 +128,7 @@ class ProjectSnapshot(StrictModel):
     test_directory: str
     runner_project: str
     archive_object: str | None = None
+    source_archive_object: str | None = None
     runtime_artifact_prefix: str | None = None
     runtime_environment_id: str | None = None
     runtime_bundle_object: str | None = None

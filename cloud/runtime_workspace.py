@@ -126,6 +126,7 @@ class RuntimeResult:
     runtime_image: str | None = None
     runtime_worker_job: str | None = None
     source_archive_sha256: str | None = None
+    source_archive_object: str | None = None
     runtime_bundle_sha256: str | None = None
     bundle_object: str | None = None
     error: str | None = None

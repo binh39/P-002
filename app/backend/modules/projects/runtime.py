@@ -407,6 +407,7 @@ class RuntimePreparationService:
         project.runtime_worker_job = report.runtime_worker_job
         project.runtime_execution_mode = report.execution_mode
         project.source_archive_sha256 = report.source_archive_sha256
+        project.runtime_source_archive_object = report.source_archive_object
         project.runtime_bundle_sha256 = report.runtime_bundle_sha256
         project.runtime_report = self._member_report(report, member_report)
         project.runtime_finished_at = now
@@ -454,6 +455,7 @@ class RuntimePreparationService:
             runtime_image=report.runtime_image,
             runtime_worker_job=report.runtime_worker_job,
             source_archive_sha256=report.source_archive_sha256,
+            source_archive_object=report.source_archive_object,
             runtime_bundle_sha256=report.runtime_bundle_sha256,
             bundle_object=report.bundle_object,
             protocol_version=report.protocol_version,

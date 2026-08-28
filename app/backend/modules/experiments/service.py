@@ -454,7 +454,11 @@ class ExperimentService:
                     source_directory=project.settings.runtime.source_directory,
                     test_directory=project.settings.tests.test_directory,
                     runner_project=runner_project,
-                    archive_object=None if self.projects.is_sample(project.id) else project.object_name,
+                    archive_object=(
+                        None
+                        if self.projects.is_sample(project.id)
+                        else (project.runtime_source_archive_object or project.object_name)
+                    ),
                     runtime_artifact_prefix=project.runtime_artifact_prefix,
                     runtime_environment_id=project.runtime_environment_id,
                     runtime_bundle_object=project.runtime_bundle_object,
