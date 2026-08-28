@@ -561,6 +561,9 @@ def prepare_environment(
             digest.update(spec.configured_tests.encode())
             digest.update((spec.configured_requirements or "").encode())
             digest.update((spec.configured_lock or "").encode())
+            # Include package-index policy in the identity, but never persist
+            # credential-bearing URL material in the fingerprint input.
+            digest.update(_redact_text(spec.extra_package_index or "").encode())
             digest.update(f"network-access={spec.configured_network_access}".encode())
             if spec.configured_install_command != "pip install -r requirements.txt":
                 raise ValueError(
