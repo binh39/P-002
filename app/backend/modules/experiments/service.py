@@ -473,6 +473,7 @@ class ExperimentService:
                     source_archive_generation=project.runtime_source_archive_generation,
                     runtime_bundle_sha256=project.runtime_bundle_sha256,
                     runtime_bundle_generation=project.runtime_bundle_generation,
+                    network_access=project.settings.security.network_access,
                     python_version=project.settings.runtime.python_version,
                 )
             )

@@ -96,6 +96,7 @@ class RuntimeProjectSpec:
     configured_lock: str | None = None
     extra_package_index: str | None = None
     configured_install_command: str = "pip install -r requirements.txt"
+    configured_network_access: bool = False
 
 
 @dataclass(slots=True)
@@ -132,6 +133,7 @@ class RuntimeResult:
     source_archive_generation: str | None = None
     runtime_bundle_sha256: str | None = None
     runtime_bundle_generation: str | None = None
+    network_access: bool = False
     bundle_object: str | None = None
     error: str | None = None
     protocol_version: int = RUNTIME_PROTOCOL_VERSION
@@ -559,6 +561,7 @@ def prepare_environment(
             digest.update(spec.configured_tests.encode())
             digest.update((spec.configured_requirements or "").encode())
             digest.update((spec.configured_lock or "").encode())
+            digest.update(f"network-access={spec.configured_network_access}".encode())
             if spec.configured_install_command != "pip install -r requirements.txt":
                 raise ValueError(
                     "Custom install_command is not supported by the trusted runtime preparer; "
@@ -589,6 +592,7 @@ def prepare_environment(
                 dependency_files=dependency_files,
             )
         result.dependency_fingerprint = digest.hexdigest()
+        result.network_access = bool(specs[0].configured_network_access)
         result.runtime_digest = hashlib.sha256(
             json.dumps(
                 {
@@ -596,6 +600,7 @@ def prepare_environment(
                     "python": actual_python,
                     "project": result.dependency_fingerprint,
                     "tools": RUNTIME_TOOL_PACKAGES,
+                    "network_access": result.network_access,
                 },
                 separators=(",", ":"),
                 sort_keys=True,

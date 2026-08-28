@@ -108,6 +108,7 @@ class CloudRunJobTestGenerator:
                         "runtime_protocol_version": snapshot.runtime_protocol_version,
                         "source_archive_sha256": snapshot.source_archive_sha256,
                         "runtime_bundle_sha256": snapshot.runtime_bundle_sha256,
+                        "network_access": snapshot.network_access,
                         **(
                             {"source_archive_generation": copied_archive_generation}
                             if copied_archive_generation

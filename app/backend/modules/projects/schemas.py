@@ -59,6 +59,7 @@ class RuntimeReport(StrictModel):
     source_archive_generation: str | None = None
     runtime_bundle_sha256: str | None = None
     runtime_bundle_generation: str | None = None
+    network_access: bool = False
     bundle_object: str | None = None
     error: str | None = None
     protocol_version: int = 1

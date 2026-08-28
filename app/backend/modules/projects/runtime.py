@@ -76,6 +76,7 @@ class CloudRunRuntimePreparer:
                 "lock_file": project.settings.dependencies.lock_file,
                 "extra_package_index": project.settings.dependencies.extra_package_index,
                 "install_command": project.settings.dependencies.install_command,
+                "network_access": project.settings.security.network_access,
             }
         ]
         await self.storage.write(
@@ -462,6 +463,7 @@ class RuntimePreparationService:
             source_archive_generation=report.source_archive_generation,
             runtime_bundle_sha256=report.runtime_bundle_sha256,
             runtime_bundle_generation=report.runtime_bundle_generation,
+            network_access=report.network_access,
             bundle_object=report.bundle_object,
             protocol_version=report.protocol_version,
             execution_mode=report.execution_mode,

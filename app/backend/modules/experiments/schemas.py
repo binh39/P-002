@@ -141,6 +141,7 @@ class ProjectSnapshot(StrictModel):
     source_archive_sha256: str | None = None
     runtime_bundle_sha256: str | None = None
     runtime_bundle_generation: str | None = None
+    network_access: bool = False
     python_version: str = "3.12"
 
 

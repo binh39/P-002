@@ -69,6 +69,7 @@ def _prepare(args, bucket, root: Path) -> RuntimeResult:
                 project.get("lock_file"),
                 project.get("extra_package_index"),
                 project.get("install_command", "pip install -r requirements.txt"),
+                bool(project.get("network_access", False)),
             )
         )
     runtime_root = Path(os.environ.get("PROMPTOPT_RUNTIME_ROOT", "/tmp/promptopt-runtime"))
