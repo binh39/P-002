@@ -819,9 +819,10 @@ implement reference tracking before deleting content-addressed objects.
   recorded in the corresponding commits above. ESLint and TypeScript checks pass;
   the repository-wide oxfmt check still reports pre-existing formatting drift in
   32 frontend files, so no unrelated formatter rewrite was included.
-- Not run without Cloud credentials and an explicit cost window: Dev Cloud
-  upload of two conflicting-Python fixtures, live GEPA reflection, final-suite
-  rerun, pause/resume smoke, and production deployment smoke checks.
+- A bounded Dev Cloud smoke was run after credentials and a cost window were
+  approved. It covered conflicting-Python upload/preparation, remote GEPA
+  baseline dispatch, and final-generation artifact persistence. A useful
+  generated suite, pause/resume, and production deployment smoke remain open.
 - Do not remove the legacy factory IAM/job/code until the Dev Cloud migration
   smoke passes and active protocol-12 runs are confirmed absent. Use a fresh
   artifacts prefix for the first live protocol-13 benchmark.
@@ -844,8 +845,55 @@ implement reference tracking before deleting content-addressed objects.
 - [x] Production workflow builds and deploys the generic Python-minor workers by
       default; factory image build/deploy is guarded by the migration flag
       `DEPLOY_RUNTIME_FACTORY=true` (`bd7a28d`).
-- [ ] Dev Cloud conflicting-Python E2E (including live GEPA, final suite,
-      pause/resume and rerun) has not been run; it requires credentials and an
-      approved cost window.
+- [ ] Full Dev Cloud conflicting-Python E2E (non-trivial generated suite,
+      pause/resume and rerun) is not yet accepted. The bounded smoke evidence
+      below covers runtime routing and artifact persistence only.
 - [ ] Remove legacy factory resources only after the preceding E2E evidence
       confirms no active protocol-12 runtime depends on them.
+
+### Bounded Dev Cloud smoke evidence (2026-08-29)
+
+The approved Dev-only smoke window used project `project-7df9f963-9fe0-4b76-b3d`,
+region `asia-southeast1`, and the two committed fixtures under
+`eval/runtime_e2e_fixtures/`:
+
+- `project_py311`: Python 3.11, `packaging==24.2`.
+- `project_py312`: Python 3.12, `packaging==25.0`.
+
+The source archives and runtime bundles were uploaded under the runner-only GCS
+prefix. Runtime preparation succeeded independently for both projects; reports
+record Python 3.11.16/3.12.14, the requested packaging versions, one collected
+passing upstream test, statement/branch coverage 1.0, immutable source/bundle
+SHA-256 values, and distinct runtime digests. No project-specific image factory
+was used for the default path.
+
+Versioned immutable resources used by the smoke are:
+
+- generic runner image digest `sha256:b4cc68cc998669dafd5275008f52fb64293c7ed19939c5efa463d3272457a688`;
+- generic runtime worker image digests `sha256:afa1d08ee72bff6ddc9e39649300893e851c4591ff00b366d8ea8c39b8cf8189` (3.11)
+  and `sha256:466bfbbc1a077efec9c4fe308b5274c7c51391258b8b774ee97f97186708d75b` (3.12);
+- GEPA smoke artifacts: `runner-jobs/e2e-gepa-a2a06fc-r3`;
+- final-generation artifacts: `runner-jobs/e2e-final-9af491d-r3`.
+
+The bounded GEPA execution completed successfully, dispatched every target to
+the matching Python worker, performed valid locked test baseline preflight, and
+kept the unchanged baseline when all measured candidate scores were 0. The
+promotion gate correctly skipped a redundant final comparison because the
+bundle digest did not change. Its cost report recorded zero priced model calls.
+The independent final-generation execution also completed and persisted its
+manifest, source files, coverage JSON, and suite ZIP. The tiny fixtures caused
+no generated test to be retained and measured project coverage was 0; this is a
+runtime routing/persistence smoke result, not evidence that a real project has
+achieved a useful generated suite.
+
+During this smoke, final-generation validation was fixed to accept the required
+GEPA three-component prompt (`initial`, `error`, `missing_coverage`) while
+retaining compatibility with legacy two-component snapshots. The fixes are
+separate pushed commits `e08b047` and `9af491d`; corresponding coordinator and
+worker images were rebuilt and pinned by digest.
+
+Still outstanding before production migration: a non-trivial fixture or real
+project final suite with at least one retained generated test and a passing
+coverage gate, pause/resume checkpoint/resume evidence, and confirmation that no
+active protocol-12 run depends on the legacy factory. These were intentionally
+not fabricated from the zero-test smoke result.
