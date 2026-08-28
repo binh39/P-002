@@ -431,6 +431,7 @@ class ExperimentService:
             or not project.runtime_image
             or not project.runtime_worker_job
             or not project.source_archive_sha256
+            or not project.runtime_source_archive_object
             or not project.runtime_bundle_sha256
             or project.runtime_report.python_version != project.settings.runtime.python_version
         ]

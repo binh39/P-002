@@ -395,7 +395,8 @@ class RuntimePreparationService:
             return project
         report.protocol_version = MINIMUM_RUNTIME_PROTOCOL_VERSION
         report.execution_mode = RUNTIME_EXECUTION_MODE_GENERIC
-        report.runtime_digest = _bind_runtime_identity(report)
+        if re.fullmatch(r"[0-9a-f]{64}", str(report.runtime_digest or "")):
+            report.runtime_digest = _bind_runtime_identity(report)
         return await self._accept(project, report)
 
     @staticmethod
@@ -411,6 +412,7 @@ class RuntimePreparationService:
             and immutable_image
             and report.runtime_worker_job
             and report.source_archive_sha256
+            and report.source_archive_object
             and report.runtime_bundle_sha256
         )
 

@@ -44,6 +44,7 @@ async def test_experiment_accepts_projects_with_independent_runtime_environments
     project.runtime_image = "promptopt-runtime-py312@sha256:image"
     project.runtime_worker_job = "projects/p/locations/r/jobs/eval-project"
     project.source_archive_sha256 = "a" * 64
+    project.runtime_source_archive_object = "runner-jobs/source-archives/a.zip"
     project.runtime_bundle_sha256 = "b" * 64
     project.runtime_report = RuntimeReport(
         status=RuntimeStatus.READY,
@@ -53,6 +54,7 @@ async def test_experiment_accepts_projects_with_independent_runtime_environments
         runtime_image=project.runtime_image,
         runtime_worker_job=project.runtime_worker_job,
         source_archive_sha256=project.source_archive_sha256,
+        source_archive_object=project.runtime_source_archive_object,
         runtime_bundle_sha256=project.runtime_bundle_sha256,
         bundle_object=project.runtime_bundle_object,
     )
@@ -242,6 +244,7 @@ async def test_uploaded_experiment_requires_current_runtime_and_only_uses_source
         runtime_image="promptopt-runtime-py312@sha256:image",
         runtime_worker_job="projects/p/locations/r/jobs/eval-wrapped",
         source_archive_sha256="c" * 64,
+        source_archive_object="runner-jobs/source-archives/c.zip",
         runtime_bundle_sha256="d" * 64,
     )
     project.runtime_bundle_object = "runner-jobs/runtime/wrapped/runtime.tar.gz"
@@ -250,6 +253,7 @@ async def test_uploaded_experiment_requires_current_runtime_and_only_uses_source
     project.runtime_image = "promptopt-runtime-py312@sha256:image"
     project.runtime_worker_job = "projects/p/locations/r/jobs/eval-wrapped"
     project.source_archive_sha256 = "c" * 64
+    project.runtime_source_archive_object = "runner-jobs/source-archives/c.zip"
     project.runtime_bundle_sha256 = "d" * 64
     await repository.save(project)
     listed = await client.get(f"/api/v1/projects/{project_id}/functions", headers=AUTH_HEADERS)
