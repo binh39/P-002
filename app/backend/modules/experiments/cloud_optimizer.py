@@ -157,7 +157,7 @@ class CloudRunJobGepaOptimizer:
                     raise ValueError(f"Uploaded project {snapshot.project_id} has no immutable runtime")
                 copied_archive = f"{prefix}/inputs/projects/{snapshot.runner_project}.zip"
                 copied_bundle = f"{prefix}/inputs/runtimes/{snapshot.runner_project}.tar.gz"
-                archive = await self.storage.read(snapshot.archive_object)
+                archive = await self.storage.read(snapshot.source_archive_object or snapshot.archive_object)
                 await self.storage.write(copied_archive, archive, "application/zip")
                 await self.storage.write(
                     copied_bundle,

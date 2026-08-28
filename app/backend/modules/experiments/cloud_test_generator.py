@@ -86,7 +86,7 @@ class CloudRunJobTestGenerator:
                 copied_bundle = f"{prefix}/inputs/runtimes/{snapshot.runner_project}.tar.gz"
                 await self.storage.write(
                     copied_archive,
-                    await self.storage.read(snapshot.archive_object),
+                    await self.storage.read(snapshot.source_archive_object or snapshot.archive_object),
                     "application/zip",
                 )
                 await self.storage.write(

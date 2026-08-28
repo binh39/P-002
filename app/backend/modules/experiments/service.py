@@ -466,6 +466,9 @@ class ExperimentService:
                         if self.projects.is_sample(project.id)
                         else (project.runtime_source_archive_object or project.object_name)
                     ),
+                    source_archive_object=(
+                        None if self.projects.is_sample(project.id) else project.runtime_source_archive_object
+                    ),
                     runtime_artifact_prefix=project.runtime_artifact_prefix,
                     runtime_environment_id=project.runtime_environment_id,
                     runtime_bundle_object=project.runtime_bundle_object,

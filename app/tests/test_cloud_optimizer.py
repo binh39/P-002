@@ -183,6 +183,7 @@ def test_experiment_settings_restrict_reflection_minibatch_size():
 async def test_cloud_gepa_optimizer_copies_uploaded_project_into_job_prefix():
     storage = FakeStorage()
     storage.objects["users/u/uploads/source.zip"] = (b"zip-content", "application/zip")
+    storage.objects["runner-jobs/source-archives/source.zip"] = (b"immutable-zip-content", "application/zip")
     storage.objects["runner-jobs/runtime/ready/runtime.tar.gz"] = (
         b"runtime-content",
         "application/gzip",
@@ -209,6 +210,7 @@ async def test_cloud_gepa_optimizer_copies_uploaded_project_into_job_prefix():
         test_directory="tests",
         runner_project="uploaded",
         archive_object="users/u/uploads/source.zip",
+        source_archive_object="runner-jobs/source-archives/source.zip",
         runtime_artifact_prefix="runner-jobs/runtime/ready",
         runtime_environment_id="environment-1",
         runtime_bundle_object="runner-jobs/runtime/ready/runtime.tar.gz",
@@ -242,7 +244,7 @@ async def test_cloud_gepa_optimizer_copies_uploaded_project_into_job_prefix():
     manifest = json.loads(storage.objects[manifest_name][0])
     copied_name = manifest["projects"][0]["archive_object"]
     assert copied_name.startswith("runner-jobs/gepa/")
-    assert storage.objects[copied_name][0] == b"zip-content"
+    assert storage.objects[copied_name][0] == b"immutable-zip-content"
     assert manifest["schema_version"] == 3
     assert manifest["projects"][0]["runtime_digest"] == "runtime-digest"
     assert manifest["projects"][0]["source_archive_sha256"] == "a" * 64
