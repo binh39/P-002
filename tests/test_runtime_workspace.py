@@ -13,6 +13,7 @@ from cloud.runtime_workspace import (
     _legacy_metadata_requirements,
     _redact_text,
     _test_requirement_files,
+    _validate_extra_package_index,
     _validate_project_python,
     detect_layout,
     prepare_environment,
@@ -45,6 +46,20 @@ def test_runtime_diagnostics_redact_private_index_credentials():
     value = _redact_text("https://user:secret@example.test/simple/pkg")
     assert "secret" not in value
     assert value == "https://example.test/simple/pkg"
+
+
+def test_runtime_preparer_rejects_credential_bearing_index_even_from_manifest():
+    for value in (
+        "https://user:secret@example.test/simple",
+        "https://example.test/simple?token=secret",
+        "https://example.test/simple?deploy_password=secret",
+    ):
+        try:
+            _validate_extra_package_index(value)
+        except ValueError as error:
+            assert "must not contain credentials" in str(error)
+        else:
+            raise AssertionError("credential-bearing package index must be rejected")
 
 
 def test_safe_extract_ignores_symbolic_links(tmp_path):

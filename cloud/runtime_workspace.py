@@ -18,7 +18,7 @@ import venv
 import zipfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path, PurePosixPath
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import Version
@@ -74,6 +74,7 @@ _NON_SOURCE_PACKAGE_NAMES = {
     "tests",
 }
 _TEST_EXTRA_NAMES = {"dev", "development", "test", "testing", "tests", "unit", "units"}
+_SENSITIVE_INDEX_QUERY_NAMES = {"auth", "key", "password", "secret", "token"}
 
 
 @dataclass(slots=True)
@@ -556,6 +557,7 @@ def prepare_environment(
         test_requirements: dict[str, list[Path]] = {}
         digest = hashlib.sha256(f"runtime-v{RUNTIME_PROTOCOL_VERSION}|python-{actual_python}".encode())
         for spec in sorted(specs, key=lambda item: item.project_id):
+            _validate_extra_package_index(spec.extra_package_index)
             digest.update(spec.project_id.encode())
             digest.update(spec.configured_source.encode())
             digest.update(spec.configured_tests.encode())
@@ -990,6 +992,21 @@ def _redact_text(value: str) -> str:
             return "<redacted-url>"
 
     return re.sub(r"https?://[^\s]+", replace, value)
+
+
+def _validate_extra_package_index(value: str | None) -> None:
+    """Reject credential-bearing indexes even if a manifest bypassed the API."""
+    if not value:
+        return
+    parsed = urlsplit(value)
+    if parsed.username or parsed.password or any(
+        key.casefold() in _SENSITIVE_INDEX_QUERY_NAMES
+        or key.casefold().endswith(("_key", "_token", "_secret", "_password"))
+        for key, _ in parse_qsl(parsed.query, keep_blank_values=True)
+    ):
+        raise ValueError(
+            "extra_package_index must not contain credentials; use a Secret Manager-backed index reference"
+        )
 
 
 def _redact_command(command: list[str]) -> list[str]:
