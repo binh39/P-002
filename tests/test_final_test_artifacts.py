@@ -232,6 +232,8 @@ def test_cloud_final_generation_merges_independent_project_workers(tmp_path, mon
     assert result["metrics"]["target_statement_coverage"] == 0.75
     assert result["metrics"]["target_branch_coverage"] == 0.5
     assert result["estimated_cost_usd"] == 0.02
+    assert result["prompt_digest"] == hashlib.sha256(prompt.read_bytes()).hexdigest()
+    assert result["runtime"]["projects"]["one"]["runtime_digest"] == "digest-one"
     assert (artifacts / "generated_tests" / "one" / "test_generated.py").is_file()
     assert (artifacts / "generated_tests" / "two" / "test_generated.py").is_file()
     assert (artifacts / "generated_tests.zip").is_file()

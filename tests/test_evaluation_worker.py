@@ -373,6 +373,8 @@ def test_final_generation_runs_inside_the_assigned_project_worker(tmp_path, monk
 
     assert result["final_generation"]["status"] == "succeeded"
     assert result["artifact_object"] == "worker-artifacts.zip"
+    assert result["final_generation"]["prompt_digest"] == hashlib.sha256(prompt).hexdigest()
+    assert result["final_generation"]["runtime"]["project"] == "uploaded"
     assert values["worker-artifacts.zip"].startswith(b"PK")
     assert captured["seed"] == 13
     assert {target.project for target in captured["targets"]} == {"uploaded"}

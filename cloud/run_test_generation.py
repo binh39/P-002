@@ -409,7 +409,7 @@ def _run_remote(
     )
     artifact_files = _artifact_index(artifacts, generated_files, source_files)
     failed = sum(int(row.get("failed_target_count") or 0) for row in metric_rows)
-    return {
+    result = {
         "schema_version": 3,
         "status": "partial" if failed or any(row.get("status") == "partial" for row in worker_results) else "completed",
         "metrics": {
@@ -452,6 +452,29 @@ def _run_remote(
             "files": artifact_files,
         },
     }
+    result["prompt_digest"] = hashlib.sha256(prompt_path.read_bytes()).hexdigest()
+    result["runtime"] = {
+        "projects": {
+            name: {
+                key: item.get(key)
+                for key in (
+                    "runtime_digest",
+                    "runtime_protocol_version",
+                    "execution_mode",
+                    "runtime_image",
+                    "runtime_worker_job",
+                    "source_archive_sha256",
+                    "runtime_bundle_sha256",
+                )
+                if item.get(key) is not None
+            }
+            for name, item in sorted(
+                ((str(item["project"]), item) for item in manifest["projects"]),
+                key=lambda pair: pair[0],
+            )
+        }
+    }
+    return result
 
 
 def _stage_projects(args, root: Path, project_names: list[str] | None = None) -> tuple[Path, dict[str, ProjectLayout]]:
@@ -718,7 +741,7 @@ def _run(args, artifacts: Path) -> dict:
         pytest_args=args.pytest_args,
         projects=layouts or None,
     )
-    return generate_local_project(
+    result = generate_local_project(
         artifacts=artifacts,
         prompt_path=prompt_path,
         targets=targets,
@@ -726,6 +749,8 @@ def _run(args, artifacts: Path) -> dict:
         sample_repos=sample_repos,
         seed=args.seed,
     )
+    result["prompt_digest"] = hashlib.sha256(prompt_path.read_bytes()).hexdigest()
+    return result
 
 
 def main() -> int:

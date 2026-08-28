@@ -269,6 +269,18 @@ def _execute(bucket, request: dict[str, Any], root: Path) -> dict[str, Any]:
             sample_repos=project_root.parent,
             seed=int(request.get("seed", 7)),
         )
+        project_spec = request["project_spec"]
+        result["prompt_digest"] = hashlib.sha256(prompt.read_bytes()).hexdigest()
+        result["runtime"] = {
+            "project": project,
+            "runtime_digest": project_spec.get("runtime_digest"),
+            "runtime_protocol_version": project_spec.get("runtime_protocol_version"),
+            "execution_mode": project_spec.get("execution_mode"),
+            "runtime_image": project_spec.get("runtime_image"),
+            "runtime_worker_job": project_spec.get("runtime_worker_job"),
+            "source_archive_sha256": project_spec.get("source_archive_sha256"),
+            "runtime_bundle_sha256": project_spec.get("runtime_bundle_sha256"),
+        }
         (artifacts / "test_generation_result.json").write_text(
             json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
         )
