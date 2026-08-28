@@ -323,6 +323,8 @@ def materialize_runtime(
                 "bundle": request["runtime_bundle_sha256"],
                 "image": immutable_image,
                 "worker_job": worker_job,
+                "runtime_protocol_version": 12,
+                "execution_mode": "project_image",
             },
             sort_keys=True,
             separators=(",", ":"),

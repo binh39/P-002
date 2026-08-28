@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from backend.modules.projects.repository import InMemoryProjectRepository
-from backend.modules.projects.runtime import CloudRunRuntimePreparer, RuntimePreparationService
+from backend.modules.projects.runtime import CloudRunRuntimePreparer, RuntimePreparationService, _bind_runtime_identity
 from backend.modules.projects.schemas import (
     MINIMUM_RUNTIME_PROTOCOL_VERSION,
     PREPARED_RUNTIME_PROTOCOL_VERSION,
@@ -144,6 +144,27 @@ async def test_compatible_project_publishes_only_its_immutable_runtime():
     assert member.runtime_status == RuntimeStatus.READY
     unchanged = await repository.get("existing")
     assert unchanged.runtime_bundle_object == "runtime/active.tar.gz"
+
+
+def test_runtime_digest_binds_protocol_and_execution_mode():
+    report = RuntimeReport(
+        status=RuntimeStatus.READY,
+        runtime_digest="a" * 64,
+        runtime_image="repo/runtime@sha256:" + "b" * 64,
+        runtime_worker_job="projects/p/locations/r/jobs/worker",
+        source_archive_sha256="c" * 64,
+        runtime_bundle_sha256="d" * 64,
+        protocol_version=13,
+        execution_mode="generic_worker_bundle",
+    )
+
+    generic_digest = _bind_runtime_identity(report)
+    project_image_digest = _bind_runtime_identity(
+        report.model_copy(update={"protocol_version": 12, "execution_mode": "project_image"})
+    )
+
+    assert len(generic_digest) == 64
+    assert generic_digest != project_image_digest
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import tarfile
 from pathlib import Path
 
@@ -187,7 +188,22 @@ def test_materialization_produces_project_specific_protocol_12_identity(tmp_path
     assert result["protocol_version"] == 12
     assert result["runtime_image"] == image
     assert result["runtime_worker_job"] == worker
-    assert len(result["runtime_digest"]) == 64
+    expected_digest = hashlib.sha256(
+        json.dumps(
+            {
+                "prepared_runtime": "prepared-digest",
+                "source": hashlib.sha256(source).hexdigest(),
+                "bundle": hashlib.sha256(bundle).hexdigest(),
+                "image": image,
+                "worker_job": worker,
+                "runtime_protocol_version": 12,
+                "execution_mode": "project_image",
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+    assert result["runtime_digest"] == expected_digest
     assert "runner-jobs/context.tar.gz" in values
 
 

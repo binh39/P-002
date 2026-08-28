@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import re
 from datetime import UTC, datetime, timedelta
@@ -19,6 +20,29 @@ from .schemas import (
     RuntimeReport,
     RuntimeStatus,
 )
+
+
+def _bind_runtime_identity(report: RuntimeReport) -> str:
+    """Bind the admitted protocol/mode to the prepared runtime digest.
+
+    The preparer first computes a capsule digest before the API knows whether
+    the project will use the generic bundle or legacy project-image path.  The
+    admission digest must nevertheless distinguish those execution contracts,
+    otherwise a resume/cache lookup could reuse an artifact under a different
+    worker protocol.
+    """
+    payload = {
+        "prepared_runtime": report.runtime_digest,
+        "source_archive_sha256": report.source_archive_sha256,
+        "runtime_bundle_sha256": report.runtime_bundle_sha256,
+        "runtime_image": report.runtime_image,
+        "runtime_worker_job": report.runtime_worker_job,
+        "runtime_protocol_version": report.protocol_version,
+        "execution_mode": report.execution_mode,
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
 
 
 class CloudRunRuntimePreparer:
@@ -371,6 +395,7 @@ class RuntimePreparationService:
             return project
         report.protocol_version = MINIMUM_RUNTIME_PROTOCOL_VERSION
         report.execution_mode = RUNTIME_EXECUTION_MODE_GENERIC
+        report.runtime_digest = _bind_runtime_identity(report)
         return await self._accept(project, report)
 
     @staticmethod
