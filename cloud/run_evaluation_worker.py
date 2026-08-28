@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from cloud.runtime_workspace import (
+    _validate_project_id,
     detect_layout,
     find_project_root,
     safe_extract_runtime_bundle,
@@ -99,6 +100,9 @@ def _upload_checkpoint(bucket, object_name: str, artifacts: Path) -> None:
 def _stage_project(bucket, request: dict[str, Any], root: Path) -> tuple[Path, ProjectLayout]:
     spec = request["project_spec"]
     name = str(request["project"])
+    _validate_project_id(name)
+    if str(spec.get("project") or name) != name:
+        raise RuntimeError("Evaluation request project does not match its immutable project spec")
     expected_image = str(spec.get("runtime_image") or "")
     worker_image = os.environ.get("PROMPTOPT_RUNTIME_IMAGE", "")
     if not expected_image or not worker_image:

@@ -24,7 +24,7 @@ import tempfile
 from collections import deque
 from pathlib import Path
 
-from cloud.runtime_workspace import detect_layout, find_project_root, safe_extract_zip
+from cloud.runtime_workspace import _validate_project_id, detect_layout, find_project_root, safe_extract_zip
 
 
 def _run_cli(command: list[str]) -> tuple[int, str | None]:
@@ -283,6 +283,7 @@ def main() -> int:
                 project_layouts: dict[str, dict[str, str]] = {}
                 for project in projects:
                     name = project["project"]
+                    _validate_project_id(str(name))
                     if project.get("kind") == "sample":
                         slug = str(project.get("sample_slug") or name)
                         bundled_root = Path(args.sample_repos_dir).resolve() / slug
