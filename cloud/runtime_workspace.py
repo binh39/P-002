@@ -75,6 +75,7 @@ _NON_SOURCE_PACKAGE_NAMES = {
 }
 _TEST_EXTRA_NAMES = {"dev", "development", "test", "testing", "tests", "unit", "units"}
 _SENSITIVE_INDEX_QUERY_NAMES = {"auth", "key", "password", "secret", "token"}
+_PROJECT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 
 
 @dataclass(slots=True)
@@ -563,6 +564,7 @@ def prepare_environment(
         test_requirements: dict[str, list[Path]] = {}
         digest = hashlib.sha256(f"runtime-v{RUNTIME_PROTOCOL_VERSION}|python-{actual_python}".encode())
         for spec in sorted(specs, key=lambda item: item.project_id):
+            _validate_project_id(spec.project_id)
             _validate_extra_package_index(spec.extra_package_index)
             digest.update(spec.project_id.encode())
             digest.update(spec.configured_source.encode())
@@ -1013,6 +1015,12 @@ def _validate_extra_package_index(value: str | None) -> None:
         raise ValueError(
             "extra_package_index must not contain credentials; use a Secret Manager-backed index reference"
         )
+
+
+def _validate_project_id(value: str) -> None:
+    """Keep manifest project identifiers from becoming filesystem paths."""
+    if not _PROJECT_ID.fullmatch(value):
+        raise ValueError("project_id must be a simple path-safe identifier")
 
 
 def _redact_command(command: list[str]) -> list[str]:

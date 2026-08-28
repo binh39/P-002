@@ -7,6 +7,8 @@ import tarfile
 import zipfile
 from pathlib import Path
 
+import pytest
+
 from cloud.runtime_workspace import (
     RUNTIME_PROTOCOL_VERSION,
     RUNTIME_TOOL_PACKAGES,
@@ -15,6 +17,7 @@ from cloud.runtime_workspace import (
     _redact_text,
     _test_requirement_files,
     _validate_extra_package_index,
+    _validate_project_id,
     _validate_project_python,
     detect_layout,
     prepare_environment,
@@ -84,6 +87,23 @@ def test_runtime_bundle_restore_supports_legacy_tarfile_api(tmp_path, monkeypatc
     python = safe_extract_runtime_bundle(bundle, tmp_path / "restored")
 
     assert python == tmp_path / "restored" / ".venv" / Path(executable)
+
+
+def test_runtime_preparer_rejects_path_unsafe_project_id_before_extraction(tmp_path):
+    archive = tmp_path / "project.zip"
+    write_zip(archive, {"demo/pkg/__init__.py": "VALUE = 1\n"})
+
+    result, python = prepare_environment(
+        [RuntimeProjectSpec("../outside", archive, "pkg", "tests")],
+        tmp_path / "workspace",
+        timeout_seconds=30,
+    )
+
+    assert python is None
+    assert result.status == "runtime_failed"
+    assert "path-safe" in (result.error or "")
+    with pytest.raises(ValueError, match="path-safe"):
+        _validate_project_id("nested/project")
 
 
 def test_safe_extract_ignores_symbolic_links(tmp_path):

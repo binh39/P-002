@@ -13,6 +13,7 @@ from pathlib import Path
 from cloud.runtime_workspace import (
     RuntimeProjectSpec,
     RuntimeResult,
+    _validate_project_id,
     create_runtime_bundle,
     prepare_environment,
 )
@@ -56,12 +57,14 @@ def _prepare(args, bucket, root: Path) -> RuntimeResult:
             }
         ]
     for project in projects:
-        archive = root / "archives" / f"{project['project_id']}.zip"
+        project_id = str(project["project_id"])
+        _validate_project_id(project_id)
+        archive = root / "archives" / f"{project_id}.zip"
         archive.parent.mkdir(parents=True, exist_ok=True)
         bucket.blob(project["archive_object"]).download_to_filename(str(archive))
         specs.append(
             RuntimeProjectSpec(
-                project["project_id"],
+                project_id,
                 archive,
                 project.get("source_directory", "src"),
                 project.get("test_directory", "tests"),
