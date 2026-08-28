@@ -2,7 +2,11 @@ import pytest
 from pydantic import ValidationError
 
 from backend.config import APP_DIRECTORY, Settings
-from backend.modules.projects.schemas import MINIMUM_RUNTIME_PROTOCOL_VERSION
+from backend.modules.projects.schemas import (
+    MINIMUM_RUNTIME_PROTOCOL_VERSION,
+    DependencySettings,
+    DependencySettingsPatch,
+)
 
 
 def production_settings(**overrides):
@@ -85,3 +89,17 @@ def test_local_paths_are_resolved_from_app_directory(monkeypatch, tmp_path):
 
     assert settings.local_upload_path == APP_DIRECTORY / "data" / "uploads"
     assert settings.sample_repos_path == APP_DIRECTORY.parent / "src" / "sample_repo"
+
+
+@pytest.mark.parametrize("settings_type", [DependencySettings, DependencySettingsPatch])
+@pytest.mark.parametrize(
+    "index_url",
+    [
+        "https://user:password@example.test/simple",
+        "https://example.test/simple?token=secret",
+        "https://example.test/simple?api_key=secret",
+    ],
+)
+def test_dependency_index_rejects_embedded_credentials(settings_type, index_url):
+    with pytest.raises(ValidationError, match="must not contain credentials"):
+        settings_type(extra_package_index=index_url)

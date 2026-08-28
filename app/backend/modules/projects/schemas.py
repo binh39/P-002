@@ -1,7 +1,8 @@
 from datetime import datetime
 from enum import StrEnum
+from urllib.parse import parse_qsl, urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 PREPARED_RUNTIME_PROTOCOL_VERSION = 11
 MINIMUM_RUNTIME_PROTOCOL_VERSION = 13
@@ -11,6 +12,25 @@ RUNTIME_EXECUTION_MODE_PROJECT_IMAGE = "project_image"
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+def _validate_package_index_url(value: str | None) -> str | None:
+    """Reject credentials before an index URL reaches Firestore or GCS."""
+    if value is None:
+        return None
+    parsed = urlsplit(value)
+    sensitive_query_names = {"auth", "key", "password", "secret", "token"}
+    if parsed.username or parsed.password or any(
+        (
+            key.casefold() in sensitive_query_names
+            or key.casefold().endswith(("_key", "_token", "_secret", "_password"))
+        )
+        for key, _ in parse_qsl(parsed.query, keep_blank_values=True)
+    ):
+        raise ValueError(
+            "extra_package_index must not contain credentials; use a Secret Manager-backed index reference"
+        )
+    return value
 
 
 class ProjectStatus(StrEnum):
@@ -84,6 +104,8 @@ class DependencySettings(StrictModel):
     cache_dependencies: bool = True
     extra_package_index: str | None = Field(default=None, max_length=500)
 
+    _validated_extra_package_index = field_validator("extra_package_index")(_validate_package_index_url)
+
 
 class TestSettings(StrictModel):
     framework: str = Field(default="pytest", pattern=r"^(pytest|unittest)$")
@@ -135,6 +157,8 @@ class DependencySettingsPatch(StrictModel):
     lock_file: str | None = Field(default=None, max_length=300)
     cache_dependencies: bool | None = None
     extra_package_index: str | None = Field(default=None, max_length=500)
+
+    _validated_extra_package_index = field_validator("extra_package_index")(_validate_package_index_url)
 
 
 class TestSettingsPatch(StrictModel):
