@@ -25,7 +25,7 @@ from cloud.runtime_workspace import detect_layout, find_project_root, safe_extra
 from src.optimization.costs import aggregate_usage_events
 from src.optimization.coveragepy import load_report, run_coverage
 from src.optimization.models import ExperimentConfig, ProjectLayout, SymbolTarget
-from src.optimization.runner import CoverUpExperimentRunner, _test_environment
+from src.optimization.runner import CoverUpExperimentRunner, _configure_runtime_environment, _test_environment
 
 
 def _download_verified_runtime_object(
@@ -615,6 +615,10 @@ def generate_local_project(
             )
         )
         coverage_path = artifacts / "coverage" / f"{re.sub(r'[^A-Za-z0-9_.-]+', '_', project)}.json"
+        coverage_environment = _test_environment(
+            config.project_root, (project_layout.import_root or project_layout.package_dir.parent,)
+        )
+        _configure_runtime_environment(coverage_environment, project_layout.python_executable)
         completed = run_coverage(
             project_root=config.project_root,
             package_dir=project_layout.package_dir,
@@ -622,9 +626,7 @@ def generate_local_project(
             output=coverage_path,
             pytest_args=config.pytest_args,
             repeat_tests=config.repeat_tests,
-            env=_test_environment(
-                config.project_root, (project_layout.import_root or project_layout.package_dir.parent,)
-            ),
+            env=coverage_environment,
         )
         if completed.returncode:
             suite_failed = True

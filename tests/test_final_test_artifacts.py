@@ -1,5 +1,7 @@
 import hashlib
 import io
+import os
+import subprocess
 import zipfile
 from types import SimpleNamespace
 
@@ -237,3 +239,96 @@ def test_cloud_final_generation_merges_independent_project_workers(tmp_path, mon
     assert (artifacts / "generated_tests" / "one" / "test_generated.py").is_file()
     assert (artifacts / "generated_tests" / "two" / "test_generated.py").is_file()
     assert (artifacts / "generated_tests.zip").is_file()
+
+
+def test_final_suite_coverage_uses_assigned_project_interpreter(tmp_path, monkeypatch):
+    package = tmp_path / "project" / "pkg"
+    package.mkdir(parents=True)
+    (package / "module.py").write_text("def value():\n    return 1\n", encoding="utf-8")
+    tests = tmp_path / "project" / "tests"
+    tests.mkdir()
+    workspace = tmp_path / "artifacts" / "generated_tests"
+    runtime_python = tmp_path / "runtime" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    runtime_python.parent.mkdir(parents=True)
+    runtime_python.write_bytes(b"runtime-python")
+    captured: dict[str, str] = {}
+
+    class FakeRunner:
+        def __init__(self, _config):
+            pass
+
+        def evaluate_batch(self, targets, _prompt, **_kwargs):
+            workspace.mkdir(parents=True, exist_ok=True)
+            (workspace / "test_generated.py").write_text("def test_generated():\n    assert True\n", encoding="utf-8")
+            return type(
+                "Batch",
+                (),
+                {
+                    "results": [
+                        type(
+                            "TargetResult",
+                            (),
+                            {
+                                "score": {
+                                    "valid": True,
+                                    "covered_statements": 1,
+                                    "num_statements": 1,
+                                    "covered_branches": 0,
+                                    "num_branches": 0,
+                                    "tests_passed": True,
+                                },
+                                "attempt_traces": [],
+                            },
+                        )()
+                        for _ in targets
+                    ],
+                    "tests_workspace": str(workspace),
+                },
+            )()
+
+    def fake_run_coverage(**kwargs):
+        captured.update({key: kwargs["env"][key] for key in ("TESTGEN_PYTHON", "VIRTUAL_ENV", "PATH")})
+        output = kwargs["output"]
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(
+            '{"totals":{"num_statements":1,"covered_lines":1,"num_branches":0,"covered_branches":0}}',
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess([], 0)
+
+    monkeypatch.setattr(run_test_generation, "CoverUpExperimentRunner", FakeRunner)
+    monkeypatch.setattr(run_test_generation, "run_coverage", fake_run_coverage)
+    from src.optimization.models import ExperimentConfig, ProjectLayout
+
+    target = SymbolTarget("uploaded", "pkg/module.py", "value", "final")
+    config = ExperimentConfig(
+        project_root=tmp_path / "project",
+        package_dir=package,
+        tests_dir=tests,
+        artifacts_dir=tmp_path / "artifacts",
+        coverup_model="model",
+        projects={
+            "uploaded": ProjectLayout(
+                package_dir=package,
+                tests_dir=tests,
+                import_root=package.parent,
+                python_executable=runtime_python,
+            )
+        },
+    )
+    prompt = tmp_path / "prompt.json"
+    prompt.write_text('{"initial":"a","error":"b"}', encoding="utf-8")
+
+    result = run_test_generation.generate_local_project(
+        artifacts=tmp_path / "artifacts",
+        prompt_path=prompt,
+        targets=[target],
+        config=config,
+        sample_repos=tmp_path / "samples",
+        seed=7,
+    )
+
+    assert result["status"] == "completed"
+    assert captured["TESTGEN_PYTHON"] == str(runtime_python.resolve())
+    assert captured["VIRTUAL_ENV"] == str(runtime_python.parent.parent.resolve())
+    assert captured["PATH"].split(os.pathsep)[0] == str(runtime_python.parent.resolve())
