@@ -335,6 +335,7 @@ def materialize_runtime(
         "runtime_image": immutable_image,
         "runtime_worker_job": worker_job,
         "protocol_version": 12,
+        "execution_mode": "project_image",
     }
 
 
@@ -364,6 +365,7 @@ def main() -> int:
                 "status": "runtime_failed",
                 "error": f"Runtime image materialization failed: {exc}"[-4000:],
                 "protocol_version": 12,
+                "execution_mode": "project_image",
             }
             exit_code = 1
         bucket.blob(args.result_object).upload_from_string(

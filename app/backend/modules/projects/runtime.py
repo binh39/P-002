@@ -16,6 +16,8 @@ from .schemas import (
     RuntimeProjectReport,
     RuntimeReport,
     RuntimeStatus,
+    RUNTIME_EXECUTION_MODE_GENERIC,
+    RUNTIME_EXECUTION_MODE_PROJECT_IMAGE,
 )
 
 
@@ -232,10 +234,17 @@ class RuntimePreparationService:
         repository: ProjectRepository,
         runner: CloudRunRuntimePreparer | None,
         image_factory: CloudRunRuntimeImageFactory | None = None,
+        execution_mode: str | None = None,
     ):
         self.repository = repository
         self.runner = runner
         self.image_factory = image_factory
+        # Passing a factory explicitly preserves the legacy project-image
+        # contract for callers/tests; production config selects the mode
+        # explicitly and defaults to the generic worker + bundle contract.
+        self.execution_mode = execution_mode or (
+            RUNTIME_EXECUTION_MODE_PROJECT_IMAGE if image_factory is not None else RUNTIME_EXECUTION_MODE_GENERIC
+        )
 
     async def request(self, project: ProjectRecord) -> ProjectResponse:
         if self.runner is None:
@@ -336,7 +345,7 @@ class RuntimePreparationService:
             )
             return project
 
-        if self.image_factory is not None:
+        if self.execution_mode == RUNTIME_EXECUTION_MODE_PROJECT_IMAGE and self.image_factory is not None:
             try:
                 project.runtime_factory_prefix = await self.image_factory.start(
                     project,
@@ -352,28 +361,36 @@ class RuntimePreparationService:
             await self.repository.save(project)
             return project
 
-        if not self._complete_runtime_report(report):
-            await self._reject(
-                project,
-                "Runtime preparation did not publish a dedicated immutable project worker",
-            )
+        if not self._complete_prepared_report(report):
+            await self._reject(project, "Runtime preparation did not publish a complete runtime bundle")
             return project
+        report.protocol_version = MINIMUM_RUNTIME_PROTOCOL_VERSION
+        report.execution_mode = RUNTIME_EXECUTION_MODE_GENERIC
         return await self._accept(project, report)
 
     @staticmethod
-    def _complete_runtime_report(report: RuntimeReport) -> bool:
+    def _complete_prepared_report(report: RuntimeReport) -> bool:
         immutable_image = bool(
             report.runtime_image and re.fullmatch(r"[A-Za-z0-9._:/-]+@sha256:[0-9a-f]{64}", report.runtime_image)
         )
         return bool(
             report.status == RuntimeStatus.READY
-            and report.protocol_version >= MINIMUM_RUNTIME_PROTOCOL_VERSION
+            and report.protocol_version >= PREPARED_RUNTIME_PROTOCOL_VERSION
             and report.bundle_object
             and report.runtime_digest
             and immutable_image
             and report.runtime_worker_job
             and report.source_archive_sha256
             and report.runtime_bundle_sha256
+        )
+
+    @staticmethod
+    def _complete_runtime_report(report: RuntimeReport) -> bool:
+        return bool(
+            RuntimePreparationService._complete_prepared_report(report)
+            and report.protocol_version
+            >= (12 if report.execution_mode == RUNTIME_EXECUTION_MODE_PROJECT_IMAGE else MINIMUM_RUNTIME_PROTOCOL_VERSION)
+            and report.execution_mode in {RUNTIME_EXECUTION_MODE_GENERIC, RUNTIME_EXECUTION_MODE_PROJECT_IMAGE}
         )
 
     async def _accept(self, project: ProjectRecord, report: RuntimeReport) -> ProjectRecord:
@@ -385,6 +402,7 @@ class RuntimePreparationService:
         project.runtime_digest = report.runtime_digest or report.dependency_fingerprint
         project.runtime_image = report.runtime_image or project.settings.runtime.runtime_image
         project.runtime_worker_job = report.runtime_worker_job
+        project.runtime_execution_mode = report.execution_mode
         project.source_archive_sha256 = report.source_archive_sha256
         project.runtime_bundle_sha256 = report.runtime_bundle_sha256
         project.runtime_report = self._member_report(report, member_report)
@@ -436,4 +454,5 @@ class RuntimePreparationService:
             runtime_bundle_sha256=report.runtime_bundle_sha256,
             bundle_object=report.bundle_object,
             protocol_version=report.protocol_version,
+            execution_mode=report.execution_mode,
         )

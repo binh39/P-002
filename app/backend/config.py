@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     cloud_run_runtime_factory_job: str = "promptopt-runtime-image-factory"
     cloud_run_runtime_timeout_seconds: int = Field(default=1800, ge=60, le=7200)
     cloud_run_runtime_factory_timeout_seconds: int = Field(default=3600, ge=300, le=7200)
+    runtime_project_image_mode: Literal["generic_worker_bundle", "project_image"] = "generic_worker_bundle"
     runtime_image_repository: str = ""
     runtime_worker_service_account: str = ""
     runtime_build_service_account: str = ""
@@ -153,7 +154,7 @@ class Settings(BaseSettings):
                 raise ValueError("CLOUD_RUN_TEST_GENERATION_JOB is required")
             if self.runtime_execution_backend != "cloud_run_job" or not self.cloud_run_runtime_job:
                 raise ValueError("RUNTIME_EXECUTION_BACKEND=cloud_run_job and CLOUD_RUN_RUNTIME_JOB are required")
-            if not self.cloud_run_runtime_factory_job:
+            if self.runtime_project_image_mode == "project_image" and not self.cloud_run_runtime_factory_job:
                 raise ValueError("CLOUD_RUN_RUNTIME_FACTORY_JOB is required")
             if not self.admin_vertexai_project.strip():
                 raise ValueError("ADMIN_VERTEXAI_PROJECT is required in production")

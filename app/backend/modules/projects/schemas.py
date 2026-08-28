@@ -4,7 +4,9 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field
 
 PREPARED_RUNTIME_PROTOCOL_VERSION = 11
-MINIMUM_RUNTIME_PROTOCOL_VERSION = 12
+MINIMUM_RUNTIME_PROTOCOL_VERSION = 13
+RUNTIME_EXECUTION_MODE_GENERIC = "generic_worker_bundle"
+RUNTIME_EXECUTION_MODE_PROJECT_IMAGE = "project_image"
 
 
 class StrictModel(BaseModel):
@@ -57,6 +59,7 @@ class RuntimeReport(StrictModel):
     bundle_object: str | None = None
     error: str | None = None
     protocol_version: int = 1
+    execution_mode: str = RUNTIME_EXECUTION_MODE_GENERIC
 
 
 class RuntimeSettings(StrictModel):
@@ -197,6 +200,7 @@ class ProjectResponse(StrictModel):
     runtime_digest: str | None = None
     runtime_image: str | None = None
     runtime_worker_job: str | None = None
+    runtime_execution_mode: str | None = None
     source_archive_sha256: str | None = None
     runtime_bundle_sha256: str | None = None
     runtime_status: RuntimeStatus = RuntimeStatus.NOT_REQUESTED

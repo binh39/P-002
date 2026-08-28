@@ -61,9 +61,14 @@ def test_production_requires_runtime_preparation_job():
         production_settings(runtime_execution_backend="disabled")
 
 
-def test_production_requires_runtime_image_factory_job():
+def test_production_generic_worker_does_not_require_runtime_image_factory_job():
+    settings = production_settings(cloud_run_runtime_factory_job="")
+    assert settings.runtime_project_image_mode == "generic_worker_bundle"
+
+
+def test_production_project_image_mode_requires_factory_job():
     with pytest.raises(ValidationError, match="CLOUD_RUN_RUNTIME_FACTORY_JOB is required"):
-        production_settings(cloud_run_runtime_factory_job="")
+        production_settings(cloud_run_runtime_factory_job="", runtime_project_image_mode="project_image")
 
 
 def test_project_runtime_resources_default_to_dedicated_accounts_and_repository():
