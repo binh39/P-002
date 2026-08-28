@@ -243,7 +243,7 @@ async def test_cloud_gepa_optimizer_copies_uploaded_project_into_job_prefix():
     copied_name = manifest["projects"][0]["archive_object"]
     assert copied_name.startswith("runner-jobs/gepa/")
     assert storage.objects[copied_name][0] == b"zip-content"
-    assert manifest["schema_version"] == 2
+    assert manifest["schema_version"] == 3
     assert manifest["projects"][0]["runtime_digest"] == "runtime-digest"
     assert manifest["projects"][0]["source_archive_sha256"] == "a" * 64
     assert manifest["projects"][0]["runtime_bundle_sha256"] == "b" * 64
@@ -305,6 +305,7 @@ async def test_cloud_gepa_optimizer_gives_sample_project_the_same_worker_contrac
         "sample_slug": "isort",
         "runtime_digest": "sample:isort:sample-commit",
         "runtime_image": "bundled-gepa-image",
+        "execution_mode": "generic_worker_bundle",
         "python_version": "3.12",
         "source_directory": "isort",
         "test_directory": "tests",

@@ -170,8 +170,8 @@ def main() -> int:
                 _download_object(args.bucket, args.project_manifest_object, manifest_path)
                 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
                 projects = manifest.get("projects", [])
-                if not projects or manifest.get("schema_version") != 2:
-                    raise RuntimeError("Project GEPA requires a version 2 immutable-runtime manifest")
+                if not projects or manifest.get("schema_version") not in (2, 3):
+                    raise RuntimeError("Project GEPA requires an immutable-runtime manifest (schema 2 or 3)")
                 worker_project = os.environ.get("PROMPTOPT_CLOUD_PROJECT", "").strip()
                 worker_region = os.environ.get("PROMPTOPT_CLOUD_REGION", "").strip()
                 worker_names = {
@@ -198,7 +198,7 @@ def main() -> int:
                 effective_manifest_path = local_dir / "execution_runtime_manifest.json"
                 if args.resume_artifacts_name and effective_manifest_path.is_file():
                     effective_manifest = json.loads(effective_manifest_path.read_text(encoding="utf-8"))
-                    if effective_manifest.get("schema_version") != 2:
+                    if effective_manifest.get("schema_version") not in (2, 3):
                         raise RuntimeError("Saved execution runtime manifest is incompatible")
                     incoming_projects = {str(item["project"]): item for item in projects}
                     saved_projects = {str(item["project"]): item for item in effective_manifest.get("projects", [])}
@@ -230,6 +230,7 @@ def main() -> int:
                         )
                         project["runtime_worker_job"] = sample_job
                         project["runtime_image"] = sample_image
+                        project["execution_mode"] = project.get("execution_mode") or "generic_worker_bundle"
                         project["runtime_digest"] = hashlib.sha256(
                             json.dumps(
                                 {
@@ -241,7 +242,7 @@ def main() -> int:
                                 separators=(",", ":"),
                             ).encode()
                         ).hexdigest()
-                    manifest = {"schema_version": 2, "projects": projects}
+                    manifest = {"schema_version": 3, "projects": projects}
                     effective_manifest_path.parent.mkdir(parents=True, exist_ok=True)
                     effective_manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
                 # Remote workers consume the effective, execution-pinned

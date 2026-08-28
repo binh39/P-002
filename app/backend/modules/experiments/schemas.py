@@ -135,6 +135,7 @@ class ProjectSnapshot(StrictModel):
     runtime_digest: str | None = None
     runtime_image: str | None = None
     runtime_worker_job: str | None = None
+    runtime_execution_mode: str | None = None
     source_archive_sha256: str | None = None
     runtime_bundle_sha256: str | None = None
     python_version: str = "3.12"

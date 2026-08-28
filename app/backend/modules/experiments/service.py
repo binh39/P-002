@@ -462,6 +462,9 @@ class ExperimentService:
                     runtime_digest=project.runtime_digest or project.runtime_dependency_fingerprint,
                     runtime_image=project.runtime_image or project.settings.runtime.runtime_image,
                     runtime_worker_job=project.runtime_worker_job,
+                    runtime_execution_mode=(
+                        project.runtime_report.execution_mode if project.runtime_report else None
+                    ),
                     source_archive_sha256=project.source_archive_sha256,
                     runtime_bundle_sha256=project.runtime_bundle_sha256,
                     python_version=project.settings.runtime.python_version,

@@ -202,6 +202,7 @@ def _pin_sample_workers(manifest: dict, jobs: dict[str, str]) -> dict:
         base_digest = str(project.get("runtime_digest") or f"sample:{project.get('sample_slug', project['project'])}")
         project["runtime_worker_job"] = sample_job
         project["runtime_image"] = sample_image
+        project["execution_mode"] = project.get("execution_mode") or "generic_worker_bundle"
         project["runtime_digest"] = hashlib.sha256(
             json.dumps(
                 {"sample": base_digest, "image": sample_image, "worker_job": sample_job},
@@ -380,7 +381,7 @@ def _run_remote(
     artifact_files = _artifact_index(artifacts, generated_files, source_files)
     failed = sum(int(row.get("failed_target_count") or 0) for row in metric_rows)
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "status": "partial" if failed or any(row.get("status") == "partial" for row in worker_results) else "completed",
         "metrics": {
             "target_statement_coverage": statement,
@@ -451,8 +452,8 @@ def _stage_projects(args, root: Path, project_names: list[str] | None = None) ->
     _download_object(args.bucket, args.project_manifest_object, manifest_path)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     projects = manifest.get("projects", [])
-    if not projects or manifest.get("schema_version") != 2:
-        raise RuntimeError("Final generation requires a version 2 immutable-runtime manifest")
+    if not projects or manifest.get("schema_version") not in (2, 3):
+        raise RuntimeError("Final generation requires an immutable-runtime manifest (schema 2 or 3)")
     staged_root = root / "sample_repos"
     for project in projects:
         name = str(project["project"])
@@ -588,7 +589,7 @@ def generate_local_project(
     artifact_files = _artifact_index(artifacts, generated_files, source_files)
     status = "partial" if suite_failed or target_metrics["failed_target_count"] else "completed"
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "status": status,
         "metrics": {
             **target_metrics,
@@ -645,8 +646,8 @@ def _run(args, artifacts: Path) -> dict:
         remote_manifest_path = scratch / "remote-projects.json"
         _download_object(args.bucket, args.project_manifest_object, remote_manifest_path)
         remote_manifest = json.loads(remote_manifest_path.read_text(encoding="utf-8"))
-        if remote_manifest.get("schema_version") != 2 or not remote_manifest.get("projects"):
-            raise RuntimeError("Final generation requires a version 2 immutable-runtime manifest")
+        if remote_manifest.get("schema_version") not in (2, 3) or not remote_manifest.get("projects"):
+            raise RuntimeError("Final generation requires an immutable-runtime manifest (schema 2 or 3)")
         return _run_remote(
             args,
             artifacts,

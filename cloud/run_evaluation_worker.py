@@ -103,7 +103,11 @@ def _stage_project(bucket, request: dict[str, Any], root: Path) -> tuple[Path, P
                 f"Evaluation worker Python {actual_python} does not match immutable runtime Python {expected_python}"
             )
         protocol_version = int(spec.get("runtime_protocol_version") or 1)
-        if protocol_version >= 12:
+        execution_mode = str(spec.get("execution_mode") or "")
+        # Schema 2 project-image workers baked both files into the image.
+        # Schema 3 generic workers restore the content-addressed files into
+        # the ephemeral task and execute through the project's venv.
+        if execution_mode == "project_image" or (not execution_mode and protocol_version == 12):
             baked_archive = os.environ.get("PROMPTOPT_BAKED_SOURCE_ARCHIVE", "").strip()
             baked_bundle = os.environ.get("PROMPTOPT_BAKED_RUNTIME_BUNDLE", "").strip()
             if not baked_archive or not baked_bundle:
@@ -112,6 +116,7 @@ def _stage_project(bucket, request: dict[str, Any], root: Path) -> tuple[Path, P
             bundle = Path(baked_bundle)
             if not archive.is_file() or not bundle.is_file():
                 raise RuntimeError("Project worker image contains incomplete baked runtime artifacts")
+            python = Path(sys.executable)
         else:
             archive = root / "project.zip"
             bundle = root / "runtime.tar.gz"
@@ -134,6 +139,10 @@ def _stage_project(bucket, request: dict[str, Any], root: Path) -> tuple[Path, P
             str(spec.get("source_directory") or "src"),
             str(spec.get("test_directory") or "tests"),
         )
+        venv = python.parent.parent
+        os.environ["VIRTUAL_ENV"] = str(venv)
+        os.environ["PATH"] = os.pathsep.join([str(python.parent), os.environ.get("PATH", "")])
+        os.environ["TESTGEN_PYTHON"] = str(python)
     tests.mkdir(parents=True, exist_ok=True)
     import_root = source.parent if (source / "__init__.py").is_file() else source
     return project_root, ProjectLayout(

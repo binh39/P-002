@@ -55,6 +55,7 @@ class CloudRunJobTestGenerator:
                             "runtime_digest": snapshot.runtime_digest
                             or f"{snapshot.project_id}:{snapshot.commit or 'bundled'}",
                             "runtime_image": snapshot.runtime_image or "bundled-gepa-image",
+                            "execution_mode": snapshot.runtime_execution_mode or "generic_worker_bundle",
                             "python_version": snapshot.python_version,
                             "source_directory": snapshot.source_directory,
                             "test_directory": snapshot.test_directory,
@@ -90,6 +91,7 @@ class CloudRunJobTestGenerator:
                         "runtime_digest": snapshot.runtime_digest,
                         "runtime_image": snapshot.runtime_image,
                         "runtime_worker_job": snapshot.runtime_worker_job,
+                        "execution_mode": snapshot.runtime_execution_mode or "generic_worker_bundle",
                         "runtime_protocol_version": snapshot.runtime_protocol_version,
                         "source_archive_sha256": snapshot.source_archive_sha256,
                         "runtime_bundle_sha256": snapshot.runtime_bundle_sha256,
@@ -103,7 +105,7 @@ class CloudRunJobTestGenerator:
                 await self.storage.write(
                     project_manifest_object,
                     json.dumps(
-                        {"schema_version": 2, "projects": manifest_projects},
+                        {"schema_version": 3, "projects": manifest_projects},
                         separators=(",", ":"),
                     ).encode(),
                     "application/json",

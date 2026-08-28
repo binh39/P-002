@@ -46,8 +46,8 @@ class RemoteEvaluationBackend(EvaluationBackend):
         authorized_session: Any | None = None,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
-        if manifest.get("schema_version") != 2:
-            raise ValueError("Remote evaluation requires project manifest schema 2")
+        if manifest.get("schema_version") not in (2, 3):
+            raise ValueError("Remote evaluation requires project manifest schema 2 or 3")
         projects = manifest.get("projects")
         if not isinstance(projects, list) or not projects:
             raise ValueError("Remote evaluation manifest contains no projects")
@@ -203,6 +203,7 @@ class RemoteEvaluationBackend(EvaluationBackend):
             "operation": operation,
             "project": project_name,
             "runtime_digest": project.get("runtime_digest") or f"sample:{project.get('sample_slug', project_name)}",
+            "execution_mode": project.get("execution_mode", "generic_worker_bundle"),
             # A durable result may only be reused when the complete execution
             # protocol is identical.  Candidate IDs alone do not cover a
             # changed model, retry policy, pytest flags, or repeat count.
