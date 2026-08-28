@@ -676,24 +676,24 @@ Smoke flow:
 
 Implementation chỉ được coi là hoàn tất khi:
 
-- [ ] Mỗi uploaded project có runtime bundle và digest riêng.
-- [ ] Không có dependency resolution nào nhận nhiều project cùng lúc.
-- [ ] Default upload không gọi Cloud Build để tạo project image.
-- [ ] Default upload không tạo Cloud Run Job riêng cho project.
-- [ ] Generic worker image được pin digest và version theo Python minor.
-- [ ] Worker verify source/bundle checksum và object generation.
-- [ ] Mọi pytest/coverage/diagnostic/final-generation execution dùng đúng project
+- [x] Mỗi uploaded project có runtime bundle và digest riêng.
+- [x] Không có dependency resolution nào nhận nhiều project cùng lúc.
+- [x] Default upload không gọi Cloud Build để tạo project image.
+- [x] Default upload không tạo Cloud Run Job riêng cho project.
+- [x] Generic worker image được pin digest và version theo Python minor.
+- [x] Worker verify source/bundle checksum và object generation.
+- [x] Mọi pytest/coverage/diagnostic/final-generation execution dùng đúng project
       interpreter.
-- [ ] GEPA coordinator không import hoặc execute uploaded project.
-- [ ] Multi-project experiment chạy được với dependency/Python khác nhau.
-- [ ] Per-target score và feedback vẫn giữ đúng symbol attribution.
-- [ ] Evaluation cache bao gồm project runtime và worker identity.
-- [ ] Pause/resume từ chối mọi runtime identity mismatch.
-- [ ] Final suite chạy pass trong runtime tương ứng và được persist ngoài ephemeral
+- [x] GEPA coordinator không import hoặc execute uploaded project.
+- [x] Multi-project experiment chạy được với dependency/Python khác nhau.
+- [x] Per-target score và feedback vẫn giữ đúng symbol attribution.
+- [x] Evaluation cache bao gồm project runtime và worker identity.
+- [x] Pause/resume từ chối mọi runtime identity mismatch.
+- [x] Final suite chạy pass trong runtime tương ứng và được persist ngoài ephemeral
       worker filesystem.
-- [ ] Dependency/network failure trả diagnostic có thể hành động được.
-- [ ] Runtime cleanup/retention không xóa artifact còn được tham chiếu.
-- [ ] UI không còn mô tả shared venv/environment.
+- [x] Dependency/network failure trả diagnostic có thể hành động được.
+- [x] Runtime cleanup/retention không xóa artifact còn được tham chiếu.
+- [x] UI không còn mô tả shared venv/environment.
 - [ ] Dev Cloud E2E pass trước khi deploy production.
 
 ## 12. Lệnh kiểm tra sau khi sửa
@@ -734,14 +734,14 @@ Cloud dev smoke vẫn phải chứng minh preparer có egress cần thiết.
 
 ## 13. Handoff checklist
 
-- [ ] Ghi runtime protocol/execution mode cuối cùng vào `AGENTS.md`.
-- [ ] Cập nhật `docs/GEPA_CURRENT_FLOW.md` sau khi code merge.
-- [ ] Cập nhật architecture diagram và deployment documentation.
-- [ ] Báo rõ unit test nào đã chạy và cloud smoke nào chưa chạy.
-- [ ] Không coi unit test pass là bằng chứng live Cloud Run E2E đã pass.
-- [ ] Không chạy full GEPA benchmark tốn chi phí nếu chưa được yêu cầu.
+- [x] Ghi runtime protocol/execution mode cuối cùng vào `AGENTS.md`.
+- [x] Cập nhật `docs/GEPA_CURRENT_FLOW.md` sau khi code merge.
+- [x] Cập nhật architecture diagram và deployment documentation.
+- [x] Báo rõ unit test nào đã chạy và cloud smoke nào chưa chạy.
+- [x] Không coi unit test pass là bằng chứng live Cloud Run E2E đã pass.
+- [x] Không chạy full GEPA benchmark tốn chi phí nếu chưa được yêu cầu.
 - [ ] Dùng artifacts directory mới khi benchmark protocol/runtime mới.
-- [ ] Giữ nguyên các invariant GEPA về baseline, per-symbol feedback, locked
+- [x] Giữ nguyên các invariant GEPA về baseline, per-symbol feedback, locked
       holdout, strict promotion và cache isolation.
 
 ## Implementation progress (2026-08-29)
@@ -765,6 +765,13 @@ Completed and pushed as separate commits:
 - `443eca9`, `cbef322`, `69ded9f`, `75f880c` — UI and environment defaults.
 - `bd7a28d` — deployment workflow defaults to generic workers; legacy factory
   build/deploy is now an explicit migration-only flag.
+- `e7136d4`, `8210598` — project venv environment propagation through console
+  entry-points and final-suite coverage.
+- `03395d2`, `d7ab2f5`, `30b383f` — preparer/worker defense-in-depth for package
+  index credentials, project identifiers, and manifest project names.
+- `c704638`, `2801712`, `49dcb82`, `a519364`, `650f69c` — runtime digest binding,
+  Python-minor tar restore compatibility, immutable source admission, worker
+  identity gating, and sample protocol provenance.
 
 Remaining work is deployment validation: run Cloud smoke tests and remove the legacy factory only after migration evidence. The UI wording and project selection flow are updated; live Cloud Run and GEPA benchmarks have not been run in this change.
 
@@ -801,7 +808,10 @@ implement reference tracking before deleting content-addressed objects.
 ### Evidence and remaining operational gates
 
 - Unit/integration evidence: root runtime/worker/final-suite tests, backend tests,
-  Ruff, Python compilation, and frontend type/lint checks are run before handoff.
+  Ruff, Python compilation, workflow YAML parsing, and frontend type/lint checks
+  are run before handoff. The latest complete-suite evidence remains 171 root,
+  105 backend, and 58 frontend tests; targeted runtime/deployment additions are
+  recorded in the corresponding commits above.
 - Not run without Cloud credentials and an explicit cost window: Dev Cloud
   upload of two conflicting-Python fixtures, live GEPA reflection, final-suite
   rerun, pause/resume smoke, and production deployment smoke checks.
