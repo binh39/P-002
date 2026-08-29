@@ -870,10 +870,10 @@ was used for the default path.
 Versioned immutable resources used by the smoke are:
 
 - generic runner image digest `sha256:b4cc68cc998669dafd5275008f52fb64293c7ed19939c5efa463d3272457a688`;
-- generic runtime worker image digests `sha256:afa1d08ee72bff6ddc9e39649300893e851c4591ff00b366d8ea8c39b8cf8189` (3.11)
-  and `sha256:466bfbbc1a077efec9c4fe308b5274c7c51391258b8b774ee97f97186708d75b` (3.12);
+- generic runtime worker image digests `sha256:51f06333c0286e234f61b88dd0c7401ad6a5c8b183b5fcf75ce7e07fb4c98795` (3.11)
+  and `sha256:dc8ed755f0b3c2f948ffc1827ad18514cd89fc6859709c3e32c4948bcb3b43e3` (3.12);
 - GEPA smoke artifacts: `runner-jobs/e2e-gepa-a2a06fc-r3`;
-- final-generation artifacts: `runner-jobs/e2e-final-9af491d-r3`.
+- final-generation artifacts: `runner-jobs/e2e-final-917f2a1-r1`.
 
 The bounded GEPA execution completed successfully, dispatched every target to
 the matching Python worker, performed valid locked test baseline preflight, and
@@ -881,16 +881,22 @@ kept the unchanged baseline when all measured candidate scores were 0. The
 promotion gate correctly skipped a redundant final comparison because the
 bundle digest did not change. Its cost report recorded zero priced model calls.
 The independent final-generation execution also completed and persisted its
-manifest, source files, coverage JSON, and suite ZIP. The tiny fixtures caused
-no generated test to be retained and measured project coverage was 0; this is a
-runtime routing/persistence smoke result, not evidence that a real project has
-achieved a useful generated suite.
+manifest, source files, coverage JSON, and suite ZIP. With the quota/billing
+project `project-a2f7084e-90ac-4bfc-84b` configured for Vertex, one Python 3.11
+fixture target produced and retained one passing test, reached statement score
+1.0, and recorded two priced Flash Lite requests (569 total tokens,
+estimated USD 0.0003203). This confirms that generation and coverage execution
+cross the project-only venv boundary; it is still only a tiny fixture smoke,
+not evidence that a real project has achieved a useful generated suite.
 
 During this smoke, final-generation validation was fixed to accept the required
 GEPA three-component prompt (`initial`, `error`, `missing_coverage`) while
 retaining compatibility with legacy two-component snapshots. The fixes are
 separate pushed commits `e08b047` and `9af491d`; corresponding coordinator and
-worker images were rebuilt and pinned by digest.
+worker images were rebuilt and pinned by digest. Runtime worker commits
+`964b0e7` and `917f2a1` then narrowed CoverUp's package root and normalized
+nested target specs for uploaded `src/` layouts; without these fixes CoverUp
+either exited before model invocation or silently filtered the target.
 
 Still outstanding before production migration: a non-trivial fixture or real
 project final suite with at least one retained generated test and a passing
