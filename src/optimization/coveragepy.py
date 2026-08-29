@@ -125,6 +125,13 @@ def run_coverage(
     run_env = os.environ.copy()
     run_env.update(env or {})
     run_env["COVERAGE_FILE"] = str(output.with_suffix(".data").resolve())
+    # Measurement is owned by PromptOpt, not by the uploaded repository's
+    # coverage configuration.  In particular, projects such as isort enable
+    # ``parallel = true`` in pyproject.toml, which writes suffixed data files;
+    # the following ``coverage json`` then sees no canonical data file.
+    coverage_config = output.with_suffix(".coveragerc").resolve()
+    coverage_config.write_text("[run]\nparallel = false\n", encoding="utf-8")
+    run_env["COVERAGE_RCFILE"] = str(coverage_config)
     # Concurrent target scorers may execute the same generated module. Avoid
     # cross-process races and leftover artifacts in a shared __pycache__.
     run_env["PYTHONDONTWRITEBYTECODE"] = "1"
