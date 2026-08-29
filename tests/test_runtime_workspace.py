@@ -372,7 +372,7 @@ def test_prepare_runtime_falls_back_when_baseline_produces_no_coverage_data(tmp_
     assert python is not None
     assert result.statement_coverage == 0.0
     assert rejected_report
-    assert any(item.name.startswith("zero baseline after empty coverage") for item in result.commands)
+    assert any(item.name.startswith("coverage discovery probe") for item in result.commands)
 
 
 def test_prepare_runtime_falls_back_when_upstream_collection_times_out(tmp_path):

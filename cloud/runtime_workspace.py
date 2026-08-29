@@ -882,13 +882,17 @@ def prepare_environment(
                 # baseline, not a reason to reject an otherwise usable venv.
                 coverage_data.unlink(missing_ok=True)
                 coverage_json.unlink(missing_ok=True)
-                empty_tests = roots[project_id] / ".promptopt-empty-tests"
-                empty_tests.mkdir(parents=True, exist_ok=True)
-                empty_config = empty_tests / "pytest.ini"
-                empty_config.write_text("[pytest]\n", encoding="utf-8")
+                # coverage.py 7.10 can persist an empty data file yet still
+                # refuse to discover unexecuted ``--source`` files at report
+                # time. Execute one trusted probe inside the measured tree,
+                # omit it from the report, and let source discovery add every
+                # real project module with zero hits. The probe never imports
+                # or executes uploaded code.
+                coverage_probe = sources[project_id] / ".promptopt_coverage_probe.py"
+                coverage_probe.write_text("PROMPTOPT_COVERAGE_PROBE = True\n", encoding="utf-8")
                 _run(
                     result,
-                    f"zero baseline after empty coverage for {project_id}",
+                    f"coverage discovery probe for {project_id}",
                     [
                         str(python),
                         "-m",
@@ -897,20 +901,12 @@ def prepare_environment(
                         "--branch",
                         f"--data-file={coverage_data}",
                         f"--source={sources[project_id]}",
-                        "-m",
-                        "pytest",
-                        "-q",
-                        "-c",
-                        str(empty_config),
-                        "-p",
-                        "no:cacheprovider",
-                        str(empty_tests),
+                        str(coverage_probe),
                     ],
                     roots[project_id],
                     deadline,
                     maximum_output_bytes,
-                    allowed_return_codes=(5,),
-                    pytest_plugin_autoload=False,
+                    allowed_return_codes=(0,),
                     extra_env=test_environment,
                     timeout_seconds=max(10, admission_command_timeout_seconds),
                 )
@@ -923,6 +919,7 @@ def prepare_environment(
                         "coverage",
                         "json",
                         f"--data-file={coverage_data}",
+                        f"--omit={coverage_probe}",
                         "-o",
                         str(coverage_json),
                     ],
@@ -930,6 +927,7 @@ def prepare_environment(
                     deadline,
                     maximum_output_bytes,
                 )
+                coverage_probe.unlink(missing_ok=True)
             coverage = json.loads(coverage_json.read_text(encoding="utf-8"))["totals"]
             project_result.statement_coverage = float(coverage.get("percent_covered", 0.0)) / 100.0
             branches = int(coverage.get("num_branches", 0))
