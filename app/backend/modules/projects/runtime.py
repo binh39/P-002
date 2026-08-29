@@ -45,6 +45,10 @@ def _bind_runtime_identity(report: RuntimeReport) -> str:
     ).hexdigest()
 
 
+def _is_sha256(value: str | None) -> bool:
+    return bool(value and re.fullmatch(r"[0-9a-f]{64}", value))
+
+
 class CloudRunRuntimePreparer:
     """Build one immutable runtime artifact for one uploaded project.
 
@@ -395,8 +399,7 @@ class RuntimePreparationService:
             return project
         report.protocol_version = MINIMUM_RUNTIME_PROTOCOL_VERSION
         report.execution_mode = RUNTIME_EXECUTION_MODE_GENERIC
-        if re.fullmatch(r"[0-9a-f]{64}", str(report.runtime_digest or "")):
-            report.runtime_digest = _bind_runtime_identity(report)
+        report.runtime_digest = _bind_runtime_identity(report)
         return await self._accept(project, report)
 
     @staticmethod
@@ -408,12 +411,12 @@ class RuntimePreparationService:
             report.status == RuntimeStatus.READY
             and report.protocol_version >= PREPARED_RUNTIME_PROTOCOL_VERSION
             and report.bundle_object
-            and report.runtime_digest
+            and _is_sha256(report.runtime_digest)
             and immutable_image
             and report.runtime_worker_job
-            and report.source_archive_sha256
+            and _is_sha256(report.source_archive_sha256)
             and report.source_archive_object
-            and report.runtime_bundle_sha256
+            and _is_sha256(report.runtime_bundle_sha256)
         )
 
     @staticmethod

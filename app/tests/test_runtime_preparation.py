@@ -112,13 +112,12 @@ async def test_compatible_project_publishes_only_its_immutable_runtime():
             branch_coverage=1.0,
         )
     }
-    runner = FakeRunner(
-        RuntimeReport(
+    prepared = RuntimeReport(
             status=RuntimeStatus.READY,
             projects=members,
             install_strategy="uv isolated resolution",
             dependency_fingerprint="digest-2",
-            runtime_digest="runtime-digest-2",
+            runtime_digest="d" * 64,
             python_version="3.12",
             runtime_image=f"promptopt-runtime-py312@sha256:{'a' * 64}",
             runtime_worker_job="projects/p/locations/r/jobs/eval-candidate",
@@ -128,7 +127,8 @@ async def test_compatible_project_publishes_only_its_immutable_runtime():
             bundle_object="runtime/candidate.tar.gz",
             protocol_version=MINIMUM_RUNTIME_PROTOCOL_VERSION,
         )
-    )
+    expected_runtime_digest = _bind_runtime_identity(prepared)
+    runner = FakeRunner(prepared)
     service = RuntimePreparationService(repository, runner)
 
     await service.request(candidate)
@@ -138,13 +138,47 @@ async def test_compatible_project_publishes_only_its_immutable_runtime():
     member = await repository.get("candidate")
     assert member.runtime_bundle_object == "runtime/candidate.tar.gz"
     assert member.runtime_dependency_fingerprint == "digest-2"
-    assert member.runtime_digest == "runtime-digest-2"
+    assert member.runtime_digest == expected_runtime_digest
     assert member.runtime_worker_job == "projects/p/locations/r/jobs/eval-candidate"
     assert member.source_archive_sha256 == "a" * 64
     assert member.runtime_bundle_sha256 == "b" * 64
     assert member.runtime_status == RuntimeStatus.READY
     unchanged = await repository.get("existing")
     assert unchanged.runtime_bundle_object == "runtime/active.tar.gz"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("runtime_digest", "not-a-digest"),
+        ("source_archive_sha256", "A" * 64),
+        ("runtime_bundle_sha256", "too-short"),
+    ],
+)
+async def test_generic_runtime_rejects_malformed_content_digests(field, value):
+    repository = InMemoryProjectRepository()
+    candidate = project("candidate", status=RuntimeStatus.NOT_REQUESTED)
+    await repository.create(candidate)
+    report = RuntimeReport(
+        status=RuntimeStatus.READY,
+        projects={"candidate": RuntimeProjectReport(source_directory="pkg", test_directory="tests")},
+        runtime_digest="d" * 64,
+        runtime_image=f"promptopt-runtime-py312@sha256:{'a' * 64}",
+        runtime_worker_job="projects/p/locations/r/jobs/eval-candidate",
+        source_archive_sha256="b" * 64,
+        source_archive_object="runner-jobs/source-archives/b.zip",
+        runtime_bundle_sha256="c" * 64,
+        bundle_object="runtime/candidate.tar.gz",
+        protocol_version=PREPARED_RUNTIME_PROTOCOL_VERSION,
+    ).model_copy(update={field: value})
+    service = RuntimePreparationService(repository, FakeRunner(report))
+
+    await service.request(candidate)
+    rejected = await service.refresh(candidate)
+
+    assert rejected.runtime_status == RuntimeStatus.FAILED
+    assert "complete runtime bundle" in (rejected.runtime_report.error or "")
 
 
 def test_runtime_digest_binds_protocol_and_execution_mode():
@@ -242,7 +276,7 @@ async def test_prepared_capsule_is_materialized_before_project_is_admitted():
         status=RuntimeStatus.READY,
         projects={"candidate": member},
         dependency_fingerprint="dependency-digest",
-        runtime_digest="prepared-digest",
+        runtime_digest="e" * 64,
         python_version="3.12",
         runtime_image=f"repo/runtime-base@sha256:{'a' * 64}",
         runtime_worker_job="projects/p/locations/r/jobs/generic-worker",
@@ -254,7 +288,7 @@ async def test_prepared_capsule_is_materialized_before_project_is_admitted():
     )
     final = prepared.model_copy(
         update={
-            "runtime_digest": "project-image-digest",
+            "runtime_digest": "f" * 64,
             "runtime_image": f"repo/project-candidate@sha256:{'d' * 64}",
             "runtime_worker_job": "projects/p/locations/r/jobs/eval-candidate-image",
             "protocol_version": MINIMUM_RUNTIME_PROTOCOL_VERSION,
