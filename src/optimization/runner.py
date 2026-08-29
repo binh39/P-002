@@ -194,6 +194,23 @@ def _package_dir_for_target(package_dir: Path, target: SymbolTarget) -> Path:
     return min(candidates, key=lambda path: (len(path.parts), path.as_posix()))
 
 
+def _target_spec_source_file(package_dir: Path, target: SymbolTarget) -> str:
+    """Normalize a target spec to the source base used by CoverUp.
+
+    When ``package_dir`` is narrowed to a nested package, CoverUp compares
+    target specs relative to that package's parent.  Uploaded manifests keep
+    repository-relative paths (for example ``src/pkg/module.py``), so remove
+    the path prefix before the selected package name.
+    """
+    normalized = target.source_file.replace("\\", "/").lower().lstrip("./")
+    parts = normalized.split("/")
+    package_name = package_dir.resolve().name.lower()
+    for index in range(len(parts) - 1, -1, -1):
+        if parts[index] == package_name:
+            return "/".join(parts[index:])
+    return target.source_file.replace("\\", "/")
+
+
 def _consolidate_saved_tests(
     traces: list[dict],
     target: SymbolTarget,
@@ -654,7 +671,12 @@ class CoverUpExperimentRunner:
             target_spec = run_dir / f"target_spec_{artifact_token}.json"
             target_spec.write_text(
                 json.dumps(
-                    [{"source_file": target.source_file, "symbol": target.symbol}],
+                    [
+                        {
+                            "source_file": _target_spec_source_file(target_package_dir, target),
+                            "symbol": target.symbol,
+                        }
+                    ],
                     indent=2,
                     ensure_ascii=False,
                 ),

@@ -49,6 +49,7 @@ from src.optimization.runner import (
     CoverUpExperimentRunner,
     _package_dir_for_target,
     _saved_tests_for_target,
+    _target_spec_source_file,
     _test_environment,
     _traces_for_target,
     _zero_coverage_like,
@@ -73,6 +74,14 @@ def test_package_dir_for_target_keeps_direct_python_source_root(tmp_path):
     target = SymbolTarget("project", "pkg/module.py", "target")
 
     assert _package_dir_for_target(package, target) == package.resolve()
+
+
+def test_target_spec_source_file_matches_narrowed_package_base(tmp_path):
+    package = tmp_path / "src" / "pkg" / "subpkg"
+    package.mkdir(parents=True)
+    target = SymbolTarget("project", "src/pkg/subpkg/module.py", "target")
+
+    assert _target_spec_source_file(package, target) == "subpkg/module.py"
 
 
 def test_definition_lines_finds_nested_functions_inside_control_flow():
