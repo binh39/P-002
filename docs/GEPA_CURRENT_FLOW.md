@@ -521,10 +521,17 @@ the project snapshot.
 For protocol 13 (`generic_worker_bundle`), that worker downloads the content-
 addressed source archive and venv bundle, verifies object generation and SHA-256,
 restores the bundle in an isolated task directory, and sets `TESTGEN_PYTHON`,
-`VIRTUAL_ENV`, and `PATH` to that project's interpreter. CoverUp generation,
-diagnostic reflection tests, pytest, SlipCover, coverage.py, and final suite
-validation therefore execute with the same project-specific venv. GEPA does not
-reinstall dependencies per candidate or replicate.
+`VIRTUAL_ENV`, and `PATH` to that project's interpreter. The outer CoverUp
+process can remain in the pinned worker tool environment, but every subprocess
+that imports or executes uploaded code (initial coverage, diagnostic tests,
+pytest, SlipCover, coverage.py, and final-suite replay) uses the project-specific
+interpreter. GEPA does not reinstall dependencies per candidate or replicate.
+
+Final generation publishes a content-addressed suite ZIP. The dispatcher then
+starts a separate `final_replay` worker operation with that exact artifact SHA;
+the final-generation operation succeeds only when replay verifies the digest,
+safely extracts the ZIP, and passes pytest/coverage in the same immutable
+project runtime.
 
 The generic worker image/job is shared only as a pinned tool layer for a Python
 minor. Runtime objects, dependency fingerprints, and runtime digests remain

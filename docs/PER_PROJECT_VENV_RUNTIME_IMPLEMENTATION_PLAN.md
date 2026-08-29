@@ -820,15 +820,16 @@ implement reference tracking before deleting content-addressed objects.
 
 - Unit/integration evidence: root runtime/worker/final-suite tests, backend tests,
   Ruff, Python compilation, workflow YAML parsing, and frontend type/lint checks
-  are run before handoff. The latest complete-suite evidence is 186 root,
-  106 backend, and 58 frontend tests; targeted runtime/deployment additions are
+  are run before handoff. The latest complete-suite counts are recorded after
+  the final regression run below; targeted runtime/deployment additions are
   recorded in the corresponding commits above. ESLint and TypeScript checks pass;
   the repository-wide oxfmt check still reports pre-existing formatting drift in
   32 frontend files, so no unrelated formatter rewrite was included.
 - A bounded Dev Cloud smoke was run after credentials and a cost window were
   approved. It covered conflicting-Python upload/preparation, remote GEPA
   baseline dispatch, diagnostic reflection, final-generation artifact
-  persistence, a fresh-prefix rerun, and a controlled pause/resume execution.
+  persistence, exact-artifact replay, and a controlled mid-batch pause/resume
+  execution.
   The pause drill exercises the same worker checkpoint and coordinator resume
   path as a provider 429 without intentionally exhausting quota.
 - The dev region has no deployed runtime-image-factory job; the generic path
@@ -847,20 +848,22 @@ implement reference tracking before deleting content-addressed objects.
 - [x] Generation/checksum verification, resume identity checks, dependency
       policy fingerprinting, credential redaction and UI/docs handoff are done.
 - [x] Root/backend test suites, required Python checks, frontend typecheck and
-      ESLint pass on this branch (186 root, 106 backend, 58 frontend tests).
+      ESLint pass on this branch (188 root, 109 backend, 58 frontend tests).
 - [x] Runtime-label metadata no longer imposes a shared Python version:
       project uploads with different Python/dependency graphs can reuse a label
       while retaining separate venvs (`75f880c`).
 - [x] Production workflow builds and deploys the generic Python-minor workers by
       default; factory image build/deploy is guarded by the migration flag
       `DEPLOY_RUNTIME_FACTORY=true` (`bd7a28d`).
-- [x] Dev Cloud conflicting-Python E2E for a non-trivial fixture and a fresh
-      rerun passed: both Python minors generated a six-test suite with target
-      statement/branch coverage 1.0 and pytest exit code 0.
+- [x] Dev Cloud conflicting-Python E2E for a non-trivial fixture and an
+      independent exact-artifact replay passed: both Python minors generated a
+      six-test suite with target statement/branch coverage 1.0 and pytest exit
+      code 0.
 - [x] Controlled pause/resume drill. A worker-only opt-in pause produced a
-      coordinator `status=paused`, pause signal, and checkpoints for both
-      Python minors; after disabling the hook, resume restored the old worker
-      prefix/checkpoints and completed successfully. Real provider-429
+      coordinator `status=paused`, pause signal, and atomic target checkpoints
+      for both Python minors; after disabling the hook, resume restored those
+      targets without repeating their model calls and completed successfully.
+      Real provider-429
       exhaustion is not induced by the test and remains covered by the same
       production path.
 - [x] No runtime-image-factory Cloud Run job is deployed in the dev region.
@@ -954,6 +957,70 @@ and generic worker images
 (Python 3.11) and
 `sha256:3c0158d3fd4e2c5980c3522bae798acf24e8c4ac27d79da894d63f2d60e7b92c`
 (Python 3.12).
+
+### Admission, exact replay, and mid-batch resume closure (2026-08-29)
+
+The final audit closed three gaps in the earlier smoke evidence:
+
+- Backend admission now accepts only canonical lowercase SHA-256 values and
+  always recomputes the runtime digest from the admitted source, bundle,
+  dependency policy, Python minor, and pinned worker identity (`320ad96`).
+  Reports produced by the actual preparer jobs were passed through the same
+  `RuntimeReport` validation and `_bind_runtime_identity` path as project upload.
+- Final generation now publishes the suite artifact SHA and the dispatcher
+  requires a separate `final_replay` operation to download that exact ZIP,
+  verify its digest, safely extract it, and rerun pytest/coverage in the restored
+  project venv (`7462c0e`). A successful generation cannot hide a failed replay.
+- Target outcomes are atomically checkpointed before a pause is surfaced. A
+  resumed batch handles the all-targets-restored case without constructing a
+  zero-worker executor and never reruns a completed target (`477cea5`).
+
+The preparer executions produced distinct, admitted protocol-13 runtimes:
+
+- Python 3.11 bundle SHA
+  `ba376825d087d8fc7343d74d1429973af3883693d2a7b916131317a62df57884`,
+  admitted runtime digest
+  `f0af4c41ec6ca45e11d5dacf5d01a57e2ba50b007ab5691c1acaff23fc4a2f27`;
+- Python 3.12 bundle SHA
+  `b54b66c615f0f81973121c3f4c6bc6a0caaf48b9a05c204cdcbd52f15af92817`,
+  admitted runtime digest
+  `23675af0ad862970250f571ecb28c24083a9a7b781a367e20389a3bd2b110153`.
+
+The admitted manifest is
+`runner-jobs/e2e-runtime/admitted-manifest-477cea5.json`. The E2E coordinator
+was pinned to image digest
+`sha256:9cd65665f25579d2acf7ba08bc192a182bfe5a5674fa372e18f6fe388fba0de8`;
+the Python 3.11 and 3.12 preparer/worker jobs were pinned respectively to
+`sha256:b0d50cc3b2dcb05631a7601197294433b506ad122527eec755fb8d598f99f678`
+and
+`sha256:eaa5e61e4a6b61a061560e7cf8745732ac0c4f907716cdc04141e42b62e2f31b`.
+
+Exact replay artifacts are under
+`runner-jobs/e2e-final-replay-477cea5-r1`. Generation and replay recorded the
+same suite SHA for each project (`7df19c9768d77fd477d1517304b3edcdd0723bd7866784b6dcaacedd7d0b9807`
+for Python 3.11 and
+`26527c5d5f19d5f09ab029c0d355c0f9e6a10b57db8790d73f04bb7b3bc40bd6`
+for Python 3.12). Both independent replays passed with pytest exit code 0;
+aggregate target coverage was 12/12 statements and 8/8 branches. Generation
+used four priced Flash Lite requests, 1,756 tokens, and estimated USD 0.0012836;
+replay made no model request.
+
+The mid-batch drill used
+`runner-jobs/e2e-gepa-midpause-477cea5-r1` (paused) and
+`runner-jobs/e2e-gepa-midpause-477cea5-r2` (resumed). Each paused worker archive
+contained a real `runs/.../target_checkpoints/*.json` beside its generated test
+and pause signal. On resume, each checkpoint archive had the same MD5 and size
+as before pause, and its LLM `event_id` values were identical to the final test
+results. The completed test-split targets therefore contributed their existing
+four request traces while only the remaining train/validation work invoked the
+model; the combined report contains 12 priced Flash Lite requests. The resumed
+coordinator finished with `status=succeeded`, locked-test baseline coverage 1.0,
+and the opt-in `PROMPTOPT_TEST_PAUSE_AFTER_COMPLETED_TARGETS` hook was removed
+from both E2E worker jobs after the drill.
+
+Final local verification passed: 188 root tests, 109 backend tests, 58 frontend
+tests, Ruff on all changed Python surfaces, the required `py_compile` set,
+frontend TypeScript/ESLint checks, workflow YAML parsing, and `git diff --check`.
 
 A read-only Firestore inventory of the deployment project inspected all 20
 current project records: no record had `runtime_execution_mode=project_image`

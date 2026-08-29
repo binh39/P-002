@@ -191,9 +191,11 @@ Khi được yêu cầu deploy hệ thống lên môi trường Dev Cloud (Proje
 - The generic worker image/job is pinned by Python minor and image digest. The
   source archive and venv bundle are content-addressed objects with SHA-256 and,
   when GCS provides it, object-generation checks. Workers verify both before
-  extraction and run CoverUp, diagnostic tests, pytest, SlipCover, and coverage
-  through the restored project's interpreter (`TESTGEN_PYTHON`, `VIRTUAL_ENV`,
-  and `PATH`). Final test-suite generation follows the same boundary.
+  extraction. Every subprocess that imports or executes uploaded code (initial
+  coverage, diagnostic tests, pytest, SlipCover, coverage, and final-suite
+  replay) runs through the restored project's interpreter (`TESTGEN_PYTHON`,
+  `VIRTUAL_ENV`, and `PATH`). The outer CoverUp control process may use the
+  pinned worker interpreter, but it must not import the uploaded package.
 - GEPA/DSPy remains a control plane and must not import or execute uploaded
   source. Its cache/request identity includes the project runtime digest and
   worker identity. Runtime objects are immutable and are not deleted with the
