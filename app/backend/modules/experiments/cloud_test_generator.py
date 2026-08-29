@@ -115,11 +115,7 @@ class CloudRunJobTestGenerator:
                             if copied_archive_generation
                             else {}
                         ),
-                        **(
-                            {"runtime_bundle_generation": copied_bundle_generation}
-                            if copied_bundle_generation
-                            else {}
-                        ),
+                        **({"runtime_bundle_generation": copied_bundle_generation} if copied_bundle_generation else {}),
                         "python_version": snapshot.python_version,
                         "source_directory": snapshot.source_directory,
                         "test_directory": snapshot.test_directory,

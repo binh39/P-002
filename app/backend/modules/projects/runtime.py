@@ -40,9 +40,7 @@ def _bind_runtime_identity(report: RuntimeReport) -> str:
         "runtime_protocol_version": report.protocol_version,
         "execution_mode": report.execution_mode,
     }
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
 def _is_sha256(value: str | None) -> bool:
@@ -424,7 +422,11 @@ class RuntimePreparationService:
         return bool(
             RuntimePreparationService._complete_prepared_report(report)
             and report.protocol_version
-            >= (12 if report.execution_mode == RUNTIME_EXECUTION_MODE_PROJECT_IMAGE else MINIMUM_RUNTIME_PROTOCOL_VERSION)
+            >= (
+                12
+                if report.execution_mode == RUNTIME_EXECUTION_MODE_PROJECT_IMAGE
+                else MINIMUM_RUNTIME_PROTOCOL_VERSION
+            )
             and report.execution_mode in {RUNTIME_EXECUTION_MODE_GENERIC, RUNTIME_EXECUTION_MODE_PROJECT_IMAGE}
         )
 

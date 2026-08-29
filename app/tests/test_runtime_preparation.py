@@ -113,20 +113,20 @@ async def test_compatible_project_publishes_only_its_immutable_runtime():
         )
     }
     prepared = RuntimeReport(
-            status=RuntimeStatus.READY,
-            projects=members,
-            install_strategy="uv isolated resolution",
-            dependency_fingerprint="digest-2",
-            runtime_digest="d" * 64,
-            python_version="3.12",
-            runtime_image=f"promptopt-runtime-py312@sha256:{'a' * 64}",
-            runtime_worker_job="projects/p/locations/r/jobs/eval-candidate",
-            source_archive_sha256="a" * 64,
-            source_archive_object="runner-jobs/source-archives/a.zip",
-            runtime_bundle_sha256="b" * 64,
-            bundle_object="runtime/candidate.tar.gz",
-            protocol_version=MINIMUM_RUNTIME_PROTOCOL_VERSION,
-        )
+        status=RuntimeStatus.READY,
+        projects=members,
+        install_strategy="uv isolated resolution",
+        dependency_fingerprint="digest-2",
+        runtime_digest="d" * 64,
+        python_version="3.12",
+        runtime_image=f"promptopt-runtime-py312@sha256:{'a' * 64}",
+        runtime_worker_job="projects/p/locations/r/jobs/eval-candidate",
+        source_archive_sha256="a" * 64,
+        source_archive_object="runner-jobs/source-archives/a.zip",
+        runtime_bundle_sha256="b" * 64,
+        bundle_object="runtime/candidate.tar.gz",
+        protocol_version=MINIMUM_RUNTIME_PROTOCOL_VERSION,
+    )
     expected_runtime_digest = _bind_runtime_identity(prepared)
     runner = FakeRunner(prepared)
     service = RuntimePreparationService(repository, runner)

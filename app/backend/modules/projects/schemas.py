@@ -20,12 +20,16 @@ def _validate_package_index_url(value: str | None) -> str | None:
         return None
     parsed = urlsplit(value)
     sensitive_query_names = {"auth", "key", "password", "secret", "token"}
-    if parsed.username or parsed.password or any(
-        (
-            key.casefold() in sensitive_query_names
-            or key.casefold().endswith(("_key", "_token", "_secret", "_password"))
+    if (
+        parsed.username
+        or parsed.password
+        or any(
+            (
+                key.casefold() in sensitive_query_names
+                or key.casefold().endswith(("_key", "_token", "_secret", "_password"))
+            )
+            for key, _ in parse_qsl(parsed.query, keep_blank_values=True)
         )
-        for key, _ in parse_qsl(parsed.query, keep_blank_values=True)
     ):
         raise ValueError(
             "extra_package_index must not contain credentials; use a Secret Manager-backed index reference"
