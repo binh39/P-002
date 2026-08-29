@@ -191,9 +191,6 @@ describe("create experiment wizard", () => {
 
     expect(screen.queryByText("Standard account limits")).not.toBeInTheDocument();
 
-    fireEvent.change(await screen.findByLabelText(/Runtime environment/i), {
-      target: { value: "sample-runtime" },
-    });
     fireEvent.click(await screen.findByRole("button", { name: /isort/i }));
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     await screen.findByText(/3 valid functions available/i);
