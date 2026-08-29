@@ -526,6 +526,7 @@ class TestGenerationRunRecord(TestGenerationRunResponse):
     idempotency_key: str | None = None
     provider_secret_refs: dict[str, dict[str, str]] = Field(default_factory=dict)
     target_snapshots: list[TargetReference] = Field(default_factory=list)
+    project_snapshots: list[ProjectSnapshot] = Field(default_factory=list)
 
 
 class TestGenerationRunListResponse(StrictModel):
