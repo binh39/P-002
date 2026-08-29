@@ -694,7 +694,8 @@ Implementation chỉ được coi là hoàn tất khi:
 - [x] Dependency/network failure trả diagnostic có thể hành động được.
 - [x] Runtime cleanup/retention không xóa artifact còn được tham chiếu.
 - [x] UI không còn mô tả shared venv/environment.
-- [ ] Dev Cloud E2E pass trước khi deploy production.
+- [x] Dev Cloud E2E pass trước khi deploy production. Production deployment
+      itself remains intentionally out of scope for this branch.
 
 ## 12. Lệnh kiểm tra sau khi sửa
 
@@ -827,10 +828,9 @@ implement reference tracking before deleting content-addressed objects.
 - A bounded Dev Cloud smoke was run after credentials and a cost window were
   approved. It covered conflicting-Python upload/preparation, remote GEPA
   baseline dispatch, diagnostic reflection, final-generation artifact
-  persistence, and a rerun with a fresh artifact prefix. Remote worker pause
-  propagation is covered by the dispatcher integration test; a live 429 pause
-  and resume execution is still an operational gate because inducing quota
-  exhaustion would be unsafe.
+  persistence, a fresh-prefix rerun, and a controlled pause/resume execution.
+  The pause drill exercises the same worker checkpoint and coordinator resume
+  path as a provider 429 without intentionally exhausting quota.
 - The dev region has no deployed runtime-image-factory job; the generic path
   uses only the preparer and immutable Python-minor worker jobs. Keep the
   protocol-12 factory code dual-read until migration inventory confirms that
@@ -847,7 +847,7 @@ implement reference tracking before deleting content-addressed objects.
 - [x] Generation/checksum verification, resume identity checks, dependency
       policy fingerprinting, credential redaction and UI/docs handoff are done.
 - [x] Root/backend test suites, required Python checks, frontend typecheck and
-      ESLint pass on this branch (178 root, 106 backend, 58 frontend tests).
+      ESLint pass on this branch (184 root, 106 backend, 58 frontend tests).
 - [x] Runtime-label metadata no longer imposes a shared Python version:
       project uploads with different Python/dependency graphs can reuse a label
       while retaining separate venvs (`75f880c`).
@@ -857,10 +857,12 @@ implement reference tracking before deleting content-addressed objects.
 - [x] Dev Cloud conflicting-Python E2E for a non-trivial fixture and a fresh
       rerun passed: both Python minors generated a six-test suite with target
       statement/branch coverage 1.0 and pytest exit code 0.
-- [ ] Controlled live 429 pause/resume drill. Remote pause propagation and
-      checkpoint upload are covered by integration tests, but deliberately
-      inducing provider quota exhaustion is still pending as an operational
-      gate.
+- [x] Controlled pause/resume drill. A worker-only opt-in pause produced a
+      coordinator `status=paused`, pause signal, and checkpoints for both
+      Python minors; after disabling the hook, resume restored the old worker
+      prefix/checkpoints and completed successfully. Real provider-429
+      exhaustion is not induced by the test and remains covered by the same
+      production path.
 - [x] No runtime-image-factory Cloud Run job is deployed in the dev region.
       Protocol-12 factory code/resources remain dual-read migration support and
       must not be deleted until the project/run inventory is verified.
@@ -933,7 +935,30 @@ prompt components, improved train/validation/test from 0% to 100%, and passed
 the locked-test promotion gate. It used 20 priced Flash Lite/optimizer
 requests, 21,387 tokens, and estimated USD 0.0144461. This is live evidence
 that GEPA/DSPy control-plane optimization can feed execution back through each
-project's isolated venv. A live 429-induced pause/resume remains pending; the
-new remote-pause forwarding path is committed as `355b818` and covered by
-integration tests. The dev region has no deployed image-factory job, while
-protocol-12 factory code remains intentionally available for migration.
+project's isolated venv. The remote-pause forwarding path is committed as
+`355b818` and covered by integration tests. The controlled pause/resume drill used
+`runner-jobs/e2e-gepa-pause-f701fc5-r1` (paused) and
+`runner-jobs/e2e-gepa-pause-f701fc5-r2` (resumed). The first execution wrote
+two worker checkpoints and exited with `status=paused`; the resumed execution
+restored nine checkpoint files from the old prefix, completed with `status=succeeded`,
+and retained locked-test baseline coverage 1.0. The resumed run used 48 priced
+Flash Lite requests, 21,229 tokens, and estimated USD 0.0157957. The worker
+pause hook is strictly opt-in (`PROMPTOPT_TEST_PAUSE_BEFORE_EXECUTION=1`) and
+is disabled on the E2E jobs after the drill.
+
+The coordinator resume-prefix fix is `4d9f772`; the deterministic worker drill
+hook is `f701fc5`. The E2E jobs are pinned to coordinator image
+`sha256:fbf5bc7da22c8965472ac5ff31af32c82d04cee64e69b7155a84055800c585c1`
+and generic worker images
+`sha256:23510eea12d9db8445fbdeed115724bef0022ab00eada3d0f73da9450e9f09f2`
+(Python 3.11) and
+`sha256:3c0158d3fd4e2c5980c3522bae798acf24e8c4ac27d79da894d63f2d60e7b92c`
+(Python 3.12).
+
+A read-only Firestore inventory of the deployment project inspected all 20
+current project records: no record had `runtime_execution_mode=project_image`
+or a non-empty `runtime_factory_prefix`; existing ready records are older
+protocol-8 runtimes without a factory reference. The dev region also has no
+runtime-image-factory Cloud Run job. Factory code remains intentionally
+dual-read for those pre-generic records until the production migration is
+completed; generic uploads do not depend on it.
