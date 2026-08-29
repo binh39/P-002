@@ -872,14 +872,16 @@ Versioned immutable resources used by the smoke are:
 - generic runner image digest `sha256:b4cc68cc998669dafd5275008f52fb64293c7ed19939c5efa463d3272457a688`;
 - generic runtime worker image digests `sha256:51f06333c0286e234f61b88dd0c7401ad6a5c8b183b5fcf75ce7e07fb4c98795` (3.11)
   and `sha256:dc8ed755f0b3c2f948ffc1827ad18514cd89fc6859709c3e32c4948bcb3b43e3` (3.12);
-- GEPA smoke artifacts: `runner-jobs/e2e-gepa-a2a06fc-r3`;
+- GEPA smoke artifacts: `runner-jobs/e2e-gepa-917f2a1-r1`;
 - final-generation artifacts: `runner-jobs/e2e-final-917f2a1-r1`.
 
 The bounded GEPA execution completed successfully, dispatched every target to
-the matching Python worker, performed valid locked test baseline preflight, and
-kept the unchanged baseline when all measured candidate scores were 0. The
-promotion gate correctly skipped a redundant final comparison because the
-bundle digest did not change. Its cost report recorded zero priced model calls.
+the matching Python worker, and performed valid locked test baseline preflight
+across both Python minors. Both project targets reached baseline aggregate
+score 1.0, so GEPA kept the unchanged baseline and correctly skipped a
+redundant final comparison. The cost report recorded 24 Flash Lite requests,
+6,814 total tokens, and estimated USD 0.0038086; no optimizer request was
+needed because the baseline already covered the tiny fixture targets.
 The independent final-generation execution also completed and persisted its
 manifest, source files, coverage JSON, and suite ZIP. With the quota/billing
 project `project-a2f7084e-90ac-4bfc-84b` configured for Vertex, one Python 3.11
