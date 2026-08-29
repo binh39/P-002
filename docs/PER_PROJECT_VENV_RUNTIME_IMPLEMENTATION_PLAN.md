@@ -854,11 +854,13 @@ implement reference tracking before deleting content-addressed objects.
 - [x] Production workflow builds and deploys the generic Python-minor workers by
       default; factory image build/deploy is guarded by the migration flag
       `DEPLOY_RUNTIME_FACTORY=true` (`bd7a28d`).
-- [x] Full Dev Cloud conflicting-Python E2E for a non-trivial fixture passed:
-      both Python minors generated and reran a six-test suite with target
-      statement/branch coverage 1.0 and pytest exit code 0. A live 429
-      pause/resume remains explicitly pending; remote pause propagation and
-      checkpoint upload are covered by tests.
+- [x] Dev Cloud conflicting-Python E2E for a non-trivial fixture and a fresh
+      rerun passed: both Python minors generated a six-test suite with target
+      statement/branch coverage 1.0 and pytest exit code 0.
+- [ ] Controlled live 429 pause/resume drill. Remote pause propagation and
+      checkpoint upload are covered by integration tests, but deliberately
+      inducing provider quota exhaustion is still pending as an operational
+      gate.
 - [x] No runtime-image-factory Cloud Run job is deployed in the dev region.
       Protocol-12 factory code/resources remain dual-read migration support and
       must not be deleted until the project/run inventory is verified.
