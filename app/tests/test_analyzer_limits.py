@@ -65,6 +65,7 @@ def test_analysis_ignores_symbolic_links_without_materializing_them():
 
     assert result.python_file_count == 1
     assert result.warning_count == 1
+    assert result.warnings == ("Skipped 1 symbolic link(s); archive links are never extracted.",)
     assert [item.qualified_name for item in result.functions] == ["target"]
 
 

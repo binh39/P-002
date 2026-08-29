@@ -56,11 +56,6 @@ function ProjectCard({
       </div>
       <h2>{project.name}</h2>
       <p>{project.description || "Imported Python source archive"}</p>
-      {(project.analysisError || project.runtimeReport?.error) && (
-        <div className="inline-validation-error" role="alert">
-          {project.analysisError || project.runtimeReport?.error}
-        </div>
-      )}
       <div className="project-meta-grid">
         <div>
           <span>Python</span>

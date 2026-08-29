@@ -105,7 +105,7 @@ describe("Projects", () => {
     expect(screen.getByLabelText("Description")).toBeInTheDocument();
   });
 
-  it("shows the detailed admission failure on the project card", async () => {
+  it("keeps admission details off the project card", async () => {
     state.list.mockResolvedValue([
       {
         ...importedProject,
@@ -124,9 +124,10 @@ describe("Projects", () => {
 
     renderPage();
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Project requires Python >=3.14, but no compatible runtime is deployed.",
-    );
+    expect(await screen.findByText("Environment rejected")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Project requires Python >=3.14, but no compatible runtime is deployed."),
+    ).not.toBeInTheDocument();
   });
 
   it("uploads a ZIP and opens the queued project", async () => {

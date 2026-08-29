@@ -52,6 +52,7 @@ class AnalysisService:
             raise AppError(409, "ANALYSIS_ALREADY_RUNNING", "Project analysis is already running")
         project.status = ProjectStatus.ANALYZING
         project.analysis_error = None
+        project.analysis_warnings = []
         project.updated_at = datetime.now(UTC)
         await self.projects.save(project)
         try:
@@ -88,6 +89,7 @@ class AnalysisService:
                 project.settings.runtime.python_version = result.python_version
             project.status = ProjectStatus.WARNING if result.warning_count else ProjectStatus.READY
             project.analysis_error = None
+            project.analysis_warnings = list(result.warnings)
             project.analyzed_at = datetime.now(UTC)
             project.updated_at = project.analyzed_at
             await self.projects.save(project)
@@ -100,6 +102,7 @@ class AnalysisService:
         except AppError as exc:
             project.status = ProjectStatus.FAILED
             project.analysis_error = exc.message
+            project.analysis_warnings = []
             project.updated_at = datetime.now(UTC)
             await self.projects.save(project)
             # Validation failures are terminal. Returning success to Cloud
@@ -107,6 +110,7 @@ class AnalysisService:
         except Exception as exc:
             project.status = ProjectStatus.FAILED
             project.analysis_error = f"Unexpected analysis failure ({type(exc).__name__})"
+            project.analysis_warnings = []
             project.updated_at = datetime.now(UTC)
             await self.projects.save(project)
             raise
