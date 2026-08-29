@@ -128,6 +128,7 @@ def test_runtime_bundle_contains_every_pytest_plugin_used_by_gepa():
     assert "pytest-repeat>=0.9,<1" in RUNTIME_TOOL_PACKAGES
     assert "pytest-timeout>=2.3,<3" in RUNTIME_TOOL_PACKAGES
     assert "coverage>=7,<8" in RUNTIME_TOOL_PACKAGES
+    assert "slipcover==1.0.18" in RUNTIME_TOOL_PACKAGES
 
 
 def test_legacy_setup_metadata_dependencies_are_discovered_without_execution(tmp_path):

@@ -43,7 +43,9 @@ RUNTIME_TOOL_PACKAGES = (
     "pytest-repeat>=0.9,<1",
     "pytest-timeout>=2.3,<3",
     "coverage>=7,<8",
-    "slipcover>=1,<2",
+    # CoverUp's subprocess contract follows the repository-pinned SlipCover
+    # CLI. Do not silently resolve a newer major/minor release in uploads.
+    "slipcover==1.0.18",
 )
 MAX_ADMISSION_BASELINE_TESTS = 250
 ADMISSION_COMMAND_TIMEOUT_SECONDS = 120
