@@ -489,6 +489,9 @@ def test_worker_test_pause_hook_writes_durable_signal_before_execution(tmp_path,
         ),
     )
     monkeypatch.setenv("PROMPTOPT_TEST_PAUSE_BEFORE_EXECUTION", "1")
+    # Track the worker-owned environment mutation so pytest restores it after
+    # this in-process worker simulation.
+    monkeypatch.setenv("PROMPTOPT_PAUSE_FILE", str(tmp_path / "placeholder-pause.json"))
     request = {
         "schema_version": 1,
         "operation": "batch",

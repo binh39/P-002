@@ -60,6 +60,7 @@ class _Session:
         self.storage = storage
         self.urls: list[str] = []
         self.pause_next = False
+        self.final_test_file_count = 1
 
     def post(self, url: str, *, json: dict, timeout: int):
         assert timeout == 30
@@ -92,7 +93,13 @@ class _Session:
                 final_generation={
                     "schema_version": 2,
                     "status": "completed",
-                    "metrics": {"target_count": len(request["targets"])},
+                    "metrics": {
+                        "target_count": len(request["targets"]),
+                        "test_file_count": self.final_test_file_count,
+                    },
+                    "generation_failures": [
+                        {"feedback": "coverage preflight failed: selected interpreter has no coverage module"}
+                    ],
                 },
                 artifact_object=request["artifact_object"],
                 artifact_sha256=hashlib.sha256(artifact).hexdigest(),
@@ -317,3 +324,16 @@ def test_remote_backend_routes_final_generation_to_project_worker(tmp_path):
     assert output["replay"]["pytest_exit_code"] == 0
     assert len(session.urls) == 2
     assert session.urls[-1].endswith("/eval-uploaded-digest:run")
+
+
+def test_remote_backend_rejects_empty_generation_before_replay(tmp_path):
+    backend, _, session = _backend(tmp_path)
+    session.final_test_file_count = 0
+    prompt = tmp_path / "prompt.json"
+    prompt.write_text('{"initial":"a","error":"b"}', encoding="utf-8")
+    targets = [SymbolTarget("uploaded", "pkg/a.py", "a", "final")]
+
+    with pytest.raises(RuntimeError, match="selected interpreter has no coverage module"):
+        backend.generate_final_project("uploaded", targets, prompt, seed=17)
+
+    assert len(session.urls) == 1

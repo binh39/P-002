@@ -680,6 +680,14 @@ def generate_local_project(
     shutil.make_archive(str(archive_base), "zip", root_dir=Path(batch.tests_workspace))
     artifact_files = _artifact_index(artifacts, generated_files, source_files)
     status = "partial" if suite_failed or target_metrics["failed_target_count"] else "completed"
+    generation_failures = [
+        {
+            "target": result.target.__dict__,
+            "feedback": str(result.feedback or "")[-4000:],
+        }
+        for result in batch.results
+        if not result.score or not result.score.get("valid")
+    ]
     return {
         "schema_version": 3,
         "status": status,
@@ -700,6 +708,7 @@ def generate_local_project(
             "by_model": cost["by_model"],
         },
         "projects": per_project,
+        "generation_failures": generation_failures[:20],
         "generated_tests": [path.relative_to(artifacts).as_posix() for path in generated_files],
         "artifacts": {
             "manifest": "test_generation_result.json",

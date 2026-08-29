@@ -81,7 +81,11 @@ def _configure_runtime_environment(environment: dict[str, str], runtime_python: 
     """Route every project subprocess through its restored virtualenv."""
     if runtime_python is None:
         return
-    executable = runtime_python.resolve()
+    # Do not resolve the interpreter symlink. On POSIX, ``venv/bin/python``
+    # normally points at the base interpreter; resolving it discards the venv
+    # identity and makes ``python -m coverage`` run without the packages that
+    # were installed into the isolated runtime.
+    executable = Path(os.path.abspath(runtime_python))
     environment["TESTGEN_PYTHON"] = str(executable)
     environment["VIRTUAL_ENV"] = str(executable.parent.parent)
     environment["PATH"] = os.pathsep.join([str(executable.parent), environment.get("PATH", "")])
@@ -874,9 +878,7 @@ class CoverUpExperimentRunner:
             try:
                 controlled_pause_threshold = int(controlled_pause_after)
             except ValueError as exc:
-                raise ValueError(
-                    "PROMPTOPT_TEST_PAUSE_AFTER_COMPLETED_TARGETS must be a positive integer"
-                ) from exc
+                raise ValueError("PROMPTOPT_TEST_PAUSE_AFTER_COMPLETED_TARGETS must be a positive integer") from exc
             if controlled_pause_threshold < 1:
                 raise ValueError("PROMPTOPT_TEST_PAUSE_AFTER_COMPLETED_TARGETS must be a positive integer")
         worker_count = (

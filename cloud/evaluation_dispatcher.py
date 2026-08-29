@@ -435,6 +435,17 @@ class RemoteEvaluationBackend(EvaluationBackend):
         value = result.get("final_generation")
         if not isinstance(value, dict):
             raise RuntimeError("Evaluation worker returned an invalid final-generation result")
+        if int((value.get("metrics") or {}).get("test_file_count") or 0) <= 0:
+            failures = value.get("generation_failures") or []
+            detail = next(
+                (
+                    str(item.get("feedback") or "").strip()
+                    for item in failures
+                    if isinstance(item, dict) and item.get("feedback")
+                ),
+                "CoverUp did not retain a valid generated pytest module.",
+            )
+            raise RuntimeError(f"Final test generation produced no pytest modules: {detail}")
         artifact_sha256 = str(result.get("artifact_sha256") or "")
         if not re.fullmatch(r"[0-9a-f]{64}", artifact_sha256):
             raise RuntimeError("Evaluation worker returned no immutable final-suite artifact digest")

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import re
 import sys
 import threading
@@ -47,6 +48,7 @@ from src.optimization.models import ExperimentConfig, ProjectLayout, SymbolTarge
 from src.optimization.prompts import PromptBundle, baseline_bundle
 from src.optimization.runner import (
     CoverUpExperimentRunner,
+    _configure_runtime_environment,
     _package_dir_for_target,
     _saved_tests_for_target,
     _target_spec_source_file,
@@ -395,6 +397,21 @@ def test_run_coverage_uses_selected_runtime_interpreter(tmp_path, monkeypatch):
     assert [command[0] for command in calls] == ["prepared-python", "prepared-python"]
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX venv interpreters are symlinks")
+def test_runtime_environment_preserves_venv_python_symlink(tmp_path):
+    venv_python = tmp_path / ".venv" / "bin" / "python"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.symlink_to(Path(sys.executable))
+    environment = {"PATH": "/usr/bin"}
+
+    _configure_runtime_environment(environment, venv_python)
+
+    assert environment["TESTGEN_PYTHON"] == str(venv_python.absolute())
+    assert environment["TESTGEN_PYTHON"] != str(venv_python.resolve())
+    assert environment["VIRTUAL_ENV"] == str((tmp_path / ".venv").absolute())
+    assert environment["PATH"].split(os.pathsep)[0] == str(venv_python.parent.absolute())
+
+
 def test_parallel_coverage_subprocesses_use_isolated_pytest_state(tmp_path):
     package_dir = tmp_path / "pkg"
     tests_dir = tmp_path / "shared-tests"
@@ -501,10 +518,7 @@ def test_run_streamed_echoes_only_selected_child_lines(capsys):
             sys.executable,
             "-u",
             "-c",
-            (
-                "print('hidden detail'); "
-                "print('PROMPTOPT_MODEL_ERROR {\"status_code\": 429}')"
-            ),
+            ("print('hidden detail'); print('PROMPTOPT_MODEL_ERROR {\"status_code\": 429}')"),
         ],
         echo=False,
         echo_prefixes=("PROMPTOPT_MODEL_ERROR ",),
@@ -994,9 +1008,7 @@ def test_runner_batches_symbols_and_separates_split_workspace(tmp_path, monkeypa
 
 
 @pytest.mark.parametrize("multi_project", [False, True])
-def test_runner_resume_skips_targets_with_durable_checkpoints(
-    tmp_path, monkeypatch, multi_project
-):
+def test_runner_resume_skips_targets_with_durable_checkpoints(tmp_path, monkeypatch, multi_project):
     from src.promptopt_pause import ModelRateLimitPauseError
 
     package_dir = tmp_path / "sample_repo" / "pkg"
@@ -1148,9 +1160,7 @@ def test_runner_controlled_pause_occurs_after_completed_target_checkpoint(tmp_pa
     with pytest.raises(ModelRateLimitPauseError, match="after 1 completed target"):
         runner.evaluate_batch([target], prompt_path, candidate_id="candidate", split="train")
 
-    checkpoint_files = list(
-        (artifacts_dir / "runs" / "candidate" / "train").rglob("target_checkpoints/*.json")
-    )
+    checkpoint_files = list((artifacts_dir / "runs" / "candidate" / "train").rglob("target_checkpoints/*.json"))
     assert len(checkpoint_files) == 1
     assert pause_path.is_file()
     assert calls == ["first"]
@@ -3503,10 +3513,7 @@ def test_coverup_retries_passing_incomplete_coverage_with_lines_branches_and_con
     source = tmp_path / "pkg" / "a.py"
     source.parent.mkdir()
     source.write_text(
-        "def target(value):\n"
-        "    if value:\n"
-        "        return 1\n"
-        "    return 0\n",
+        "def target(value):\n    if value:\n        return 1\n    return 0\n",
         encoding="utf-8",
     )
     segment = importlib.import_module("coverup.segment").CodeSegment(
@@ -3605,10 +3612,7 @@ def test_coverup_retries_passing_incomplete_coverage_with_lines_branches_and_con
     assert traces[1]["remaining_branches"] == []
 
     retry_messages = chatter.messages[1]
-    assert any(
-        message["role"] == "assistant" and "assert True" in message["content"]
-        for message in retry_messages
-    )
+    assert any(message["role"] == "assistant" and "assert True" in message["content"] for message in retry_messages)
     missing_prompt = retry_messages[-1]["content"]
     assert "The tests still lack coverage: line 3 and branch 2->4 do not execute." in missing_prompt
 
