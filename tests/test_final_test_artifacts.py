@@ -1,20 +1,28 @@
 import hashlib
 import io
+import json
 import os
 import subprocess
 import zipfile
 from types import SimpleNamespace
 
+import pytest
+
 from cloud import run_test_generation
-from cloud.run_test_generation import _artifact_index, _run_remote, _stage_projects, _workspaces_for_targets
+from cloud.run_test_generation import (
+    _artifact_index,
+    _load_prompt,
+    _run_remote,
+    _stage_projects,
+    _workspaces_for_targets,
+)
 from src.optimization.models import SymbolTarget
 
 
 def test_prompt_snapshot_accepts_gepa_missing_coverage_component(tmp_path):
     prompt = tmp_path / "prompt.json"
     prompt.write_text(
-        '{"initial":"{source_excerpt}","error":"{error}",'
-        '"missing_coverage":"{missing_coverage}"}',
+        '{"initial":"{source_excerpt}","error":"{error}","missing_coverage":"{missing_coverage}"}',
         encoding="utf-8",
     )
 
@@ -77,13 +85,6 @@ def test_runtime_object_download_rejects_changed_checksum(tmp_path, monkeypatch)
         assert "checksum changed" in str(exc)
     else:
         raise AssertionError("tampered runtime object was accepted")
-import json
-from types import SimpleNamespace
-
-import pytest
-
-from cloud.run_test_generation import _artifact_index, _load_prompt, _stage_projects, _workspaces_for_targets
-from src.optimization.models import SymbolTarget
 
 
 def test_final_test_prompt_keeps_missing_coverage_component(tmp_path):

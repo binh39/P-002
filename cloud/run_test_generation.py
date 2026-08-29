@@ -71,9 +71,7 @@ def _load_prompt(path: Path) -> dict[str, str]:
         or set(prompt) != required_components
         or not all(isinstance(prompt.get(component), str) for component in required_components)
     ):
-        raise RuntimeError(
-            "Prompt snapshot must contain initial, error, and missing_coverage strings"
-        )
+        raise RuntimeError("Prompt snapshot must contain initial, error, and missing_coverage strings")
     return prompt
 
 
@@ -620,6 +618,116 @@ def generate_local_project(
     if not targets:
         raise ValueError("Final generation requires at least one target")
     os.environ["PYTHONHASHSEED"] = str(seed)
+    batch = CoverUpExperimentRunner(config).evaluate_batch(
+        targets,
+        prompt_path,
+        candidate_id="final",
+        split="final",
+        workspace_kind="candidate",
+    )
+    target_metrics = _target_metrics(batch)
+    cost = aggregate_usage_events(
+        event for result in batch.results for event in result.attempt_traces if isinstance(event, dict)
+    )
+    workspaces = _workspaces_for_targets(targets, batch.tests_workspace)
+    per_project = {}
+    suite_failed = False
+    for project, workspace in sorted(workspaces.items()):
+        project_layout = (
+            config.projects[project]
+            if config.projects and project in config.projects
+            else ProjectLayout(
+                package_dir=config.package_dir, tests_dir=config.tests_dir, import_root=config.package_dir.parent
+            )
+        )
+        coverage_path = artifacts / "coverage" / f"{re.sub(r'[^A-Za-z0-9_.-]+', '_', project)}.json"
+        coverage_environment = _test_environment(
+            config.project_root, (project_layout.import_root or project_layout.package_dir.parent,)
+        )
+        _configure_runtime_environment(coverage_environment, project_layout.python_executable)
+        completed = run_coverage(
+            project_root=config.project_root,
+            package_dir=project_layout.package_dir,
+            tests_dir=workspace,
+            output=coverage_path,
+            pytest_args=config.pytest_args,
+            repeat_tests=config.repeat_tests,
+            env=coverage_environment,
+        )
+        if completed.returncode:
+            suite_failed = True
+        statement = branch = None
+        if coverage_path.is_file():
+            statement, branch = _project_totals(load_report(coverage_path))
+        per_project[project] = {
+            "pytest_exit_code": completed.returncode,
+            "project_statement_coverage": statement,
+            "project_branch_coverage": branch,
+        }
+    project_statements = [
+        value["project_statement_coverage"]
+        for value in per_project.values()
+        if value["project_statement_coverage"] is not None
+    ]
+    project_branches = [
+        value["project_branch_coverage"]
+        for value in per_project.values()
+        if value["project_branch_coverage"] is not None
+    ]
+    generated_files = sorted(path for path in Path(batch.tests_workspace).rglob("test_*.py") if path.is_file())
+    source_files = _copy_source_artifacts(artifacts, targets, config, sample_repos)
+    archive_base = artifacts / "generated_tests"
+    shutil.make_archive(str(archive_base), "zip", root_dir=Path(batch.tests_workspace))
+    artifact_files = _artifact_index(artifacts, generated_files, source_files)
+    status = "partial" if suite_failed or target_metrics["failed_target_count"] else "completed"
+    return {
+        "schema_version": 3,
+        "status": status,
+        "metrics": {
+            **target_metrics,
+            "test_file_count": len(generated_files),
+            "test_count": _count_tests(generated_files),
+            "project_statement_coverage": sum(project_statements) / len(project_statements)
+            if project_statements
+            else None,
+            "project_branch_coverage": sum(project_branches) / len(project_branches) if project_branches else None,
+        },
+        "estimated_cost_usd": cost["estimated_cost_usd"],
+        "token_usage": cost["token_usage"],
+        "cost_accounting": {
+            "priced_request_count": cost["priced_request_count"],
+            "unpriced_request_count": cost["unpriced_request_count"],
+            "by_model": cost["by_model"],
+        },
+        "projects": per_project,
+        "generated_tests": [path.relative_to(artifacts).as_posix() for path in generated_files],
+        "artifacts": {
+            "manifest": "test_generation_result.json",
+            "suite_zip": "generated_tests.zip",
+            "generated_tests_directory": "generated_tests",
+            "coverage_directory": "coverage",
+            "files": artifact_files,
+        },
+    }
+
+
+def _load_prompt_snapshot(prompt_path: Path) -> dict[str, str]:
+    """Load a legacy or GEPA three-component CoverUp prompt bundle."""
+    prompt = json.loads(prompt_path.read_text(encoding="utf-8"))
+    # GEPA candidates are real three-component CoverUp bundles.  Keep accepting
+    # legacy two-component snapshots because PromptBundle supplies the default
+    # missing-coverage template, but reject unknown keys and non-string values.
+    allowed_prompt_keys = {"initial", "error", "missing_coverage"}
+    if (
+        not isinstance(prompt, dict)
+        or not {"initial", "error"}.issubset(prompt)
+        or not set(prompt).issubset(allowed_prompt_keys)
+        or not all(isinstance(value, str) for value in prompt.values())
+    ):
+        raise RuntimeError("Prompt snapshot must contain initial/error strings and may contain missing_coverage")
+    return prompt
+
+
 def _run(args, artifacts: Path) -> dict:
     scratch = artifacts.parent / "inputs"
     scratch.mkdir(parents=True, exist_ok=True)
@@ -767,10 +875,7 @@ def _load_prompt_snapshot(prompt_path: Path) -> dict[str, str]:
         or not set(prompt).issubset(allowed_prompt_keys)
         or not all(isinstance(value, str) for value in prompt.values())
     ):
-        raise RuntimeError(
-            "Prompt snapshot must contain initial/error strings and may contain "
-            "missing_coverage"
-        )
+        raise RuntimeError("Prompt snapshot must contain initial/error strings and may contain missing_coverage")
     return prompt
 
 
