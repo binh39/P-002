@@ -23,7 +23,7 @@ from cloud.runtime_workspace import (
 )
 from src.optimization.models import ExperimentConfig, ProjectLayout, SymbolTarget
 from src.optimization.runner import CoverUpExperimentRunner
-from src.promptopt_pause import ModelRateLimitPauseError
+from src.promptopt_pause import ModelRateLimitPauseError, request_rate_limit_pause
 
 
 def _download(bucket, object_name: str, destination: Path) -> None:
@@ -237,6 +237,23 @@ def _execute(bucket, request: dict[str, Any], root: Path) -> dict[str, Any]:
         pytest_args=str(values.get("pytest_args", "")),
         projects={project: layout},
     )
+    # This opt-in hook is deliberately disabled by default. It provides a
+    # deterministic Cloud Run migration drill for the same durable pause path
+    # used by real provider 429s, without consuming quota or depending on a
+    # live rate-limit incident. A resumed worker skips the hook after its
+    # checkpoint has been restored.
+    if (
+        os.environ.get("PROMPTOPT_TEST_PAUSE_BEFORE_EXECUTION", "").strip() == "1"
+        and os.environ.get("PROMPTOPT_RESUMING") != "1"
+    ):
+        error = ModelRateLimitPauseError("controlled test pause before worker execution")
+        request_rate_limit_pause(
+            model=config.coverup_model,
+            attempt=1,
+            error=error,
+            force=True,
+        )
+        raise error
     runner = CoverUpExperimentRunner(config)
     if request["operation"] == "batch":
         prompt = root / "prompt.json"

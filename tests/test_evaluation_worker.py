@@ -12,6 +12,7 @@ import pytest
 
 from cloud.run_evaluation_worker import _execute, _relocate_venv_scripts, _safe_extract_checkpoint, _stage_project
 from src.optimization.models import ProjectLayout
+from src.promptopt_pause import ModelRateLimitPauseError
 
 
 class _Blob:
@@ -400,3 +401,50 @@ def test_final_generation_runs_inside_the_assigned_project_worker(tmp_path, monk
     assert values["worker-artifacts.zip"].startswith(b"PK")
     assert captured["seed"] == 13
     assert {target.project for target in captured["targets"]} == {"uploaded"}
+
+
+def test_worker_test_pause_hook_writes_durable_signal_before_execution(tmp_path, monkeypatch):
+    from cloud import run_evaluation_worker
+
+    project_root = tmp_path / "project"
+    package = project_root / "pkg"
+    tests = project_root / "tests"
+    package.mkdir(parents=True)
+    tests.mkdir()
+    (package / "__init__.py").write_text("VALUE = 1\n", encoding="utf-8")
+    monkeypatch.setattr(
+        run_evaluation_worker,
+        "_stage_project",
+        lambda *_args: (
+            project_root,
+            ProjectLayout(
+                package_dir=package,
+                tests_dir=tests,
+                import_root=project_root,
+                python_executable=Path(os.sys.executable),
+                runtime_digest="runtime-digest",
+            ),
+        ),
+    )
+    monkeypatch.setenv("PROMPTOPT_TEST_PAUSE_BEFORE_EXECUTION", "1")
+    request = {
+        "schema_version": 1,
+        "operation": "batch",
+        "project": "uploaded",
+        "project_spec": {"project": "uploaded"},
+        "targets": [],
+        "config": {
+            "coverup_model": "model",
+            "max_attempts": 1,
+            "repeat_tests": 0,
+            "max_concurrency": 1,
+            "pytest_args": "",
+        },
+    }
+
+    with pytest.raises(ModelRateLimitPauseError, match="controlled test pause"):
+        _execute(_Bucket({}), request, tmp_path / "execution")
+
+    payload = json.loads((tmp_path / "execution" / "artifacts" / "pause_signal.json").read_text(encoding="utf-8"))
+    assert payload["status_code"] == 429
+    assert payload["model"] == "model"
