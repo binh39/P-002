@@ -1090,6 +1090,79 @@ def test_runner_resume_skips_targets_with_durable_checkpoints(
     assert len(list(Path(record.tests_workspace).rglob("test_opt_*.py"))) == 2
 
 
+def test_runner_controlled_pause_occurs_after_completed_target_checkpoint(tmp_path, monkeypatch):
+    from src.promptopt_pause import ModelRateLimitPauseError
+
+    package_dir = tmp_path / "sample_repo" / "pkg"
+    tests_dir = tmp_path / "sample_repo" / "tests"
+    artifacts_dir = tmp_path / "artifacts"
+    package_dir.mkdir(parents=True)
+    tests_dir.mkdir(parents=True)
+    prompt_path = tmp_path / "prompt.json"
+    baseline_bundle().save(prompt_path)
+    pause_path = artifacts_dir / "pause_signal.json"
+    monkeypatch.setenv("PROMPTOPT_PAUSE_FILE", str(pause_path))
+    monkeypatch.setenv("PROMPTOPT_TEST_PAUSE_AFTER_COMPLETED_TARGETS", "1")
+    calls = []
+
+    def fake_subprocess_run(command, **kwargs):
+        del kwargs
+        calls.append(command[command.index("--target-symbols") + 1])
+        workspace = Path(command[command.index("--tests-dir") + 1])
+        saved = workspace / "test_opt.py"
+        saved.write_text("def test_first(): pass\n", encoding="utf-8")
+        spec = json.loads(Path(command[command.index("--target-spec-file") + 1]).read_text(encoding="utf-8"))[0]
+        Path(command[command.index("--trace-file") + 1]).write_text(
+            json.dumps(
+                {
+                    "source_file": spec["source_file"],
+                    "symbol": "first",
+                    "name": "first",
+                    "component": "initial",
+                    "outcome": "coverage_gain_saved",
+                    "saved_test": str(saved),
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return SimpleNamespace(returncode=0, stdout="ok")
+
+    monkeypatch.setattr("src.optimization.runner.run_streamed", fake_subprocess_run)
+    monkeypatch.setattr(
+        "src.optimization.runner.run_coverage",
+        lambda **kwargs: SimpleNamespace(returncode=1, stdout="no coverage"),
+    )
+    runner = CoverUpExperimentRunner(
+        ExperimentConfig(
+            project_root=tmp_path,
+            package_dir=package_dir,
+            tests_dir=tests_dir,
+            artifacts_dir=artifacts_dir,
+            coverup_model="fake-model",
+            max_concurrency=1,
+        )
+    )
+    target = SymbolTarget("project", "pkg/a.py", "first", "train")
+
+    with pytest.raises(ModelRateLimitPauseError, match="after 1 completed target"):
+        runner.evaluate_batch([target], prompt_path, candidate_id="candidate", split="train")
+
+    checkpoint_files = list(
+        (artifacts_dir / "runs" / "candidate" / "train").rglob("target_checkpoints/*.json")
+    )
+    assert len(checkpoint_files) == 1
+    assert pause_path.is_file()
+    assert calls == ["first"]
+
+    pause_path.unlink()
+    monkeypatch.setenv("PROMPTOPT_RESUMING", "1")
+    record = runner.evaluate_batch([target], prompt_path, candidate_id="candidate", split="train")
+
+    assert calls == ["first"]
+    assert [result.target.symbol for result in record.results] == ["first"]
+
+
 @pytest.mark.parametrize("split", ["train", "validation", "test"])
 def test_runner_batches_generation_but_scores_and_reports_each_target_separately(
     tmp_path,

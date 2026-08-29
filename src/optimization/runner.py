@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from src.promptopt_pause import ModelRateLimitPauseError, read_pause_request
+from src.promptopt_pause import ModelRateLimitPauseError, read_pause_request, request_rate_limit_pause
 
 from .coveragepy import SymbolCoverage, load_report, run_coverage, symbol_coverage
 from .metrics import build_feedback, score_symbol
@@ -868,7 +868,22 @@ class CoverUpExperimentRunner:
         started = time.monotonic()
         # A configured limiter is process-local, so multiple CoverUp processes
         # would exceed it. Preserve its semantics by serializing that rare mode.
-        worker_count = 1 if self.config.rate_limit is not None else min(len(jobs), max(1, self.config.max_concurrency))
+        controlled_pause_after = os.environ.get("PROMPTOPT_TEST_PAUSE_AFTER_COMPLETED_TARGETS", "").strip()
+        controlled_pause_threshold: int | None = None
+        if controlled_pause_after:
+            try:
+                controlled_pause_threshold = int(controlled_pause_after)
+            except ValueError as exc:
+                raise ValueError(
+                    "PROMPTOPT_TEST_PAUSE_AFTER_COMPLETED_TARGETS must be a positive integer"
+                ) from exc
+            if controlled_pause_threshold < 1:
+                raise ValueError("PROMPTOPT_TEST_PAUSE_AFTER_COMPLETED_TARGETS must be a positive integer")
+        worker_count = (
+            1
+            if self.config.rate_limit is not None or controlled_pause_after
+            else min(len(jobs), max(1, self.config.max_concurrency))
+        )
         outcomes_by_index = dict(restored_outcomes)
         job_positions = {job.artifact_token: int(job.artifact_token.rsplit("_", 1)[1]) for job in jobs}
 
@@ -881,10 +896,28 @@ class CoverUpExperimentRunner:
             )
             outcomes_by_index[position] = outcome
 
-        if worker_count == 1:
+        if not jobs:
+            # A pause can occur after the final target checkpoint is durable
+            # but before the aggregate batch record is written. Resume must
+            # finalize entirely from those checkpoints without constructing a
+            # zero-sized executor or re-running project code.
+            pass
+        elif worker_count == 1:
             for job in jobs:
                 outcome = evaluate_target(job)
                 retain_outcome(job, outcome)
+                if controlled_pause_threshold is not None and os.environ.get("PROMPTOPT_RESUMING") != "1":
+                    if len(outcomes_by_index) >= controlled_pause_threshold:
+                        error = ModelRateLimitPauseError(
+                            f"controlled test pause after {len(outcomes_by_index)} completed target(s)"
+                        )
+                        request_rate_limit_pause(
+                            model=self.config.coverup_model,
+                            attempt=1,
+                            error=error,
+                            force=True,
+                        )
+                        raise error
         else:
             pause_error: ModelRateLimitPauseError | None = None
             first_error: BaseException | None = None
