@@ -14,6 +14,7 @@ Usage (as the job command):
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -23,7 +24,7 @@ import tempfile
 from collections import deque
 from pathlib import Path
 
-from cloud.runtime_workspace import detect_layout, find_project_root, safe_extract_runtime_bundle, safe_extract_zip
+from cloud.runtime_workspace import _validate_project_id, detect_layout, find_project_root, safe_extract_zip
 
 
 def _run_cli(command: list[str]) -> tuple[int, str | None]:
@@ -80,6 +81,29 @@ def _download_object(bucket: str, object_name: str, destination: Path) -> None:
     storage.Client().bucket(bucket).blob(object_name).download_to_filename(str(destination))
 
 
+def _download_verified(
+    bucket: str,
+    object_name: str,
+    destination: Path,
+    *,
+    sha256: str | None = None,
+    generation: str | None = None,
+) -> None:
+    from google.cloud import storage
+
+    if generation:
+        blob = storage.Client().bucket(bucket).blob(object_name)
+        blob.reload()
+        actual = getattr(blob, "generation", None)
+        if actual is None or str(actual) != str(generation):
+            raise RuntimeError(f"Runtime object generation changed for {object_name}")
+    # Delegate the actual download so local/test adapters can provide an
+    # in-memory object store without having to emulate google-cloud-storage.
+    _download_object(bucket, object_name, destination)
+    if sha256 and hashlib.sha256(destination.read_bytes()).hexdigest() != sha256:
+        raise RuntimeError(f"Runtime source archive checksum changed for {object_name}")
+
+
 def _download_dir(bucket: str, prefix: str, destination: Path) -> int:
     """Restore a previously uploaded artifact tree, excluding its terminal sentinel."""
     from google.cloud import storage
@@ -88,7 +112,7 @@ def _download_dir(bucket: str, prefix: str, destination: Path) -> int:
     marker = normalized + "/"
     count = 0
     for blob in storage.Client().list_blobs(bucket, prefix=marker):
-        relative = blob.name[len(marker):]
+        relative = blob.name[len(marker) :]
         if not relative or relative in {"job_result.json", "pause_signal.json"}:
             continue
         target = destination / Path(relative)
@@ -118,6 +142,7 @@ def main() -> int:
     parser.add_argument("--pytest-args", default="")
     parser.add_argument("--reflection-temperature", type=float, default=0.7)
     parser.add_argument("--pause-after-429", type=int, default=5)
+    parser.add_argument("--evaluation-worker-timeout-seconds", type=int, default=3600)
     parser.add_argument("cli_args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     cli_args = list(args.cli_args)
@@ -135,6 +160,11 @@ def main() -> int:
             "PROMPTOPT_RESUMING",
             "PROMPTOPT_PAUSE_FILE",
             "PROMPTOPT_PAUSE_AFTER_429",
+            "PROMPTOPT_EVALUATION_MANIFEST",
+            "PROMPTOPT_EVALUATION_BUCKET",
+            "PROMPTOPT_EVALUATION_PREFIX",
+            "PROMPTOPT_EVALUATION_JOBS",
+            "PROMPTOPT_EVALUATION_TIMEOUT_SECONDS",
         )
         previous_environment = {name: os.environ.get(name) for name in managed_environment}
         temporary_root = Path(temporary).resolve()
@@ -147,8 +177,7 @@ def main() -> int:
             restored = _download_dir(args.bucket, args.resume_artifacts_name, local_dir)
             os.environ["PROMPTOPT_RESUMING"] = "1"
             print(
-                f"==> Restored {restored} checkpoint files from "
-                f"gs://{args.bucket}/{args.resume_artifacts_name}/",
+                f"==> Restored {restored} checkpoint files from gs://{args.bucket}/{args.resume_artifacts_name}/",
                 flush=True,
             )
 
@@ -164,20 +193,146 @@ def main() -> int:
                 _download_object(args.bucket, args.project_manifest_object, manifest_path)
                 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
                 projects = manifest.get("projects", [])
-                if not projects or not manifest.get("runtime_bundle_object"):
-                    raise RuntimeError("Uploaded-project GEPA requires projects and a prepared runtime bundle")
-                bundle = temporary_root / "runtime.tar.gz"
-                _download_object(args.bucket, manifest["runtime_bundle_object"], bundle)
-                runtime_root = Path(os.environ.get("PROMPTOPT_RUNTIME_ROOT", "/tmp/promptopt-runtime"))
-                if runtime_root.exists():
-                    shutil.rmtree(runtime_root)
-                runtime_python = safe_extract_runtime_bundle(bundle, runtime_root)
+                if not projects or manifest.get("schema_version") not in (2, 3):
+                    raise RuntimeError("Project GEPA requires an immutable-runtime manifest (schema 2 or 3)")
+                worker_project = os.environ.get("PROMPTOPT_CLOUD_PROJECT", "").strip()
+                worker_region = os.environ.get("PROMPTOPT_CLOUD_REGION", "").strip()
+                worker_names = {
+                    "sample": os.environ.get("PROMPTOPT_EVALUATION_JOB_SAMPLE", "").strip(),
+                    "3.10": os.environ.get("PROMPTOPT_EVALUATION_JOB_PY310", "").strip(),
+                    "3.11": os.environ.get("PROMPTOPT_EVALUATION_JOB_PY311", "").strip(),
+                    "3.12": os.environ.get("PROMPTOPT_EVALUATION_JOB_PY312", "").strip(),
+                    "3.13": os.environ.get("PROMPTOPT_EVALUATION_JOB_PY313", "").strip(),
+                }
+                relative_jobs = [name for name in worker_names.values() if name and not name.startswith("projects/")]
+                if relative_jobs and (not worker_project or not worker_region):
+                    raise RuntimeError(
+                        "Independent evaluation worker names require PROMPTOPT_CLOUD_PROJECT and PROMPTOPT_CLOUD_REGION"
+                    )
+                worker_jobs = {
+                    version: (
+                        name
+                        if name.startswith("projects/")
+                        else f"projects/{worker_project}/locations/{worker_region}/jobs/{name}"
+                    )
+                    for version, name in worker_names.items()
+                    if name
+                }
+                effective_manifest_path = local_dir / "execution_runtime_manifest.json"
+                if args.resume_artifacts_name and effective_manifest_path.is_file():
+                    effective_manifest = json.loads(effective_manifest_path.read_text(encoding="utf-8"))
+                    if effective_manifest.get("schema_version") not in (2, 3):
+                        raise RuntimeError("Saved execution runtime manifest is incompatible")
+                    incoming_projects = {str(item["project"]): item for item in projects}
+                    saved_projects = {str(item["project"]): item for item in effective_manifest.get("projects", [])}
+                    if set(saved_projects) != set(incoming_projects):
+                        raise RuntimeError("Resume project set differs from the immutable execution runtime manifest")
+                    for project_name, saved in saved_projects.items():
+                        incoming = incoming_projects[project_name]
+                        for field in (
+                            "kind",
+                            "archive_object",
+                            "runtime_bundle_object",
+                            "source_archive_sha256",
+                            "runtime_bundle_sha256",
+                            "source_archive_generation",
+                            "runtime_bundle_generation",
+                            "runtime_digest",
+                            "runtime_image",
+                            "runtime_worker_job",
+                            "runtime_protocol_version",
+                            "execution_mode",
+                            "python_version",
+                        ):
+                            if saved.get(field) != incoming.get(field):
+                                raise RuntimeError(f"Resume project {project_name} changed immutable field {field}")
+                    manifest = effective_manifest
+                    projects = list(saved_projects.values())
+                else:
+                    sample_job = worker_jobs.get("sample", "")
+                    sample_image = os.environ.get("PROMPTOPT_SAMPLE_RUNTIME_IMAGE", "").strip()
+                    for project in projects:
+                        if project.get("kind") != "sample":
+                            continue
+                        if not sample_job or not sample_image:
+                            raise RuntimeError("Remote sample evaluation requires an immutable worker job and image")
+                        base_digest = str(
+                            project.get("runtime_digest") or f"sample:{project.get('sample_slug', project['project'])}"
+                        )
+                        project["runtime_worker_job"] = sample_job
+                        project["runtime_image"] = sample_image
+                        project["execution_mode"] = project.get("execution_mode") or "generic_worker_bundle"
+                        project["runtime_protocol_version"] = 13
+                        project["runtime_digest"] = hashlib.sha256(
+                            json.dumps(
+                                {
+                                    "sample": base_digest,
+                                    "image": sample_image,
+                                    "worker_job": sample_job,
+                                    "runtime_protocol_version": 13,
+                                    "execution_mode": project["execution_mode"],
+                                },
+                                sort_keys=True,
+                                separators=(",", ":"),
+                            ).encode()
+                        ).hexdigest()
+                    manifest = {"schema_version": 3, "projects": projects}
+                    effective_manifest_path.parent.mkdir(parents=True, exist_ok=True)
+                    effective_manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+                # Remote workers consume the effective, execution-pinned
+                # manifest rather than the mutable API input manifest.
+                manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
                 sample_repos = temporary_root / "sample_repos"
                 project_layouts: dict[str, dict[str, str]] = {}
                 for project in projects:
                     name = project["project"]
+                    _validate_project_id(str(name))
+                    if project.get("kind") == "sample":
+                        slug = str(project.get("sample_slug") or name)
+                        bundled_root = Path(args.sample_repos_dir).resolve() / slug
+                        if not bundled_root.is_dir():
+                            raise RuntimeError(f"Bundled sample repository is missing: {slug}")
+                        destination = sample_repos / name
+                        shutil.copytree(bundled_root, destination)
+                        source, tests = detect_layout(
+                            destination,
+                            project.get("source_directory", slug),
+                            project.get("test_directory", "tests"),
+                        )
+                        project_layouts[name] = {
+                            "package_dir": str(source),
+                            "tests_dir": str(tests),
+                            "import_root": str(source.parent if (source / "__init__.py").is_file() else source),
+                            "runtime_digest": str(project.get("runtime_digest") or f"sample:{slug}"),
+                        }
+                        continue
+                    required = (
+                        "archive_object",
+                        "runtime_bundle_object",
+                        "runtime_digest",
+                        "runtime_image",
+                        "runtime_worker_job",
+                        "source_archive_sha256",
+                        "runtime_bundle_sha256",
+                        "python_version",
+                    )
+                    missing_fields = [field for field in required if not project.get(field)]
+                    if missing_fields:
+                        raise RuntimeError(
+                            f"Uploaded project {name} has an incomplete immutable runtime: {missing_fields}"
+                        )
                     archive = temporary_root / f"{name}.zip"
-                    _download_object(args.bucket, project["archive_object"], archive)
+                    _download_verified(
+                        args.bucket,
+                        project["archive_object"],
+                        archive,
+                        sha256=(
+                            project.get("source_archive_sha256")
+                            if project.get("execution_mode") or int(project.get("runtime_protocol_version") or 1) >= 13
+                            else None
+                        ),
+                        generation=project.get("source_archive_generation"),
+                    )
                     extracted = temporary_root / "projects" / name
                     safe_extract_zip(archive, extracted)
                     project_root = find_project_root(extracted)
@@ -194,23 +349,33 @@ def main() -> int:
                     # empty test directory for projects that have no unit
                     # suite (or only executable integration harnesses).
                     staged_tests.mkdir(parents=True, exist_ok=True)
-                    project_layouts[name] = {
+                    project_layout = {
                         "package_dir": str(staged_source),
                         "tests_dir": str(staged_tests),
                         "import_root": str(
                             staged_source.parent if (staged_source / "__init__.py").is_file() else staged_source
                         ),
+                        "runtime_digest": str(project["runtime_digest"]),
                     }
+                    project_layouts[name] = project_layout
                 layouts_path = temporary_root / "project-layouts.json"
                 layouts_path.write_text(
                     json.dumps(project_layouts, indent=2),
                     encoding="utf-8",
                 )
-                # GEPA, DSPy, and CoverUp run with the trusted image Python.
-                # Only generated/user tests run in the prepared project venv.
-                # This keeps optimizer dependencies isolated from arbitrary
-                # dependency constraints in uploaded projects.
-                os.environ["TESTGEN_PYTHON"] = str(runtime_python)
+                os.environ["PROMPTOPT_EVALUATION_MANIFEST"] = str(manifest_path)
+                os.environ["PROMPTOPT_EVALUATION_BUCKET"] = args.bucket
+                # Worker requests/results and checkpoints belong to the
+                # original execution prefix.  A resumed coordinator writes a
+                # new output prefix, but must continue using the old remote
+                # prefix so an interrupted worker can restore its durable
+                # checkpoint instead of starting from scratch.
+                evaluation_prefix = args.resume_artifacts_name or args.artifacts_name
+                os.environ["PROMPTOPT_EVALUATION_PREFIX"] = evaluation_prefix.strip("/")
+                os.environ["PROMPTOPT_EVALUATION_JOBS"] = json.dumps(worker_jobs)
+                os.environ["PROMPTOPT_EVALUATION_TIMEOUT_SECONDS"] = str(
+                    max(300, min(args.evaluation_worker_timeout_seconds, 7200))
+                )
             elif not sample_repos.is_dir():
                 raise RuntimeError(f"Bundled sample repository directory is missing: {sample_repos}")
             cli_args = [
@@ -290,9 +455,7 @@ def main() -> int:
             except json.JSONDecodeError:
                 pause_request = {"reason": "rate_limited", "message": "Model calls were rate limited"}
         status = (
-            "paused"
-            if pause_request is not None
-            else ("succeeded" if return_code == 0 and not missing else "failed")
+            "paused" if pause_request is not None else ("succeeded" if return_code == 0 and not missing else "failed")
         )
         (local_dir / "job_result.json").write_text(
             json.dumps(

@@ -121,6 +121,11 @@ async def test_uploaded_experiment_accepts_the_current_runtime_protocol():
                 archive_object="sources/project.zip",
                 runtime_bundle_object="runtime/current.tar.gz",
                 runtime_protocol_version=MINIMUM_RUNTIME_PROTOCOL_VERSION,
+                runtime_digest="runtime-digest",
+                runtime_image="runtime-image@sha256:one",
+                runtime_worker_job="projects/p/locations/r/jobs/eval-project",
+                source_archive_sha256="a" * 64,
+                runtime_bundle_sha256="b" * 64,
             )
         ],
         targets=refs,
@@ -473,6 +478,7 @@ async def test_optimization_passes_locked_multi_project_snapshot_to_cloud():
             assert [target.id for target in kwargs["train"]] == [keys[0]]
             assert [target.id for target in kwargs["validation"]] == [keys[1]]
             assert [target.id for target in kwargs["holdout"]] == [keys[2]]
+            assert kwargs["projects"] == experiment.project_snapshots
             candidate = PromptBundle(initial=prompt.initial + "\nPrefer boundary cases.", error=prompt.error)
             return OptimizationResult(
                 candidate,

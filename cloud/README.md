@@ -152,3 +152,9 @@ gcloud storage rm -r gs://p002-gepa-artifacts/prompt_optimization_v3
 # Lúc quay lại — chờ + tải kết quả của đúng execution đó
 .\cloud\run_gepa_job.ps1 -ExecutionName p002-gepa-d5r6z
 ```
+
+Runtime uploaded project uses one content-addressed source archive and one
+private virtualenv bundle per project. Versioned Python-minor evaluation
+workers are shared immutable workers; each task restores the selected
+project's bundle. `RUNTIME_PROJECT_IMAGE_MODE=project_image` is an explicit
+migration-only opt-in for the legacy image factory.

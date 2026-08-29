@@ -97,7 +97,7 @@ describe("Projects", () => {
     expect(advanced).not.toHaveAttribute("open");
     expect(screen.getByLabelText("Environment name")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole("combobox", { name: /Runtime environment/i }), {
+    fireEvent.change(screen.getByRole("combobox", { name: /Runtime label/i }), {
       target: { value: "environment-1" },
     });
     expect(screen.queryByLabelText("Environment name")).not.toBeInTheDocument();

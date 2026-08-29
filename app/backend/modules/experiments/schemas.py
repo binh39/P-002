@@ -128,10 +128,21 @@ class ProjectSnapshot(StrictModel):
     test_directory: str
     runner_project: str
     archive_object: str | None = None
+    source_archive_object: str | None = None
+    source_archive_generation: str | None = None
     runtime_artifact_prefix: str | None = None
     runtime_environment_id: str | None = None
     runtime_bundle_object: str | None = None
     runtime_protocol_version: int = 1
+    runtime_digest: str | None = None
+    runtime_image: str | None = None
+    runtime_worker_job: str | None = None
+    runtime_execution_mode: str | None = None
+    source_archive_sha256: str | None = None
+    runtime_bundle_sha256: str | None = None
+    runtime_bundle_generation: str | None = None
+    network_access: bool = False
+    python_version: str = "3.12"
 
 
 class CreateExperimentRequest(StrictModel):

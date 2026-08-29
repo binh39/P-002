@@ -3,8 +3,10 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from backend.modules.projects.repository import InMemoryProjectRepository
-from backend.modules.projects.runtime import CloudRunRuntimePreparer, RuntimePreparationService
+from backend.modules.projects.runtime import CloudRunRuntimePreparer, RuntimePreparationService, _bind_runtime_identity
 from backend.modules.projects.schemas import (
+    MINIMUM_RUNTIME_PROTOCOL_VERSION,
+    PREPARED_RUNTIME_PROTOCOL_VERSION,
     ProjectRecord,
     ProjectSettings,
     ProjectStatus,
@@ -52,8 +54,23 @@ class FakeRunner:
         return self.report
 
 
+class FakeFactory:
+    def __init__(self, report: RuntimeReport):
+        self.report = report
+        self.started: list[tuple[str, str]] = []
+
+    async def start(self, project, prepared, preparation_prefix):
+        assert prepared.protocol_version == PREPARED_RUNTIME_PROTOCOL_VERSION
+        self.started.append((project.id, preparation_prefix))
+        return f"runner-jobs/runtime-images/{project.id}"
+
+    async def collect(self, prefix):
+        assert prefix.startswith("runner-jobs/runtime-images/")
+        return self.report
+
+
 @pytest.mark.asyncio
-async def test_conflicting_candidate_is_rejected_without_replacing_active_bundle():
+async def test_conflicting_project_is_rejected_without_touching_another_project_runtime():
     repository = InMemoryProjectRepository()
     existing = project("existing", status=RuntimeStatus.READY, bundle="runtime/active.tar.gz")
     candidate = project("candidate", status=RuntimeStatus.NOT_REQUESTED)
@@ -69,7 +86,7 @@ async def test_conflicting_candidate_is_rejected_without_replacing_active_bundle
 
     queued = await service.request(candidate)
     assert queued.runtime_status == RuntimeStatus.PREPARING
-    assert runner.started_with == ["existing", "candidate"]
+    assert runner.started_with == ["candidate"]
     rejected = await service.refresh(candidate)
 
     assert rejected.runtime_status == RuntimeStatus.FAILED
@@ -80,47 +97,113 @@ async def test_conflicting_candidate_is_rejected_without_replacing_active_bundle
 
 
 @pytest.mark.asyncio
-async def test_compatible_candidate_atomically_replaces_bundle_for_all_members():
+async def test_compatible_project_publishes_only_its_immutable_runtime():
     repository = InMemoryProjectRepository()
     existing = project("existing", status=RuntimeStatus.READY, bundle="runtime/active.tar.gz")
     candidate = project("candidate", status=RuntimeStatus.NOT_REQUESTED)
     await repository.create(existing)
     await repository.create(candidate)
     members = {
-        project_id: RuntimeProjectReport(
+        "candidate": RuntimeProjectReport(
             source_directory="pkg",
             test_directory="tests",
             collected_tests=1,
             statement_coverage=1.0,
             branch_coverage=1.0,
         )
-        for project_id in ("existing", "candidate")
     }
-    runner = FakeRunner(
-        RuntimeReport(
-            status=RuntimeStatus.READY,
-            projects=members,
-            install_strategy="uv shared resolution",
-            dependency_fingerprint="digest-2",
-            bundle_object="runtime/candidate.tar.gz",
-            protocol_version=2,
-        )
+    prepared = RuntimeReport(
+        status=RuntimeStatus.READY,
+        projects=members,
+        install_strategy="uv isolated resolution",
+        dependency_fingerprint="digest-2",
+        runtime_digest="d" * 64,
+        python_version="3.12",
+        runtime_image=f"promptopt-runtime-py312@sha256:{'a' * 64}",
+        runtime_worker_job="projects/p/locations/r/jobs/eval-candidate",
+        source_archive_sha256="a" * 64,
+        source_archive_object="runner-jobs/source-archives/a.zip",
+        runtime_bundle_sha256="b" * 64,
+        bundle_object="runtime/candidate.tar.gz",
+        protocol_version=MINIMUM_RUNTIME_PROTOCOL_VERSION,
     )
+    expected_runtime_digest = _bind_runtime_identity(prepared)
+    runner = FakeRunner(prepared)
     service = RuntimePreparationService(repository, runner)
 
     await service.request(candidate)
     accepted = await service.refresh(candidate)
 
     assert accepted.runtime_status == RuntimeStatus.READY
-    for project_id in ("existing", "candidate"):
-        member = await repository.get(project_id)
-        assert member.runtime_bundle_object == "runtime/candidate.tar.gz"
-        assert member.runtime_dependency_fingerprint == "digest-2"
-        assert member.runtime_status == RuntimeStatus.READY
+    member = await repository.get("candidate")
+    assert member.runtime_bundle_object == "runtime/candidate.tar.gz"
+    assert member.runtime_dependency_fingerprint == "digest-2"
+    assert member.runtime_digest == expected_runtime_digest
+    assert member.runtime_worker_job == "projects/p/locations/r/jobs/eval-candidate"
+    assert member.source_archive_sha256 == "a" * 64
+    assert member.runtime_bundle_sha256 == "b" * 64
+    assert member.runtime_status == RuntimeStatus.READY
+    unchanged = await repository.get("existing")
+    assert unchanged.runtime_bundle_object == "runtime/active.tar.gz"
 
 
 @pytest.mark.asyncio
-async def test_stale_runtime_result_cannot_overwrite_new_environment_membership():
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("runtime_digest", "not-a-digest"),
+        ("source_archive_sha256", "A" * 64),
+        ("runtime_bundle_sha256", "too-short"),
+    ],
+)
+async def test_generic_runtime_rejects_malformed_content_digests(field, value):
+    repository = InMemoryProjectRepository()
+    candidate = project("candidate", status=RuntimeStatus.NOT_REQUESTED)
+    await repository.create(candidate)
+    report = RuntimeReport(
+        status=RuntimeStatus.READY,
+        projects={"candidate": RuntimeProjectReport(source_directory="pkg", test_directory="tests")},
+        runtime_digest="d" * 64,
+        runtime_image=f"promptopt-runtime-py312@sha256:{'a' * 64}",
+        runtime_worker_job="projects/p/locations/r/jobs/eval-candidate",
+        source_archive_sha256="b" * 64,
+        source_archive_object="runner-jobs/source-archives/b.zip",
+        runtime_bundle_sha256="c" * 64,
+        bundle_object="runtime/candidate.tar.gz",
+        protocol_version=PREPARED_RUNTIME_PROTOCOL_VERSION,
+    ).model_copy(update={field: value})
+    service = RuntimePreparationService(repository, FakeRunner(report))
+
+    await service.request(candidate)
+    rejected = await service.refresh(candidate)
+
+    assert rejected.runtime_status == RuntimeStatus.FAILED
+    assert "complete runtime bundle" in (rejected.runtime_report.error or "")
+
+
+def test_runtime_digest_binds_protocol_and_execution_mode():
+    report = RuntimeReport(
+        status=RuntimeStatus.READY,
+        runtime_digest="a" * 64,
+        runtime_image="repo/runtime@sha256:" + "b" * 64,
+        runtime_worker_job="projects/p/locations/r/jobs/worker",
+        source_archive_sha256="c" * 64,
+        runtime_bundle_sha256="d" * 64,
+        protocol_version=13,
+        execution_mode="generic_worker_bundle",
+    )
+
+    generic_digest = _bind_runtime_identity(report)
+    project_image_digest = _bind_runtime_identity(
+        report.model_copy(update={"protocol_version": 12, "execution_mode": "project_image"})
+    )
+
+    assert len(generic_digest) == 64
+    assert generic_digest != project_image_digest
+
+
+@pytest.mark.asyncio
+async def test_runtime_result_for_multiple_projects_is_rejected():
     repository = InMemoryProjectRepository()
     existing = project("existing", status=RuntimeStatus.READY, bundle="runtime/active.tar.gz")
     candidate = project("candidate", status=RuntimeStatus.NOT_REQUESTED)
@@ -146,13 +229,120 @@ async def test_stale_runtime_result_cannot_overwrite_new_environment_membership(
     rejected = await service.refresh(candidate)
 
     assert rejected.runtime_status == RuntimeStatus.FAILED
-    assert "membership changed" in (rejected.runtime_report.error or "")
+    assert "immutable project snapshot" in (rejected.runtime_report.error or "")
     assert (await repository.get("existing")).runtime_bundle_object == "runtime/active.tar.gz"
     assert (await repository.get("concurrent-member")).runtime_bundle_object == "runtime/new-active.tar.gz"
 
 
 @pytest.mark.asyncio
-async def test_environment_rebuilds_are_queued_instead_of_rejected_as_busy():
+async def test_ready_runtime_with_old_protocol_is_rejected_before_admission():
+    repository = InMemoryProjectRepository()
+    candidate = project("candidate", status=RuntimeStatus.NOT_REQUESTED)
+    await repository.create(candidate)
+    runner = FakeRunner(
+        RuntimeReport(
+            status=RuntimeStatus.READY,
+            projects={
+                "candidate": RuntimeProjectReport(
+                    source_directory="pkg",
+                    test_directory="tests",
+                )
+            },
+            runtime_digest="runtime-digest",
+            runtime_image="image@sha256:one",
+            runtime_worker_job="projects/p/locations/r/jobs/worker",
+            source_archive_sha256="a" * 64,
+            runtime_bundle_sha256="b" * 64,
+            bundle_object="runtime/candidate.tar.gz",
+            protocol_version=PREPARED_RUNTIME_PROTOCOL_VERSION - 1,
+        )
+    )
+    service = RuntimePreparationService(repository, runner)
+
+    await service.request(candidate)
+    rejected = await service.refresh(candidate)
+
+    assert rejected.runtime_status == RuntimeStatus.FAILED
+    assert "protocol is outdated" in (rejected.runtime_report.error or "")
+
+
+@pytest.mark.asyncio
+async def test_prepared_capsule_is_materialized_before_project_is_admitted():
+    repository = InMemoryProjectRepository()
+    candidate = project("candidate", status=RuntimeStatus.NOT_REQUESTED)
+    await repository.create(candidate)
+    member = RuntimeProjectReport(source_directory="pkg", test_directory="tests", collected_tests=3)
+    prepared = RuntimeReport(
+        status=RuntimeStatus.READY,
+        projects={"candidate": member},
+        dependency_fingerprint="dependency-digest",
+        runtime_digest="e" * 64,
+        python_version="3.12",
+        runtime_image=f"repo/runtime-base@sha256:{'a' * 64}",
+        runtime_worker_job="projects/p/locations/r/jobs/generic-worker",
+        source_archive_sha256="b" * 64,
+        source_archive_object="runner-jobs/source-archives/b.zip",
+        runtime_bundle_sha256="c" * 64,
+        bundle_object="runner-jobs/runtime/candidate/runtime.tar.gz",
+        protocol_version=PREPARED_RUNTIME_PROTOCOL_VERSION,
+    )
+    final = prepared.model_copy(
+        update={
+            "runtime_digest": "f" * 64,
+            "runtime_image": f"repo/project-candidate@sha256:{'d' * 64}",
+            "runtime_worker_job": "projects/p/locations/r/jobs/eval-candidate-image",
+            "protocol_version": MINIMUM_RUNTIME_PROTOCOL_VERSION,
+        }
+    )
+    factory = FakeFactory(final)
+    service = RuntimePreparationService(repository, FakeRunner(prepared), factory)
+
+    await service.request(candidate)
+    building = await service.refresh(candidate)
+    assert building.runtime_status == RuntimeStatus.PREPARING
+    assert building.runtime_factory_prefix == "runner-jobs/runtime-images/candidate"
+    assert factory.started == [("candidate", "runner-jobs/runtime/candidate")]
+
+    admitted = await service.refresh(building)
+    assert admitted.runtime_status == RuntimeStatus.READY
+    assert admitted.runtime_image == f"repo/project-candidate@sha256:{'d' * 64}"
+    assert admitted.runtime_worker_job == "projects/p/locations/r/jobs/eval-candidate-image"
+    assert admitted.runtime_report is not None
+    assert admitted.runtime_report.protocol_version == MINIMUM_RUNTIME_PROTOCOL_VERSION
+
+
+@pytest.mark.asyncio
+async def test_factory_result_without_dedicated_worker_is_rejected():
+    repository = InMemoryProjectRepository()
+    candidate = project("candidate", status=RuntimeStatus.NOT_REQUESTED)
+    await repository.create(candidate)
+    member = RuntimeProjectReport(source_directory="pkg", test_directory="tests")
+    prepared = RuntimeReport(
+        status=RuntimeStatus.READY,
+        projects={"candidate": member},
+        runtime_digest="prepared-digest",
+        runtime_image=f"repo/runtime-base@sha256:{'a' * 64}",
+        runtime_worker_job="projects/p/locations/r/jobs/generic-worker",
+        source_archive_sha256="b" * 64,
+        runtime_bundle_sha256="c" * 64,
+        bundle_object="runner-jobs/runtime/candidate/runtime.tar.gz",
+        protocol_version=PREPARED_RUNTIME_PROTOCOL_VERSION,
+    )
+    incomplete = prepared.model_copy(
+        update={"protocol_version": MINIMUM_RUNTIME_PROTOCOL_VERSION, "runtime_worker_job": None}
+    )
+    service = RuntimePreparationService(repository, FakeRunner(prepared), FakeFactory(incomplete))
+
+    await service.request(candidate)
+    building = await service.refresh(candidate)
+    rejected = await service.refresh(building)
+
+    assert rejected.runtime_status == RuntimeStatus.FAILED
+    assert "complete immutable worker identity" in (rejected.runtime_report.error or "")
+
+
+@pytest.mark.asyncio
+async def test_project_runtime_builds_can_start_independently():
     repository = InMemoryProjectRepository()
     first = project("first", status=RuntimeStatus.NOT_REQUESTED)
     second = project("second", status=RuntimeStatus.NOT_REQUESTED)
@@ -167,8 +357,8 @@ async def test_environment_rebuilds_are_queued_instead_of_rejected_as_busy():
     second_response = await service.request(second)
 
     assert first_response.runtime_status == RuntimeStatus.PREPARING
-    assert second_response.runtime_status == RuntimeStatus.QUEUED
-    assert runner.start_calls == [["first"]]
+    assert second_response.runtime_status == RuntimeStatus.PREPARING
+    assert runner.start_calls == [["first"], ["second"]]
 
 
 @pytest.mark.asyncio

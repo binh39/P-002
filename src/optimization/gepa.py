@@ -48,8 +48,7 @@ COMPONENT_ROLES = {
         "assumption, and repair the complete pytest module without losing useful behavior."
     ),
     "missing_coverage": (
-        "Expand an existing valid test module to cover remaining lines and branches "
-        "without losing useful behavior."
+        "Expand an existing valid test module to cover remaining lines and branches without losing useful behavior."
     ),
 }
 MIN_COMPONENT_CHAR_BUDGET = {"initial": 2_400, "error": 1_600, "missing_coverage": 1_600}
@@ -222,7 +221,12 @@ def _log_value(value: Any) -> Any:
     if value is None or isinstance(value, int | float | bool):
         return value
     if isinstance(value, str):
-        if len(value) > 1000 and os.environ.get("PROMPTOPT_COMPACT_LOGS", "").strip().lower() in {"1", "true", "yes", "on"}:
+        if len(value) > 1000 and os.environ.get("PROMPTOPT_COMPACT_LOGS", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }:
             return f"[...{len(value)} chars...]"
         return value
     if isinstance(value, Mapping):
@@ -329,10 +333,15 @@ def _evaluation_digest(
         )
     }
     source_hashes = {}
+    runtime_digests = {}
     if config is not None:
         project_root = Path(getattr(config, "project_root", ".")).resolve()
         resolve_package = getattr(config, "package_dir_for", None)
         for target in targets:
+            layouts = getattr(config, "projects", None) or {}
+            layout = layouts.get(target.project)
+            if layout is not None and getattr(layout, "runtime_digest", None):
+                runtime_digests[target.project] = str(layout.runtime_digest)
             if resolve_package is not None:
                 package_dir = Path(resolve_package(target.project)).resolve()
             else:
@@ -359,6 +368,7 @@ def _evaluation_digest(
         "config": config_values,
         "targets": [_target_identity(target) for target in targets],
         "sources": source_hashes,
+        "runtimes": runtime_digests,
     }
     serialized = json.dumps(payload, sort_keys=True, ensure_ascii=True)
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:12]
@@ -1109,9 +1119,7 @@ class CoverUpPromptAdapter:
         reflection_minibatch_size: int = REFLECTION_MINIBATCH_SIZE,
     ) -> None:
         if not 1 <= reflection_minibatch_size <= REFLECTION_MINIBATCH_SIZE:
-            raise ValueError(
-                f"reflection_minibatch_size must be between 1 and {REFLECTION_MINIBATCH_SIZE}"
-            )
+            raise ValueError(f"reflection_minibatch_size must be between 1 and {REFLECTION_MINIBATCH_SIZE}")
         self.runner = runner
         self.candidate_dir = candidate_dir
         self.targets_by_split = targets_by_split
@@ -1602,7 +1610,7 @@ class CoverUpPromptAdapter:
         case_targets: Mapping[str, SymbolTarget],
     ) -> list[dict[str, Any]]:
         history: list[dict[str, Any]] = []
-        visible_cases = cases[:self.reflection_minibatch_size]
+        visible_cases = cases[: self.reflection_minibatch_size]
         for attempt in range(1, MAX_OPTIMIZER_TEST_EXPERIMENTS + 1):
             prompt = f"""
 You are the diagnostic teacher for a reusable pytest-generation prompt. Do not rewrite the prompt yet. First prove a concrete strategy by repairing one failed case with an executable test.
@@ -2103,9 +2111,7 @@ def optimize(
     if evaluation_replicates < 1:
         raise ValueError("evaluation_replicates must be at least 1")
     if not 1 <= reflection_minibatch_size <= REFLECTION_MINIBATCH_SIZE:
-        raise ValueError(
-            f"reflection_minibatch_size must be between 1 and {REFLECTION_MINIBATCH_SIZE}"
-        )
+        raise ValueError(f"reflection_minibatch_size must be between 1 and {REFLECTION_MINIBATCH_SIZE}")
     if auto is not None:
         max_metric_calls = AUTO_METRIC_BUDGETS[auto]
     if max_metric_calls is None or max_metric_calls < 1:

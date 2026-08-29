@@ -1,13 +1,40 @@
 from datetime import datetime
 from enum import StrEnum
+from urllib.parse import parse_qsl, urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-MINIMUM_RUNTIME_PROTOCOL_VERSION = 8
+PREPARED_RUNTIME_PROTOCOL_VERSION = 11
+MINIMUM_RUNTIME_PROTOCOL_VERSION = 13
+RUNTIME_EXECUTION_MODE_GENERIC = "generic_worker_bundle"
+RUNTIME_EXECUTION_MODE_PROJECT_IMAGE = "project_image"
 
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+def _validate_package_index_url(value: str | None) -> str | None:
+    """Reject credentials before an index URL reaches Firestore or GCS."""
+    if value is None:
+        return None
+    parsed = urlsplit(value)
+    sensitive_query_names = {"auth", "key", "password", "secret", "token"}
+    if (
+        parsed.username
+        or parsed.password
+        or any(
+            (
+                key.casefold() in sensitive_query_names
+                or key.casefold().endswith(("_key", "_token", "_secret", "_password"))
+            )
+            for key, _ in parse_qsl(parsed.query, keep_blank_values=True)
+        )
+    ):
+        raise ValueError(
+            "extra_package_index must not contain credentials; use a Secret Manager-backed index reference"
+        )
+    return value
 
 
 class ProjectStatus(StrEnum):
@@ -47,9 +74,20 @@ class RuntimeReport(StrictModel):
     commands: list[dict] = Field(default_factory=list)
     projects: dict[str, RuntimeProjectReport] = Field(default_factory=dict)
     dependency_fingerprint: str | None = None
+    runtime_digest: str | None = None
+    python_version: str | None = None
+    runtime_image: str | None = None
+    runtime_worker_job: str | None = None
+    source_archive_sha256: str | None = None
+    source_archive_object: str | None = None
+    source_archive_generation: str | None = None
+    runtime_bundle_sha256: str | None = None
+    runtime_bundle_generation: str | None = None
+    network_access: bool = False
     bundle_object: str | None = None
     error: str | None = None
     protocol_version: int = 1
+    execution_mode: str = RUNTIME_EXECUTION_MODE_GENERIC
 
 
 class RuntimeSettings(StrictModel):
@@ -69,6 +107,8 @@ class DependencySettings(StrictModel):
     lock_file: str | None = Field(default=None, max_length=300)
     cache_dependencies: bool = True
     extra_package_index: str | None = Field(default=None, max_length=500)
+
+    _validated_extra_package_index = field_validator("extra_package_index")(_validate_package_index_url)
 
 
 class TestSettings(StrictModel):
@@ -121,6 +161,8 @@ class DependencySettingsPatch(StrictModel):
     lock_file: str | None = Field(default=None, max_length=300)
     cache_dependencies: bool | None = None
     extra_package_index: str | None = Field(default=None, max_length=500)
+
+    _validated_extra_package_index = field_validator("extra_package_index")(_validate_package_index_url)
 
 
 class TestSettingsPatch(StrictModel):
@@ -187,9 +229,19 @@ class ProjectResponse(StrictModel):
     runtime_environment_name: str | None = None
     runtime_bundle_object: str | None = None
     runtime_dependency_fingerprint: str | None = None
+    runtime_digest: str | None = None
+    runtime_image: str | None = None
+    runtime_worker_job: str | None = None
+    runtime_execution_mode: str | None = None
+    source_archive_sha256: str | None = None
+    runtime_source_archive_object: str | None = None
+    runtime_source_archive_generation: str | None = None
+    runtime_bundle_sha256: str | None = None
+    runtime_bundle_generation: str | None = None
     runtime_status: RuntimeStatus = RuntimeStatus.NOT_REQUESTED
     runtime_report: RuntimeReport | None = None
     runtime_artifact_prefix: str | None = None
+    runtime_factory_prefix: str | None = None
     runtime_started_at: datetime | None = None
     runtime_finished_at: datetime | None = None
     created_at: datetime

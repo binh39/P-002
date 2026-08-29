@@ -59,13 +59,6 @@ class ProjectService:
                     "The selected runtime environment does not exist",
                 )
             environment_name = existing_members[0].runtime_environment_name or environment_name
-            expected_python = existing_members[0].settings.runtime.python_version
-            if payload.settings.runtime.python_version != expected_python:
-                raise AppError(
-                    409,
-                    "PYTHON_VERSION_CONFLICT",
-                    f"This environment uses Python {expected_python}",
-                )
         now = datetime.now(UTC)
         project = ProjectRecord(
             id=str(uuid4()),

@@ -205,10 +205,10 @@ export default function ProjectDetail() {
       {!isSample && runtimeStatus === "runtime_failed" && (
         <div className="platform-callout platform-callout-danger" role="alert">
           <div>
-            <strong>Project was not admitted to the environment</strong>
+            <strong>Project was not admitted to its isolated runtime</strong>
             <p>
-              {project.runtimeReport?.error ?? "Runtime validation failed."} The environment's
-              active bundle and its existing projects were left unchanged.
+              {project.runtimeReport?.error ?? "Runtime validation failed."} The existing project
+              runtime remains unchanged.
             </p>
           </div>
           <button className="secondary-button" onClick={() => navigate("/projects")}>
@@ -280,6 +280,10 @@ export default function ProjectDetail() {
                 <div>
                   <dt>Environment</dt>
                   <dd>{project.runtimeEnvironmentName || "Bundled sample environment"}</dd>
+                </div>
+                <div>
+                  <dt>Execution mode</dt>
+                  <dd>{project.runtimeReport?.executionMode || "Generic worker + project venv"}</dd>
                 </div>
                 <div>
                   <dt>Dependency fingerprint</dt>

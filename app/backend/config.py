@@ -56,7 +56,18 @@ class Settings(BaseSettings):
     cloud_run_test_generation_timeout_seconds: int = Field(default=7200, ge=300, le=86400)
     runtime_execution_backend: Literal["disabled", "cloud_run_job"] = "disabled"
     cloud_run_runtime_job: str = "promptopt-runtime-preparer"
+    cloud_run_runtime_job_py310: str = ""
+    cloud_run_runtime_job_py311: str = ""
+    cloud_run_runtime_job_py312: str = ""
+    cloud_run_runtime_job_py313: str = ""
+    cloud_run_runtime_factory_job: str = "promptopt-runtime-image-factory"
     cloud_run_runtime_timeout_seconds: int = Field(default=1800, ge=60, le=7200)
+    cloud_run_runtime_factory_timeout_seconds: int = Field(default=3600, ge=300, le=7200)
+    runtime_project_image_mode: Literal["generic_worker_bundle", "project_image"] = "generic_worker_bundle"
+    runtime_image_repository: str = ""
+    runtime_worker_service_account: str = ""
+    runtime_build_service_account: str = ""
+    runtime_worker_coverup_model: str = "vertex_ai/gemini-3.6-flash"
     runtime_bundle_protocol_version: int = Field(default=MINIMUM_RUNTIME_PROTOCOL_VERSION, ge=1)
     gepa_max_concurrency: int = Field(default=10, ge=1, le=32)
     gepa_repeat_tests: int = Field(default=5, ge=0, le=20)
@@ -90,6 +101,34 @@ class Settings(BaseSettings):
     def sample_repos_path(self) -> Path:
         return self.resolve_app_path(self.sample_repos_dir)
 
+    @property
+    def cloud_run_runtime_jobs(self) -> dict[str, str]:
+        """Return explicitly deployed admission jobs keyed by Python minor."""
+        configured = {
+            "3.10": self.cloud_run_runtime_job_py310.strip(),
+            "3.11": self.cloud_run_runtime_job_py311.strip(),
+            "3.12": self.cloud_run_runtime_job_py312.strip() or self.cloud_run_runtime_job.strip(),
+            "3.13": self.cloud_run_runtime_job_py313.strip(),
+        }
+        return {version: job for version, job in configured.items() if job}
+
+    @property
+    def project_runtime_image_repository(self) -> str:
+        configured = self.runtime_image_repository.strip()
+        return configured or (
+            f"{self.cloud_tasks_location}-docker.pkg.dev/{self.gcp_project_id}/promptopt/project-runtimes"
+        )
+
+    @property
+    def project_runtime_worker_service_account(self) -> str:
+        configured = self.runtime_worker_service_account.strip()
+        return configured or f"promptopt-runner@{self.gcp_project_id}.iam.gserviceaccount.com"
+
+    @property
+    def project_runtime_build_service_account(self) -> str:
+        configured = self.runtime_build_service_account.strip()
+        return configured or f"promptopt-runtime-builder@{self.gcp_project_id}.iam.gserviceaccount.com"
+
     @model_validator(mode="after")
     def validate_production_backends(self):
         if self.app_env == "production":
@@ -115,8 +154,8 @@ class Settings(BaseSettings):
                 raise ValueError("CLOUD_RUN_TEST_GENERATION_JOB is required")
             if self.runtime_execution_backend != "cloud_run_job" or not self.cloud_run_runtime_job:
                 raise ValueError("RUNTIME_EXECUTION_BACKEND=cloud_run_job and CLOUD_RUN_RUNTIME_JOB are required")
-            if not self.admin_vertexai_project.strip():
-                raise ValueError("ADMIN_VERTEXAI_PROJECT is required in production")
+            if self.runtime_project_image_mode == "project_image" and not self.cloud_run_runtime_factory_job:
+                raise ValueError("CLOUD_RUN_RUNTIME_FACTORY_JOB is required")
             if not self.admin_vertexai_project.strip():
                 raise ValueError("ADMIN_VERTEXAI_PROJECT is required in production")
         return self

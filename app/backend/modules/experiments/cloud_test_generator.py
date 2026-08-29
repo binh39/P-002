@@ -12,6 +12,17 @@ import json
 from uuid import uuid4
 
 
+async def _object_generation(storage, object_name: str) -> str | None:
+    getter = getattr(storage, "generation", None)
+    if getter is None:
+        return None
+    try:
+        value = await getter(object_name)
+    except Exception:  # noqa: BLE001 - generation is optional for local fakes
+        return None
+    return str(value) if value is not None else None
+
+
 class CloudRunJobTestGenerator:
     def __init__(self, *, client, storage, bucket: str, job_name: str, timeout_seconds: int):
         self.client = client
@@ -44,41 +55,82 @@ class CloudRunJobTestGenerator:
 
         project_manifest_object = None
         if projects:
-            bundle_objects = {snapshot.runtime_bundle_object for snapshot in projects if snapshot.archive_object}
-            if bundle_objects:
-                if len(bundle_objects) != 1 or None in bundle_objects:
-                    raise ValueError("Uploaded projects must share one prepared runtime bundle")
-                source_bundle = bundle_objects.pop()
-                copied_bundle = f"{prefix}/inputs/runtime.tar.gz"
-                await self.storage.write(copied_bundle, await self.storage.read(source_bundle), "application/gzip")
-                manifest_projects = []
-                for snapshot in projects:
-                    if not snapshot.archive_object:
-                        continue
-                    copied_archive = f"{prefix}/inputs/projects/{snapshot.runner_project}.zip"
-                    await self.storage.write(
-                        copied_archive,
-                        await self.storage.read(snapshot.archive_object),
-                        "application/zip",
-                    )
+            manifest_projects = []
+            for snapshot in projects:
+                if not snapshot.archive_object:
                     manifest_projects.append(
                         {
+                            "kind": "sample",
                             "project": snapshot.runner_project,
-                            "archive_object": copied_archive,
+                            "sample_slug": snapshot.project_id.split(":", 1)[-1],
+                            "runtime_digest": snapshot.runtime_digest
+                            or f"{snapshot.project_id}:{snapshot.commit or 'bundled'}",
+                            "runtime_image": snapshot.runtime_image or "bundled-gepa-image",
+                            "execution_mode": snapshot.runtime_execution_mode or "generic_worker_bundle",
+                            "runtime_protocol_version": max(13, snapshot.runtime_protocol_version),
+                            "python_version": snapshot.python_version,
                             "source_directory": snapshot.source_directory,
                             "test_directory": snapshot.test_directory,
                         }
                     )
-                if manifest_projects:
-                    project_manifest_object = f"{prefix}/inputs/projects.json"
-                    await self.storage.write(
-                        project_manifest_object,
-                        json.dumps(
-                            {"projects": manifest_projects, "runtime_bundle_object": copied_bundle},
-                            separators=(",", ":"),
-                        ).encode(),
-                        "application/json",
-                    )
+                    continue
+                if (
+                    not snapshot.runtime_bundle_object
+                    or not snapshot.runtime_digest
+                    or not snapshot.runtime_worker_job
+                    or not snapshot.source_archive_sha256
+                    or not snapshot.runtime_bundle_sha256
+                ):
+                    raise ValueError(f"Uploaded project {snapshot.project_id} has no immutable runtime")
+                copied_archive = f"{prefix}/inputs/projects/{snapshot.runner_project}.zip"
+                copied_bundle = f"{prefix}/inputs/runtimes/{snapshot.runner_project}.tar.gz"
+                await self.storage.write(
+                    copied_archive,
+                    await self.storage.read(snapshot.source_archive_object or snapshot.archive_object),
+                    "application/zip",
+                )
+                await self.storage.write(
+                    copied_bundle,
+                    await self.storage.read(snapshot.runtime_bundle_object),
+                    "application/gzip",
+                )
+                copied_archive_generation = await _object_generation(self.storage, copied_archive)
+                copied_bundle_generation = await _object_generation(self.storage, copied_bundle)
+                manifest_projects.append(
+                    {
+                        "kind": "uploaded",
+                        "project": snapshot.runner_project,
+                        "archive_object": copied_archive,
+                        "runtime_bundle_object": copied_bundle,
+                        "runtime_digest": snapshot.runtime_digest,
+                        "runtime_image": snapshot.runtime_image,
+                        "runtime_worker_job": snapshot.runtime_worker_job,
+                        "execution_mode": snapshot.runtime_execution_mode or "generic_worker_bundle",
+                        "runtime_protocol_version": snapshot.runtime_protocol_version,
+                        "source_archive_sha256": snapshot.source_archive_sha256,
+                        "runtime_bundle_sha256": snapshot.runtime_bundle_sha256,
+                        "network_access": snapshot.network_access,
+                        **(
+                            {"source_archive_generation": copied_archive_generation}
+                            if copied_archive_generation
+                            else {}
+                        ),
+                        **({"runtime_bundle_generation": copied_bundle_generation} if copied_bundle_generation else {}),
+                        "python_version": snapshot.python_version,
+                        "source_directory": snapshot.source_directory,
+                        "test_directory": snapshot.test_directory,
+                    }
+                )
+            if manifest_projects:
+                project_manifest_object = f"{prefix}/inputs/projects.json"
+                await self.storage.write(
+                    project_manifest_object,
+                    json.dumps(
+                        {"schema_version": 3, "projects": manifest_projects},
+                        separators=(",", ":"),
+                    ).encode(),
+                    "application/json",
+                )
 
         args = [
             "-m",
@@ -101,6 +153,8 @@ class CloudRunJobTestGenerator:
             str(settings["max_concurrency"]),
             "--seed",
             str(settings["random_seed"]),
+            "--evaluation-worker-timeout-seconds",
+            str(self.timeout_seconds),
         ]
         if project_manifest_object:
             args.extend(["--project-manifest-object", project_manifest_object])

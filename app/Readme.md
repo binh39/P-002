@@ -357,29 +357,43 @@ Thá»© tá»± Æ°u tiÃªn Ä‘Æ°á»£c theo dÃµi chi tiáº¿t trong 
 ## Uploaded project runtime preparation
 
 Uploaded ZIP projects are never installed or executed by the API service. The
-user chooses a runtime environment during upload. After static analysis, the API
-copies every active member plus the new candidate into an opaque
-`runner-jobs/runtime/<execution-id>/` prefix and starts
-`promptopt-runtime-preparer` under the dedicated `promptopt-runtime` service
-account. The worker contains UV; uploaded repositories do not need to bundle or
-install UV themselves.
+control plane starts exactly one runtime-preparation job for each project under
+the dedicated `promptopt-runtime` service account. Runtime-environment labels are
+UI metadata only; projects are never dependency-resolved into a shared virtual
+environment. The worker contains UV, so uploaded repositories do not need to
+bundle or install UV themselves.
 
-The job safely extracts every ZIP, resolves all `uv.lock`, `pyproject.toml`, and
-`requirements.txt` constraints together, creates one shared virtual environment,
-installs every project, runs `pytest --collect-only`, and measures baseline
-statement/branch coverage for each member. A successful candidate is archived as
-an immutable `runtime.tar.gz` bundle. The API atomically points every member at
-the new bundle only after the full validation succeeds. Dependency conflicts or
-runtime failures reject only the candidate; the previous active bundle remains
-unchanged. Concurrent admissions are queued per environment.
+The preparation job safely extracts one ZIP, resolves its `uv.lock`,
+`pyproject.toml`, and requirements metadata, creates a project-only virtual
+environment, runs bounded collection/baseline diagnostics, and publishes a
+content-addressed source archive plus runtime bundle. The default protocol is
+`runtime_protocol_version=13` with `execution_mode=generic_worker_bundle`:
+the bundle is restored by a versioned generic worker for the project's Python
+minor (3.10--3.13), after generation and SHA-256 checks are verified. The
+worker/job image is pinned by digest and is shared only as the immutable tool
+layer; the source and venv bundle are never shared between projects.
 
-An uploaded project is selectable only after its persisted status is
-`runtime_ready`. Experiment creation first selects an environment and accepts
-only projects from that environment. The bundled sample catalog is represented
-by the read-only `sample-runtime` environment. A GEPA job restores the selected
-bundle at the same isolated path and uses its Python interpreter for CoverUp,
-pytest, SlipCover, and coverage subprocesses; it does not reinstall project
-dependencies on each optimization run.
+The legacy trusted image-factory path remains available only when
+`RUNTIME_PROJECT_IMAGE_MODE=project_image` is explicitly selected during the
+migration period. It is not used by the default upload path. The untrusted
+preparation account never receives Cloud Build or Cloud Run administration
+privileges. Admission persists the worker image/job identity, source ZIP hash,
+runtime bundle hash, Python minor, object generations, and combined runtime
+digest. A changed or incomplete identity must be rebuilt before it can run.
+
+There is one GEPA coordinator for the whole experiment, but it never installs a
+user project or executes user tests. It groups each metric batch by project and
+dispatches the groups concurrently to the exact Cloud Run job recorded for each
+project. Each worker downloads and verifies only that project's source and venv
+bundle, restores the venv in an isolated task workspace, and executes
+CoverUp/pytest/coverage with that project's interpreter. Diagnostic reflection
+tests and final test-suite generation use the same boundary. Therefore projects
+with different dependency graphs or supported Python minors can participate in
+one experiment without sharing a virtual environment.
+
+Bundled sample projects use the same remote worker protocol in web experiments,
+with an immutable sample image and worker job. The standalone local CLI keeps its
+existing bundled-sample path for development and smoke tests.
 
 Before the first production deployment, provision the runtime identity and
 prefix-restricted GCS permissions:

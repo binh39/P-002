@@ -14,6 +14,7 @@ export interface RuntimeReport {
   branchCoverage: number | null;
   error: string | null;
   dependencyFingerprint?: string | null;
+  executionMode?: string | null;
 }
 
 export interface PythonProject {

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+import configparser
 import hashlib
 import json
 import os
@@ -12,29 +14,41 @@ import subprocess
 import sys
 import tarfile
 import time
-import tomllib
 import venv
 import zipfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path, PurePosixPath
+from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import Version
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 runtime images use the backport.
+    import tomli as tomllib
 
 from src.optimization.project_setup import prepare_project
 
 MAX_ARCHIVE_ENTRIES = 20_000
 MAX_UNCOMPRESSED_BYTES = 250 * 1024 * 1024
 MAX_FILE_BYTES = 25 * 1024 * 1024
-RUNTIME_PROTOCOL_VERSION = 8
+# Protocol 11 describes the prepared project capsule. Protocol 12 is emitted
+# only after the trusted factory has baked that capsule and source archive into
+# a project-specific OCI image and created its dedicated worker job.
+RUNTIME_PROTOCOL_VERSION = 11
 RUNTIME_TOOL_PACKAGES = (
-    "pytest==9.1.1",
-    "pytest-asyncio==1.4.0",
-    "pytest-repeat==0.9.4",
-    "pytest-timeout==2.4.0",
-    "coverage==7.15.2",
+    "pytest>=7.4,<10",
+    "pytest-asyncio>=0.23,<2",
+    "pytest-repeat>=0.9,<1",
+    "pytest-timeout>=2.3,<3",
+    "coverage>=7,<8",
+    # CoverUp's subprocess contract follows the repository-pinned SlipCover
+    # CLI. Do not silently resolve a newer major/minor release in uploads.
     "slipcover==1.0.18",
 )
+MAX_ADMISSION_BASELINE_TESTS = 250
+ADMISSION_COMMAND_TIMEOUT_SECONDS = 120
 DEPENDENCY_FILES = (
     "uv.lock",
     "pyproject.toml",
@@ -61,6 +75,9 @@ _NON_SOURCE_PACKAGE_NAMES = {
     "test",
     "tests",
 }
+_TEST_EXTRA_NAMES = {"dev", "development", "test", "testing", "tests", "unit", "units"}
+_SENSITIVE_INDEX_QUERY_NAMES = {"auth", "key", "password", "secret", "token"}
+_PROJECT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 
 
 @dataclass(slots=True)
@@ -79,6 +96,11 @@ class RuntimeProjectSpec:
     archive: Path
     configured_source: str = "src"
     configured_tests: str = "tests"
+    configured_requirements: str | None = None
+    configured_lock: str | None = None
+    extra_package_index: str | None = None
+    configured_install_command: str = "pip install -r requirements.txt"
+    configured_network_access: bool = False
 
 
 @dataclass(slots=True)
@@ -106,6 +128,16 @@ class RuntimeResult:
     commands: list[CommandResult] = field(default_factory=list)
     projects: dict[str, RuntimeProjectResult] = field(default_factory=dict)
     dependency_fingerprint: str | None = None
+    runtime_digest: str | None = None
+    python_version: str | None = None
+    runtime_image: str | None = None
+    runtime_worker_job: str | None = None
+    source_archive_sha256: str | None = None
+    source_archive_object: str | None = None
+    source_archive_generation: str | None = None
+    runtime_bundle_sha256: str | None = None
+    runtime_bundle_generation: str | None = None
+    network_access: bool = False
     bundle_object: str | None = None
     error: str | None = None
     protocol_version: int = RUNTIME_PROTOCOL_VERSION
@@ -165,7 +197,13 @@ def safe_extract_runtime_bundle(bundle: Path, destination: Path) -> Path:
             target = (root / member.name).resolve()
             if target != root and root not in target.parents:
                 raise ValueError(f"Runtime bundle path escapes destination: {member.name}")
-        archive.extractall(root, filter="data")
+        try:
+            archive.extractall(root, filter="data")
+        except TypeError:
+            # ``filter`` was added after the oldest supported worker Python.
+            # Members were fully validated above, so the legacy extraction API
+            # remains safe on Python 3.10/3.11.
+            archive.extractall(root)
     python = root / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     if not python.is_file():
         raise RuntimeError("Runtime bundle does not contain a usable Python environment")
@@ -191,14 +229,8 @@ def find_project_root(extracted: Path) -> Path:
 
 def detect_layout(root: Path, configured_source: str = "src", configured_tests: str = "tests") -> tuple[Path, Path]:
     source = _safe_relative(root, configured_source)
-    configured_parts = {
-        part.casefold() for part in PurePosixPath(configured_source.replace("\\", "/")).parts
-    }
-    if (
-        configured_parts.intersection(_NON_SOURCE_PACKAGE_NAMES)
-        or not source.is_dir()
-        or not any(source.rglob("*.py"))
-    ):
+    configured_parts = {part.casefold() for part in PurePosixPath(configured_source.replace("\\", "/")).parts}
+    if configured_parts.intersection(_NON_SOURCE_PACKAGE_NAMES) or not source.is_dir() or not any(source.rglob("*.py")):
         source = _detect_source(root)
     tests = _safe_relative(root, configured_tests)
     if not tests.is_dir():
@@ -334,6 +366,169 @@ def _test_requirement_files(root: Path, tests: Path) -> list[Path]:
     return sorted(unique, key=lambda path: path.as_posix())
 
 
+def _split_requirement_block(value: str) -> list[str]:
+    """Parse the newline-oriented dependency syntax used by setup.cfg."""
+    return [
+        line.strip()
+        for line in value.splitlines()
+        if line.strip() and not line.lstrip().startswith(("#", "-r ", "--requirement "))
+    ]
+
+
+def _selected_extra_requirements(name: str, items: object) -> list[str]:
+    """Normalize test extras and legacy environment-marker extras."""
+    if isinstance(items, str):
+        values = _split_requirement_block(items)
+    elif isinstance(items, (list, tuple)):
+        values = [str(item).strip() for item in items if str(item).strip()]
+    else:
+        return []
+    normalized = name.strip()
+    if normalized.casefold() in _TEST_EXTRA_NAMES:
+        return values
+    if normalized.startswith(":"):
+        marker = normalized[1:].strip()
+        return [f"{value}; {marker}" if ";" not in value else value for value in values]
+    return []
+
+
+def _literal_setup_value(node: ast.AST, assignments: dict[str, ast.AST]) -> object:
+    """Evaluate only inert setup.py literals; repository code is never executed."""
+    if isinstance(node, ast.Name) and node.id in assignments:
+        return _literal_setup_value(assignments[node.id], assignments)
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+        return [_literal_setup_value(item, assignments) for item in node.elts]
+    if isinstance(node, ast.Dict):
+        return {
+            _literal_setup_value(key, assignments): _literal_setup_value(value, assignments)
+            for key, value in zip(node.keys, node.values, strict=True)
+            if key is not None
+        }
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left = _literal_setup_value(node.left, assignments)
+        right = _literal_setup_value(node.right, assignments)
+        if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):
+            return [*left, *right]
+        if isinstance(left, str) and isinstance(right, str):
+            return left + right
+        raise ValueError("unsupported setup.py addition")
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id in {"list", "set", "tuple"}
+        and len(node.args) == 1
+        and not node.keywords
+    ):
+        value = _literal_setup_value(node.args[0], assignments)
+        if isinstance(value, (list, tuple, set)):
+            return list(value)
+    raise ValueError("unsupported dynamic setup.py expression")
+
+
+def _setup_keyword_values(tree: ast.Module, assignments: dict[str, ast.AST]) -> dict[str, ast.AST]:
+    """Find direct setup keywords and static ``setup(**mapping)`` mutations."""
+    mappings: dict[str, dict[str, ast.AST]] = {}
+    for statement in tree.body:
+        if not isinstance(statement, ast.Assign) or len(statement.targets) != 1:
+            continue
+        target = statement.targets[0]
+        if not isinstance(target, ast.Subscript) or not isinstance(target.value, ast.Name):
+            continue
+        try:
+            key = _literal_setup_value(target.slice, assignments)
+        except ValueError:
+            continue
+        if isinstance(key, str):
+            mappings.setdefault(target.value.id, {})[key] = statement.value
+
+    setup_call = next(
+        (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and (
+                (isinstance(node.func, ast.Name) and node.func.id == "setup")
+                or (isinstance(node.func, ast.Attribute) and node.func.attr == "setup")
+            )
+        ),
+        None,
+    )
+    if setup_call is None:
+        return {}
+
+    keywords = {item.arg: item.value for item in setup_call.keywords if item.arg}
+    for item in setup_call.keywords:
+        if item.arg is None and isinstance(item.value, ast.Name):
+            keywords.update(mappings.get(item.value.id, {}))
+    return keywords
+
+
+def _legacy_metadata_requirements(root: Path) -> list[str]:
+    """Read install/test dependencies from legacy packaging metadata safely.
+
+    This deliberately supports only static literals. Dynamic setup scripts can
+    still provide a requirements file or a modern PEP 621 ``pyproject.toml``;
+    executing arbitrary setup.py code during archive admission is not safe.
+    """
+    requirements: list[str] = []
+    setup_cfg = root / "setup.cfg"
+    if setup_cfg.is_file():
+        parser = configparser.ConfigParser(interpolation=None)
+        parser.read(setup_cfg, encoding="utf-8")
+        if parser.has_option("options", "install_requires"):
+            requirements.extend(_split_requirement_block(parser.get("options", "install_requires")))
+        if parser.has_section("options.extras_require"):
+            for name, value in parser.items("options.extras_require"):
+                requirements.extend(_selected_extra_requirements(name, value))
+
+    setup_py = root / "setup.py"
+    if setup_py.is_file():
+        try:
+            tree = ast.parse(setup_py.read_text(encoding="utf-8", errors="replace"))
+            assignments = {
+                statement.targets[0].id: statement.value
+                for statement in tree.body
+                if isinstance(statement, ast.Assign)
+                and len(statement.targets) == 1
+                and isinstance(statement.targets[0], ast.Name)
+            }
+            keywords = _setup_keyword_values(tree, assignments)
+            if keywords:
+                if install_requires := keywords.get("install_requires"):
+                    value = _literal_setup_value(install_requires, assignments)
+                    if isinstance(value, str):
+                        requirements.extend(_split_requirement_block(value))
+                    elif isinstance(value, (list, tuple)):
+                        requirements.extend(str(item).strip() for item in value if str(item).strip())
+                if extras_require := keywords.get("extras_require"):
+                    value = _literal_setup_value(extras_require, assignments)
+                    if isinstance(value, dict):
+                        for name, items in value.items():
+                            requirements.extend(_selected_extra_requirements(str(name), items))
+                if tests_require := keywords.get("tests_require"):
+                    value = _literal_setup_value(tests_require, assignments)
+                    if isinstance(value, str):
+                        requirements.extend(_split_requirement_block(value))
+                    elif isinstance(value, (list, tuple)):
+                        requirements.extend(str(item).strip() for item in value if str(item).strip())
+        except (OSError, SyntaxError, TypeError, ValueError):
+            # Native requirement files and PEP 621 metadata remain authoritative.
+            pass
+
+    return list(dict.fromkeys(requirements))
+
+
+def _write_legacy_metadata_requirements(root: Path, destination: Path) -> Path | None:
+    requirements = _legacy_metadata_requirements(root)
+    if not requirements:
+        return None
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text("\n".join(requirements) + "\n", encoding="utf-8")
+    return destination
+
+
 def prepare_environment(
     specs: list[RuntimeProjectSpec],
     workspace: Path,
@@ -342,13 +537,21 @@ def prepare_environment(
     maximum_output_bytes: int = 10 * 1024 * 1024,
     expected_python: str | None = None,
     persistent_venv: Path | None = None,
+    admission_command_timeout_seconds: int = ADMISSION_COMMAND_TIMEOUT_SECONDS,
 ) -> tuple[RuntimeResult, Path | None]:
-    """Resolve all projects together and accept the environment atomically."""
+    """Prepare one immutable project runtime.
+
+    Project dependencies must never be resolved together.  Keeping this
+    invariant at the lowest runtime layer prevents a caller from accidentally
+    reintroducing a shared virtual environment even if it bypasses the API
+    service, which already submits one project per preparation job.
+    """
     result = RuntimeResult(status="runtime_failed")
     try:
-        if not specs:
-            raise ValueError("Runtime environment requires at least one project")
+        if len(specs) != 1:
+            raise ValueError("Runtime preparation requires exactly one project")
         actual_python = f"{sys.version_info.major}.{sys.version_info.minor}"
+        result.python_version = actual_python
         if expected_python and expected_python != actual_python:
             raise RuntimeError(
                 f"Environment requests Python {expected_python}, but the runtime provides Python {actual_python}"
@@ -363,9 +566,22 @@ def prepare_environment(
         test_requirements: dict[str, list[Path]] = {}
         digest = hashlib.sha256(f"runtime-v{RUNTIME_PROTOCOL_VERSION}|python-{actual_python}".encode())
         for spec in sorted(specs, key=lambda item: item.project_id):
+            _validate_project_id(spec.project_id)
+            _validate_extra_package_index(spec.extra_package_index)
             digest.update(spec.project_id.encode())
             digest.update(spec.configured_source.encode())
             digest.update(spec.configured_tests.encode())
+            digest.update((spec.configured_requirements or "").encode())
+            digest.update((spec.configured_lock or "").encode())
+            # Include package-index policy in the identity, but never persist
+            # credential-bearing URL material in the fingerprint input.
+            digest.update(_redact_text(spec.extra_package_index or "").encode())
+            digest.update(f"network-access={spec.configured_network_access}".encode())
+            if spec.configured_install_command != "pip install -r requirements.txt":
+                raise ValueError(
+                    "Custom install_command is not supported by the trusted runtime preparer; "
+                    "select a requirements or lock file instead"
+                )
             digest.update(spec.archive.read_bytes())
             extracted = workspace / "projects" / spec.project_id
             safe_extract_zip(spec.archive, extracted)
@@ -374,13 +590,16 @@ def prepare_environment(
             source, test_dir = detect_layout(root, spec.configured_source, spec.configured_tests)
             test_dir = _runtime_test_directory(root, test_dir)
             dependency_files = [name for name in DEPENDENCY_FILES if (root / name).is_file()]
+            for configured in (spec.configured_requirements, spec.configured_lock):
+                if configured and configured not in dependency_files:
+                    configured_path = _safe_relative(root, configured)
+                    if configured_path.is_file():
+                        dependency_files.append(configured_path.relative_to(root).as_posix())
             roots[spec.project_id] = root
             sources[spec.project_id] = source
             tests[spec.project_id] = test_dir
             test_requirements[spec.project_id] = _test_requirement_files(root, test_dir)
-            dependency_files.extend(
-                path.relative_to(root).as_posix() for path in test_requirements[spec.project_id]
-            )
+            dependency_files.extend(path.relative_to(root).as_posix() for path in test_requirements[spec.project_id])
             result.projects[spec.project_id] = RuntimeProjectResult(
                 project_root=str(root),
                 source_directory=source.relative_to(root).as_posix() or ".",
@@ -388,6 +607,20 @@ def prepare_environment(
                 dependency_files=dependency_files,
             )
         result.dependency_fingerprint = digest.hexdigest()
+        result.network_access = bool(specs[0].configured_network_access)
+        result.runtime_digest = hashlib.sha256(
+            json.dumps(
+                {
+                    "protocol": RUNTIME_PROTOCOL_VERSION,
+                    "python": actual_python,
+                    "project": result.dependency_fingerprint,
+                    "tools": RUNTIME_TOOL_PACKAGES,
+                    "network_access": result.network_access,
+                },
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode()
+        ).hexdigest()
 
         venv_dir = (persistent_venv or workspace / ".venv").resolve()
         if venv_dir.exists():
@@ -397,22 +630,39 @@ def prepare_environment(
         if uv:
             _run(
                 result,
-                "create shared environment",
+                "create project runtime",
                 [uv, "venv", "--python", sys.executable, str(venv_dir)],
                 workspace,
                 deadline,
                 maximum_output_bytes,
             )
         else:
-            venv.EnvBuilder(with_pip=True, system_site_packages=True).create(venv_dir)
+            # Never inherit the worker's site-packages: the venv is the
+            # isolation boundary between uploaded projects.
+            venv.EnvBuilder(with_pip=True, system_site_packages=False).create(venv_dir)
         python = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
         requirements: list[Path] = []
         dependency_groups: list[str] = []
         pyproject_requirements = False
         for project_id, root in roots.items():
-            if (root / "pyproject.toml").is_file() and uv:
-                if (root / "uv.lock").is_file():
+            spec = next(item for item in specs if item.project_id == project_id)
+            configured_lock = _safe_relative(root, spec.configured_lock) if spec.configured_lock else None
+            configured_requirements = (
+                _safe_relative(root, spec.configured_requirements) if spec.configured_requirements else None
+            )
+            if configured_lock and not configured_lock.is_file():
+                raise ValueError(f"Configured lock file does not exist: {spec.configured_lock}")
+            if (
+                configured_requirements
+                and not configured_requirements.is_file()
+                and spec.configured_requirements != "requirements.txt"
+            ):
+                raise ValueError(f"Configured requirements file does not exist: {spec.configured_requirements}")
+            if configured_requirements and not configured_requirements.is_file():
+                configured_requirements = None
+            if (root / "pyproject.toml").is_file() and uv and not configured_requirements:
+                if configured_lock or (root / "uv.lock").is_file():
                     exported = workspace / "resolved" / f"{project_id}.txt"
                     exported.parent.mkdir(parents=True, exist_ok=True)
                     _run(
@@ -439,8 +689,16 @@ def prepare_environment(
                     requirements.append(pyproject)
                     pyproject_requirements = True
                     dependency_groups.extend(f"{pyproject}:{name}" for name in _dependency_group_names(pyproject))
+            elif configured_requirements:
+                requirements.append(configured_requirements)
             else:
                 requirements.extend(root / name for name in LEGACY_REQUIREMENT_FILES if (root / name).is_file())
+            legacy_metadata = _write_legacy_metadata_requirements(
+                root,
+                workspace / "resolved" / f"{project_id}-legacy-metadata.txt",
+            )
+            if legacy_metadata is not None:
+                requirements.append(legacy_metadata)
             requirements.extend(test_requirements[project_id])
 
         if requirements or uv:
@@ -457,9 +715,13 @@ def prepare_environment(
                 for group in dependency_groups:
                     command.extend(["--group", group])
                 command.extend(RUNTIME_TOOL_PACKAGES)
+                if spec.extra_package_index:
+                    command.extend(["--index", spec.extra_package_index])
+            elif spec.extra_package_index:
+                command.extend(["--extra-index-url", spec.extra_package_index])
             _run(
                 result,
-                "resolve shared dependencies",
+                "resolve project dependencies",
                 command,
                 workspace,
                 deadline,
@@ -467,17 +729,28 @@ def prepare_environment(
             )
             check = [uv, "pip", "check", "--python", str(python)] if uv else [str(python), "-m", "pip", "check"]
             _run(result, "verify dependency compatibility", check, workspace, deadline, maximum_output_bytes)
-            result.install_strategy = "uv dependency-only shared resolution" if uv else "pip shared resolution"
+            result.install_strategy = "uv dependency-only project resolution" if uv else "pip project resolution"
         else:
             result.install_strategy = "PYTHONPATH (no dependency manifest)"
+
+        # Every project subprocess, including subprocesses spawned by an
+        # upstream test through a console entry point, must inherit the
+        # restored project's interpreter boundary.  Calling ``python -m``
+        # alone is insufficient because ``subprocess.run(["tool", ...])``
+        # resolves through PATH and entry-point shebangs.
+        runtime_environment = dict(os.environ)
+        runtime_environment["TESTGEN_PYTHON"] = str(python)
+        runtime_environment["VIRTUAL_ENV"] = str(venv_dir)
+        runtime_environment["PATH"] = os.pathsep.join(
+            [str(python.parent), runtime_environment.get("PATH", "")]
+        )
 
         site_packages = (
             venv_dir / "Lib" / "site-packages"
             if os.name == "nt"
             else venv_dir / "lib" / f"python{actual_python}" / "site-packages"
         )
-        prepared_environment = dict(os.environ)
-        prepared_environment["TESTGEN_PYTHON"] = str(python)
+        prepared_environment = runtime_environment
         import_roots = [source.parent if (source / "__init__.py").is_file() else source for source in sources.values()]
         prepared_environment["PYTHONPATH"] = os.pathsep.join(str(path) for path in import_roots)
         for project_id in roots:
@@ -487,7 +760,10 @@ def prepare_environment(
                 prepared_environment,
                 metadata_site=site_packages,
             )
-        test_environment = {"PYTHONPATH": prepared_environment["PYTHONPATH"]}
+        test_environment = {
+            key: prepared_environment[key]
+            for key in ("PATH", "VIRTUAL_ENV", "TESTGEN_PYTHON", "PYTHONPATH")
+        }
 
         for project_id in roots:
             project_result = result.projects[project_id]
@@ -499,39 +775,88 @@ def prepare_environment(
                 roots[project_id],
                 deadline,
                 maximum_output_bytes,
-                allowed_return_codes=(0, 5),
+                # Upstream collection is diagnostic. Generated PromptOpt tests
+                # do not depend on every repository test module collecting.
+                allowed_return_codes=(0, 1, 2, 3, 4, 5),
                 pytest_plugin_autoload=bool(uv),
                 extra_env=test_environment,
+                timeout_seconds=admission_command_timeout_seconds,
+                raise_on_timeout=False,
             )
             project_result.collected_tests = _parse_collected_tests(collect.output)
             coverage_data = workspace / "coverage" / f".coverage-{project_id}"
             coverage_json = workspace / "coverage" / f"{project_id}.json"
             coverage_json.parent.mkdir(parents=True, exist_ok=True)
-            _run(
-                result,
-                f"baseline tests for {project_id}",
-                [
-                    str(python),
-                    "-m",
-                    "coverage",
-                    "run",
-                    "--branch",
-                    f"--data-file={coverage_data}",
-                    f"--source={sources[project_id]}",
-                    "-m",
-                    "pytest",
-                    "-q",
-                    str(pytest_target),
-                ],
-                roots[project_id],
-                deadline,
-                maximum_output_bytes,
-                # Test failures are diagnostic, not an invalid measurement.
-                # coverage.py still emits usable denominators for exit code 1.
-                allowed_return_codes=(0, 1, 5),
-                pytest_plugin_autoload=bool(uv),
-                extra_env=test_environment,
-            )
+            baseline: CommandResult | None = None
+            collection_usable = not collect.timed_out and collect.return_code in (0, 1, 5)
+            if collection_usable and 0 < project_result.collected_tests <= MAX_ADMISSION_BASELINE_TESTS:
+                baseline = _run(
+                    result,
+                    f"baseline tests for {project_id}",
+                    [
+                        str(python),
+                        "-m",
+                        "coverage",
+                        "run",
+                        "--branch",
+                        f"--data-file={coverage_data}",
+                        f"--source={sources[project_id]}",
+                        "-m",
+                        "pytest",
+                        "-q",
+                        str(pytest_target),
+                    ],
+                    roots[project_id],
+                    deadline,
+                    maximum_output_bytes,
+                    # Failing upstream assertions are diagnostic. Collection,
+                    # internal and usage errors fall back to a zero baseline.
+                    allowed_return_codes=(0, 1, 5),
+                    pytest_plugin_autoload=bool(uv),
+                    extra_env=test_environment,
+                    timeout_seconds=admission_command_timeout_seconds,
+                    raise_on_timeout=False,
+                    raise_on_unexpected_exit=False,
+                )
+
+            if baseline is None or baseline.timed_out or baseline.return_code not in (0, 1, 5):
+                coverage_data.unlink(missing_ok=True)
+                empty_tests = roots[project_id] / ".promptopt-empty-tests"
+                empty_tests.mkdir(parents=True, exist_ok=True)
+                empty_config = empty_tests / "pytest.ini"
+                empty_config.write_text("[pytest]\n", encoding="utf-8")
+                _run(
+                    result,
+                    f"zero baseline for {project_id}",
+                    [
+                        str(python),
+                        "-m",
+                        "coverage",
+                        "run",
+                        "--branch",
+                        f"--data-file={coverage_data}",
+                        f"--source={sources[project_id]}",
+                        "-m",
+                        "pytest",
+                        "-q",
+                        "-c",
+                        str(empty_config),
+                        "-p",
+                        "no:cacheprovider",
+                        str(empty_tests),
+                    ],
+                    roots[project_id],
+                    deadline,
+                    maximum_output_bytes,
+                    allowed_return_codes=(5,),
+                    pytest_plugin_autoload=False,
+                    extra_env=test_environment,
+                    # Collection may intentionally use an aggressive timeout
+                    # for arbitrary upstream suites.  The isolated empty-suite
+                    # measurement still needs enough time to start the runtime
+                    # and coverage.py, especially on Windows and cold workers.
+                    timeout_seconds=max(10, admission_command_timeout_seconds),
+                )
             _run(
                 result,
                 f"coverage report for {project_id}",
@@ -577,6 +902,7 @@ def prepare_runtime(
     timeout_seconds: int = 900,
     maximum_output_bytes: int = 10 * 1024 * 1024,
     expected_python: str | None = None,
+    admission_command_timeout_seconds: int = ADMISSION_COMMAND_TIMEOUT_SECONDS,
 ) -> tuple[RuntimeResult, Path | None]:
     return prepare_environment(
         [RuntimeProjectSpec("project", archive, configured_source, configured_tests)],
@@ -584,6 +910,7 @@ def prepare_runtime(
         timeout_seconds=timeout_seconds,
         maximum_output_bytes=maximum_output_bytes,
         expected_python=expected_python,
+        admission_command_timeout_seconds=admission_command_timeout_seconds,
     )
 
 
@@ -598,8 +925,13 @@ def _run(
     allowed_return_codes: tuple[int, ...] = (0,),
     pytest_plugin_autoload: bool = False,
     extra_env: dict[str, str] | None = None,
+    timeout_seconds: float | None = None,
+    raise_on_timeout: bool = True,
+    raise_on_unexpected_exit: bool = True,
 ) -> CommandResult:
     remaining = max(1.0, deadline - time.monotonic())
+    if timeout_seconds is not None:
+        remaining = min(remaining, max(0.1, timeout_seconds))
     started = time.monotonic()
     env = {
         "PATH": os.environ.get("PATH", ""),
@@ -638,20 +970,63 @@ def _run(
             timeout=remaining,
             check=False,
         )
-        output = completed.stdout[:output_limit].decode("utf-8", errors="replace")
-        item = CommandResult(name, command, completed.returncode, time.monotonic() - started, output=output)
+        output = _redact_text(completed.stdout[:output_limit].decode("utf-8", errors="replace"))
+        item = CommandResult(name, _redact_command(command), completed.returncode, time.monotonic() - started, output=output)
     except subprocess.TimeoutExpired as exc:
-        output = (exc.stdout or b"")[:output_limit].decode("utf-8", errors="replace")
-        item = CommandResult(name, command, None, time.monotonic() - started, timed_out=True, output=output)
+        output = _redact_text((exc.stdout or b"")[:output_limit].decode("utf-8", errors="replace"))
+        item = CommandResult(name, _redact_command(command), None, time.monotonic() - started, timed_out=True, output=output)
     result.commands.append(item)
-    if item.timed_out:
+    if item.timed_out and raise_on_timeout:
         raise RuntimeError(f"{name} timed out")
-    if item.return_code not in allowed_return_codes:
+    if not item.timed_out and item.return_code not in allowed_return_codes and raise_on_unexpected_exit:
         detail = item.output[-2000:]
-        if name == "resolve shared dependencies":
-            raise RuntimeError(f"Dependency conflict prevented this project from joining the environment: {detail}")
+        if name == "resolve project dependencies":
+            raise RuntimeError(f"Dependency conflict prevented this project runtime from being prepared: {detail}")
         raise RuntimeError(f"{name} failed with exit code {item.return_code}: {detail}")
     return item
+
+
+def _redact_text(value: str) -> str:
+    """Remove credentials from URLs before persisting command diagnostics."""
+    def replace(match: re.Match[str]) -> str:
+        raw = match.group(0)
+        try:
+            parsed = urlsplit(raw)
+            if parsed.username is None and parsed.password is None:
+                return raw
+            host = parsed.hostname or ""
+            if parsed.port:
+                host = f"{host}:{parsed.port}"
+            return urlunsplit((parsed.scheme, host, parsed.path, parsed.query, parsed.fragment))
+        except ValueError:
+            return "<redacted-url>"
+
+    return re.sub(r"https?://[^\s]+", replace, value)
+
+
+def _validate_extra_package_index(value: str | None) -> None:
+    """Reject credential-bearing indexes even if a manifest bypassed the API."""
+    if not value:
+        return
+    parsed = urlsplit(value)
+    if parsed.username or parsed.password or any(
+        key.casefold() in _SENSITIVE_INDEX_QUERY_NAMES
+        or key.casefold().endswith(("_key", "_token", "_secret", "_password"))
+        for key, _ in parse_qsl(parsed.query, keep_blank_values=True)
+    ):
+        raise ValueError(
+            "extra_package_index must not contain credentials; use a Secret Manager-backed index reference"
+        )
+
+
+def _validate_project_id(value: str) -> None:
+    """Keep manifest project identifiers from becoming filesystem paths."""
+    if not _PROJECT_ID.fullmatch(value):
+        raise ValueError("project_id must be a simple path-safe identifier")
+
+
+def _redact_command(command: list[str]) -> list[str]:
+    return [_redact_text(str(item)) for item in command]
 
 
 def _parse_collected_tests(output: str) -> int:

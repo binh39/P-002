@@ -33,6 +33,8 @@ class ObjectStorage(Protocol):
 
     async def write(self, object_name: str, content: bytes, content_type: str) -> None: ...
 
+    async def generation(self, object_name: str) -> str | None: ...
+
     async def delete(self, object_name: str) -> None: ...
 
 
@@ -82,6 +84,10 @@ class LocalObjectStorage:
     async def write(self, object_name: str, content: bytes, content_type: str) -> None:
         del content_type
         await self.put_local(object_name, content)
+
+    async def generation(self, object_name: str) -> str | None:
+        del object_name
+        return None
 
     async def delete(self, object_name: str) -> None:
         target = (self.root / object_name).resolve()
@@ -144,6 +150,11 @@ class GcsObjectStorage:
     async def write(self, object_name: str, content: bytes, content_type: str) -> None:
         blob = self.bucket.blob(object_name)
         await asyncio.to_thread(blob.upload_from_string, content, content_type=content_type)
+
+    async def generation(self, object_name: str) -> str | None:
+        blob = self.bucket.blob(object_name)
+        await asyncio.to_thread(blob.reload, client=self.client)
+        return str(blob.generation) if blob.generation is not None else None
 
     async def delete(self, object_name: str) -> None:
         blob = self.bucket.blob(object_name)

@@ -2,7 +2,11 @@ import pytest
 from pydantic import ValidationError
 
 from backend.config import APP_DIRECTORY, Settings
-from backend.modules.projects.schemas import MINIMUM_RUNTIME_PROTOCOL_VERSION
+from backend.modules.projects.schemas import (
+    MINIMUM_RUNTIME_PROTOCOL_VERSION,
+    DependencySettings,
+    DependencySettingsPatch,
+)
 
 
 def production_settings(**overrides):
@@ -61,9 +65,41 @@ def test_production_requires_runtime_preparation_job():
         production_settings(runtime_execution_backend="disabled")
 
 
+def test_production_generic_worker_does_not_require_runtime_image_factory_job():
+    settings = production_settings(cloud_run_runtime_factory_job="")
+    assert settings.runtime_project_image_mode == "generic_worker_bundle"
+
+
+def test_production_project_image_mode_requires_factory_job():
+    with pytest.raises(ValidationError, match="CLOUD_RUN_RUNTIME_FACTORY_JOB is required"):
+        production_settings(cloud_run_runtime_factory_job="", runtime_project_image_mode="project_image")
+
+
+def test_project_runtime_resources_default_to_dedicated_accounts_and_repository():
+    settings = production_settings()
+
+    assert settings.project_runtime_image_repository.endswith("/promptopt/project-runtimes")
+    assert settings.project_runtime_worker_service_account.startswith("promptopt-runner@")
+    assert settings.project_runtime_build_service_account.startswith("promptopt-runtime-builder@")
+
+
 def test_local_paths_are_resolved_from_app_directory(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     settings = Settings(_env_file=None)
 
     assert settings.local_upload_path == APP_DIRECTORY / "data" / "uploads"
     assert settings.sample_repos_path == APP_DIRECTORY.parent / "src" / "sample_repo"
+
+
+@pytest.mark.parametrize("settings_type", [DependencySettings, DependencySettingsPatch])
+@pytest.mark.parametrize(
+    "index_url",
+    [
+        "https://user:password@example.test/simple",
+        "https://example.test/simple?token=secret",
+        "https://example.test/simple?api_key=secret",
+    ],
+)
+def test_dependency_index_rejects_embedded_credentials(settings_type, index_url):
+    with pytest.raises(ValidationError, match="must not contain credentials"):
+        settings_type(extra_package_index=index_url)

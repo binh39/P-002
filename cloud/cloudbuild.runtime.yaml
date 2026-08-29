@@ -1,0 +1,17 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file
+      - cloud/Dockerfile.runtime
+      - --build-arg
+      - PYTHON_VERSION=${_PYTHON_VERSION}
+      - --tag
+      - ${_IMAGE}
+      - .
+
+images:
+  - ${_IMAGE}
+
+substitutions:
+  _PYTHON_VERSION: "3.12"

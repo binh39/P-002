@@ -6,9 +6,13 @@ import os
 import re
 import subprocess
 import sys
-import tomllib
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 runtime images use the backport.
+    import tomli as tomllib
 
 PROFILE_PATH = Path(".promptopt/setup.json")
 

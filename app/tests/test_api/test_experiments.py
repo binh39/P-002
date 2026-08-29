@@ -17,7 +17,7 @@ from backend.modules.experiments.schemas import (
 from backend.modules.experiments.schemas import (
     TestGenerationRunRecord as FinalTestGenerationRunRecord,
 )
-from backend.modules.projects.schemas import RuntimeReport, RuntimeStatus
+from backend.modules.projects.schemas import MINIMUM_RUNTIME_PROTOCOL_VERSION, RuntimeReport, RuntimeStatus
 from tests.test_api.test_analysis import AUTH_HEADERS, create_project, python_archive
 
 
@@ -28,26 +28,53 @@ class AdminTokenVerifier:
 
 
 @pytest.mark.asyncio
-async def test_experiment_rejects_projects_from_different_runtime_environments(client):
+async def test_experiment_accepts_projects_with_independent_runtime_environments(client, app):
     uploaded_id = await create_project(client, python_archive())
     analyzed = await client.post(
         f"/api/v1/projects/{uploaded_id}/analyze",
         headers=AUTH_HEADERS,
     )
     assert analyzed.status_code == 202
+    repository = app.state.services.projects.repository
+    project = await repository.get(uploaded_id)
+    project.runtime_status = RuntimeStatus.READY
+    project.runtime_bundle_object = "runner-jobs/runtime/uploaded/runtime.tar.gz"
+    project.runtime_dependency_fingerprint = "dependency-digest"
+    project.runtime_digest = "runtime-digest"
+    project.runtime_image = "promptopt-runtime-py312@sha256:" + "a" * 64
+    project.runtime_worker_job = "projects/p/locations/r/jobs/eval-project"
+    project.source_archive_sha256 = "a" * 64
+    project.runtime_source_archive_object = "runner-jobs/source-archives/a.zip"
+    project.runtime_bundle_sha256 = "b" * 64
+    project.runtime_report = RuntimeReport(
+        status=RuntimeStatus.READY,
+        protocol_version=MINIMUM_RUNTIME_PROTOCOL_VERSION,
+        runtime_digest="runtime-digest",
+        python_version="3.12",
+        runtime_image=project.runtime_image,
+        runtime_worker_job=project.runtime_worker_job,
+        source_archive_sha256=project.source_archive_sha256,
+        source_archive_object=project.runtime_source_archive_object,
+        runtime_bundle_sha256=project.runtime_bundle_sha256,
+        bundle_object=project.runtime_bundle_object,
+    )
+    await repository.save(project)
 
     response = await client.post(
         "/api/v1/experiments",
         headers=AUTH_HEADERS,
         json={
             "project_ids": ["sample:isort", uploaded_id],
-            "name": "Invalid cross-environment run",
-            "max_targets": 3,
+            "name": "Independent cross-environment run",
+            "max_targets": 6,
         },
     )
 
-    assert response.status_code == 422
-    assert response.json()["error"]["code"] == "RUNTIME_ENVIRONMENT_MISMATCH"
+    assert response.status_code == 201, response.text
+    snapshots = response.json()["project_snapshots"]
+    assert {item["project_id"] for item in snapshots} == {"sample:isort", uploaded_id}
+    uploaded_snapshot = next(item for item in snapshots if item["project_id"] == uploaded_id)
+    assert uploaded_snapshot["runtime_digest"] == "runtime-digest"
 
 
 @pytest.mark.asyncio
@@ -209,7 +236,25 @@ async def test_uploaded_experiment_requires_current_runtime_and_only_uses_source
     assert outdated.status_code == 409
     assert outdated.json()["error"]["code"] == "RUNTIME_REBUILD_REQUIRED"
 
-    project.runtime_report = RuntimeReport(status=RuntimeStatus.READY, protocol_version=8)
+    project.runtime_report = RuntimeReport(
+        status=RuntimeStatus.READY,
+        protocol_version=MINIMUM_RUNTIME_PROTOCOL_VERSION,
+        runtime_digest="wrapped-runtime-digest",
+        python_version="3.12",
+        runtime_image="promptopt-runtime-py312@sha256:" + "a" * 64,
+        runtime_worker_job="projects/p/locations/r/jobs/eval-wrapped",
+        source_archive_sha256="c" * 64,
+        source_archive_object="runner-jobs/source-archives/c.zip",
+        runtime_bundle_sha256="d" * 64,
+    )
+    project.runtime_bundle_object = "runner-jobs/runtime/wrapped/runtime.tar.gz"
+    project.runtime_dependency_fingerprint = "wrapped-dependency-digest"
+    project.runtime_digest = "wrapped-runtime-digest"
+    project.runtime_image = "promptopt-runtime-py312@sha256:" + "a" * 64
+    project.runtime_worker_job = "projects/p/locations/r/jobs/eval-wrapped"
+    project.source_archive_sha256 = "c" * 64
+    project.runtime_source_archive_object = "runner-jobs/source-archives/c.zip"
+    project.runtime_bundle_sha256 = "d" * 64
     await repository.save(project)
     listed = await client.get(f"/api/v1/projects/{project_id}/functions", headers=AUTH_HEADERS)
     assert listed.status_code == 200

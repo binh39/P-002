@@ -47,12 +47,41 @@ from src.optimization.models import ExperimentConfig, ProjectLayout, SymbolTarge
 from src.optimization.prompts import PromptBundle, baseline_bundle
 from src.optimization.runner import (
     CoverUpExperimentRunner,
+    _package_dir_for_target,
     _saved_tests_for_target,
+    _target_spec_source_file,
     _test_environment,
     _traces_for_target,
     _zero_coverage_like,
 )
 from src.optimization.subprocesses import run_streamed
+
+
+def test_package_dir_for_target_narrows_nested_uploaded_source(tmp_path):
+    source_root = tmp_path / "src"
+    package = source_root / "fixture311"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("def target():\n    return 1\n", encoding="utf-8")
+    target = SymbolTarget("project", "src/fixture311/__init__.py", "target")
+
+    assert _package_dir_for_target(source_root, target) == package.resolve()
+
+
+def test_package_dir_for_target_keeps_direct_python_source_root(tmp_path):
+    package = tmp_path / "pkg"
+    package.mkdir()
+    (package / "module.py").write_text("def target():\n    return 1\n", encoding="utf-8")
+    target = SymbolTarget("project", "pkg/module.py", "target")
+
+    assert _package_dir_for_target(package, target) == package.resolve()
+
+
+def test_target_spec_source_file_matches_narrowed_package_base(tmp_path):
+    package = tmp_path / "src" / "pkg" / "subpkg"
+    package.mkdir(parents=True)
+    target = SymbolTarget("project", "src/pkg/subpkg/module.py", "target")
+
+    assert _target_spec_source_file(package, target) == "subpkg/module.py"
 
 
 def test_definition_lines_finds_nested_functions_inside_control_flow():
@@ -1059,6 +1088,79 @@ def test_runner_resume_skips_targets_with_durable_checkpoints(
     assert calls == [(False, "first"), (False, "second"), (True, "second")]
     assert [result.target.symbol for result in record.results] == ["first", "second"]
     assert len(list(Path(record.tests_workspace).rglob("test_opt_*.py"))) == 2
+
+
+def test_runner_controlled_pause_occurs_after_completed_target_checkpoint(tmp_path, monkeypatch):
+    from src.promptopt_pause import ModelRateLimitPauseError
+
+    package_dir = tmp_path / "sample_repo" / "pkg"
+    tests_dir = tmp_path / "sample_repo" / "tests"
+    artifacts_dir = tmp_path / "artifacts"
+    package_dir.mkdir(parents=True)
+    tests_dir.mkdir(parents=True)
+    prompt_path = tmp_path / "prompt.json"
+    baseline_bundle().save(prompt_path)
+    pause_path = artifacts_dir / "pause_signal.json"
+    monkeypatch.setenv("PROMPTOPT_PAUSE_FILE", str(pause_path))
+    monkeypatch.setenv("PROMPTOPT_TEST_PAUSE_AFTER_COMPLETED_TARGETS", "1")
+    calls = []
+
+    def fake_subprocess_run(command, **kwargs):
+        del kwargs
+        calls.append(command[command.index("--target-symbols") + 1])
+        workspace = Path(command[command.index("--tests-dir") + 1])
+        saved = workspace / "test_opt.py"
+        saved.write_text("def test_first(): pass\n", encoding="utf-8")
+        spec = json.loads(Path(command[command.index("--target-spec-file") + 1]).read_text(encoding="utf-8"))[0]
+        Path(command[command.index("--trace-file") + 1]).write_text(
+            json.dumps(
+                {
+                    "source_file": spec["source_file"],
+                    "symbol": "first",
+                    "name": "first",
+                    "component": "initial",
+                    "outcome": "coverage_gain_saved",
+                    "saved_test": str(saved),
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return SimpleNamespace(returncode=0, stdout="ok")
+
+    monkeypatch.setattr("src.optimization.runner.run_streamed", fake_subprocess_run)
+    monkeypatch.setattr(
+        "src.optimization.runner.run_coverage",
+        lambda **kwargs: SimpleNamespace(returncode=1, stdout="no coverage"),
+    )
+    runner = CoverUpExperimentRunner(
+        ExperimentConfig(
+            project_root=tmp_path,
+            package_dir=package_dir,
+            tests_dir=tests_dir,
+            artifacts_dir=artifacts_dir,
+            coverup_model="fake-model",
+            max_concurrency=1,
+        )
+    )
+    target = SymbolTarget("project", "pkg/a.py", "first", "train")
+
+    with pytest.raises(ModelRateLimitPauseError, match="after 1 completed target"):
+        runner.evaluate_batch([target], prompt_path, candidate_id="candidate", split="train")
+
+    checkpoint_files = list(
+        (artifacts_dir / "runs" / "candidate" / "train").rglob("target_checkpoints/*.json")
+    )
+    assert len(checkpoint_files) == 1
+    assert pause_path.is_file()
+    assert calls == ["first"]
+
+    pause_path.unlink()
+    monkeypatch.setenv("PROMPTOPT_RESUMING", "1")
+    record = runner.evaluate_batch([target], prompt_path, candidate_id="candidate", split="train")
+
+    assert calls == ["first"]
+    assert [result.target.symbol for result in record.results] == ["first"]
 
 
 @pytest.mark.parametrize("split", ["train", "validation", "test"])

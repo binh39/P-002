@@ -1,0 +1,6 @@
+aiolimiter==1.2.1
+google-cloud-storage>=2.19,<4
+litellm[google]==1.94.0
+openai==2.53.0
+pytest>=7.4,<10
+python-dotenv==1.2.2

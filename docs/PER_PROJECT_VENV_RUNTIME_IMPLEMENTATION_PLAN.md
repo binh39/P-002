@@ -1,0 +1,1031 @@
+# Kế hoạch hoàn thiện runtime venv riêng cho từng project
+
+## 1. Trạng thái và quyết định kiến trúc
+
+Tài liệu này mô tả hướng hoàn thiện runtime cho project upload trên nhánh
+`fix/import-project-v3`, đồng thời ghi rõ phần nào đã có, phần nào cần giữ,
+phần nào cần thay đổi và tiêu chí nghiệm thu trước khi deploy.
+
+Quyết định kiến trúc:
+
+1. Mỗi project upload có một venv riêng. Không project nào resolve hoặc dùng
+   chung dependency environment với project khác.
+2. GEPA/DSPy tiếp tục chạy như control plane: quản lý candidate prompt,
+   reflection, search, cache, score aggregation và promotion gate.
+3. CoverUp có thể chạy orchestration trong worker tool environment, nhưng mọi
+   thao tác import project, pytest, SlipCover, coverage và diagnostic test phải
+   dùng interpreter của venv thuộc đúng project.
+4. Dùng một generic immutable worker image/job cho mỗi Python minor được hỗ trợ,
+   ví dụ Python 3.10, 3.11, 3.12 và 3.13.
+5. Runtime riêng của project được lưu dưới dạng content-addressed source archive
+   và venv bundle có SHA-256, không bắt buộc tạo OCI image hoặc Cloud Run Job
+   riêng cho từng project.
+6. Project-specific OCI image/job chỉ là chế độ nâng cao trong tương lai cho
+   project cần OS dependency riêng hoặc yêu cầu compliance/isolation đặc biệt;
+   không phải đường chạy mặc định.
+
+Phân biệt hai khái niệm:
+
+- **Immutable worker**: image chứa code PromptOpt/CoverUp và được pin bằng image
+  digest. Worker này có thể dùng chung cho nhiều project cùng Python minor.
+- **Immutable project runtime**: source ZIP, venv bundle, dependency fingerprint,
+  Python version và checksum cố định của một project. Runtime không dùng chung
+  với project khác dù worker image được dùng chung.
+
+## 2. Vì sao chọn generic worker + per-project venv
+
+Per-project venv giải quyết trực tiếp các vấn đề cần xử lý:
+
+- Hai project yêu cầu hai version khác nhau của cùng dependency.
+- Hai project dùng Python minor khác nhau.
+- Dependency của project này không làm project khác bị `runtime_failed`.
+- Baseline và candidate của cùng project luôn được chấm bằng cùng runtime.
+- Diagnostic test của reflection và final generated suite chạy trong đúng môi
+  trường đã admission.
+
+Không cần project-specific image để đạt các invariant trên. Cloud Run Job tạo
+mỗi execution trong container/filesystem tạm độc lập. Generic worker có thể tải,
+kiểm tra checksum và giải nén một runtime bundle khác nhau cho mỗi execution.
+
+Project-specific image/job mặc định gây thêm chi phí:
+
+- Mỗi upload hoặc rebuild phải chạy Cloud Build.
+- Tăng số image, Cloud Run Job, IAM binding và quota cần quản lý.
+- Phải dọn image/job cũ khi project bị xóa hoặc runtime được rebuild.
+- Upload có thể fail do Cloud Build, Artifact Registry hoặc factory IAM dù venv
+  đã được chuẩn bị thành công.
+- Source riêng tư bị lưu thêm một bản trong Artifact Registry.
+- Implementation hiện tại vẫn copy `runtime.tar.gz` vào image rồi giải nén khi
+  execution bắt đầu; image riêng không loại bỏ bước restore venv.
+
+## 3. Kiến trúc đích
+
+### 3.1 Upload và runtime preparation
+
+```text
+Browser upload ZIP
+        |
+        v
+Static analysis (không import/execute source)
+        |
+        v
+Select preparer theo Python minor
+        |
+        v
+Isolated runtime preparation job, đúng một project
+        |
+        +-- safe extract ZIP
+        +-- detect source/test layout
+        +-- validate requires-python
+        +-- create venv riêng
+        +-- resolve project dependencies
+        +-- install pytest/coverage/SlipCover toolchain
+        +-- pip/uv check
+        +-- bounded admission diagnostics
+        |
+        v
+Seal project runtime
+        |
+        +-- source archive SHA-256
+        +-- runtime bundle SHA-256
+        +-- dependency fingerprint
+        +-- runtime digest
+        +-- Python version
+        +-- pinned generic worker image/job identity
+        |
+        v
+Project runtime_ready
+```
+
+Dependency installation chỉ diễn ra khi upload, thay đổi settings hoặc rebuild
+runtime. GEPA không được chạy `pip install` lại cho mỗi candidate/replicate.
+
+### 3.2 GEPA optimization
+
+```text
+GEPA/DSPy coordinator
+        |
+        +-- candidate prompt
+        +-- project + source_file + symbol + split
+        +-- evaluation config
+        |
+        v
+RemoteEvaluationBackend groups targets by project
+        |
+        +--> generic worker py310 + runtime project A
+        +--> generic worker py312 + runtime project B
+        +--> generic worker py313 + runtime project C
+        |
+        v
+Per-project worker execution
+        |
+        +-- verify worker image/job identity
+        +-- download source/runtime objects
+        +-- verify object generation/checksums
+        +-- restore venv in isolated workspace
+        +-- CoverUp generates tests
+        +-- project venv runs pytest/coverage
+        |
+        v
+Per-symbol score + feedback + coverage + attempt traces
+        |
+        v
+GEPA reflection/search/promotion
+```
+
+Coordinator được phép đọc immutable source snapshot để tạo numbered source
+context. Coordinator không được import project hoặc chạy test của project.
+
+### 3.3 Diagnostic reflection test
+
+```text
+Reflection LM writes diagnostic pytest module
+        |
+        v
+run_test_experiment request for one project/symbol
+        |
+        v
+Generic worker restores that project's venv
+        |
+        v
+pytest + coverage in project venv
+        |
+        v
+Result returned to reflection LM
+```
+
+Diagnostic test là teacher evidence. Nó không được copy vào candidate workspace
+và không được dùng trực tiếp làm GEPA candidate score.
+
+### 3.4 Final test-suite generation
+
+```text
+Immutable prompt snapshot
+        |
+        v
+Targets grouped by project
+        |
+        v
+CoverUp final_generation on each project's worker execution
+        |
+        +-- generated tests run in project venv
+        +-- project coverage measured in project venv
+        +-- generated tests + coverage + manifest archived
+        |
+        v
+Artifacts uploaded and merged by coordinator
+```
+
+Final generated tests không cần được bake vào worker image. Container image là
+read-only base layer nhưng Cloud Run execution vẫn có writable ephemeral
+workspace. Test artifacts phải được upload trước khi execution kết thúc.
+
+## 4. Phần nhánh hiện tại đã làm và cần giữ
+
+| Hạng mục | Trạng thái | File chính | Hành động |
+| --- | --- | --- | --- |
+| Một runtime preparation chỉ nhận đúng một project | Đã làm | `cloud/runtime_workspace.py`, `app/backend/modules/projects/runtime.py` | Giữ invariant và test |
+| Chọn preparer theo Python 3.10-3.13 | Đã làm | `app/backend/config.py`, `app/backend/modules/projects/runtime.py` | Giữ |
+| Detect `src`, `lib`, `python` và package layout | Đã làm | `cloud/runtime_workspace.py` | Giữ và bổ sung fixture |
+| Đọc `uv.lock`, `pyproject.toml`, requirements và legacy static metadata | Đã làm | `cloud/runtime_workspace.py` | Giữ, mở rộng có kiểm soát |
+| Cài pytest, pytest plugins, coverage và SlipCover vào project runtime | Đã làm | `cloud/runtime_workspace.py` | Giữ, pin/version digest đầy đủ |
+| Upstream test collection/failure là diagnostic | Đã làm | `cloud/runtime_workspace.py` | Giữ |
+| Zero baseline fallback khi upstream suite không dùng được | Đã làm | `cloud/runtime_workspace.py` | Giữ |
+| Runtime bundle, source hash, bundle hash và runtime digest | Đã làm | `cloud/prepare_runtime.py`, `cloud/runtime_workspace.py` | Giữ và chuyển object sang content-addressed path |
+| `ProjectLayout.python_executable` | Đã làm | `src/optimization/models.py` | Giữ |
+| `TESTGEN_PYTHON` cho pytest/coverage/import checks | Đã làm | `src/optimization/runner.py`, `src/optimization/coveragepy.py`, `src/coverup/testrunner.py`, `src/coverup/coverup.py` | Audit để không còn đường chạy sai interpreter |
+| `EvaluationBackend` tách GEPA khỏi execution | Đã làm | `src/optimization/models.py`, `src/optimization/runner.py` | Giữ |
+| Remote evaluation group target theo project | Đã làm | `cloud/evaluation_dispatcher.py` | Giữ |
+| Remote diagnostic test | Đã làm | `cloud/evaluation_dispatcher.py`, `cloud/run_evaluation_worker.py` | Giữ |
+| Remote final generation theo project | Đã làm | `cloud/run_test_generation.py`, `cloud/run_evaluation_worker.py` | Giữ |
+| Request identity/cache có runtime digest và config | Đã làm | `cloud/evaluation_dispatcher.py` | Giữ và thêm generic worker digest |
+| Hash/image/job validation trước execution | Đã làm | `cloud/run_evaluation_worker.py` | Giữ, điều chỉnh cho generic worker |
+| Checkpoint/pause-resume qua GCS | Đã làm | `cloud/evaluation_dispatcher.py`, `cloud/run_evaluation_worker.py` | Giữ |
+| Bỏ constraint mọi project trong experiment phải cùng environment | Đã làm | `app/backend/modules/experiments/service.py` | Giữ |
+
+## 5. Phần hiện tại cần thay đổi
+
+### 5.1 Không bắt buộc runtime image factory
+
+Hiện tại backend đi theo chuỗi:
+
+```text
+prepare venv bundle
+  -> start trusted runtime image factory
+  -> Cloud Build project-specific image
+  -> create project-specific Cloud Run Job
+  -> accept protocol 12
+```
+
+Cần đổi đường mặc định thành:
+
+```text
+prepare venv bundle
+  -> seal content-addressed runtime manifest
+  -> attach pinned generic worker identity for Python minor
+  -> accept runtime
+```
+
+Việc cần làm:
+
+- Cho `RuntimePreparationService` accept một complete generic runtime report mà
+  không gọi `CloudRunRuntimeImageFactory`.
+- Bỏ điều kiện factory phải trả image/job khác generic preparation worker.
+- Không yêu cầu `runtime_factory_prefix` cho runtime mới.
+- Chuyển factory thành optional feature flag trong giai đoạn migration.
+- Sau khi generic path ổn định, xóa factory job, service account và IAM không còn
+  cần thiết.
+
+### 5.2 Không tái sử dụng semantic của protocol 12
+
+Protocol 11 hiện đại diện prepared venv capsule. Protocol 12 hiện đại diện
+project-specific OCI image/job. Không nên đổi ý nghĩa protocol 12 tại chỗ vì
+artifact/cache cũ có thể bị hiểu sai.
+
+Khuyến nghị tạo protocol mới, ví dụ protocol 13:
+
+```text
+protocol 13 = content-addressed project venv + pinned generic worker identity
+```
+
+Protocol mới phải có execution mode rõ ràng, ví dụ:
+
+```json
+{
+  "runtime_protocol_version": 13,
+  "execution_mode": "generic_worker_bundle"
+}
+```
+
+Trong rollout:
+
+- Worker có thể dual-read protocol 12 và 13.
+- API mới chỉ emit protocol 13.
+- Project protocol 12 có thể tiếp tục chạy trong thời gian migration hoặc bị
+  yêu cầu rebuild tùy môi trường chưa deploy production.
+- Cache/evaluation digest phải bao gồm protocol và execution mode.
+
+### 5.3 Thay project-specific worker identity bằng generic worker identity
+
+Runtime snapshot vẫn cần lưu worker identity để pause/resume không đổi toolchain,
+nhưng identity sẽ thuộc deployment/Python version, không thuộc project.
+
+Manifest đề xuất:
+
+```json
+{
+  "schema_version": 3,
+  "projects": [
+    {
+      "kind": "uploaded",
+      "project": "runner-project-name",
+      "python_version": "3.12",
+      "source_directory": "src",
+      "test_directory": "tests",
+      "archive_object": "project-runtimes/<source-sha>/source.zip",
+      "archive_generation": "gcs-object-generation",
+      "source_archive_sha256": "...",
+      "runtime_bundle_object": "project-runtimes/<runtime-sha>/runtime.tar.gz",
+      "runtime_bundle_generation": "gcs-object-generation",
+      "runtime_bundle_sha256": "...",
+      "dependency_fingerprint": "...",
+      "runtime_digest": "...",
+      "runtime_protocol_version": 13,
+      "execution_mode": "generic_worker_bundle",
+      "worker_image": ".../runtime-py312@sha256:...",
+      "worker_job": "projects/.../jobs/promptopt-evaluation-py312-<deploy-version>"
+    }
+  ]
+}
+```
+
+`runtime_digest` phải hash ít nhất:
+
+- Runtime protocol và execution mode.
+- Source archive SHA-256.
+- Runtime bundle SHA-256.
+- Python major/minor và, nếu cần, patch version.
+- Dependency/tool package versions.
+- Generic worker image digest.
+- Source/test layout.
+- Các evaluation-relevant project settings.
+
+Cloud Run Job name có thể versioned theo deployment SHA. Không được resume một
+run bằng worker deployment khác nếu execution manifest đã khóa worker cũ.
+
+### 5.4 Generic worker selection
+
+`RemoteEvaluationBackend._job_for()` cần ưu tiên worker identity đã pin trong
+execution manifest và xác nhận worker tương ứng với `python_version`.
+
+Không lấy một mutable job alias rồi giả định image bên dưới chưa đổi. Có hai cách
+hợp lệ:
+
+1. Deploy job có version trong tên và giữ job cũ cho các run đang resume.
+2. Lưu image digest trong manifest và xác nhận job execution thực tế đang dùng
+   đúng digest trước khi chạy.
+
+Khuyến nghị dùng cả hai.
+
+### 5.5 Worker restore path và tính relocatable của venv
+
+Venv hiện được tạo ở một absolute path rồi giải nén sang workspace tạm khác.
+`python -m pytest` thường hoạt động, nhưng entry-point scripts trong `venv/bin`
+có thể giữ shebang trỏ về path cũ.
+
+Cần chọn và test một chiến lược:
+
+- Ưu tiên: tạo và restore venv ở cùng absolute path cố định bên trong mỗi
+  container execution, ví dụ `/tmp/promptopt-runtime/<runtime-digest>/.venv`.
+- Hoặc rewrite entry-point shebang sau restore.
+- Luôn set `VIRTUAL_ENV` và prepend đúng `venv/bin` vào `PATH`.
+- Tiếp tục set `TESTGEN_PYTHON` bằng absolute path đã verify.
+- Không dựa vào activation shell script.
+
+Cần có test project gọi một console script dependency qua `subprocess` để phát
+hiện regression path/PATH.
+
+### 5.6 Audit toàn bộ project-code execution
+
+Mọi đường chạy dưới đây phải dùng project interpreter:
+
+- Initial coverage measurement của CoverUp.
+- Generated test validation bằng SlipCover.
+- Error-repair attempt.
+- Missing-coverage attempt.
+- Final coverage.py scoring.
+- `run_test_experiment` của reflection.
+- Final test-suite generation và final project coverage.
+- Import availability/preflight.
+- Bất kỳ subprocess nào do project test gọi qua console entry point.
+
+CoverUp parent process có thể dùng worker base interpreter nếu nó chỉ parse source,
+gọi model và điều phối. Parent process không được import package của project.
+
+### 5.7 Dependency settings và package index
+
+Hiện schema có các field như `install_command`, `requirements_file`, `lock_file`,
+`extra_package_index` và `network_access`, nhưng runtime preparation chưa dùng
+đầy đủ.
+
+Cần quyết định contract an toàn:
+
+- Hỗ trợ explicit relative `requirements_file` và `lock_file` sau khi validate
+  path không thoát project root.
+- Hỗ trợ PEP 621 `pyproject.toml`, `uv.lock` và các requirements file hiện tại.
+- Không chạy arbitrary `install_command` từ người dùng trong trusted API/factory.
+- Nếu hỗ trợ custom command, chỉ chạy trong untrusted preparer với command policy,
+  timeout, output limit và network policy rõ ràng.
+- Private index credential phải đi qua Secret Manager/reference; không ghi URL có
+  credential vào artifact, log hoặc Firestore.
+- Evaluation worker mặc định không được `pip install` thêm package trong GEPA run.
+- Dependency resolution failure phải trả diagnostic đầu tiên có ý nghĩa, không
+  chỉ trả wrapper `runtime_failed`.
+
+### 5.8 Content-addressed storage và lifecycle
+
+Source/runtime object nên được lưu theo digest, không theo mutable run prefix duy
+nhất:
+
+```text
+project-runtimes/sources/<source-sha256>/source.zip
+project-runtimes/bundles/<runtime-bundle-sha256>/runtime.tar.gz
+```
+
+Yêu cầu:
+
+- Upload với generation precondition để không overwrite object đã tồn tại.
+- Manifest lưu cả object generation và SHA-256.
+- Worker verify SHA-256 sau download và trước extract.
+- Không dùng cache chỉ dựa trên project ID.
+- Rebuild có cùng digest có thể reuse immutable object.
+- Thiết kế reference tracking hoặc retention policy trước khi xóa object.
+- Project deletion không được xóa bundle còn được experiment snapshot/run khác
+  tham chiếu.
+
+### 5.9 Project settings và runtime invalidation
+
+Thay đổi các field sau phải làm runtime cũ stale và yêu cầu rebuild:
+
+- Python version.
+- Source directory/test directory.
+- Dependency/lock manifest selection.
+- Package index policy có ảnh hưởng dependency.
+- Runtime tool versions.
+- Worker base image digest.
+- Runtime protocol.
+
+Không nhất thiết rebuild khi chỉ đổi metadata như project display name hoặc mô
+tả.
+
+## 6. Các file cần chỉnh sửa
+
+### Backend
+
+- `app/backend/modules/projects/schemas.py`
+  - Thêm execution mode/protocol mới.
+  - Phân biệt generic worker identity với project-specific worker identity.
+  - Bổ sung object generation nếu storage implementation hỗ trợ.
+- `app/backend/modules/projects/runtime.py`
+  - Accept generic sealed runtime ngay sau preparation.
+  - Không bắt buộc start image factory.
+  - Giữ factory sau feature flag trong migration rồi loại bỏ.
+- `app/backend/modules/projects/service.py`
+  - Giữ automatic runtime request sau analysis.
+  - Bảo đảm retry tạo fresh attempt và không dùng artifact cũ sai digest.
+- `app/backend/modules/experiments/schemas.py`
+  - Snapshot đầy đủ runtime protocol, execution mode và worker identity.
+- `app/backend/modules/experiments/service.py`
+  - Gate experiment theo complete generic runtime contract.
+  - Không tái thêm same-environment restriction.
+- `app/backend/modules/experiments/cloud_optimizer.py`
+  - Emit execution manifest schema mới.
+  - Copy/reference đúng immutable runtime objects.
+- `app/backend/modules/experiments/cloud_test_generator.py`
+  - Dùng cùng manifest contract với optimization.
+- `app/backend/services/container.py`
+  - Factory optional trong migration; sau đó bỏ wiring và config thừa.
+- `app/backend/config.py`
+  - Giữ Python-specific preparer/evaluation jobs.
+  - Deprecate factory job/image repository/service-account settings.
+
+### Cloud runtime và worker
+
+- `cloud/runtime_workspace.py`
+  - Giữ single-project preparation.
+  - Hoàn thiện relocatable/fixed-path venv.
+  - Audit dependency selection/settings.
+- `cloud/prepare_runtime.py`
+  - Publish sealed generic runtime report/protocol mới.
+  - Upload content-addressed bundle với checksum/generation.
+- `cloud/run_evaluation_worker.py`
+  - Generic worker restore source/runtime bundle.
+  - Verify protocol, execution mode, Python, worker digest, object generation và
+    checksums.
+  - Set `TESTGEN_PYTHON`, `VIRTUAL_ENV`, `PATH` chính xác.
+- `cloud/evaluation_dispatcher.py`
+  - Resolve generic versioned job theo project snapshot.
+  - Giữ project-grouped dispatch, durable result và checkpoint.
+- `cloud/run_job.py`
+  - Stage source context cho coordinator nhưng không restore project runtime.
+  - Pin execution manifest khi bắt đầu/resume.
+- `cloud/run_test_generation.py`
+  - Dùng cùng generic worker backend cho final generation.
+- `cloud/Dockerfile.runtime`
+  - Tiếp tục là generic worker/preparer image theo Python minor.
+  - Pin đầy đủ tool dependencies cần bởi outer CoverUp process và venv runtime.
+- `cloud/runtime_image_factory.py`
+- `cloud/Dockerfile.runtime-factory`
+  - Giữ tạm sau feature flag trong migration, sau đó xóa nếu không còn enhanced mode.
+
+### Optimization/CoverUp
+
+- `src/optimization/models.py`
+  - Giữ per-project interpreter/runtime digest contract.
+- `src/optimization/runner.py`
+  - Audit không có pytest/coverage project path nào fallback nhầm sang
+    `sys.executable` khi project runtime đã được khai báo.
+- `src/optimization/coveragepy.py`
+  - Giữ project interpreter là authoritative.
+- `src/optimization/project_setup.py`
+  - Import preflight dùng project interpreter.
+- `src/coverup/testrunner.py`
+  - Test/coverage bằng project interpreter.
+- `src/coverup/coverup.py`
+  - Import availability dùng project interpreter.
+  - Không bật dynamic `--install-missing-modules` trong evaluation mặc định.
+- `src/optimization/gepa.py`
+  - Không cần thay search logic nếu `EvaluationBackend` contract không đổi.
+  - Giữ diagnostic experiment chạy qua backend đúng project.
+
+### Deployment
+
+- `.github/workflows/backend-deploy.yml`
+  - Deploy generic immutable evaluation worker trước coordinator/API.
+  - Giữ versioned worker job cho mỗi Python minor.
+  - Bỏ deploy runtime factory sau migration.
+- `app/infra/provision-production.ps1`
+- `app/infra/provision-production-runner.ps1`
+  - Loại bỏ factory/builder service accounts và roles không còn dùng.
+  - Giữ least-privilege preparer và evaluation worker accounts.
+- `app/infra/cloud-run-env.yaml`
+- `app/infra/cloud-run-env.dev.yaml`
+  - Cập nhật generic worker names/protocol.
+  - Gỡ factory settings sau migration.
+
+### UI và tài liệu, có thể làm sau backend/cloud
+
+- `app/frontend/src/pages/Projects.tsx`
+  - Bỏ mô tả “resolved together” hoặc shared environment.
+  - Hiển thị mỗi project có runtime riêng.
+- `app/frontend/src/pages/ProjectDetail.tsx`
+  - Đổi thông báo rejection không nói active shared bundle.
+  - Nối thực sự settings form với backend nếu giữ các controls dependency/runtime.
+- `app/frontend/src/pages/CreateExperiment.tsx`
+  - Không yêu cầu project cùng environment.
+- `app/Readme.md`, `docs/architecture_diagram.md`, `docs/GEPA_CURRENT_FLOW.md`
+  - Cập nhật kiến trúc sau khi implementation ổn định.
+
+## 7. Phần nên xóa hoặc deprecate
+
+Chỉ xóa sau khi protocol mới và generic worker E2E đã pass:
+
+- Mandatory `CloudRunRuntimeImageFactory` path.
+- Project-specific Cloud Build context/image creation.
+- Project-specific Cloud Run evaluation Job creation.
+- Factory/builder service accounts và IAM bindings.
+- Config bắt buộc `CLOUD_RUN_RUNTIME_FACTORY_JOB`.
+- Runtime gate yêu cầu project worker job phải khác generic worker job.
+- Tests chỉ xác nhận project-specific image/job là invariant bắt buộc.
+
+Nếu muốn giữ enhanced mode, isolate nó bằng enum/feature flag rõ ràng:
+
+```text
+generic_worker_bundle   # default
+project_image           # optional future mode
+```
+
+Không để generic path vô tình phụ thuộc factory availability.
+
+## 8. Security và isolation invariants
+
+1. API/static analyzer không import hoặc execute source upload.
+2. Dependency resolution có thể chạy build backend code; nó phải nằm trong
+   untrusted preparer identity, không phải trusted API identity.
+3. Evaluation worker chỉ có quyền đọc đúng runtime inputs cần thiết, ghi artifact
+   prefix của execution và gọi model theo policy.
+4. Runtime bundle không được mount trực tiếp từ gcsfuse để chạy; tải về local disk,
+   verify rồi extract.
+5. ZIP/tar extraction phải tiếp tục chặn traversal, link và device entry.
+6. Worker không được chạy nếu Python minor, protocol, worker image/job, object
+   generation hoặc checksum không khớp manifest.
+7. Source và generated tests phải nằm trong workspace tạm riêng của execution.
+8. Không share writable tests workspace hoặc coverage database giữa project.
+9. Không log secret, credential-bearing index URL hoặc source contents ngoài
+   artifact policy.
+10. Generated test không được tự động cài package mới trong evaluation.
+11. Timeout, output limit, pytest basetemp và cache isolation phải giữ nguyên.
+12. Pause/resume phải khóa cùng runtime digest và worker deployment identity.
+
+## 9. Test plan bắt buộc
+
+### 9.1 Runtime workspace tests
+
+- Hai project có dependency version xung đột vẫn prepare độc lập thành công.
+- `prepare_environment()` với nhiều project bị từ chối trước dependency resolution.
+- Python 3.10/3.11/3.12/3.13 được route đúng preparer.
+- `requires-python` không tương thích trả diagnostic rõ.
+- Source/test layout `src`, `lib`, package root và no-tests hoạt động.
+- Upstream test fail, collection fail/timeout và suite quá lớn dùng diagnostic/zero
+  baseline đúng invariant.
+- Dependency resolution hoặc `pip check` fail làm đúng project fail, không ảnh
+  hưởng project khác.
+- Runtime bundle restore được ở execution mới.
+- Console entry-point của dependency chạy được sau restore venv.
+- `PATH`, `VIRTUAL_ENV` và `TESTGEN_PYTHON` trỏ đúng runtime.
+
+### 9.2 Manifest/storage tests
+
+- Runtime object path content-addressed và không overwrite digest cũ.
+- Source hash mismatch bị từ chối.
+- Bundle hash mismatch bị từ chối.
+- GCS object generation mismatch bị từ chối.
+- Runtime digest đổi khi source, dependency, Python, toolchain hoặc worker image đổi.
+- Resume bằng runtime/worker identity khác bị từ chối.
+- Protocol 12/13 dual-read hoạt động trong migration.
+
+### 9.3 Evaluation worker tests
+
+- Generic worker chọn đúng Python minor.
+- Coordinator không restore venv hoặc chạy project test.
+- Worker restore đúng project runtime trước CoverUp.
+- CoverUp generated test chạy bằng project interpreter.
+- coverage.py chạy bằng project interpreter.
+- `run_test_experiment` chạy bằng project interpreter.
+- Final generation chạy và đo coverage bằng project interpreter.
+- Hai project chạy song song không share tests, coverage data, pytest temp hoặc
+  import cache.
+- Worker luôn publish terminal result hoặc paused checkpoint.
+
+### 9.4 GEPA integration tests
+
+- Một candidate batch chứa nhiều project được group và merge đúng target order.
+- Per-symbol score/feedback không bị gán nhầm giữa project.
+- Evaluation cache tách theo runtime digest, worker digest, split và replicate.
+- Diagnostic experiment được gửi tới đúng project worker.
+- Baseline preflight giữ denominator hợp lệ cho mọi target.
+- Holdout chỉ chạy ở final promotion gate.
+- Final suite artifact ghi runtime/prompt/source digests đầy đủ.
+
+### 9.5 Cloud smoke test
+
+Tạo tối thiểu hai fixture project:
+
+```text
+project-a: Python 3.11, dependency-X==1
+project-b: Python 3.12, dependency-X==2
+```
+
+Smoke flow:
+
+1. Upload cả hai ZIP.
+2. Chờ static analysis và runtime preparation.
+3. Xác nhận hai runtime digest và bundle object khác nhau.
+4. Xác nhận không tạo project-specific image/job ở default mode.
+5. Tạo một experiment chứa target của cả hai project.
+6. Chạy baseline evaluation.
+7. Chạy ít nhất một GEPA reflection iteration có diagnostic test.
+8. Xác nhận log mỗi target dùng đúng Python/venv.
+9. Sinh final suite cho cả hai project.
+10. Tải artifact và rerun từng suite trong runtime tương ứng.
+11. Xác nhận không có cross-project import hoặc dependency contamination.
+
+## 10. Rollout và migration
+
+### Giai đoạn 1: thêm generic protocol, chưa xóa factory
+
+- Thêm protocol/execution mode mới.
+- Worker dual-read project-image và generic-bundle manifests.
+- Backend có feature flag chọn generic mode ở dev.
+- Deploy versioned generic workers trước API/coordinator.
+- Chạy unit/integration tests.
+
+### Giai đoạn 2: dev E2E
+
+- Bật generic mode trên dev.
+- Upload fixture xung đột dependency/Python.
+- Chạy optimization và final generation.
+- Kiểm tra pause/resume.
+- Theo dõi install latency, worker startup, GCS transfer và artifact size.
+
+### Giai đoạn 3: default generic mode
+
+- API emit generic protocol cho runtime mới.
+- Existing project-specific runtime được dual-read hoặc yêu cầu rebuild.
+- Không tạo image/job riêng cho project mới.
+- Cập nhật UI và documentation.
+
+### Giai đoạn 4: loại bỏ factory
+
+- Xác nhận không còn active runtime/run phụ thuộc project-specific factory path.
+- Xóa factory deployment/config/IAM/code.
+- Dọn orphan project images/jobs theo danh sách đã verify.
+- Không xóa source/runtime artifacts còn được experiment snapshot tham chiếu.
+
+## 11. Tiêu chí nghiệm thu
+
+Implementation chỉ được coi là hoàn tất khi:
+
+- [x] Mỗi uploaded project có runtime bundle và digest riêng.
+- [x] Không có dependency resolution nào nhận nhiều project cùng lúc.
+- [x] Default upload không gọi Cloud Build để tạo project image.
+- [x] Default upload không tạo Cloud Run Job riêng cho project.
+- [x] Generic worker image được pin digest và version theo Python minor.
+- [x] Worker verify source/bundle checksum và object generation.
+- [x] Mọi pytest/coverage/diagnostic/final-generation execution dùng đúng project
+      interpreter.
+- [x] GEPA coordinator không import hoặc execute uploaded project.
+- [x] Multi-project experiment chạy được với dependency/Python khác nhau.
+- [x] Per-target score và feedback vẫn giữ đúng symbol attribution.
+- [x] Evaluation cache bao gồm project runtime và worker identity.
+- [x] Pause/resume từ chối mọi runtime identity mismatch.
+- [x] Final suite chạy pass trong runtime tương ứng và được persist ngoài ephemeral
+      worker filesystem.
+- [x] Dependency/network failure trả diagnostic có thể hành động được.
+- [x] Runtime cleanup/retention không xóa artifact còn được tham chiếu.
+- [x] UI không còn mô tả shared venv/environment.
+- [x] Dev Cloud E2E pass trước khi deploy production. Production deployment
+      itself remains intentionally out of scope for this branch.
+
+## 12. Lệnh kiểm tra sau khi sửa
+
+Chạy các lệnh bắt buộc của repository:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests -q
+.\.venv\Scripts\ruff.exe check src\optimization tests\test_coverage_optimization.py
+python -m py_compile src\coverup\coverup.py src\optimization\gepa.py src\optimization\metrics.py src\optimization\cli.py src\optimization\runner.py src\optimization\prompts.py src\optimization\subprocesses.py
+git diff --check
+```
+
+Chạy backend tests tách khỏi root `tests` trên Windows để tránh import collision
+giữa hai package `tests.conftest`:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest app\tests -q
+.\.venv\Scripts\ruff.exe check app\backend app\tests cloud
+```
+
+Chạy riêng các test runtime/worker quan trọng:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest `
+  tests\test_runtime_workspace.py `
+  tests\test_evaluation_dispatcher.py `
+  tests\test_evaluation_worker.py `
+  tests\test_deployment_architecture.py `
+  -q
+
+.\.venv\Scripts\python.exe -m pytest app\tests\test_runtime_preparation.py -q
+```
+
+Các test runtime có thể cần tải package từ PyPI. Nếu môi trường test chặn network,
+phải phân biệt network/sandbox failure với assertion failure của implementation;
+Cloud dev smoke vẫn phải chứng minh preparer có egress cần thiết.
+
+## 13. Handoff checklist
+
+- [x] Ghi runtime protocol/execution mode cuối cùng vào `AGENTS.md`.
+- [x] Cập nhật `docs/GEPA_CURRENT_FLOW.md` sau khi code merge.
+- [x] Cập nhật architecture diagram và deployment documentation.
+- [x] Báo rõ unit test nào đã chạy và cloud smoke nào chưa chạy.
+- [x] Không coi unit test pass là bằng chứng live Cloud Run E2E đã pass.
+- [x] Không chạy full GEPA benchmark tốn chi phí nếu chưa được yêu cầu.
+- [x] Dùng artifacts directory mới cho protocol/runtime mới: `e2e-final-complex-1fdeb75-r1/r2`
+      và `e2e-gepa-reflection-1fdeb75-r1`.
+- [x] Giữ nguyên các invariant GEPA về baseline, per-symbol feedback, locked
+      holdout, strict promotion và cache isolation.
+
+## Implementation progress (2026-08-29)
+
+Completed and pushed as separate commits:
+
+- `f75a5f6` — implementation plan and acceptance checklist.
+- `393523b` — protocol 13 generic worker + per-project bundle is the default; project-image factory is opt-in.
+- `88a1e4d` — schema 3 manifests, execution-mode routing, and schema 2 compatibility.
+- `dfe91f3` — per-project dependency configuration is passed to the resolver.
+- `6aff723` — content-addressed source archive and venv bundle publication.
+- `85a5dfc`, `471634e` — immutable object generation checks and resume source
+  verification.
+- `414b2a6`, `ff2791a` — dependency install-command policy and isolated fallback
+  venv behavior.
+- `7999d87`, `508d654` — relocatable venv scripts and minimal local toolchain
+  compatibility.
+- `3a1e2e6`, `7e32d45` — final-suite runtime verification and provenance.
+- `e938e30`, `d073f8b`, `27d4576` — network policy identity, index fingerprinting,
+  and credential-bearing index rejection.
+- `443eca9`, `cbef322`, `69ded9f`, `75f880c` — UI and environment defaults.
+- `bd7a28d` — deployment workflow defaults to generic workers; legacy factory
+  build/deploy is now an explicit migration-only flag.
+- `e7136d4`, `8210598` — project venv environment propagation through console
+  entry-points and final-suite coverage.
+- `03395d2`, `d7ab2f5`, `30b383f` — preparer/worker defense-in-depth for package
+  index credentials, project identifiers, and manifest project names.
+- `c704638`, `2801712`, `49dcb82`, `a519364`, `650f69c` — runtime digest binding,
+  Python-minor tar restore compatibility, immutable source admission, worker
+  identity gating, and sample protocol provenance.
+- `d947176` — experiment snapshots now persist and prefer the immutable runtime
+  source archive object when coordinators upload project source for evaluation
+  and final test generation.
+
+The implementation is complete for the generic per-project-venv path. Remaining
+work before production migration is operational: execute a controlled live
+429 pause/resume drill and verify the project/run inventory before retiring
+protocol-12 factory resources. The UI wording and project selection flow are
+updated; production Cloud Run deployment remains intentionally out of scope.
+
+## Implementation audit (2026-08-28)
+
+The code-level portions of this plan are now implemented and pushed as small,
+independent commits:
+
+- Runtime protocol 13 and generic-worker default: `393523b`, `88a1e4d`.
+- Per-project dependency selection and safe install policy: `dfe91f3`, `414b2a6`,
+  `ff2791a`.
+- Content-addressed source/runtime objects, generation checks, and digest identity:
+  `6aff723`, `85a5dfc`, `471634e`.
+- Project-venv interpreter routing, relocatable console scripts, and local toolchain
+  fallback: `5aee773`, `7999d87`, `508d654`.
+- Generic evaluation/final-generation dispatch, schema compatibility, and final
+  runtime-object verification: `88a1e4d`, `3a1e2e6`.
+- Experiment source snapshots retain the immutable runtime source object rather
+  than relying on a mutable project archive pointer: `d947176`.
+- Final-suite artifacts now persist prompt/runtime/source provenance:
+  `7e32d45`.
+- UI, deployment environment, and architecture/runbook documentation:
+  `9ea726e`, `f4a3a9b`, `d79dbc8`, `443eca9`, `cbef322`, `69ded9f`, `75f880c`.
+- Network policy is included in runtime manifests and cache identity:
+  `e938e30`, `d073f8b`; credential-bearing package indexes are rejected by
+  `27d4576`.
+
+The default upload path does not invoke Cloud Build, create a project-specific
+image, or create a project-specific Cloud Run Job. The legacy image factory is
+kept only for explicit `project_image` migration compatibility and is disabled by
+default in the deployment workflow (`DEPLOY_RUNTIME_FACTORY=false`). Runtime objects
+are intentionally retained after project deletion; no cleanup path deletes an
+object that an experiment snapshot can reference. A future retention job must
+implement reference tracking before deleting content-addressed objects.
+
+### Evidence and remaining operational gates
+
+- Unit/integration evidence: root runtime/worker/final-suite tests, backend tests,
+  Ruff, Python compilation, workflow YAML parsing, and frontend type/lint checks
+  are run before handoff. The latest complete-suite counts are recorded after
+  the final regression run below; targeted runtime/deployment additions are
+  recorded in the corresponding commits above. ESLint and TypeScript checks pass;
+  the repository-wide oxfmt check still reports pre-existing formatting drift in
+  32 frontend files, so no unrelated formatter rewrite was included.
+- A bounded Dev Cloud smoke was run after credentials and a cost window were
+  approved. It covered conflicting-Python upload/preparation, remote GEPA
+  baseline dispatch, diagnostic reflection, final-generation artifact
+  persistence, exact-artifact replay, and a controlled mid-batch pause/resume
+  execution.
+  The pause drill exercises the same worker checkpoint and coordinator resume
+  path as a provider 429 without intentionally exhausting quota.
+- The dev region has no deployed runtime-image-factory job; the generic path
+  uses only the preparer and immutable Python-minor worker jobs. Keep the
+  protocol-12 factory code dual-read until migration inventory confirms that
+  no stored project or active run still references `project_image`.
+
+### Checklist status at handoff
+
+- [x] Per-project venv, immutable source/bundle objects, digest and worker
+      identity are implemented and covered by tests.
+- [x] Generic protocol 13 is the default; protocol 12 factory workers remain
+      dual-read only behind an explicit migration flag.
+- [x] GEPA, diagnostic reflection, pytest/coverage and final-suite generation
+      route uploaded source execution through the project's restored venv.
+- [x] Generation/checksum verification, resume identity checks, dependency
+      policy fingerprinting, credential redaction and UI/docs handoff are done.
+- [x] Root/backend test suites, required Python checks, frontend typecheck and
+      ESLint pass on this branch (188 root, 109 backend, 58 frontend tests).
+- [x] Runtime-label metadata no longer imposes a shared Python version:
+      project uploads with different Python/dependency graphs can reuse a label
+      while retaining separate venvs (`75f880c`).
+- [x] Production workflow builds and deploys the generic Python-minor workers by
+      default; factory image build/deploy is guarded by the migration flag
+      `DEPLOY_RUNTIME_FACTORY=true` (`bd7a28d`).
+- [x] Dev Cloud conflicting-Python E2E for a non-trivial fixture and an
+      independent exact-artifact replay passed: both Python minors generated a
+      six-test suite with target statement/branch coverage 1.0 and pytest exit
+      code 0.
+- [x] Controlled pause/resume drill. A worker-only opt-in pause produced a
+      coordinator `status=paused`, pause signal, and atomic target checkpoints
+      for both Python minors; after disabling the hook, resume restored those
+      targets without repeating their model calls and completed successfully.
+      Real provider-429
+      exhaustion is not induced by the test and remains covered by the same
+      production path.
+- [x] No runtime-image-factory Cloud Run job is deployed in the dev region.
+      Protocol-12 factory code/resources remain dual-read migration support and
+      must not be deleted until the project/run inventory is verified.
+
+### Bounded Dev Cloud smoke evidence (2026-08-29)
+
+The approved Dev-only smoke window used project `project-7df9f963-9fe0-4b76-b3d`,
+region `asia-southeast1`, and the two committed fixtures under
+`eval/runtime_e2e_fixtures/`:
+
+- `project_py311`: Python 3.11, `packaging==24.2`.
+- `project_py312`: Python 3.12, `packaging==25.0`.
+
+The source archives and runtime bundles were uploaded under the runner-only GCS
+prefix. Runtime preparation succeeded independently for both projects; reports
+record Python 3.11.16/3.12.14, the requested packaging versions, one collected
+passing upstream test, statement/branch coverage 1.0, immutable source/bundle
+SHA-256 values, and distinct runtime digests. No project-specific image factory
+was used for the default path.
+
+Versioned immutable resources used by the smoke are:
+
+- generic runner image digest `sha256:b4cc68cc998669dafd5275008f52fb64293c7ed19939c5efa463d3272457a688`;
+- updated E2E coordinator image digest `sha256:150a1a32373e2ace3441f1c09a4438cea3a532b56efb18c932273705db98b855`
+  (contains remote pause forwarding from `355b818`);
+- generic runtime worker image digests `sha256:51f06333c0286e234f61b88dd0c7401ad6a5c8b183b5fcf75ce7e07fb4c98795` (3.11)
+  and `sha256:dc8ed755f0b3c2f948ffc1827ad18514cd89fc6859709c3e32c4948bcb3b43e3` (3.12);
+- GEPA smoke artifacts: `runner-jobs/e2e-gepa-917f2a1-r1`;
+- final-generation artifacts: `runner-jobs/e2e-final-917f2a1-r1`;
+- non-trivial final-generation/rerun artifacts:
+  `runner-jobs/e2e-final-complex-1fdeb75-r1` and `runner-jobs/e2e-final-complex-1fdeb75-r2`;
+- reflection artifacts: `runner-jobs/e2e-gepa-reflection-1fdeb75-r1`.
+
+The bounded GEPA execution completed successfully, dispatched every target to
+the matching Python worker, and performed valid locked test baseline preflight
+across both Python minors. Both project targets reached baseline aggregate
+score 1.0, so GEPA kept the unchanged baseline and correctly skipped a
+redundant final comparison. The cost report recorded 24 Flash Lite requests,
+6,814 total tokens, and estimated USD 0.0038086; no optimizer request was
+needed because the baseline already covered the tiny fixture targets.
+The independent final-generation execution also completed and persisted its
+manifest, source files, coverage JSON, and suite ZIP. With the quota/billing
+project `project-a2f7084e-90ac-4bfc-84b` configured for Vertex, one Python 3.11
+fixture target produced and retained one passing test, reached statement score
+1.0, and recorded two priced Flash Lite requests (569 total tokens,
+estimated USD 0.0003203). This confirms that generation and coverage execution
+cross the project-only venv boundary; it is still only a tiny fixture smoke,
+not evidence that a real project has achieved a useful generated suite.
+
+During this smoke, final-generation validation was fixed to accept the required
+GEPA three-component prompt (`initial`, `error`, `missing_coverage`) while
+retaining compatibility with legacy two-component snapshots. The fixes are
+separate pushed commits `e08b047` and `9af491d`; corresponding coordinator and
+worker images were rebuilt and pinned by digest. Runtime worker commits
+`964b0e7` and `917f2a1` then narrowed CoverUp's package root and normalized
+nested target specs for uploaded `src/` layouts; without these fixes CoverUp
+either exited before model invocation or silently filtered the target.
+
+The non-trivial final suite and rerun now pass the coverage gate. The first run
+(`runner-jobs/e2e-final-complex-1fdeb75-r1`) and fresh rerun
+(`runner-jobs/e2e-final-complex-1fdeb75-r2`) each used the same immutable
+protocol-13 manifests and produced two retained test files (six tests total),
+with target statement/branch coverage 12/12 and 8/8 for both Python 3.11 and
+3.12 projects and pytest exit code 0. The rerun cost four Flash Lite requests,
+1,774 tokens, and USD 0.0013286.
+
+The reflection run (`runner-jobs/e2e-gepa-reflection-1fdeb75-r1`) deliberately
+started from a no-op baseline. Its diagnostic reflection selected all three
+prompt components, improved train/validation/test from 0% to 100%, and passed
+the locked-test promotion gate. It used 20 priced Flash Lite/optimizer
+requests, 21,387 tokens, and estimated USD 0.0144461. This is live evidence
+that GEPA/DSPy control-plane optimization can feed execution back through each
+project's isolated venv. The remote-pause forwarding path is committed as
+`355b818` and covered by integration tests. The controlled pause/resume drill used
+`runner-jobs/e2e-gepa-pause-f701fc5-r1` (paused) and
+`runner-jobs/e2e-gepa-pause-f701fc5-r2` (resumed). The first execution wrote
+two worker checkpoints and exited with `status=paused`; the resumed execution
+restored nine checkpoint files from the old prefix, completed with `status=succeeded`,
+and retained locked-test baseline coverage 1.0. The resumed run used 48 priced
+Flash Lite requests, 21,229 tokens, and estimated USD 0.0157957. The worker
+pause hook is strictly opt-in (`PROMPTOPT_TEST_PAUSE_BEFORE_EXECUTION=1`) and
+is disabled on the E2E jobs after the drill.
+
+The coordinator resume-prefix fix is `4d9f772`; the deterministic worker drill
+hook is `f701fc5`. The E2E jobs are pinned to coordinator image
+`sha256:fbf5bc7da22c8965472ac5ff31af32c82d04cee64e69b7155a84055800c585c1`
+and generic worker images
+`sha256:23510eea12d9db8445fbdeed115724bef0022ab00eada3d0f73da9450e9f09f2`
+(Python 3.11) and
+`sha256:3c0158d3fd4e2c5980c3522bae798acf24e8c4ac27d79da894d63f2d60e7b92c`
+(Python 3.12).
+
+### Admission, exact replay, and mid-batch resume closure (2026-08-29)
+
+The final audit closed three gaps in the earlier smoke evidence:
+
+- Backend admission now accepts only canonical lowercase SHA-256 values and
+  always recomputes the runtime digest from the admitted source, bundle,
+  dependency policy, Python minor, and pinned worker identity (`320ad96`).
+  Reports produced by the actual preparer jobs were passed through the same
+  `RuntimeReport` validation and `_bind_runtime_identity` path as project upload.
+- Final generation now publishes the suite artifact SHA and the dispatcher
+  requires a separate `final_replay` operation to download that exact ZIP,
+  verify its digest, safely extract it, and rerun pytest/coverage in the restored
+  project venv (`7462c0e`). A successful generation cannot hide a failed replay.
+- Target outcomes are atomically checkpointed before a pause is surfaced. A
+  resumed batch handles the all-targets-restored case without constructing a
+  zero-worker executor and never reruns a completed target (`477cea5`).
+
+The preparer executions produced distinct, admitted protocol-13 runtimes:
+
+- Python 3.11 bundle SHA
+  `ba376825d087d8fc7343d74d1429973af3883693d2a7b916131317a62df57884`,
+  admitted runtime digest
+  `f0af4c41ec6ca45e11d5dacf5d01a57e2ba50b007ab5691c1acaff23fc4a2f27`;
+- Python 3.12 bundle SHA
+  `b54b66c615f0f81973121c3f4c6bc6a0caaf48b9a05c204cdcbd52f15af92817`,
+  admitted runtime digest
+  `23675af0ad862970250f571ecb28c24083a9a7b781a367e20389a3bd2b110153`.
+
+The admitted manifest is
+`runner-jobs/e2e-runtime/admitted-manifest-477cea5.json`. The E2E coordinator
+was pinned to image digest
+`sha256:9cd65665f25579d2acf7ba08bc192a182bfe5a5674fa372e18f6fe388fba0de8`;
+the Python 3.11 and 3.12 preparer/worker jobs were pinned respectively to
+`sha256:b0d50cc3b2dcb05631a7601197294433b506ad122527eec755fb8d598f99f678`
+and
+`sha256:eaa5e61e4a6b61a061560e7cf8745732ac0c4f907716cdc04141e42b62e2f31b`.
+
+Exact replay artifacts are under
+`runner-jobs/e2e-final-replay-477cea5-r1`. Generation and replay recorded the
+same suite SHA for each project (`7df19c9768d77fd477d1517304b3edcdd0723bd7866784b6dcaacedd7d0b9807`
+for Python 3.11 and
+`26527c5d5f19d5f09ab029c0d355c0f9e6a10b57db8790d73f04bb7b3bc40bd6`
+for Python 3.12). Both independent replays passed with pytest exit code 0;
+aggregate target coverage was 12/12 statements and 8/8 branches. Generation
+used four priced Flash Lite requests, 1,756 tokens, and estimated USD 0.0012836;
+replay made no model request.
+
+The mid-batch drill used
+`runner-jobs/e2e-gepa-midpause-477cea5-r1` (paused) and
+`runner-jobs/e2e-gepa-midpause-477cea5-r2` (resumed). Each paused worker archive
+contained a real `runs/.../target_checkpoints/*.json` beside its generated test
+and pause signal. On resume, each checkpoint archive had the same MD5 and size
+as before pause, and its LLM `event_id` values were identical to the final test
+results. The completed test-split targets therefore contributed their existing
+four request traces while only the remaining train/validation work invoked the
+model; the combined report contains 12 priced Flash Lite requests. The resumed
+coordinator finished with `status=succeeded`, locked-test baseline coverage 1.0,
+and the opt-in `PROMPTOPT_TEST_PAUSE_AFTER_COMPLETED_TARGETS` hook was removed
+from both E2E worker jobs after the drill.
+
+Final local verification passed: 188 root tests, 109 backend tests, 58 frontend
+tests, Ruff on all changed Python surfaces, the required `py_compile` set,
+frontend TypeScript/ESLint checks, workflow YAML parsing, and `git diff --check`.
+
+A read-only Firestore inventory of the deployment project inspected all 20
+current project records: no record had `runtime_execution_mode=project_image`
+or a non-empty `runtime_factory_prefix`; existing ready records are older
+protocol-8 runtimes without a factory reference. The dev region also has no
+runtime-image-factory Cloud Run job. Factory code remains intentionally
+dual-read for those pre-generic records until the production migration is
+completed; generic uploads do not depend on it.

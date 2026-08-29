@@ -61,15 +61,20 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--artifacts-dir", type=Path, default=Path("eval/prompt_optimization"))
     result.add_argument("--max-attempts", type=int, default=3)
     result.add_argument(
-        "--repeat-tests", type=int, default=5,
+        "--repeat-tests",
+        type=int,
+        default=5,
         help="Repeat generated tests to reject flaky suites (default: 5)",
     )
     result.add_argument(
-        "--max-concurrency", type=int, default=10,
+        "--max-concurrency",
+        type=int,
+        default=10,
         help="Maximum concurrent CoverUp model requests (default: 10)",
     )
     result.add_argument(
-        "--rate-limit", type=int,
+        "--rate-limit",
+        type=int,
         help="Optional CoverUp token-per-minute limit",
     )
     result.add_argument("--pytest-args", default="")
@@ -88,7 +93,8 @@ def parser() -> argparse.ArgumentParser:
     tune.add_argument("--dataset", type=Path, required=True)
     tune.add_argument("--prompt", type=Path, required=True)
     tune.add_argument(
-        "--holdout-split", default="test",
+        "--holdout-split",
+        default="test",
         help="Locked split used only for final promotion (falls back to validation if absent)",
     )
     tune.add_argument("--evaluation-replicates", type=int, default=1)
@@ -184,10 +190,7 @@ def _top_isort_targets(coverage_path: Path, *, seed: int = 7) -> list[dict]:
                 ranked.append((branches > 0, branches, statements, source, symbol))
     ranked.sort(key=lambda item: (-item[0], -item[1], -item[2], item[3], item[4]))
     if len(ranked) < 110:
-        raise ValueError(
-            f"Coverage report has only {len(ranked)} measurable isort functions; "
-            "110 are required"
-        )
+        raise ValueError(f"Coverage report has only {len(ranked)} measurable isort functions; 110 are required")
     selected = ranked[:110]
     random.Random(seed).shuffle(selected)
     return [
@@ -195,9 +198,7 @@ def _top_isort_targets(coverage_path: Path, *, seed: int = 7) -> list[dict]:
             "project": "isort",
             "source_file": source,
             "symbol": symbol,
-            "split": (
-                "train" if index < 50 else "validation" if index < 80 else "test"
-            ),
+            "split": ("train" if index < 50 else "validation" if index < 80 else "test"),
         }
         for index, (_, _, _, source, symbol) in enumerate(selected)
     ]
@@ -224,10 +225,7 @@ def _resolve_project_layouts(
         missing = sorted(set(projects) - set(value))
         extra = sorted(set(value) - set(projects))
         if missing or extra:
-            raise ValueError(
-                "Project layouts must match dataset projects exactly; "
-                f"missing={missing}, extra={extra}"
-            )
+            raise ValueError(f"Project layouts must match dataset projects exactly; missing={missing}, extra={extra}")
         layouts: dict[str, ProjectLayout] = {}
         for project in projects:
             item = value[project]
@@ -237,21 +235,25 @@ def _resolve_project_layouts(
                 package_value = Path(item["package_dir"])
                 tests_value = Path(item["tests_dir"])
             except (KeyError, TypeError) as exc:
-                raise ValueError(
-                    f"Project layout for {project!r} requires package_dir and tests_dir"
-                ) from exc
+                raise ValueError(f"Project layout for {project!r} requires package_dir and tests_dir") from exc
             package = _resolve(manifest_path.parent, package_value).resolve()
             tests = _resolve(manifest_path.parent, tests_value).resolve()
             import_root_value = Path(item.get("import_root", package.parent))
             import_root = _resolve(manifest_path.parent, import_root_value).resolve()
+            python_value = item.get("python_executable")
+            python_executable = _resolve(manifest_path.parent, Path(python_value)).resolve() if python_value else None
             if not package.is_dir():
                 raise FileNotFoundError(f"Package directory does not exist: {package}")
             if not import_root.is_dir():
                 raise FileNotFoundError(f"Import root does not exist: {import_root}")
+            if python_executable is not None and not python_executable.is_file():
+                raise FileNotFoundError(f"Project runtime interpreter does not exist: {python_executable}")
             layouts[project] = ProjectLayout(
                 package_dir=package,
                 tests_dir=tests,
                 import_root=import_root,
+                python_executable=python_executable,
+                runtime_digest=str(item.get("runtime_digest") or "") or None,
             )
         return layouts
 
@@ -261,9 +263,7 @@ def _resolve_project_layouts(
         package = (repos / project / project).resolve()
         tests = (repos / project / "tests").resolve()
         if not package.is_dir():
-            raise FileNotFoundError(
-                f"Optimization run needs package directory {package}"
-            )
+            raise FileNotFoundError(f"Optimization run needs package directory {package}")
         layouts[project] = ProjectLayout(package_dir=package, tests_dir=tests)
     return layouts
 
@@ -305,10 +305,13 @@ def make_runner(
     # ``package_dir`` is only the single-project fallback. Dynamic and
     # multi-project runs have already validated every entry in ``projects``.
     if projects is None and not config.package_dir.is_dir():
-        raise FileNotFoundError(
-            f"The package directory does not exist: {config.package_dir}"
-        )
-    return CoverUpExperimentRunner(config)
+        raise FileNotFoundError(f"The package directory does not exist: {config.package_dir}")
+    evaluation_backend = None
+    if os.environ.get("PROMPTOPT_EVALUATION_MANIFEST", "").strip():
+        from cloud.evaluation_dispatcher import RemoteEvaluationBackend
+
+        evaluation_backend = RemoteEvaluationBackend.from_environment(config)
+    return CoverUpExperimentRunner(config, evaluation_backend=evaluation_backend)
 
 
 def init_files(args: argparse.Namespace) -> None:
@@ -341,18 +344,25 @@ def evaluate(args: argparse.Namespace) -> None:
     )
     runner = make_runner(args, projects=projects)
     batch = evaluate_bundle_repeated(
-        runner, targets, prompt,
+        runner,
+        targets,
+        prompt,
         runner.config.artifacts_dir.resolve() / "candidates",
         split=args.split,
         replicates=args.evaluation_replicates,
     )
     aggregate = batch.get("aggregate") or aggregate_coverage_score(batch["results"])
-    print(json.dumps({
-        "runs": batch["run_ids"],
-        "aggregate_score": aggregate["score"],
-        "aggregate_coverage": aggregate,
-        "results": batch["results"],
-    }, indent=2))
+    print(
+        json.dumps(
+            {
+                "runs": batch["run_ids"],
+                "aggregate_score": aggregate["score"],
+                "aggregate_coverage": aggregate,
+                "results": batch["results"],
+            },
+            indent=2,
+        )
+    )
 
 
 def tune(args: argparse.Namespace) -> None:
@@ -373,26 +383,22 @@ def tune(args: argparse.Namespace) -> None:
     final_targets = holdout or validation
     final_split = args.holdout_split if holdout else "validation"
     print(
-        "Optimization dataset: "
-        f"train={len(train)}, validation={len(validation)}, "
-        f"{final_split}={len(final_targets)}",
+        f"Optimization dataset: train={len(train)}, validation={len(validation)}, {final_split}={len(final_targets)}",
         flush=True,
     )
-    validate_project_stratification({
-        "train": train,
-        "validation": validation,
-        final_split: final_targets,
-    })
+    validate_project_stratification(
+        {
+            "train": train,
+            "validation": validation,
+            final_split: final_targets,
+        }
+    )
     artifacts = runner.config.artifacts_dir.resolve()
     existing_baseline_reference = None
     if args.baseline_tests_dir is not None:
-        baseline_tests_dir = _resolve(
-            args.project_root.resolve(), args.baseline_tests_dir
-        ).resolve()
+        baseline_tests_dir = _resolve(args.project_root.resolve(), args.baseline_tests_dir).resolve()
         if not baseline_tests_dir.is_dir():
-            raise FileNotFoundError(
-                f"The baseline tests directory does not exist: {baseline_tests_dir}"
-            )
+            raise FileNotFoundError(f"The baseline tests directory does not exist: {baseline_tests_dir}")
         baseline_record = runner.evaluate_existing_tests_batch(
             final_targets,
             baseline_tests_dir,
@@ -420,8 +426,7 @@ def tune(args: argparse.Namespace) -> None:
     # is cached and reused at the promotion gate, so a broken holdout target
     # fails early instead of wasting the entire search budget first.
     print(
-        f"Starting locked {final_split} baseline preflight for "
-        f"{len(final_targets)} targets...",
+        f"Starting locked {final_split} baseline preflight for {len(final_targets)} targets...",
         flush=True,
     )
     baseline_evaluation = evaluate_bundle_repeated(
@@ -435,13 +440,14 @@ def tune(args: argparse.Namespace) -> None:
     )
     baseline_results = baseline_evaluation["results"]
     validate_reference_evaluation(
-        baseline_results, split=final_split, expected_targets=final_targets,
+        baseline_results,
+        split=final_split,
+        expected_targets=final_targets,
     )
     baseline_aggregate = baseline_evaluation["aggregate"]
     baseline_mean_score = float(baseline_aggregate["score"])
     print(
-        f"Completed locked {final_split} baseline preflight; "
-        f"aggregate score={baseline_mean_score:.4f}",
+        f"Completed locked {final_split} baseline preflight; aggregate score={baseline_mean_score:.4f}",
         flush=True,
     )
 
@@ -455,8 +461,12 @@ def tune(args: argparse.Namespace) -> None:
     )
 
     optimized = optimize(
-        runner=runner, train_targets=train, validation_targets=validation,
-        baseline=baseline, reflection_lm=lm, artifacts_dir=artifacts,
+        runner=runner,
+        train_targets=train,
+        validation_targets=validation,
+        baseline=baseline,
+        reflection_lm=lm,
+        artifacts_dir=artifacts,
         auto=args.auto or ("medium" if args.max_metric_calls is None else None),
         max_metric_calls=args.max_metric_calls,
         evaluation_replicates=args.evaluation_replicates,
@@ -471,9 +481,7 @@ def tune(args: argparse.Namespace) -> None:
         print(f"Saved cost report to {cost_report_path}")
 
     program_path = artifacts / "optimized_program.json"
-    program_path.write_text(
-        json.dumps(optimized.as_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    program_path.write_text(json.dumps(optimized.as_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
     proposed_prompt = optimized.best_bundle
     if error := validate_bundle(proposed_prompt):
         raise ValueError(f"GEPA produced an invalid final prompt bundle: {error}")
@@ -493,8 +501,7 @@ def tune(args: argparse.Namespace) -> None:
             "promoted": False,
             "final_evaluation_skipped": True,
             "skip_reason": (
-                "GEPA selected the unchanged baseline; there is no new prompt "
-                "to compare on the final split."
+                "GEPA selected the unchanged baseline; there is no new prompt to compare on the final split."
             ),
             "final_split": final_split,
             "used_locked_holdout": bool(holdout),
@@ -512,15 +519,10 @@ def tune(args: argparse.Namespace) -> None:
             "existing_baseline_reference": existing_baseline_reference,
         }
         report_path = artifacts / "final_validation.json"
-        report_path.write_text(
-            json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+        report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
         write_cost_report()
         print(f"Saved optimized program to {program_path}")
-        print(
-            "GEPA retained the unchanged baseline; skipped final "
-            f"{final_split} test generation and evaluation."
-        )
+        print(f"GEPA retained the unchanged baseline; skipped final {final_split} test generation and evaluation.")
         print(f"Retained baseline at {final_path}")
         return
 
@@ -605,8 +607,10 @@ def tune(args: argparse.Namespace) -> None:
 def _target_key(value: SymbolTarget | dict) -> tuple[str, str, str, str]:
     target = value.__dict__ if isinstance(value, SymbolTarget) else value
     return (
-        str(target["project"]), str(target["source_file"]),
-        str(target["symbol"]), str(target["split"]),
+        str(target["project"]),
+        str(target["source_file"]),
+        str(target["symbol"]),
+        str(target["split"]),
     )
 
 
@@ -615,9 +619,7 @@ def _reference_row_is_valid(row: dict) -> bool:
     if not coverage or coverage.get("valid") is False:
         return False
     try:
-        return int(coverage["num_statements"]) > 0 and int(
-            coverage["num_branches"]
-        ) >= 0
+        return int(coverage["num_statements"]) > 0 and int(coverage["num_branches"]) >= 0
     except (KeyError, TypeError, ValueError):
         return False
 
@@ -647,11 +649,13 @@ def finalize(args: argparse.Namespace) -> None:
     final_targets = load_targets(args.dataset.resolve(), args.holdout_split)
     if not final_targets:
         raise ValueError(f"No targets found for split {args.holdout_split!r}")
-    validate_project_stratification({
-        "train": load_targets(args.dataset.resolve(), "train"),
-        "validation": load_targets(args.dataset.resolve(), "validation"),
-        args.holdout_split: final_targets,
-    })
+    validate_project_stratification(
+        {
+            "train": load_targets(args.dataset.resolve(), "train"),
+            "validation": load_targets(args.dataset.resolve(), "validation"),
+            args.holdout_split: final_targets,
+        }
+    )
     projects = _resolve_project_layouts(
         args.project_root.resolve(),
         final_targets,
@@ -667,18 +671,12 @@ def finalize(args: argparse.Namespace) -> None:
     expected = {_target_key(target) for target in final_targets}
     actual = {_target_key(row["target"]) for row in rows}
     if actual != expected:
-        raise RuntimeError(
-            "Reference cache target set does not match the requested holdout split."
-        )
-    invalid_keys = {
-        _target_key(row["target"]) for row in rows if not _reference_row_is_valid(row)
-    }
+        raise RuntimeError("Reference cache target set does not match the requested holdout split.")
+    invalid_keys = {_target_key(row["target"]) for row in rows if not _reference_row_is_valid(row)}
     repaired_run_ids: list[str] = []
     repaired_workspaces: list[str] = []
     if invalid_keys:
-        invalid_targets = [
-            target for target in final_targets if _target_key(target) in invalid_keys
-        ]
+        invalid_targets = [target for target in final_targets if _target_key(target) in invalid_keys]
         repaired = evaluate_bundle_repeated(
             runner,
             invalid_targets,
@@ -688,15 +686,15 @@ def finalize(args: argparse.Namespace) -> None:
             workspace_kind="baseline",
             replicates=args.evaluation_replicates,
         )
-        replacements = {
-            _target_key(row["target"]): row for row in repaired["results"]
-        }
+        replacements = {_target_key(row["target"]): row for row in repaired["results"]}
         rows = [replacements.get(_target_key(row["target"]), row) for row in rows]
         repaired_run_ids = repaired["run_ids"]
         repaired_workspaces = repaired["tests_workspaces"]
 
     validate_reference_evaluation(
-        rows, split=args.holdout_split, expected_targets=final_targets,
+        rows,
+        split=args.holdout_split,
+        expected_targets=final_targets,
     )
     baseline_aggregate = aggregate_coverage_score(rows)
     proposed_evaluation = evaluate_bundle_repeated(
@@ -713,7 +711,8 @@ def finalize(args: argparse.Namespace) -> None:
     baseline_score = float(baseline_aggregate["score"])
     proposed_score = float(proposed_aggregate["score"])
     promoted = should_promote(
-        optimized_mean=proposed_score, baseline_mean=baseline_score,
+        optimized_mean=proposed_score,
+        baseline_mean=baseline_score,
     )
 
     proposed_path = artifacts / "prompts" / "gepa_proposed.json"
@@ -737,10 +736,12 @@ def finalize(args: argparse.Namespace) -> None:
         "production_prompt": str(final_path),
         "baseline_prompt": str(args.prompt.resolve()),
         "baseline_tests_workspaces": [
-            *reference.get("tests_workspaces", []), *repaired_workspaces,
+            *reference.get("tests_workspaces", []),
+            *repaired_workspaces,
         ],
         "baseline_run_ids": [
-            *reference.get("run_ids", []), *repaired_run_ids,
+            *reference.get("run_ids", []),
+            *repaired_run_ids,
         ],
         "run_ids": proposed_evaluation["run_ids"],
         "tests_workspaces": proposed_evaluation["tests_workspaces"],
@@ -753,9 +754,7 @@ def finalize(args: argparse.Namespace) -> None:
             "gepa_search_rerun": False,
         },
     }
-    (artifacts / "final_validation.json").write_text(
-        json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    (artifacts / "final_validation.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     coverage_report = {
         "baseline_digest": bundle_digest(baseline),
         "optimized_digest": bundle_digest(proposed),
@@ -764,9 +763,7 @@ def finalize(args: argparse.Namespace) -> None:
         "splits": {
             args.holdout_split: {
                 "baseline": _coverage_summary(baseline_aggregate, len(rows)),
-                "optimized": _coverage_summary(
-                    proposed_aggregate, len(proposed_evaluation["results"])
-                ),
+                "optimized": _coverage_summary(proposed_aggregate, len(proposed_evaluation["results"])),
             }
         },
     }

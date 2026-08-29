@@ -419,13 +419,6 @@ class ExperimentService:
         if any(project.status not in {"ready", "warning"} for project in projects):
             raise AppError(409, "ANALYSIS_NOT_READY", "Every project must finish analysis first")
         uploaded = [project for project in projects if not self.projects.is_sample(project.id)]
-        environment_ids = {project.runtime_environment_id for project in projects}
-        if len(environment_ids) != 1:
-            raise AppError(
-                422,
-                "RUNTIME_ENVIRONMENT_MISMATCH",
-                "Every project in an experiment must belong to the same runtime environment",
-            )
         if any(project.runtime_status != RuntimeStatus.READY for project in uploaded):
             raise AppError(409, "RUNTIME_NOT_READY", "Every uploaded project must pass runtime preparation")
         outdated_runtime = [
@@ -433,6 +426,20 @@ class ExperimentService:
             for project in uploaded
             if project.runtime_report is None
             or project.runtime_report.protocol_version < MINIMUM_RUNTIME_PROTOCOL_VERSION
+            or not project.runtime_bundle_object
+            or not project.runtime_digest
+            or not re.fullmatch(
+                r"[A-Za-z0-9._:/-]+@sha256:[0-9a-f]{64}",
+                str(project.runtime_image or ""),
+            )
+            or not re.fullmatch(
+                r"projects/[^/]+/locations/[^/]+/jobs/[^/]+",
+                str(project.runtime_worker_job or ""),
+            )
+            or not project.source_archive_sha256
+            or not project.runtime_source_archive_object
+            or not project.runtime_bundle_sha256
+            or project.runtime_report.python_version != project.settings.runtime.python_version
         ]
         if outdated_runtime:
             raise AppError(
@@ -454,11 +461,28 @@ class ExperimentService:
                     source_directory=project.settings.runtime.source_directory,
                     test_directory=project.settings.tests.test_directory,
                     runner_project=runner_project,
-                    archive_object=None if self.projects.is_sample(project.id) else project.object_name,
+                    archive_object=(
+                        None
+                        if self.projects.is_sample(project.id)
+                        else (project.runtime_source_archive_object or project.object_name)
+                    ),
+                    source_archive_object=(
+                        None if self.projects.is_sample(project.id) else project.runtime_source_archive_object
+                    ),
                     runtime_artifact_prefix=project.runtime_artifact_prefix,
                     runtime_environment_id=project.runtime_environment_id,
                     runtime_bundle_object=project.runtime_bundle_object,
                     runtime_protocol_version=(project.runtime_report.protocol_version if project.runtime_report else 1),
+                    runtime_digest=project.runtime_digest or project.runtime_dependency_fingerprint,
+                    runtime_image=project.runtime_image or project.settings.runtime.runtime_image,
+                    runtime_worker_job=project.runtime_worker_job,
+                    runtime_execution_mode=(project.runtime_report.execution_mode if project.runtime_report else None),
+                    source_archive_sha256=project.source_archive_sha256,
+                    source_archive_generation=project.runtime_source_archive_generation,
+                    runtime_bundle_sha256=project.runtime_bundle_sha256,
+                    runtime_bundle_generation=project.runtime_bundle_generation,
+                    network_access=project.settings.security.network_access,
+                    python_version=project.settings.runtime.python_version,
                 )
             )
             for function in await self._list_functions(project.id):
@@ -904,7 +928,11 @@ class ExperimentService:
                 ]
                 if hasattr(self.cloud_optimizer, "start"):
                     start_options = {}
-                    if any(snapshot.archive_object for snapshot in item.project_snapshots):
+                    # Samples and uploaded projects share the same immutable
+                    # evaluation-worker protocol.  Omitting sample snapshots
+                    # here would silently fall back to executing their tests
+                    # inside the GEPA coordinator.
+                    if item.project_snapshots:
                         start_options["projects"] = item.project_snapshots
                     if run.resume_artifact_prefix:
                         start_options["resume_artifacts_prefix"] = run.resume_artifact_prefix
@@ -929,6 +957,7 @@ class ExperimentService:
                     holdout=holdout,
                     settings=optimization_settings,
                     vertexai_project=run.vertexai_project,
+                    projects=item.project_snapshots or None,
                 )
             artifact_payloads = {
                 "candidate_prompt.json": (result.candidate.as_json().encode(), "application/json"),
@@ -1411,13 +1440,6 @@ class ExperimentService:
                 "TEST_GENERATION_PROJECT_NOT_IN_EXPERIMENT",
                 "A test suite can only use projects from the selected prompt's experiment",
             )
-        environments = {snapshots[project_id].runtime_environment_id for project_id in selected_project_ids}
-        if len(environments) != 1:
-            raise AppError(
-                422,
-                "RUNTIME_ENVIRONMENT_MISMATCH",
-                "Every selected Test Suite project must use the same runtime environment",
-            )
         available: dict[str, TargetReference] = {}
         for project_id in selected_project_ids:
             project = await self.projects.require_owned(project_id, owner_id)
@@ -1702,13 +1724,12 @@ class ExperimentService:
                         "pytest_args": item.settings.pytest_args,
                         "random_seed": run.random_seed,
                     },
-                    projects=[snapshot for snapshot in item.project_snapshots if snapshot.project_id in run.project_ids]
-                    if any(
-                        snapshot.archive_object
-                        for snapshot in item.project_snapshots
-                        if snapshot.project_id in run.project_ids
-                    )
-                    else None,
+                    projects=[
+                        project_snapshot
+                        for project_snapshot in item.project_snapshots
+                        if project_snapshot.project_id in run.project_ids
+                    ]
+                    or None,
                     provider_secret_refs=run.provider_secret_refs,
                 )
                 run.cloud_deadline_at = datetime.now(UTC) + timedelta(seconds=self.cloud_test_generator.timeout_seconds)

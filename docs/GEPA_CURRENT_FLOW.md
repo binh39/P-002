@@ -509,3 +509,32 @@ Promotion                : false
 Day la artifact cu voi dataset 25/20/20. Run moi se dung dataset 50/30/30,
 reflection minibatch 5, causal selection `initial/error`, va neu `best_index=0` thi dung
 ngay sau GEPA search ma khong tao run test.
+
+## 11. Uploaded project runtime boundary
+
+The GEPA/DSPy process remains a control plane. It parses numbered source context,
+builds prompt candidates, performs reflection and promotion, and never imports or
+executes an uploaded package. Remote evaluation and final-suite generation group
+targets by project and dispatch each group to the immutable worker job recorded in
+the project snapshot.
+
+For protocol 13 (`generic_worker_bundle`), that worker downloads the content-
+addressed source archive and venv bundle, verifies object generation and SHA-256,
+restores the bundle in an isolated task directory, and sets `TESTGEN_PYTHON`,
+`VIRTUAL_ENV`, and `PATH` to that project's interpreter. The outer CoverUp
+process can remain in the pinned worker tool environment, but every subprocess
+that imports or executes uploaded code (initial coverage, diagnostic tests,
+pytest, SlipCover, coverage.py, and final-suite replay) uses the project-specific
+interpreter. GEPA does not reinstall dependencies per candidate or replicate.
+
+Final generation publishes a content-addressed suite ZIP. The dispatcher then
+starts a separate `final_replay` worker operation with that exact artifact SHA;
+the final-generation operation succeeds only when replay verifies the digest,
+safely extracts the ZIP, and passes pytest/coverage in the same immutable
+project runtime.
+
+The generic worker image/job is shared only as a pinned tool layer for a Python
+minor. Runtime objects, dependency fingerprints, and runtime digests remain
+project-specific. The legacy project-image factory is retained only behind the
+explicit `project_image` migration flag; new uploads default to the generic
+bundle path.
