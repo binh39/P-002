@@ -857,7 +857,7 @@ def prepare_environment(
                     # and coverage.py, especially on Windows and cold workers.
                     timeout_seconds=max(10, admission_command_timeout_seconds),
                 )
-            _run(
+            report = _run(
                 result,
                 f"coverage report for {project_id}",
                 [
@@ -872,7 +872,64 @@ def prepare_environment(
                 roots[project_id],
                 deadline,
                 maximum_output_bytes,
+                allowed_return_codes=(0, 1),
+                raise_on_unexpected_exit=False,
             )
+            if report.return_code != 0 or not coverage_json.is_file():
+                # A usable collect-only pass can still abort before importing
+                # any measured source during the real baseline run. Coverage
+                # then exits 1 with "No data to report". This is a valid zero
+                # baseline, not a reason to reject an otherwise usable venv.
+                coverage_data.unlink(missing_ok=True)
+                coverage_json.unlink(missing_ok=True)
+                empty_tests = roots[project_id] / ".promptopt-empty-tests"
+                empty_tests.mkdir(parents=True, exist_ok=True)
+                empty_config = empty_tests / "pytest.ini"
+                empty_config.write_text("[pytest]\n", encoding="utf-8")
+                _run(
+                    result,
+                    f"zero baseline after empty coverage for {project_id}",
+                    [
+                        str(python),
+                        "-m",
+                        "coverage",
+                        "run",
+                        "--branch",
+                        f"--data-file={coverage_data}",
+                        f"--source={sources[project_id]}",
+                        "-m",
+                        "pytest",
+                        "-q",
+                        "-c",
+                        str(empty_config),
+                        "-p",
+                        "no:cacheprovider",
+                        str(empty_tests),
+                    ],
+                    roots[project_id],
+                    deadline,
+                    maximum_output_bytes,
+                    allowed_return_codes=(5,),
+                    pytest_plugin_autoload=False,
+                    extra_env=test_environment,
+                    timeout_seconds=max(10, admission_command_timeout_seconds),
+                )
+                _run(
+                    result,
+                    f"zero coverage report for {project_id}",
+                    [
+                        str(python),
+                        "-m",
+                        "coverage",
+                        "json",
+                        f"--data-file={coverage_data}",
+                        "-o",
+                        str(coverage_json),
+                    ],
+                    roots[project_id],
+                    deadline,
+                    maximum_output_bytes,
+                )
             coverage = json.loads(coverage_json.read_text(encoding="utf-8"))["totals"]
             project_result.statement_coverage = float(coverage.get("percent_covered", 0.0)) / 100.0
             branches = int(coverage.get("num_branches", 0))
