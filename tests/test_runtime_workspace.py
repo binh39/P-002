@@ -195,7 +195,7 @@ def test_detect_layout_does_not_select_root_test_package_as_source(tmp_path):
     assert detected_tests == tests
 
 
-def test_prepare_runtime_collects_tests_and_baseline_coverage(tmp_path):
+def test_prepare_runtime_does_not_run_tests_or_coverage_during_admission(tmp_path):
     archive = tmp_path / "project.zip"
     write_zip(
         archive,
@@ -215,9 +215,13 @@ def test_prepare_runtime_collects_tests_and_baseline_coverage(tmp_path):
 
     assert result.status == "runtime_ready", result.error
     assert python is not None
-    assert result.collected_tests == 1
-    assert result.statement_coverage == 1.0
-    assert result.branch_coverage == 1.0
+    assert result.collected_tests == 0
+    assert result.statement_coverage is None
+    assert result.branch_coverage is None
+    assert not any(
+        item.name.startswith(("collect tests", "baseline tests", "zero baseline", "coverage report"))
+        for item in result.commands
+    )
 
 
 def test_runtime_admission_exports_project_venv_to_console_entrypoints(tmp_path, monkeypatch):
@@ -231,11 +235,11 @@ def test_runtime_admission_exports_project_venv_to_console_entrypoints(tmp_path,
                 "import subprocess\n"
                 "import sys\n\n"
                 "def test_console_entrypoint():\n"
-                "    completed = subprocess.run([\"promptopt-console\"], check=True, "
+                '    completed = subprocess.run(["promptopt-console"], check=True, '
                 "capture_output=True, text=True)\n"
-                "    assert completed.stdout.strip() == \"runtime-ok\"\n"
-                "    assert os.environ[\"TESTGEN_PYTHON\"] == sys.executable\n"
-                "    assert os.environ[\"VIRTUAL_ENV\"]\n"
+                '    assert completed.stdout.strip() == "runtime-ok"\n'
+                '    assert os.environ["TESTGEN_PYTHON"] == sys.executable\n'
+                '    assert os.environ["VIRTUAL_ENV"]\n'
             ),
         },
     )
@@ -251,9 +255,7 @@ def test_runtime_admission_exports_project_venv_to_console_entrypoints(tmp_path,
             bin_dir = runtime_dir / ".venv" / ("Scripts" if os.name == "nt" else "bin")
             bin_dir.mkdir(parents=True, exist_ok=True)
             if os.name == "nt":
-                (bin_dir / "promptopt-console.cmd").write_text(
-                    "@echo off\r\necho runtime-ok\r\n", encoding="utf-8"
-                )
+                (bin_dir / "promptopt-console.cmd").write_text("@echo off\r\necho runtime-ok\r\n", encoding="utf-8")
             else:
                 script = bin_dir / "promptopt-console"
                 script.write_text("#!/bin/sh\necho runtime-ok\n", encoding="utf-8")
@@ -298,11 +300,11 @@ def test_prepare_runtime_accepts_project_without_existing_tests(tmp_path):
     assert result.status == "runtime_ready", result.error
     assert python is not None
     assert result.collected_tests == 0
-    assert result.statement_coverage == 0.0
+    assert result.statement_coverage is None
     assert result.test_directory == ".promptopt-empty-tests"
 
 
-def test_prepare_runtime_treats_upstream_collection_failure_as_diagnostic(tmp_path):
+def test_prepare_runtime_ignores_upstream_pytest_configuration(tmp_path):
     archive = tmp_path / "project-with-broken-upstream-config.zip"
     write_zip(
         archive,
@@ -323,13 +325,11 @@ def test_prepare_runtime_treats_upstream_collection_failure_as_diagnostic(tmp_pa
 
     assert result.status == "runtime_ready", result.error
     assert python is not None
-    collect = next(item for item in result.commands if item.name.startswith("collect tests"))
-    assert collect.return_code not in (0, 5)
-    assert any(item.name.startswith("zero baseline") for item in result.commands)
-    assert result.statement_coverage == 0.0
+    assert not any("pytest" in item.command for item in result.commands)
+    assert result.statement_coverage is None
 
 
-def test_prepare_runtime_falls_back_when_baseline_produces_no_coverage_data(tmp_path, monkeypatch):
+def test_prepare_runtime_never_requests_a_coverage_report(tmp_path, monkeypatch):
     from cloud import runtime_workspace
 
     archive = tmp_path / "project-with-empty-baseline-coverage.zip"
@@ -370,12 +370,11 @@ def test_prepare_runtime_falls_back_when_baseline_produces_no_coverage_data(tmp_
 
     assert result.status == "runtime_ready", result.error
     assert python is not None
-    assert result.statement_coverage == 0.0
-    assert rejected_report
-    assert any(item.name.startswith("coverage discovery probe") for item in result.commands)
+    assert result.statement_coverage is None
+    assert not rejected_report
 
 
-def test_prepare_runtime_falls_back_when_upstream_collection_times_out(tmp_path):
+def test_prepare_runtime_does_not_import_hanging_test_modules(tmp_path):
     archive = tmp_path / "project-with-hanging-collection.zip"
     write_zip(
         archive,
@@ -396,9 +395,7 @@ def test_prepare_runtime_falls_back_when_upstream_collection_times_out(tmp_path)
 
     assert result.status == "runtime_ready", result.error
     assert python is not None
-    collect = next(item for item in result.commands if item.name.startswith("collect tests"))
-    assert collect.timed_out is True
-    assert any(item.name.startswith("zero baseline") for item in result.commands)
+    assert not any("pytest" in item.command for item in result.commands)
 
 
 def test_prepare_runtime_prefers_unit_tests_over_integration_harnesses(tmp_path):
@@ -424,7 +421,7 @@ def test_prepare_runtime_prefers_unit_tests_over_integration_harnesses(tmp_path)
 
     assert result.status == "runtime_ready", result.error
     assert python is not None
-    assert result.collected_tests == 1
+    assert result.collected_tests == 0
     assert result.test_directory == "test/units"
 
 
@@ -482,7 +479,7 @@ def test_invalid_project_python_requirement_is_reported_as_project_metadata_erro
         raise AssertionError("invalid project metadata must be rejected")
 
 
-def test_prepare_runtime_accepts_failing_upstream_tests_when_coverage_is_measurable(tmp_path):
+def test_prepare_runtime_does_not_execute_failing_upstream_tests(tmp_path):
     archive = tmp_path / "project-with-failing-test.zip"
     write_zip(
         archive,
@@ -504,10 +501,9 @@ def test_prepare_runtime_accepts_failing_upstream_tests_when_coverage_is_measura
 
     assert result.status == "runtime_ready", result.error
     assert python is not None
-    assert result.collected_tests == 1
-    baseline = next(item for item in result.commands if item.name.startswith("baseline tests"))
-    assert baseline.return_code == 1
-    assert result.statement_coverage is not None
+    assert result.collected_tests == 0
+    assert result.statement_coverage is None
+    assert not any("pytest" in item.command for item in result.commands)
 
 
 def test_prepare_runtime_does_not_build_dynamic_version_project(tmp_path):

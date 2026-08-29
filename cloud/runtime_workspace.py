@@ -47,7 +47,6 @@ RUNTIME_TOOL_PACKAGES = (
     # CLI. Do not silently resolve a newer major/minor release in uploads.
     "slipcover==1.0.18",
 )
-MAX_ADMISSION_BASELINE_TESTS = 250
 ADMISSION_COMMAND_TIMEOUT_SECONDS = 120
 DEPENDENCY_FILES = (
     "uv.lock",
@@ -741,9 +740,7 @@ def prepare_environment(
         runtime_environment = dict(os.environ)
         runtime_environment["TESTGEN_PYTHON"] = str(python)
         runtime_environment["VIRTUAL_ENV"] = str(venv_dir)
-        runtime_environment["PATH"] = os.pathsep.join(
-            [str(python.parent), runtime_environment.get("PATH", "")]
-        )
+        runtime_environment["PATH"] = os.pathsep.join([str(python.parent), runtime_environment.get("PATH", "")])
 
         site_packages = (
             venv_dir / "Lib" / "site-packages"
@@ -760,178 +757,11 @@ def prepare_environment(
                 prepared_environment,
                 metadata_site=site_packages,
             )
-        test_environment = {
-            key: prepared_environment[key]
-            for key in ("PATH", "VIRTUAL_ENV", "TESTGEN_PYTHON", "PYTHONPATH")
-        }
-
-        for project_id in roots:
-            project_result = result.projects[project_id]
-            pytest_target = tests[project_id]
-            collect = _run(
-                result,
-                f"collect tests for {project_id}",
-                [str(python), "-m", "pytest", "--collect-only", "-q", str(pytest_target)],
-                roots[project_id],
-                deadline,
-                maximum_output_bytes,
-                # Upstream collection is diagnostic. Generated PromptOpt tests
-                # do not depend on every repository test module collecting.
-                allowed_return_codes=(0, 1, 2, 3, 4, 5),
-                pytest_plugin_autoload=bool(uv),
-                extra_env=test_environment,
-                timeout_seconds=admission_command_timeout_seconds,
-                raise_on_timeout=False,
-            )
-            project_result.collected_tests = _parse_collected_tests(collect.output)
-            coverage_data = workspace / "coverage" / f".coverage-{project_id}"
-            coverage_json = workspace / "coverage" / f"{project_id}.json"
-            coverage_json.parent.mkdir(parents=True, exist_ok=True)
-            baseline: CommandResult | None = None
-            collection_usable = not collect.timed_out and collect.return_code in (0, 1, 5)
-            if collection_usable and 0 < project_result.collected_tests <= MAX_ADMISSION_BASELINE_TESTS:
-                baseline = _run(
-                    result,
-                    f"baseline tests for {project_id}",
-                    [
-                        str(python),
-                        "-m",
-                        "coverage",
-                        "run",
-                        "--branch",
-                        f"--data-file={coverage_data}",
-                        f"--source={sources[project_id]}",
-                        "-m",
-                        "pytest",
-                        "-q",
-                        str(pytest_target),
-                    ],
-                    roots[project_id],
-                    deadline,
-                    maximum_output_bytes,
-                    # Failing upstream assertions are diagnostic. Collection,
-                    # internal and usage errors fall back to a zero baseline.
-                    allowed_return_codes=(0, 1, 5),
-                    pytest_plugin_autoload=bool(uv),
-                    extra_env=test_environment,
-                    timeout_seconds=admission_command_timeout_seconds,
-                    raise_on_timeout=False,
-                    raise_on_unexpected_exit=False,
-                )
-
-            if baseline is None or baseline.timed_out or baseline.return_code not in (0, 1, 5):
-                coverage_data.unlink(missing_ok=True)
-                empty_tests = roots[project_id] / ".promptopt-empty-tests"
-                empty_tests.mkdir(parents=True, exist_ok=True)
-                empty_config = empty_tests / "pytest.ini"
-                empty_config.write_text("[pytest]\n", encoding="utf-8")
-                _run(
-                    result,
-                    f"zero baseline for {project_id}",
-                    [
-                        str(python),
-                        "-m",
-                        "coverage",
-                        "run",
-                        "--branch",
-                        f"--data-file={coverage_data}",
-                        f"--source={sources[project_id]}",
-                        "-m",
-                        "pytest",
-                        "-q",
-                        "-c",
-                        str(empty_config),
-                        "-p",
-                        "no:cacheprovider",
-                        str(empty_tests),
-                    ],
-                    roots[project_id],
-                    deadline,
-                    maximum_output_bytes,
-                    allowed_return_codes=(5,),
-                    pytest_plugin_autoload=False,
-                    extra_env=test_environment,
-                    # Collection may intentionally use an aggressive timeout
-                    # for arbitrary upstream suites.  The isolated empty-suite
-                    # measurement still needs enough time to start the runtime
-                    # and coverage.py, especially on Windows and cold workers.
-                    timeout_seconds=max(10, admission_command_timeout_seconds),
-                )
-            report = _run(
-                result,
-                f"coverage report for {project_id}",
-                [
-                    str(python),
-                    "-m",
-                    "coverage",
-                    "json",
-                    f"--data-file={coverage_data}",
-                    "-o",
-                    str(coverage_json),
-                ],
-                roots[project_id],
-                deadline,
-                maximum_output_bytes,
-                allowed_return_codes=(0, 1),
-                raise_on_unexpected_exit=False,
-            )
-            if report.return_code != 0 or not coverage_json.is_file():
-                # A usable collect-only pass can still abort before importing
-                # any measured source during the real baseline run. Coverage
-                # then exits 1 with "No data to report". This is a valid zero
-                # baseline, not a reason to reject an otherwise usable venv.
-                coverage_data.unlink(missing_ok=True)
-                coverage_json.unlink(missing_ok=True)
-                # coverage.py 7.10 can persist an empty data file yet still
-                # refuse to discover unexecuted ``--source`` files at report
-                # time. Execute one trusted probe inside the measured tree,
-                # omit it from the report, and let source discovery add every
-                # real project module with zero hits. The probe never imports
-                # or executes uploaded code.
-                coverage_probe = sources[project_id] / ".promptopt_coverage_probe.py"
-                coverage_probe.write_text("PROMPTOPT_COVERAGE_PROBE = True\n", encoding="utf-8")
-                _run(
-                    result,
-                    f"coverage discovery probe for {project_id}",
-                    [
-                        str(python),
-                        "-m",
-                        "coverage",
-                        "run",
-                        "--branch",
-                        f"--data-file={coverage_data}",
-                        f"--source={sources[project_id]}",
-                        str(coverage_probe),
-                    ],
-                    roots[project_id],
-                    deadline,
-                    maximum_output_bytes,
-                    allowed_return_codes=(0,),
-                    extra_env=test_environment,
-                    timeout_seconds=max(10, admission_command_timeout_seconds),
-                )
-                _run(
-                    result,
-                    f"zero coverage report for {project_id}",
-                    [
-                        str(python),
-                        "-m",
-                        "coverage",
-                        "json",
-                        f"--data-file={coverage_data}",
-                        f"--omit={coverage_probe}",
-                        "-o",
-                        str(coverage_json),
-                    ],
-                    roots[project_id],
-                    deadline,
-                    maximum_output_bytes,
-                )
-                coverage_probe.unlink(missing_ok=True)
-            coverage = json.loads(coverage_json.read_text(encoding="utf-8"))["totals"]
-            project_result.statement_coverage = float(coverage.get("percent_covered", 0.0)) / 100.0
-            branches = int(coverage.get("num_branches", 0))
-            project_result.branch_coverage = int(coverage.get("covered_branches", 0)) / branches if branches else 1.0
+        # Admission ends after the isolated interpreter, project dependencies,
+        # and runtime toolchain are prepared. Uploaded code and upstream tests
+        # are not imported, collected, executed, or measured here. Experiment
+        # and Test Suite workers perform those operations later for their exact
+        # immutable target snapshots.
 
         first = result.projects[specs[0].project_id]
         result.project_root = first.project_root
@@ -1026,10 +856,14 @@ def _run(
             check=False,
         )
         output = _redact_text(completed.stdout[:output_limit].decode("utf-8", errors="replace"))
-        item = CommandResult(name, _redact_command(command), completed.returncode, time.monotonic() - started, output=output)
+        item = CommandResult(
+            name, _redact_command(command), completed.returncode, time.monotonic() - started, output=output
+        )
     except subprocess.TimeoutExpired as exc:
         output = _redact_text((exc.stdout or b"")[:output_limit].decode("utf-8", errors="replace"))
-        item = CommandResult(name, _redact_command(command), None, time.monotonic() - started, timed_out=True, output=output)
+        item = CommandResult(
+            name, _redact_command(command), None, time.monotonic() - started, timed_out=True, output=output
+        )
     result.commands.append(item)
     if item.timed_out and raise_on_timeout:
         raise RuntimeError(f"{name} timed out")
@@ -1043,6 +877,7 @@ def _run(
 
 def _redact_text(value: str) -> str:
     """Remove credentials from URLs before persisting command diagnostics."""
+
     def replace(match: re.Match[str]) -> str:
         raw = match.group(0)
         try:
@@ -1064,10 +899,14 @@ def _validate_extra_package_index(value: str | None) -> None:
     if not value:
         return
     parsed = urlsplit(value)
-    if parsed.username or parsed.password or any(
-        key.casefold() in _SENSITIVE_INDEX_QUERY_NAMES
-        or key.casefold().endswith(("_key", "_token", "_secret", "_password"))
-        for key, _ in parse_qsl(parsed.query, keep_blank_values=True)
+    if (
+        parsed.username
+        or parsed.password
+        or any(
+            key.casefold() in _SENSITIVE_INDEX_QUERY_NAMES
+            or key.casefold().endswith(("_key", "_token", "_secret", "_password"))
+            for key, _ in parse_qsl(parsed.query, keep_blank_values=True)
+        )
     ):
         raise ValueError(
             "extra_package_index must not contain credentials; use a Secret Manager-backed index reference"
@@ -1082,10 +921,3 @@ def _validate_project_id(value: str) -> None:
 
 def _redact_command(command: list[str]) -> list[str]:
     return [_redact_text(str(item)) for item in command]
-
-
-def _parse_collected_tests(output: str) -> int:
-    matches = re.findall(r"(\d+)\s+(?:tests?|items?)\s+collected", output)
-    if matches:
-        return int(matches[-1])
-    return len(re.findall(r"::test[^\s]*", output))
