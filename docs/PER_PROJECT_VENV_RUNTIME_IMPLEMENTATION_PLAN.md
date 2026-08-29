@@ -884,6 +884,8 @@ was used for the default path.
 Versioned immutable resources used by the smoke are:
 
 - generic runner image digest `sha256:b4cc68cc998669dafd5275008f52fb64293c7ed19939c5efa463d3272457a688`;
+- updated E2E coordinator image digest `sha256:150a1a32373e2ace3441f1c09a4438cea3a532b56efb18c932273705db98b855`
+  (contains remote pause forwarding from `355b818`);
 - generic runtime worker image digests `sha256:51f06333c0286e234f61b88dd0c7401ad6a5c8b183b5fcf75ce7e07fb4c98795` (3.11)
   and `sha256:dc8ed755f0b3c2f948ffc1827ad18514cd89fc6859709c3e32c4948bcb3b43e3` (3.12);
 - GEPA smoke artifacts: `runner-jobs/e2e-gepa-917f2a1-r1`;
