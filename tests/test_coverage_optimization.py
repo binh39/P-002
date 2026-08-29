@@ -47,12 +47,32 @@ from src.optimization.models import ExperimentConfig, ProjectLayout, SymbolTarge
 from src.optimization.prompts import PromptBundle, baseline_bundle
 from src.optimization.runner import (
     CoverUpExperimentRunner,
+    _package_dir_for_target,
     _saved_tests_for_target,
     _test_environment,
     _traces_for_target,
     _zero_coverage_like,
 )
 from src.optimization.subprocesses import run_streamed
+
+
+def test_package_dir_for_target_narrows_nested_uploaded_source(tmp_path):
+    source_root = tmp_path / "src"
+    package = source_root / "fixture311"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("def target():\n    return 1\n", encoding="utf-8")
+    target = SymbolTarget("project", "src/fixture311/__init__.py", "target")
+
+    assert _package_dir_for_target(source_root, target) == package.resolve()
+
+
+def test_package_dir_for_target_keeps_direct_python_source_root(tmp_path):
+    package = tmp_path / "pkg"
+    package.mkdir()
+    (package / "module.py").write_text("def target():\n    return 1\n", encoding="utf-8")
+    target = SymbolTarget("project", "pkg/module.py", "target")
+
+    assert _package_dir_for_target(package, target) == package.resolve()
 
 
 def test_definition_lines_finds_nested_functions_inside_control_flow():

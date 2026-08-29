@@ -164,6 +164,36 @@ def _target_artifact_token(target: SymbolTarget) -> str:
     return hashlib.sha256(identity.encode("utf-8")).hexdigest()[:12]
 
 
+def _package_dir_for_target(package_dir: Path, target: SymbolTarget) -> Path:
+    """Return a CoverUp-compatible source directory for one target.
+
+    CoverUp requires ``--package-dir`` to contain Python files directly.  An
+    uploaded project commonly exposes a repository-level ``src`` directory,
+    while the actual package (and the target source file) lives one or more
+    levels below it.  Narrowing the directory to the target package preserves
+    the uploaded layout and avoids an argparse failure before the model is
+    called.  The import root remains the project layout's original root, so
+    sibling imports continue to work.
+    """
+    package_dir = package_dir.resolve()
+    if list(package_dir.glob("*.py")):
+        return package_dir
+
+    wanted = target.source_file.replace("\\", "/").lower().lstrip("./")
+    if not wanted:
+        return package_dir
+
+    candidates: list[Path] = []
+    for source in package_dir.rglob("*.py"):
+        normalized = source.as_posix().lower()
+        relative = source.relative_to(package_dir).as_posix().lower()
+        if normalized.endswith("/" + wanted) or relative == wanted or relative.endswith("/" + wanted):
+            candidates.append(source.parent.resolve())
+    if not candidates:
+        return package_dir
+    return min(candidates, key=lambda path: (len(path.parts), path.as_posix()))
+
+
 def _consolidate_saved_tests(
     traces: list[dict],
     target: SymbolTarget,
@@ -620,6 +650,7 @@ class CoverUpExperimentRunner:
                 continue
             temporary_workspace = temporary_root / artifact_token
             temporary_workspace.mkdir(parents=True, exist_ok=False)
+            target_package_dir = _package_dir_for_target(package_dirs[target.project], target)
             target_spec = run_dir / f"target_spec_{artifact_token}.json"
             target_spec.write_text(
                 json.dumps(
@@ -637,7 +668,7 @@ class CoverUpExperimentRunner:
                 "-m",
                 "coverup",
                 "--package-dir",
-                str(package_dirs[target.project]),
+                str(target_package_dir),
                 "--tests-dir",
                 str(temporary_workspace),
                 "--target-symbols",
@@ -677,7 +708,7 @@ class CoverUpExperimentRunner:
             jobs.append(
                 _TargetEvaluationJob(
                     target=target,
-                    package_dir=package_dirs[target.project],
+                    package_dir=target_package_dir,
                     final_workspace=final_workspaces[target.project],
                     temporary_workspace=temporary_workspace,
                     target_spec=target_spec,
