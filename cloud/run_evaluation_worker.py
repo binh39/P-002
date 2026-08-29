@@ -21,8 +21,9 @@ from cloud.runtime_workspace import (
     safe_extract_runtime_bundle,
     safe_extract_zip,
 )
+from src.optimization.coveragepy import run_coverage
 from src.optimization.models import ExperimentConfig, ProjectLayout, SymbolTarget
-from src.optimization.runner import CoverUpExperimentRunner
+from src.optimization.runner import CoverUpExperimentRunner, _configure_runtime_environment, _test_environment
 from src.promptopt_pause import ModelRateLimitPauseError, request_rate_limit_pause
 
 
@@ -309,7 +310,48 @@ def _execute(bucket, request: dict[str, Any], root: Path) -> dict[str, Any]:
         archive_path = Path(shutil.make_archive(str(root / "final-worker-artifacts"), "zip", root_dir=artifacts))
         artifact_object = str(request["artifact_object"])
         bucket.blob(artifact_object).upload_from_filename(str(archive_path), content_type="application/zip")
-        return {"final_generation": result, "artifact_object": artifact_object}
+        return {
+            "final_generation": result,
+            "artifact_object": artifact_object,
+            "artifact_sha256": hashlib.sha256(archive_path.read_bytes()).hexdigest(),
+        }
+    if request["operation"] == "final_replay":
+        artifact = root / "final-worker-artifacts.zip"
+        _download(bucket, str(request["suite_artifact_object"]), artifact)
+        expected_sha256 = str(request["suite_artifact_sha256"])
+        actual_sha256 = hashlib.sha256(artifact.read_bytes()).hexdigest()
+        if actual_sha256 != expected_sha256:
+            raise RuntimeError("Final-suite artifact no longer matches the generated immutable archive")
+        replay_root = root / "final-replay"
+        safe_extract_zip(artifact, replay_root)
+        generated_tests = replay_root / "generated_tests"
+        test_files = sorted(generated_tests.rglob("test_*.py"))
+        if not test_files:
+            raise RuntimeError("Final-suite artifact contains no generated pytest modules")
+        coverage_path = replay_root / "replay-coverage.json"
+        environment = _test_environment(project_root, (layout.import_root or layout.package_dir.parent,))
+        _configure_runtime_environment(environment, layout.python_executable)
+        completed = run_coverage(
+            project_root=project_root,
+            package_dir=layout.package_dir,
+            tests_dir=generated_tests,
+            output=coverage_path,
+            pytest_args=config.pytest_args,
+            repeat_tests=config.repeat_tests,
+            env=environment,
+        )
+        replay = {
+            "schema_version": 1,
+            "status": "passed" if completed.returncode == 0 else "failed",
+            "pytest_exit_code": completed.returncode,
+            "artifact_sha256": actual_sha256,
+            "test_file_count": len(test_files),
+            "test_files": [path.relative_to(generated_tests).as_posix() for path in test_files],
+            "runtime_digest": layout.runtime_digest,
+        }
+        if completed.returncode != 0:
+            replay["error"] = completed.stdout[-4000:]
+        return {"final_replay": replay}
     raise RuntimeError(f"Unsupported evaluation operation: {request['operation']!r}")
 
 

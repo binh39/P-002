@@ -399,8 +399,70 @@ def test_final_generation_runs_inside_the_assigned_project_worker(tmp_path, monk
     assert result["final_generation"]["prompt_digest"] == hashlib.sha256(prompt).hexdigest()
     assert result["final_generation"]["runtime"]["project"] == "uploaded"
     assert values["worker-artifacts.zip"].startswith(b"PK")
+    assert result["artifact_sha256"] == hashlib.sha256(values["worker-artifacts.zip"]).hexdigest()
     assert captured["seed"] == 13
     assert {target.project for target in captured["targets"]} == {"uploaded"}
+
+
+def test_final_replay_downloads_exact_artifact_and_runs_it_in_project_runtime(tmp_path, monkeypatch):
+    from cloud import run_evaluation_worker
+
+    project_root = tmp_path / "project"
+    package = project_root / "pkg"
+    tests = project_root / "tests"
+    package.mkdir(parents=True)
+    tests.mkdir()
+    (package / "__init__.py").write_text("VALUE = 1\n", encoding="utf-8")
+    suite = _zip_bytes(
+        {"generated_tests/final/tests_candidate_final/test_generated.py": "def test_value():\n    assert True\n"}
+    )
+    values = {"worker-artifacts.zip": suite}
+    bucket = _Bucket(values)
+    runtime_python = Path(os.sys.executable)
+    monkeypatch.setattr(
+        run_evaluation_worker,
+        "_stage_project",
+        lambda *_args: (
+            project_root,
+            ProjectLayout(
+                package_dir=package,
+                tests_dir=tests,
+                import_root=project_root,
+                python_executable=runtime_python,
+                runtime_digest="runtime-digest",
+            ),
+        ),
+    )
+    captured = {}
+
+    def run_replay(**kwargs):
+        captured.update(kwargs)
+        return type("Completed", (), {"returncode": 0, "stdout": "1 passed"})()
+
+    monkeypatch.setattr(run_evaluation_worker, "run_coverage", run_replay)
+    request = {
+        "schema_version": 1,
+        "operation": "final_replay",
+        "project": "uploaded",
+        "project_spec": {"project": "uploaded"},
+        "suite_artifact_object": "worker-artifacts.zip",
+        "suite_artifact_sha256": hashlib.sha256(suite).hexdigest(),
+        "config": {
+            "coverup_model": "model",
+            "max_attempts": 1,
+            "repeat_tests": 1,
+            "max_concurrency": 1,
+            "pytest_args": "",
+        },
+    }
+
+    result = _execute(bucket, request, tmp_path / "replay")
+
+    assert result["final_replay"]["status"] == "passed"
+    assert result["final_replay"]["test_file_count"] == 1
+    assert result["final_replay"]["artifact_sha256"] == hashlib.sha256(suite).hexdigest()
+    assert captured["env"]["TESTGEN_PYTHON"] == str(runtime_python.resolve())
+    assert Path(captured["tests_dir"]).name == "generated_tests"
 
 
 def test_worker_test_pause_hook_writes_durable_signal_before_execution(tmp_path, monkeypatch):

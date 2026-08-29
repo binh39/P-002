@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -84,6 +85,8 @@ class _Session:
                 },
             )
         elif request["operation"] == "final_generation":
+            artifact = b"immutable-final-suite"
+            self.storage.values[request["artifact_object"]] = artifact
             response.update(
                 status="succeeded",
                 final_generation={
@@ -92,6 +95,18 @@ class _Session:
                     "metrics": {"target_count": len(request["targets"])},
                 },
                 artifact_object=request["artifact_object"],
+                artifact_sha256=hashlib.sha256(artifact).hexdigest(),
+            )
+        elif request["operation"] == "final_replay":
+            response.update(
+                status="succeeded",
+                final_replay={
+                    "schema_version": 1,
+                    "status": "passed",
+                    "pytest_exit_code": 0,
+                    "artifact_sha256": request["suite_artifact_sha256"],
+                    "test_file_count": 1,
+                },
             )
         else:
             targets = request["targets"]
@@ -298,4 +313,7 @@ def test_remote_backend_routes_final_generation_to_project_worker(tmp_path):
 
     assert output["result"]["metrics"]["target_count"] == 1
     assert output["artifact_object"].endswith(".zip")
+    assert output["replay"]["status"] == "passed"
+    assert output["replay"]["pytest_exit_code"] == 0
+    assert len(session.urls) == 2
     assert session.urls[-1].endswith("/eval-uploaded-digest:run")

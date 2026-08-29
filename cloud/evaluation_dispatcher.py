@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -434,7 +435,23 @@ class RemoteEvaluationBackend(EvaluationBackend):
         value = result.get("final_generation")
         if not isinstance(value, dict):
             raise RuntimeError("Evaluation worker returned an invalid final-generation result")
+        artifact_sha256 = str(result.get("artifact_sha256") or "")
+        if not re.fullmatch(r"[0-9a-f]{64}", artifact_sha256):
+            raise RuntimeError("Evaluation worker returned no immutable final-suite artifact digest")
+        replay_result = self._submit(
+            "final_replay",
+            project,
+            {
+                "suite_artifact_object": str(result.get("artifact_object") or artifact_object),
+                "suite_artifact_sha256": artifact_sha256,
+            },
+        )
+        replay = replay_result.get("final_replay")
+        if not isinstance(replay, dict) or replay.get("status") != "passed":
+            raise RuntimeError("Generated final-suite artifact failed its independent runtime replay")
         return {
             "result": value,
             "artifact_object": str(result.get("artifact_object") or artifact_object),
+            "artifact_sha256": artifact_sha256,
+            "replay": replay,
         }
