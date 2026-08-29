@@ -56,6 +56,11 @@ function ProjectCard({
       </div>
       <h2>{project.name}</h2>
       <p>{project.description || "Imported Python source archive"}</p>
+      {(project.analysisError || project.runtimeReport?.error) && (
+        <div className="inline-validation-error" role="alert">
+          {project.analysisError || project.runtimeReport?.error}
+        </div>
+      )}
       <div className="project-meta-grid">
         <div>
           <span>Python</span>
@@ -96,8 +101,6 @@ export default function Projects() {
   const [branch, setBranch] = useState("main");
   const [commit, setCommit] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [environmentChoice, setEnvironmentChoice] = useState("new");
-  const [environmentName, setEnvironmentName] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const samplesQuery = useQuery({
@@ -168,11 +171,6 @@ export default function Projects() {
       branch: normalizedBranch,
       commit: commit.trim() || undefined,
       file,
-      runtimeEnvironmentId: environmentChoice === "new" ? undefined : environmentChoice,
-      runtimeEnvironmentName:
-        environmentChoice === "new"
-          ? environmentName.trim() || `${normalizedName} environment`
-          : undefined,
     });
   };
 
@@ -203,18 +201,6 @@ export default function Projects() {
 
   const sampleProjects = samplesQuery.data;
   const importedProjects = projectsQuery.data;
-  const environments = Array.from(
-    new Map(
-      importedProjects
-        .filter(
-          (project) => project.runtimeEnvironmentId && project.runtimeStatus === "runtime_ready",
-        )
-        .map((project) => [
-          project.runtimeEnvironmentId as string,
-          project.runtimeEnvironmentName || "Unnamed environment",
-        ]),
-    ),
-  );
   const allProjects = [...importedProjects, ...sampleProjects];
   const totalFunctions = allProjects.reduce((sum, project) => sum + project.functions, 0);
 
@@ -231,8 +217,6 @@ export default function Projects() {
             onClick={() => {
               createProject.reset();
               setValidationError(null);
-              setEnvironmentChoice("new");
-              setEnvironmentName("");
               setShowImport(true);
             }}
           >
@@ -311,9 +295,8 @@ export default function Projects() {
         <div>
           <strong>Isolated runtime for every project</strong>
           <p>
-            Each upload gets its own dependency-resolved venv. The optional runtime label is only
-            for organization; projects can be optimized together even when their dependencies
-            differ.
+            Each upload gets its own dependency-resolved venv. Projects can be optimized together
+            even when their Python versions and dependencies differ.
           </p>
         </div>
         <button className="secondary-button" onClick={() => navigate("/experiments/new")}>
@@ -354,36 +337,6 @@ export default function Projects() {
                   disabled={createProject.isPending}
                 />
               </Field>
-              <Field
-                label="Runtime label"
-                hint="Optional grouping label; every project still gets an isolated venv."
-              >
-                <select
-                  value={environmentChoice}
-                  onChange={(event) => setEnvironmentChoice(event.target.value)}
-                  disabled={createProject.isPending}
-                >
-                  <option value="new">Create a new environment</option>
-                  {environments.map(([id, label]) => (
-                    <option key={id} value={id}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              {environmentChoice === "new" && (
-                <Field label="Environment name">
-                  <input
-                    maxLength={100}
-                    value={environmentName}
-                    onChange={(event) => setEnvironmentName(event.target.value)}
-                    placeholder={
-                      name.trim() ? `${name.trim()} environment` : "Python 3.12 environment"
-                    }
-                    disabled={createProject.isPending}
-                  />
-                </Field>
-              )}
               <details className="project-advanced-details">
                 <summary>
                   <span>Advanced details</span>

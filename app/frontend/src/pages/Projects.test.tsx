@@ -80,7 +80,7 @@ describe("Projects", () => {
     expect(state.create).not.toHaveBeenCalled();
   });
 
-  it("keeps optional metadata collapsed and only asks for a name for new environments", async () => {
+  it("keeps optional metadata collapsed and does not ask for a shared runtime label", async () => {
     state.list.mockResolvedValue([
       {
         ...importedProject,
@@ -95,18 +95,38 @@ describe("Projects", () => {
 
     const advanced = screen.getByText("Advanced details").closest("details");
     expect(advanced).not.toHaveAttribute("open");
-    expect(screen.getByLabelText("Environment name")).toBeInTheDocument();
-
-    fireEvent.change(screen.getByRole("combobox", { name: /Runtime label/i }), {
-      target: { value: "environment-1" },
-    });
     expect(screen.queryByLabelText("Environment name")).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /Runtime label/i })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Advanced details"));
     expect(advanced).toHaveAttribute("open");
     expect(screen.getByLabelText("Branch or source label")).toHaveValue("main");
     expect(screen.getByLabelText("Commit or version")).toBeInTheDocument();
     expect(screen.getByLabelText("Description")).toBeInTheDocument();
+  });
+
+  it("shows the detailed admission failure on the project card", async () => {
+    state.list.mockResolvedValue([
+      {
+        ...importedProject,
+        status: "ready",
+        runtimeStatus: "runtime_failed",
+        runtimeReport: {
+          dependencyFiles: ["pyproject.toml"],
+          installStrategy: "",
+          collectedTests: 0,
+          statementCoverage: null,
+          branchCoverage: null,
+          error: "Project requires Python >=3.14, but no compatible runtime is deployed.",
+        },
+      },
+    ]);
+
+    renderPage();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Project requires Python >=3.14, but no compatible runtime is deployed.",
+    );
   });
 
   it("uploads a ZIP and opens the queued project", async () => {

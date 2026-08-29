@@ -211,8 +211,12 @@ export default function ProjectDetail() {
               runtime remains unchanged.
             </p>
           </div>
-          <button className="secondary-button" onClick={() => navigate("/projects")}>
-            Upload revised ZIP
+          <button
+            className="secondary-button"
+            disabled={analyzeMutation.isPending}
+            onClick={() => analyzeMutation.mutate()}
+          >
+            {analyzeMutation.isPending ? "Analyzing..." : "Detect Python and retry"}
           </button>
         </div>
       )}

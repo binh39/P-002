@@ -61,6 +61,4 @@ export interface CreateProjectInput {
   branch: string;
   commit?: string;
   file: File;
-  runtimeEnvironmentId?: string;
-  runtimeEnvironmentName?: string;
 }
