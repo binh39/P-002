@@ -186,6 +186,19 @@ export default function ProjectDetail() {
             "Analysis failed. Review the ZIP archive and project settings, then run the analysis again."}
         </div>
       )}
+      {(project.analysisWarnings?.length ?? 0) > 0 && (
+        <div className="platform-callout" role="status">
+          <div>
+            <strong>Project analysis completed with warnings</strong>
+            <ul>
+              {project.analysisWarnings?.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          </div>
+          <StatusBadge tone="warning">Warning</StatusBadge>
+        </div>
+      )}
       {deleteMutation.isError && (
         <div className="page-state page-state-error" role="alert">
           {deleteMutation.error instanceof Error

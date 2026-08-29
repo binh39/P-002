@@ -461,7 +461,9 @@ def test_final_replay_downloads_exact_artifact_and_runs_it_in_project_runtime(tm
     assert result["final_replay"]["status"] == "passed"
     assert result["final_replay"]["test_file_count"] == 1
     assert result["final_replay"]["artifact_sha256"] == hashlib.sha256(suite).hexdigest()
-    assert captured["env"]["TESTGEN_PYTHON"] == str(runtime_python.resolve())
+    # Preserve the venv entry point instead of resolving its POSIX symlink to
+    # the base interpreter, otherwise installed project dependencies vanish.
+    assert captured["env"]["TESTGEN_PYTHON"] == str(runtime_python.absolute())
     assert Path(captured["tests_dir"]).name == "generated_tests"
 
 
@@ -489,6 +491,9 @@ def test_worker_test_pause_hook_writes_durable_signal_before_execution(tmp_path,
         ),
     )
     monkeypatch.setenv("PROMPTOPT_TEST_PAUSE_BEFORE_EXECUTION", "1")
+    # Track the worker-owned environment mutation so pytest restores it after
+    # this in-process worker simulation.
+    monkeypatch.setenv("PROMPTOPT_PAUSE_FILE", str(tmp_path / "placeholder-pause.json"))
     request = {
         "schema_version": 1,
         "operation": "batch",

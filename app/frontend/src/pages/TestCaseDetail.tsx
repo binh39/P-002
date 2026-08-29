@@ -189,17 +189,12 @@ const samplingLabels: Record<TestGenerationRun["samplingMethod"], string> = {
 };
 
 function TestSuiteSettings({ run }: { run: TestGenerationRun }) {
-  const environment =
-    run.runtimeEnvironmentId === "sample-runtime"
-      ? "Bundled sample environment · sample-runtime"
-      : run.runtimeEnvironmentId || "Cloud Run isolated runner";
   const prompt = run.promptRole === "baseline" ? "Baseline Prompt" : "Final Prompt";
   const values: Array<[string, string]> = [
     ["Test Suite", run.name],
     ["Experiment", run.experimentId],
     ["Prompt", prompt],
-    ["Environment", environment],
-    ["Projects", run.projectIds.join(", ") || "All experiment projects"],
+    ["Projects", run.projectIds.join(", ") || "Prompt experiment projects"],
     ["Function selection", samplingLabels[run.samplingMethod]],
     ["Functions", String(run.targetIds.length)],
     ["Random seed", run.samplingMethod === "random" ? String(run.randomSeed) : "None Available"],

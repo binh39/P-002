@@ -11,9 +11,8 @@ import {
   type SamplingMethod,
 } from "@/domain/experimentConfiguration";
 import type { PromptRegistryEntry } from "@/domain/experiments";
-import type { PythonProject } from "@/domain/projects";
 
-const steps = ["Projects & runtimes", "Setting", "Review"] as const;
+const steps = ["Prompt & projects", "Setting", "Review"] as const;
 const functionMethods: Array<{ id: SamplingMethod; title: string; description: string }> = [
   { id: "random", title: "Random", description: "Shuffle valid functions with the saved seed." },
   {
@@ -52,14 +51,6 @@ const models = [
   "deepseek/deepseek-v4-pro",
 ] as const;
 
-function projectEnvironment(project: PythonProject) {
-  return project.runtimeEnvironmentId ?? "unassigned";
-}
-
-function environmentLabel(project: PythonProject) {
-  return `${project.runtimeEnvironmentName || "Runtime environment"} · ${projectEnvironment(project)}`;
-}
-
 function functionKey(projectId: string, functionId: string) {
   return `${projectId}::${functionId}`;
 }
@@ -85,7 +76,6 @@ export default function CreateTestSuite() {
   const [promptRole, setPromptRole] = useState<"baseline" | "optimized">(
     defaults.get("prompt") === "baseline" ? "baseline" : "optimized",
   );
-  const [environmentId, setEnvironmentId] = useState("");
   const [projectIds, setProjectIds] = useState<string[]>([]);
   const [method, setMethod] = useState<SamplingMethod>("random");
   const [functionCount, setFunctionCount] = useState(20);
@@ -117,20 +107,16 @@ export default function CreateTestSuite() {
     promptRole === "optimized" && !selectedEntry?.optimized ? "baseline" : promptRole;
   const allowedProjects = useMemo(
     () =>
-      (projectsQuery.data ?? []).filter((project) =>
-        selectedEntry?.projectIds.includes(project.id),
-      ),
-    [projectsQuery.data, selectedEntry?.projectIds],
+      selectedEntry
+        ? (projectsQuery.data ?? []).filter(
+            (project) =>
+              ["ready", "warning"].includes(project.status) &&
+              (project.id.startsWith("sample:") || project.runtimeStatus === "runtime_ready"),
+          )
+        : [],
+    [projectsQuery.data, selectedEntry],
   );
-  const environments = useMemo(() => {
-    const values = new Map<string, PythonProject>();
-    for (const project of allowedProjects) values.set(projectEnvironment(project), project);
-    return [...values.entries()];
-  }, [allowedProjects]);
-  // Every uploaded project owns its runtime. A suite may therefore combine
-  // projects with different Python/dependency environments.
-  const environmentProjects = allowedProjects;
-  const selectedProjects = environmentProjects.filter((project) => projectIds.includes(project.id));
+  const selectedProjects = allowedProjects.filter((project) => projectIds.includes(project.id));
   const functionQueries = useQueries({
     queries: selectedProjects.map((project) => ({
       queryKey: ["projects", project.id, "functions", "create-test-suite"],
@@ -206,10 +192,6 @@ export default function CreateTestSuite() {
     // The suite name describes the user's intended output, not the prompt source.
     // Keep it intact when they compare or switch Prompt Registry experiments.
   };
-  const chooseEnvironment = (value: string) => {
-    setEnvironmentId(value);
-    setProjectIds([]);
-  };
   const toggleProject = (projectId: string) => {
     setProjectIds((current) =>
       current.includes(projectId)
@@ -258,9 +240,10 @@ export default function CreateTestSuite() {
         <section className="platform-card wizard-panel">
           <div className="wizard-heading">
             <span className="eyebrow">Step 1</span>
-            <h2>Projects & runtimes</h2>
+            <h2>Prompt & projects</h2>
             <p>
-              Select a prompt and the projects to test. Each project runs in its own prepared venv.
+              Select any saved prompt and any ready project. The project does not need to have
+              participated in that prompt&apos;s experiment and runs in its own prepared venv.
             </p>
           </div>
           <Field
@@ -300,35 +283,16 @@ export default function CreateTestSuite() {
               </select>
             </Field>
           </div>
-          <Field
-            label="Runtime label"
-            hint="Projects keep independent Python and dependency environments; grouping is optional."
-          >
-            <select
-              value={environmentId}
-              disabled={!selectedEntry}
-              onChange={(event) => chooseEnvironment(event.target.value)}
-            >
-              <option value="">All project runtimes</option>
-              {environments.map(([id, project]) => (
-                <option key={id} value={id}>
-                  {environmentLabel(project)}
-                </option>
-              ))}
-            </select>
-          </Field>
           <div className="create-suite-project-picker">
             <div className="card-heading">
               <div>
                 <h3>Projects</h3>
                 <p>{selectedProjects.length} selected</p>
               </div>
-              <StatusBadge tone={environmentId ? "success" : "neutral"}>
-                {environmentProjects.length} available
-              </StatusBadge>
+              <StatusBadge tone="neutral">{allowedProjects.length} available</StatusBadge>
             </div>
             <div className="create-suite-project-list">
-              {environmentProjects.map((project) => (
+              {allowedProjects.map((project) => (
                 <label
                   className={`create-suite-project ${projectIds.includes(project.id) ? "is-selected" : ""}`}
                   key={project.id}
@@ -346,9 +310,9 @@ export default function CreateTestSuite() {
                   </span>
                 </label>
               ))}
-              {!environmentId && (
+              {selectedEntry && allowedProjects.length === 0 && (
                 <p className="muted-cell">
-                  All project runtimes are available; choose a label to filter.
+                  No analyzed project with a ready isolated runtime is available.
                 </p>
               )}
             </div>
@@ -493,12 +457,6 @@ export default function CreateTestSuite() {
             <div>
               <dt>Prompt</dt>
               <dd>{resolvedPromptRole === "baseline" ? "Baseline prompt" : "Final Prompt"}</dd>
-            </div>
-            <div>
-              <dt>Environment</dt>
-              <dd>
-                {environmentProjects[0] ? environmentLabel(environmentProjects[0]) : "Not selected"}
-              </dd>
             </div>
             <div>
               <dt>Projects</dt>

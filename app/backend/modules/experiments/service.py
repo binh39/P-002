@@ -1424,25 +1424,73 @@ class ExperimentService:
 
     async def _select_configured_test_generation_targets(
         self, item: ExperimentRecord, owner_id: str, payload: CreateTestGenerationRequest
-    ) -> list[TargetReference]:
+    ) -> tuple[list[TargetReference], list[ProjectSnapshot]]:
         """Build a fresh, immutable final-suite target snapshot from the selected projects.
 
-        An experiment's prompt is reusable for every analyzed function in the
-        projects that produced that prompt; it is not limited to the smaller
-        train/validation/test sample used by GEPA.
+        The registry prompt and executable project are independent inputs. A
+        prompt may therefore generate tests for any owned, admitted project,
+        including one that never participated in prompt optimization.
         """
         selected_project_ids = payload.project_ids or list(item.project_ids)
-        snapshots = {snapshot.project_id: snapshot for snapshot in item.project_snapshots}
-        unknown = sorted(set(selected_project_ids) - set(snapshots))
-        if unknown:
-            raise AppError(
-                422,
-                "TEST_GENERATION_PROJECT_NOT_IN_EXPERIMENT",
-                "A test suite can only use projects from the selected prompt's experiment",
+        projects = [await self.projects.require_owned(project_id, owner_id) for project_id in selected_project_ids]
+        if any(project.status not in {"ready", "warning"} for project in projects):
+            raise AppError(409, "ANALYSIS_NOT_READY", "Every selected project must finish analysis first")
+        uploaded = [project for project in projects if not self.projects.is_sample(project.id)]
+        if self.projects.runtime:
+            refreshed = {project.id: await self.projects.runtime.refresh(project) for project in uploaded}
+            projects = [refreshed.get(project.id, project) for project in projects]
+            uploaded = [project for project in projects if not self.projects.is_sample(project.id)]
+        if any(project.runtime_status != RuntimeStatus.READY for project in uploaded):
+            raise AppError(409, "RUNTIME_NOT_READY", "Every uploaded project must pass runtime preparation")
+
+        snapshots: dict[str, ProjectSnapshot] = {}
+        used_runner_names: set[str] = set()
+        for index, project in enumerate(projects):
+            runner_project = self._runner_project_name(project, index, used_runner_names)
+            used_runner_names.add(runner_project)
+            is_sample = self.projects.is_sample(project.id)
+            snapshots[project.id] = ProjectSnapshot(
+                project_id=project.id,
+                name=project.name,
+                commit=project.commit,
+                source_directory=project.settings.runtime.source_directory,
+                test_directory=project.settings.tests.test_directory,
+                runner_project=runner_project,
+                archive_object=None if is_sample else (project.runtime_source_archive_object or project.object_name),
+                source_archive_object=None if is_sample else project.runtime_source_archive_object,
+                runtime_artifact_prefix=project.runtime_artifact_prefix,
+                runtime_environment_id=project.runtime_environment_id,
+                runtime_bundle_object=project.runtime_bundle_object,
+                runtime_protocol_version=project.runtime_report.protocol_version if project.runtime_report else 1,
+                runtime_digest=project.runtime_digest or project.runtime_dependency_fingerprint,
+                runtime_image=project.runtime_image or project.settings.runtime.runtime_image,
+                runtime_worker_job=project.runtime_worker_job,
+                runtime_execution_mode=project.runtime_report.execution_mode if project.runtime_report else None,
+                source_archive_sha256=project.source_archive_sha256,
+                source_archive_generation=project.runtime_source_archive_generation,
+                runtime_bundle_sha256=project.runtime_bundle_sha256,
+                runtime_bundle_generation=project.runtime_bundle_generation,
+                network_access=project.settings.security.network_access,
+                python_version=project.settings.runtime.python_version,
             )
+        invalid_runtime = [
+            snapshot.project_id
+            for snapshot in snapshots.values()
+            if snapshot.archive_object
+            and (
+                snapshot.runtime_protocol_version < MINIMUM_RUNTIME_PROTOCOL_VERSION
+                or not snapshot.runtime_bundle_object
+                or not snapshot.runtime_digest
+                or not snapshot.runtime_worker_job
+                or not snapshot.source_archive_sha256
+                or not snapshot.runtime_bundle_sha256
+            )
+        ]
+        if invalid_runtime:
+            raise AppError(409, "RUNTIME_REBUILD_REQUIRED", "A selected project needs its isolated runtime rebuilt")
         available: dict[str, TargetReference] = {}
-        for project_id in selected_project_ids:
-            project = await self.projects.require_owned(project_id, owner_id)
+        for project in projects:
+            project_id = project.id
             snapshot = snapshots[project_id]
             for function in await self._list_functions(project_id):
                 if not is_valid_optimization_function(function):
@@ -1478,7 +1526,7 @@ class ExperimentService:
             raise AppError(422, "INVALID_TEST_GENERATION_SELECTION", str(exc)) from exc
         if not selected:
             raise AppError(422, "TEST_GENERATION_SCOPE_EMPTY", "The selected test-suite scope has no targets")
-        return selected
+        return selected, list(snapshots.values())
 
     async def _require_test_generation_projects(
         self, item: ExperimentRecord, owner_id: str, project_ids: list[str] | None = None
@@ -1506,7 +1554,6 @@ class ExperimentService:
     ) -> TestGenerationRunResponse:
         item = await self._owned(experiment_id, owner_id)
         requested_project_ids = payload.project_ids or list(item.project_ids)
-        await self._require_test_generation_projects(item, owner_id, requested_project_ids)
         snapshot = await self.repository.get_prompt_snapshot(item.id, payload.prompt_role)
         if snapshot is None:
             if payload.prompt_role == PromptRole.BASELINE:
@@ -1524,11 +1571,14 @@ class ExperimentService:
             or payload.function_count is not None
             or payload.sampling_method != SamplingMethod.RANDOM
         )
-        targets = (
-            await self._select_configured_test_generation_targets(item, owner_id, payload)
-            if configured_selection
-            else self._select_legacy_test_generation_targets(item, payload)
-        )
+        if configured_selection:
+            targets, project_snapshots = await self._select_configured_test_generation_targets(item, owner_id, payload)
+        else:
+            await self._require_test_generation_projects(item, owner_id, requested_project_ids)
+            targets = self._select_legacy_test_generation_targets(item, payload)
+            project_snapshots = [
+                snapshot for snapshot in item.project_snapshots if snapshot.project_id in requested_project_ids
+            ]
         settings = self._test_generation_settings(item, payload)
         model = payload.model or snapshot.coverup_model
         if self.test_generation_dispatcher is None:
@@ -1584,6 +1634,7 @@ class ExperimentService:
                 for environment, reference in provider_secret_refs.items()
             },
             target_snapshots=targets,
+            project_snapshots=project_snapshots,
             created_at=now,
         )
         await self.repository.create_test_generation_run(run)
@@ -1724,12 +1775,15 @@ class ExperimentService:
                         "pytest_args": item.settings.pytest_args,
                         "random_seed": run.random_seed,
                     },
-                    projects=[
-                        project_snapshot
-                        for project_snapshot in item.project_snapshots
-                        if project_snapshot.project_id in run.project_ids
-                    ]
-                    or None,
+                    projects=(
+                        run.project_snapshots
+                        or [
+                            project_snapshot
+                            for project_snapshot in item.project_snapshots
+                            if project_snapshot.project_id in run.project_ids
+                        ]
+                        or None
+                    ),
                     provider_secret_refs=run.provider_secret_refs,
                 )
                 run.cloud_deadline_at = datetime.now(UTC) + timedelta(seconds=self.cloud_test_generator.timeout_seconds)

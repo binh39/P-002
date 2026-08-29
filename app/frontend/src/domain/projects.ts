@@ -31,6 +31,7 @@ export interface PythonProject {
   status: ProjectStatus;
   analyzedAt: string;
   analysisError?: string | null;
+  analysisWarnings?: string[];
   testCommand: string;
   sourceDir: string;
   testDir: string;

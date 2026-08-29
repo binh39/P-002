@@ -47,6 +47,7 @@ class AnalysisResult:
     warning_count: int
     python_version: str | None = None
     requires_python: str | None = None
+    warnings: tuple[str, ...] = ()
 
 
 def _project_python_requirement(
@@ -300,7 +301,9 @@ def analyze_zip(
         raise AppError(422, "NO_PYTHON_FILES", "The archive does not contain analyzable Python files")
 
     analyzed_at = datetime.now(UTC)
-    warning_count = skipped_symlinks
+    warnings = (
+        [f"Skipped {skipped_symlinks} symbolic link(s); archive links are never extracted."] if skipped_symlinks else []
+    )
     sources: dict[str, str] = {}
     with tempfile.TemporaryDirectory(prefix="prompt-optimizer-analysis-") as temporary:
         source_root = Path(temporary)
@@ -308,8 +311,8 @@ def analyze_zip(
             try:
                 source = bundle.read(info).decode("utf-8-sig")
                 compile(source, archive_path, "exec")
-            except (UnicodeDecodeError, SyntaxError, RuntimeError, NotImplementedError, zipfile.BadZipFile):
-                warning_count += 1
+            except (UnicodeDecodeError, SyntaxError, RuntimeError, NotImplementedError, zipfile.BadZipFile) as exc:
+                warnings.append(f"Skipped {archive_path}: {type(exc).__name__}: {exc}")
                 continue
             destination = source_root.joinpath(*PurePosixPath(archive_path).parts)
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -337,7 +340,8 @@ def analyze_zip(
         python_file_count=len(candidates),
         statement_count=statement_count,
         branch_count=branch_count,
-        warning_count=warning_count,
+        warning_count=len(warnings),
         python_version=python_version,
         requires_python=requires_python,
+        warnings=tuple(warnings),
     )

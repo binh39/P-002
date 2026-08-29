@@ -225,6 +225,7 @@ class ProjectResponse(StrictModel):
     branch_count: int = 0
     analyzed_at: datetime | None = None
     analysis_error: str | None = None
+    analysis_warnings: list[str] = Field(default_factory=list)
     runtime_environment_id: str | None = None
     runtime_environment_name: str | None = None
     runtime_bundle_object: str | None = None

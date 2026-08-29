@@ -726,6 +726,36 @@ async def test_final_test_generation_uses_its_own_project_selection_snapshot(cli
 
 
 @pytest.mark.asyncio
+async def test_registry_prompt_generates_for_project_outside_prompt_experiment(client, app):
+    created = await client.post(
+        "/api/v1/experiments",
+        headers=AUTH_HEADERS,
+        json={"project_ids": ["sample:isort"], "name": "Portable registry prompt", "max_targets": 3},
+    )
+    assert created.status_code == 201, created.text
+
+    response = await client.post(
+        f"/api/v1/prompt-registry/{created.json()['id']}/test-generation",
+        headers=AUTH_HEADERS,
+        json={
+            "prompt_role": "baseline",
+            "name": "Independent mimesis suite",
+            "project_ids": ["sample:mimesis"],
+            "sampling_method": "most_statements",
+            "function_count": 2,
+        },
+    )
+
+    assert response.status_code == 202, response.text
+    run = response.json()
+    assert run["project_ids"] == ["sample:mimesis"]
+    stored = await app.state.services.experiments.repository.get_test_generation_run(run["id"])
+    assert stored is not None
+    assert [snapshot.project_id for snapshot in stored.project_snapshots] == ["sample:mimesis"]
+    assert {target.project_id for target in stored.target_snapshots} == {"sample:mimesis"}
+
+
+@pytest.mark.asyncio
 async def test_final_test_generation_rejects_optimized_prompt_before_comparison(client):
     created = await client.post(
         "/api/v1/experiments",
