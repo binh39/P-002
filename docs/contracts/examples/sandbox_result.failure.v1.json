@@ -1,0 +1,27 @@
+{
+  "protocol_version": 1,
+  "run_id": "isort-candidate-002",
+  "status": "failed",
+  "environment_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "exit_code": 1,
+  "failure_stage": "test",
+  "error_code": "TESTS_FAILED",
+  "retryable": false,
+  "test_counts": {
+    "collected": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0
+  },
+  "coverage": {
+    "covered_statements": 0,
+    "total_statements": 42,
+    "covered_branches": 0,
+    "total_branches": 10
+  },
+  "coverage_artifact": "artifacts/coverage.json",
+  "stdout": "1 failed",
+  "stderr": "",
+  "duration_seconds": 0.75,
+  "peak_memory_mb": 92.0
+}

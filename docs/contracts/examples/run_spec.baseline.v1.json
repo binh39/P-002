@@ -1,0 +1,8 @@
+{
+  "protocol_version": 1,
+  "run_id": "isort-baseline-001",
+  "kind": "baseline",
+  "environment_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "test_paths": ["tests"],
+  "test_pattern": "test_*.py"
+}

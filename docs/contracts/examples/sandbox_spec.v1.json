@@ -1,0 +1,28 @@
+{
+  "protocol_version": 1,
+  "project_id": "isort",
+  "archive_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "requested_python": "3.12",
+  "detected_python": "3.12",
+  "source_directory": "isort",
+  "test_directory": "tests",
+  "dependency_policy": {
+    "mode": "locked",
+    "manifest": "pyproject.toml",
+    "lock_file": "uv.lock",
+    "groups": ["test"],
+    "extras": [],
+    "package_index_refs": ["pypi-public"]
+  },
+  "runner_profile": "project_native",
+  "coverage_mode": "statement_and_branch",
+  "allowed_environment_variables": ["PYTHONHASHSEED", "TZ"],
+  "resource_limits": {
+    "cpu": 1,
+    "memory_mb": 2048,
+    "timeout_seconds": 900,
+    "maximum_processes": 128,
+    "maximum_output_bytes": 10485760,
+    "maximum_file_bytes": 104857600
+  }
+}

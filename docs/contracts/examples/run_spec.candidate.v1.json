@@ -1,0 +1,8 @@
+{
+  "protocol_version": 1,
+  "run_id": "isort-candidate-001",
+  "kind": "candidate",
+  "environment_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "test_paths": ["generated_tests/test_sorting.py"],
+  "test_pattern": "test_*.py"
+}
