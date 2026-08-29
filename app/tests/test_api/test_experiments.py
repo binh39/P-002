@@ -654,6 +654,45 @@ async def test_final_test_generation_is_owner_scoped_and_idempotent(client, app)
 
 
 @pytest.mark.asyncio
+async def test_final_test_generation_sends_missing_coverage_prompt_to_runner(client, app):
+    prompt = baseline_prompt().as_candidate()
+    prompt["missing_coverage"] = "Retry uncovered targets: {missing_coverage}"
+
+    class RecordingTestGenerator:
+        timeout_seconds = 60
+
+        def __init__(self):
+            self.prompts = []
+
+        async def start(self, **kwargs):
+            self.prompts.append(kwargs["prompt"])
+            raise RuntimeError("Stop after recording the runner input")
+
+    generator = RecordingTestGenerator()
+    app.state.services.experiments.cloud_test_generator = generator
+    created = await client.post(
+        "/api/v1/experiments",
+        headers=AUTH_HEADERS,
+        json={
+            "project_ids": ["sample:isort"],
+            "name": "Three-stage final suite prompt",
+            "max_targets": 3,
+            "baseline_prompt": prompt,
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    response = await client.post(
+        f"/api/v1/prompt-registry/{created.json()['id']}/test-generation",
+        headers=AUTH_HEADERS,
+        json={"prompt_role": "baseline"},
+    )
+
+    assert response.status_code == 202, response.text
+    assert generator.prompts == [prompt]
+
+
+@pytest.mark.asyncio
 async def test_final_test_generation_uses_its_own_project_selection_snapshot(client, app):
     created = await client.post(
         "/api/v1/experiments",

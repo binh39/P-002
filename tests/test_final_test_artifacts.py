@@ -77,6 +77,33 @@ def test_runtime_object_download_rejects_changed_checksum(tmp_path, monkeypatch)
         assert "checksum changed" in str(exc)
     else:
         raise AssertionError("tampered runtime object was accepted")
+import json
+from types import SimpleNamespace
+
+import pytest
+
+from cloud.run_test_generation import _artifact_index, _load_prompt, _stage_projects, _workspaces_for_targets
+from src.optimization.models import SymbolTarget
+
+
+def test_final_test_prompt_keeps_missing_coverage_component(tmp_path):
+    prompt_path = tmp_path / "prompt.json"
+    expected = {
+        "initial": "Generate tests for {filename}: {coverage_targets}\n{source_excerpt}",
+        "error": "Repair this failure: {error}",
+        "missing_coverage": "Cover the remaining targets: {missing_coverage}",
+    }
+    prompt_path.write_text(json.dumps(expected), encoding="utf-8")
+
+    assert _load_prompt(prompt_path) == expected
+
+
+def test_final_test_prompt_rejects_snapshot_without_missing_coverage(tmp_path):
+    prompt_path = tmp_path / "prompt.json"
+    prompt_path.write_text(json.dumps({"initial": "initial", "error": "error"}), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="missing_coverage"):
+        _load_prompt(prompt_path)
 
 
 def test_final_test_artifact_index_contains_generated_tests_source_and_coverage(tmp_path):

@@ -63,6 +63,20 @@ def _download_verified_runtime_object(
         raise RuntimeError(f"Runtime object checksum changed: {object_name}")
 
 
+def _load_prompt(path: Path) -> dict[str, str]:
+    prompt = json.loads(path.read_text(encoding="utf-8"))
+    required_components = {"initial", "error", "missing_coverage"}
+    if (
+        not isinstance(prompt, dict)
+        or set(prompt) != required_components
+        or not all(isinstance(prompt.get(component), str) for component in required_components)
+    ):
+        raise RuntimeError(
+            "Prompt snapshot must contain initial, error, and missing_coverage strings"
+        )
+    return prompt
+
+
 def _artifact_index(
     artifacts: Path, generated_files: list[Path], source_files: list[Path] | None = None
 ) -> list[dict[str, object]]:
@@ -606,6 +620,47 @@ def generate_local_project(
     if not targets:
         raise ValueError("Final generation requires at least one target")
     os.environ["PYTHONHASHSEED"] = str(seed)
+def _run(args, artifacts: Path) -> dict:
+    scratch = artifacts.parent / "inputs"
+    scratch.mkdir(parents=True, exist_ok=True)
+    prompt_path = scratch / "prompt.json"
+    targets_path = scratch / "targets.json"
+    _download_object(args.bucket, args.prompt_object, prompt_path)
+    _download_object(args.bucket, args.targets_object, targets_path)
+    _load_prompt(prompt_path)
+    raw_targets = json.loads(targets_path.read_text(encoding="utf-8"))
+    if not isinstance(raw_targets, list) or not raw_targets:
+        raise RuntimeError("Target manifest is empty")
+    targets = [
+        SymbolTarget(
+            project=str(target["project"]),
+            source_file=str(target["source_file"]),
+            symbol=str(target["symbol"]),
+            split="final",
+        )
+        for target in raw_targets
+    ]
+    project_names = sorted({str(target.project) for target in targets})
+    sample_repos, layouts = _stage_projects(args, scratch, project_names)
+    package_dir = sample_repos / "isort" / "isort"
+    tests_dir = sample_repos / "isort" / "tests"
+    if layouts:
+        first = next(iter(layouts.values()))
+        package_dir, tests_dir = first.package_dir, first.tests_dir
+    config = ExperimentConfig(
+        project_root=Path("/app"),
+        package_dir=package_dir,
+        tests_dir=tests_dir,
+        artifacts_dir=artifacts,
+        coverup_model=args.model,
+        max_attempts=args.max_attempts,
+        repeat_tests=args.repeat_tests,
+        max_concurrency=args.max_concurrency,
+        rate_limit=args.rate_limit,
+        pytest_args=args.pytest_args,
+        projects=layouts or None,
+    )
+    os.environ["PYTHONHASHSEED"] = str(args.seed)
     batch = CoverUpExperimentRunner(config).evaluate_batch(
         targets,
         prompt_path,

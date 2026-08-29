@@ -4,7 +4,7 @@ from typing import Protocol
 
 from backend.core.errors import AppError
 
-FULL_ACCESS_EMAILS = frozenset({"admin@gmail.com"})
+FULL_ACCESS_EMAILS = frozenset({"admin@gmail.com", "admintest@gmail.com"})
 
 
 @dataclass(frozen=True, slots=True)
