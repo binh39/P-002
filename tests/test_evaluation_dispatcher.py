@@ -195,12 +195,37 @@ def test_remote_backend_dispatches_each_project_and_preserves_target_order(tmp_p
     assert any(url.endswith("/eval-sample:run") for url in session.urls)
 
 
-def test_remote_backend_retries_same_durable_request_after_pause(tmp_path):
+def test_remote_backend_forwards_remote_pause_to_coordinator_signal(tmp_path, monkeypatch):
     backend, _, session = _backend(tmp_path)
     prompt = tmp_path / "prompt.json"
     prompt.write_text("{}", encoding="utf-8")
     target = SymbolTarget("uploaded", "pkg/a.py", "a", "train")
     session.pause_next = True
+    pause_file = tmp_path / "pause_signal.json"
+    monkeypatch.setenv("PROMPTOPT_PAUSE_FILE", str(pause_file))
+
+    with pytest.raises(ModelRateLimitPauseError, match="provider quota"):
+        backend.evaluate_batch(
+            [target],
+            prompt,
+            candidate_id="candidate",
+            split="train",
+            workspace_kind="candidate",
+        )
+
+    payload = __import__("json").loads(pause_file.read_text(encoding="utf-8"))
+    assert payload["status_code"] == 429
+    assert payload["model"] == "model"
+    assert "provider quota" in payload["message"]
+
+
+def test_remote_backend_retries_same_durable_request_after_pause(tmp_path, monkeypatch):
+    backend, _, session = _backend(tmp_path)
+    prompt = tmp_path / "prompt.json"
+    prompt.write_text("{}", encoding="utf-8")
+    target = SymbolTarget("uploaded", "pkg/a.py", "a", "train")
+    session.pause_next = True
+    monkeypatch.delenv("PROMPTOPT_PAUSE_FILE", raising=False)
 
     with pytest.raises(ModelRateLimitPauseError, match="provider quota"):
         backend.evaluate_batch(

@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from src.optimization.models import BatchRunRecord, EvaluationBackend, SymbolTarget
-from src.promptopt_pause import ModelRateLimitPauseError
+from src.promptopt_pause import ModelRateLimitPauseError, request_rate_limit_pause
 
 _CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 _RESULT_POLL_SECONDS = 2.0
@@ -261,7 +261,21 @@ class RemoteEvaluationBackend(EvaluationBackend):
                 raise TimeoutError(f"Evaluation worker for {project_name} did not publish a result in time")
         status = existing.get("status") if existing else None
         if status == "paused":
-            raise ModelRateLimitPauseError(str(existing.get("error") or f"Evaluation worker for {project_name} paused"))
+            error = ModelRateLimitPauseError(
+                str(existing.get("error") or f"Evaluation worker for {project_name} paused")
+            )
+            # A remote worker owns the actual model call, but the coordinator
+            # owns the durable Cloud Run execution state.  Forward the worker's
+            # pause result to the coordinator signal file before bubbling the
+            # exception so run_job.py can publish status=paused and resume from
+            # the worker checkpoint on the next execution.
+            request_rate_limit_pause(
+                model=str(self.config.coverup_model),
+                attempt=int(existing.get("attempt") or 1),
+                error=error,
+                force=True,
+            )
+            raise error
         if status != "succeeded":
             raise RuntimeError(str((existing or {}).get("error") or f"Evaluation worker for {project_name} failed"))
         return existing
