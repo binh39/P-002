@@ -59,6 +59,17 @@ interface ApiUpload {
   headers: Record<string, string>;
 }
 
+async function uploadFailureMessage(response: Response): Promise<string> {
+  const body = (await response.text().catch(() => "")).trim().replace(/\s+/g, " ");
+  if (!body) return `ZIP upload failed with status ${response.status}`;
+  const safeDetail = body
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 500);
+  return `ZIP upload failed with status ${response.status}: ${safeDetail}`;
+}
+
 interface ApiProjectFunction {
   id: string;
   project_id: string;
@@ -216,8 +227,7 @@ export class HttpProjectRepository implements ProjectRepository {
       },
       body: input.file,
     });
-    if (!uploadResponse.ok)
-      throw new Error(`ZIP upload failed with status ${uploadResponse.status}`);
+    if (!uploadResponse.ok) throw new Error(await uploadFailureMessage(uploadResponse));
 
     await apiRequest(`/uploads/${upload.id}/complete`, { method: "POST" });
     const project = mapProject(
@@ -230,8 +240,6 @@ export class HttpProjectRepository implements ProjectRepository {
           upload_id: upload.id,
           branch: input.branch,
           commit: input.commit || null,
-          runtime_environment_id: input.runtimeEnvironmentId || null,
-          runtime_environment_name: input.runtimeEnvironmentName || null,
         }),
       }),
     );

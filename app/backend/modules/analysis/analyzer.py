@@ -5,12 +5,15 @@ import io
 import json
 import stat
 import tempfile
+import tomllib
 import zipfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 
 from coverage import Coverage
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import Version
 
 from backend.core.errors import AppError
 from backend.modules.analysis.schemas import ProjectFunctionRecord
@@ -31,6 +34,8 @@ IGNORED_PARTS = {
 }
 NON_TARGET_PARTS = {"tests", "test", "migrations"}
 MAX_ARCHIVE_ENTRIES = 50_000
+SUPPORTED_PYTHON_MINORS = ("3.10", "3.11", "3.12", "3.13")
+MAX_PROJECT_METADATA_BYTES = 1_000_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +45,68 @@ class AnalysisResult:
     statement_count: int
     branch_count: int
     warning_count: int
+    python_version: str | None = None
+    requires_python: str | None = None
+
+
+def _project_python_requirement(
+    bundle: zipfile.ZipFile,
+    entries: list[zipfile.ZipInfo],
+    root_prefix: str,
+) -> str | None:
+    """Read root pyproject metadata without extracting or importing project code."""
+    pyproject = next(
+        (
+            info
+            for info in entries
+            if not info.is_dir()
+            and _project_relative_path(PurePosixPath(info.filename.replace("\\", "/")), root_prefix).as_posix()
+            == "pyproject.toml"
+        ),
+        None,
+    )
+    if pyproject is None:
+        return None
+    if pyproject.file_size > MAX_PROJECT_METADATA_BYTES:
+        raise AppError(422, "PROJECT_METADATA_TOO_LARGE", "pyproject.toml is too large to inspect safely")
+    try:
+        payload = tomllib.loads(bundle.read(pyproject).decode("utf-8-sig"))
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError, RuntimeError, zipfile.BadZipFile) as exc:
+        raise AppError(422, "INVALID_PYPROJECT", "pyproject.toml is not valid UTF-8 TOML") from exc
+    project = payload.get("project")
+    requirement = project.get("requires-python") if isinstance(project, dict) else None
+    if requirement is None:
+        return None
+    if not isinstance(requirement, str) or not requirement.strip():
+        raise AppError(422, "INVALID_PYTHON_REQUIREMENT", "[project].requires-python must be a non-empty string")
+    return requirement.strip()
+
+
+def _compatible_python_minor(requirement: str | None, preferred: str) -> str | None:
+    if requirement is None:
+        return preferred
+    try:
+        supported = SpecifierSet(requirement)
+    except InvalidSpecifier as exc:
+        raise AppError(
+            422,
+            "INVALID_PYTHON_REQUIREMENT",
+            f"[project].requires-python is invalid: {requirement!r}",
+        ) from exc
+
+    ordered = [preferred, *(version for version in SUPPORTED_PYTHON_MINORS if version != preferred)]
+    for minor in ordered:
+        # The exact patch installed in the immutable worker can change while
+        # the routing contract remains Python-minor based. These endpoints
+        # establish whether the requirement admits any normal patch in it.
+        if any(Version(f"{minor}.{patch}") in supported for patch in (0, 999)):
+            return minor
+    raise AppError(
+        422,
+        "PYTHON_RUNTIME_UNAVAILABLE",
+        f"Project requires Python {requirement}, but available isolated runtimes are "
+        f"{', '.join(SUPPORTED_PYTHON_MINORS)}",
+    )
 
 
 def _coverage_report(source_files: list[Path], output: Path) -> dict:
@@ -178,6 +245,7 @@ def analyze_zip(
     archive: bytes,
     max_python_files: int,
     max_uncompressed_bytes: int,
+    preferred_python_version: str = "3.12",
 ) -> AnalysisResult:
     try:
         bundle = zipfile.ZipFile(io.BytesIO(archive))
@@ -190,6 +258,8 @@ def analyze_zip(
         raise AppError(413, "TOO_MANY_ARCHIVE_ENTRIES", "The archive contains too many entries")
 
     root_prefix = _archive_root_prefix(entries)
+    requires_python = _project_python_requirement(bundle, entries, root_prefix)
+    python_version = _compatible_python_minor(requires_python, preferred_python_version)
     candidates: list[tuple[zipfile.ZipInfo, str]] = []
     normalized_paths: set[str] = set()
     total_size = 0
@@ -268,4 +338,6 @@ def analyze_zip(
         statement_count=statement_count,
         branch_count=branch_count,
         warning_count=warning_count,
+        python_version=python_version,
+        requires_python=requires_python,
     )
