@@ -77,12 +77,15 @@ class AnalysisService:
                 archive,
                 self.max_python_files,
                 self.max_uncompressed_bytes,
+                project.settings.runtime.python_version,
             )
             await self.functions.replace_for_project(project.id, result.functions)
             project.python_file_count = result.python_file_count
             project.function_count = len(result.functions)
             project.statement_count = result.statement_count
             project.branch_count = result.branch_count
+            if result.python_version:
+                project.settings.runtime.python_version = result.python_version
             project.status = ProjectStatus.WARNING if result.warning_count else ProjectStatus.READY
             project.analysis_error = None
             project.analyzed_at = datetime.now(UTC)

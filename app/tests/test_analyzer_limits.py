@@ -93,3 +93,51 @@ def test_analysis_strips_the_same_single_wrapper_directory_as_runtime():
     result = analyze_zip("project", archive, max_python_files=10, max_uncompressed_bytes=4096)
 
     assert [function.file for function in result.functions] == ["pysnooper/core.py"]
+
+
+def test_analysis_selects_python_313_from_wrapped_pyproject_metadata():
+    archive = archive_with(
+        {
+            "project-main/pyproject.toml": '[project]\nname = "example"\nrequires-python = ">=3.13"\n',
+            "project-main/src/example/core.py": "def target():\n    return 1\n",
+        }
+    )
+
+    result = analyze_zip("project", archive, max_python_files=10, max_uncompressed_bytes=4096)
+
+    assert result.requires_python == ">=3.13"
+    assert result.python_version == "3.13"
+
+
+def test_analysis_keeps_preferred_python_when_requirement_is_compatible():
+    archive = archive_with(
+        {
+            "pyproject.toml": '[project]\nname = "example"\nrequires-python = ">=3.10"\n',
+            "src/example/core.py": "def target():\n    return 1\n",
+        }
+    )
+
+    result = analyze_zip(
+        "project",
+        archive,
+        max_python_files=10,
+        max_uncompressed_bytes=4096,
+        preferred_python_version="3.12",
+    )
+
+    assert result.python_version == "3.12"
+
+
+def test_analysis_rejects_requirement_without_a_deployed_python_minor():
+    archive = archive_with(
+        {
+            "pyproject.toml": '[project]\nname = "example"\nrequires-python = ">=3.14"\n',
+            "src/example/core.py": "def target():\n    return 1\n",
+        }
+    )
+
+    with pytest.raises(AppError) as error:
+        analyze_zip("project", archive, max_python_files=10, max_uncompressed_bytes=4096)
+
+    assert error.value.code == "PYTHON_RUNTIME_UNAVAILABLE"
+    assert "3.13" in error.value.message

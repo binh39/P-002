@@ -5,6 +5,7 @@ pydantic>=2.10.0
 pydantic-settings>=2.7.0
 coverage>=7.6.0
 python-dotenv>=1.0.0
+packaging>=24.0,<26.0
 firebase-admin>=6.6.0
 google-cloud-firestore>=2.20.0
 # 2.35.0 percent-encodes Firestore's special `(default)` database ID,

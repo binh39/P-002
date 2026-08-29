@@ -99,6 +99,23 @@ async def test_project_analysis_lifecycle(client):
 
 
 @pytest.mark.asyncio
+async def test_analysis_routes_project_to_python_minor_required_by_pyproject(client):
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr(
+            "project-main/pyproject.toml",
+            '[project]\nname = "python-313-project"\nrequires-python = ">=3.13"\n',
+        )
+        archive.writestr("project-main/src/example.py", "def value():\n    return 1\n")
+    project_id = await create_project(client, buffer.getvalue())
+
+    response = await client.post(f"/api/v1/projects/{project_id}/analyze", headers=AUTH_HEADERS)
+
+    assert response.status_code == 202
+    assert response.json()["settings"]["runtime"]["python_version"] == "3.13"
+
+
+@pytest.mark.asyncio
 async def test_functions_are_unavailable_before_analysis(client):
     project_id = await create_project(client, python_archive())
 
