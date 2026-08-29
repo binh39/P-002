@@ -43,9 +43,7 @@ def _verify_generation(bucket, object_name: str, expected: str | None) -> None:
         blob.reload(client=getattr(bucket, "client", None))
     actual = getattr(blob, "generation", None)
     if actual is None or str(actual) != str(expected):
-        raise RuntimeError(
-            f"Runtime object generation changed for {object_name}; prepare the project runtime again"
-        )
+        raise RuntimeError(f"Runtime object generation changed for {object_name}; prepare the project runtime again")
 
 
 def _relocate_venv_scripts(python: Path) -> None:
@@ -340,17 +338,32 @@ def _execute(bucket, request: dict[str, Any], root: Path) -> dict[str, Any]:
             repeat_tests=config.repeat_tests,
             env=environment,
         )
+        pytest_result = getattr(completed, "pytest_result", completed)
+        coverage_result = getattr(completed, "coverage_report_result", None)
+        pytest_output = str(getattr(pytest_result, "stdout", "") or "")
+        coverage_output = str(getattr(coverage_result, "stdout", "") or "")
         replay = {
             "schema_version": 1,
             "status": "passed" if completed.returncode == 0 else "failed",
-            "pytest_exit_code": completed.returncode,
+            "pytest_exit_code": int(getattr(pytest_result, "returncode", completed.returncode)),
+            "pytest_output": pytest_output[-12000:],
+            "coverage_exit_code": (int(coverage_result.returncode) if coverage_result is not None else None),
+            "coverage_output": coverage_output[-4000:],
+            "coverage_data_exists": coverage_path.with_suffix(".data").is_file(),
+            "coverage_data_size": (
+                coverage_path.with_suffix(".data").stat().st_size if coverage_path.with_suffix(".data").is_file() else 0
+            ),
+            "coverage_json_exists": coverage_path.is_file(),
+            "test_python": environment.get("TESTGEN_PYTHON", sys.executable),
+            "package_dir": str(layout.package_dir),
+            "import_root": str(layout.import_root or layout.package_dir.parent),
             "artifact_sha256": actual_sha256,
             "test_file_count": len(test_files),
             "test_files": [path.relative_to(generated_tests).as_posix() for path in test_files],
             "runtime_digest": layout.runtime_digest,
         }
         if completed.returncode != 0:
-            replay["error"] = completed.stdout[-4000:]
+            replay["error"] = (pytest_output or coverage_output or "Replay failed without output")[-4000:]
         return {"final_replay": replay}
     raise RuntimeError(f"Unsupported evaluation operation: {request['operation']!r}")
 

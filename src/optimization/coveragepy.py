@@ -109,8 +109,13 @@ def symbol_coverage(report: dict[str, Any], source_file: str, symbol: str) -> Sy
 
 
 def run_coverage(
-    *, project_root: Path, package_dir: Path, tests_dir: Path, output: Path,
-    pytest_args: str = "", repeat_tests: int = 0,
+    *,
+    project_root: Path,
+    package_dir: Path,
+    tests_dir: Path,
+    output: Path,
+    pytest_args: str = "",
+    repeat_tests: int = 0,
     env: dict[str, str] | None = None,
     test_paths: Sequence[Path] | None = None,
     pytest_basetemp: Path | None = None,
@@ -120,14 +125,19 @@ def run_coverage(
     run_env = os.environ.copy()
     run_env.update(env or {})
     run_env["COVERAGE_FILE"] = str(output.with_suffix(".data").resolve())
+    # Measurement is owned by PromptOpt, not by the uploaded repository's
+    # coverage configuration.  In particular, projects such as isort enable
+    # ``parallel = true`` in pyproject.toml, which writes suffixed data files;
+    # the following ``coverage json`` then sees no canonical data file.
+    coverage_config = output.with_suffix(".coveragerc").resolve()
+    coverage_config.write_text("[run]\nparallel = false\n", encoding="utf-8")
+    run_env["COVERAGE_RCFILE"] = str(coverage_config)
     # Concurrent target scorers may execute the same generated module. Avoid
     # cross-process races and leftover artifacts in a shared __pycache__.
     run_env["PYTHONDONTWRITEBYTECODE"] = "1"
     test_python = _test_python(run_env)
     selected_tests = (
-        [str(path.resolve()) for path in test_paths]
-        if test_paths is not None
-        else [str(tests_dir.resolve())]
+        [str(path.resolve()) for path in test_paths] if test_paths is not None else [str(tests_dir.resolve())]
     )
     if not selected_tests:
         raise ValueError("test_paths must contain at least one path when provided")
@@ -136,15 +146,22 @@ def run_coverage(
         resolved_basetemp = pytest_basetemp.resolve()
         resolved_basetemp.parent.mkdir(parents=True, exist_ok=True)
     run_cmd = [
-        test_python, "-m", "coverage", "run", "--branch",
-        f"--source={package_dir.resolve()}", "-m", "pytest", *selected_tests,
-        "--disable-warnings", "-q", "-p", "no:cacheprovider",
-        *(
-            ("--basetemp", str(resolved_basetemp))
-            if resolved_basetemp is not None else ()
-        ),
+        test_python,
+        "-m",
+        "coverage",
+        "run",
+        "--branch",
+        f"--source={package_dir.resolve()}",
+        "-m",
+        "pytest",
+        *selected_tests,
+        "--disable-warnings",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        *(("--basetemp", str(resolved_basetemp)) if resolved_basetemp is not None else ()),
         *(("--count", str(repeat_tests)) if repeat_tests else ()),
-        *( (f"--timeout={TEST_TIMEOUT_SECONDS}",) if _pytest_timeout_available(test_python) else () ),
+        *((f"--timeout={TEST_TIMEOUT_SECONDS}",) if _pytest_timeout_available(test_python) else ()),
         *shlex.split(pytest_args, posix=os.name != "nt"),
     ]
     completed = run_streamed(
@@ -155,6 +172,12 @@ def run_coverage(
         echo=False,
         timeout=COVERAGE_PROCESS_TIMEOUT_SECONDS,
     )
+    # Keep the pytest phase available to callers even when exporting the
+    # coverage report fails.  Previously a failing ``coverage json`` replaced
+    # this result, which made replay diagnostics report the exporter exit code
+    # as pytest's and discarded the actual collection/test failure output.
+    completed.pytest_result = completed
+    completed.coverage_report_result = None
     # coverage.py writes usable execution data when pytest finishes with test
     # failures (exit 1), as well as when it passes or collects no tests.  Export
     # that data so callers can retain symbol denominators while scoring a
@@ -172,6 +195,9 @@ def run_coverage(
         echo=False,
         timeout=120,
     )
+    completed.coverage_report_result = report
+    report.pytest_result = completed
+    report.coverage_report_result = report
     if report.returncode:
         return report
     if completed.returncode == _NO_TESTS_COLLECTED:

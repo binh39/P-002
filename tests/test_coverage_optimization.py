@@ -397,6 +397,36 @@ def test_run_coverage_uses_selected_runtime_interpreter(tmp_path, monkeypatch):
     assert [command[0] for command in calls] == ["prepared-python", "prepared-python"]
 
 
+def test_run_coverage_ignores_uploaded_project_parallel_coverage_config(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs["env"].copy()))
+        return SimpleNamespace(args=command, returncode=0, stdout="", stderr=None)
+
+    monkeypatch.setattr("src.optimization.coveragepy.run_streamed", fake_run)
+    package_dir = tmp_path / "pkg"
+    tests_dir = tmp_path / "tests"
+    package_dir.mkdir()
+    tests_dir.mkdir()
+    (tmp_path / "pyproject.toml").write_text(
+        "[tool.coverage.run]\nparallel = true\n",
+        encoding="utf-8",
+    )
+
+    run_coverage(
+        project_root=tmp_path,
+        package_dir=package_dir,
+        tests_dir=tests_dir,
+        output=tmp_path / "coverage.json",
+    )
+
+    assert len(calls) == 2
+    rcfile = Path(calls[0][1]["COVERAGE_RCFILE"])
+    assert rcfile.read_text(encoding="utf-8") == "[run]\nparallel = false\n"
+    assert calls[1][1]["COVERAGE_RCFILE"] == str(rcfile)
+
+
 @pytest.mark.skipif(os.name == "nt", reason="POSIX venv interpreters are symlinks")
 def test_runtime_environment_preserves_venv_python_symlink(tmp_path):
     venv_python = tmp_path / ".venv" / "bin" / "python"
