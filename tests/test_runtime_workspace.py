@@ -329,6 +329,52 @@ def test_prepare_runtime_treats_upstream_collection_failure_as_diagnostic(tmp_pa
     assert result.statement_coverage == 0.0
 
 
+def test_prepare_runtime_falls_back_when_baseline_produces_no_coverage_data(tmp_path, monkeypatch):
+    from cloud import runtime_workspace
+
+    archive = tmp_path / "project-with-empty-baseline-coverage.zip"
+    write_zip(
+        archive,
+        {
+            "demo/pkg/__init__.py": "def add(a, b):\n    return a + b\n",
+            "demo/tests/test_pkg.py": "from pkg import add\n\ndef test_add():\n    assert add(2, 3) == 5\n",
+        },
+    )
+    original_run = runtime_workspace._run
+    rejected_report = False
+
+    def empty_first_report(result, name, command, cwd, deadline, output_limit, **kwargs):
+        nonlocal rejected_report
+        if name.startswith("coverage report for") and not rejected_report:
+            rejected_report = True
+            completed = runtime_workspace.CommandResult(
+                name=name,
+                command=command,
+                return_code=1,
+                duration_seconds=0.01,
+                output="No data to report.\n",
+            )
+            result.commands.append(completed)
+            return completed
+        return original_run(result, name, command, cwd, deadline, output_limit, **kwargs)
+
+    monkeypatch.setattr(runtime_workspace, "_run", empty_first_report)
+
+    result, python = prepare_runtime(
+        archive,
+        tmp_path / "runtime-with-empty-baseline-coverage",
+        configured_source="pkg",
+        configured_tests="tests",
+        timeout_seconds=120,
+    )
+
+    assert result.status == "runtime_ready", result.error
+    assert python is not None
+    assert result.statement_coverage == 0.0
+    assert rejected_report
+    assert any(item.name.startswith("zero baseline after empty coverage") for item in result.commands)
+
+
 def test_prepare_runtime_falls_back_when_upstream_collection_times_out(tmp_path):
     archive = tmp_path / "project-with-hanging-collection.zip"
     write_zip(
