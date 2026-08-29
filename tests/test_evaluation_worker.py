@@ -212,7 +212,9 @@ def test_uploaded_worker_rejects_changed_object_generation(tmp_path, monkeypatch
         },
     }
     with pytest.raises(RuntimeError, match="object generation changed"):
-        _stage_project(_GenerationBucket({"project.zip": archive, "runtime.tar.gz": runtime}), request, tmp_path / "worker")
+        _stage_project(
+            _GenerationBucket({"project.zip": archive, "runtime.tar.gz": runtime}), request, tmp_path / "worker"
+        )
 
 
 def test_uploaded_worker_restores_only_matching_runtime_capsule(tmp_path, monkeypatch):
@@ -465,6 +467,69 @@ def test_final_replay_downloads_exact_artifact_and_runs_it_in_project_runtime(tm
     # the base interpreter, otherwise installed project dependencies vanish.
     assert captured["env"]["TESTGEN_PYTHON"] == str(runtime_python.absolute())
     assert Path(captured["tests_dir"]).name == "generated_tests"
+
+
+def test_final_replay_preserves_pytest_failure_when_coverage_export_fails(tmp_path, monkeypatch):
+    from cloud import run_evaluation_worker
+
+    project_root = tmp_path / "project"
+    package = project_root / "pkg"
+    tests = project_root / "tests"
+    package.mkdir(parents=True)
+    tests.mkdir()
+    (package / "__init__.py").write_text("VALUE = 1\n", encoding="utf-8")
+    suite = _zip_bytes(
+        {"generated_tests/final/tests_candidate_final/test_generated.py": "def test_value():\n    assert False\n"}
+    )
+    bucket = _Bucket({"worker-artifacts.zip": suite})
+    runtime_python = Path(os.sys.executable)
+    monkeypatch.setattr(
+        run_evaluation_worker,
+        "_stage_project",
+        lambda *_args: (
+            project_root,
+            ProjectLayout(
+                package_dir=package,
+                tests_dir=tests,
+                import_root=project_root,
+                python_executable=runtime_python,
+                runtime_digest="runtime-digest",
+            ),
+        ),
+    )
+    pytest_result = type("Completed", (), {"returncode": 1, "stdout": "assertion failed"})()
+    coverage_result = type("Completed", (), {"returncode": 1, "stdout": "No data to report."})()
+    result = coverage_result
+    result.pytest_result = pytest_result
+    result.coverage_report_result = coverage_result
+    monkeypatch.setattr(run_evaluation_worker, "run_coverage", lambda **_kwargs: result)
+
+    output = _execute(
+        bucket,
+        {
+            "schema_version": 1,
+            "operation": "final_replay",
+            "project": "uploaded",
+            "project_spec": {"project": "uploaded"},
+            "suite_artifact_object": "worker-artifacts.zip",
+            "suite_artifact_sha256": hashlib.sha256(suite).hexdigest(),
+            "config": {
+                "coverup_model": "model",
+                "max_attempts": 1,
+                "repeat_tests": 1,
+                "max_concurrency": 1,
+                "pytest_args": "",
+            },
+        },
+        tmp_path / "replay",
+    )["final_replay"]
+
+    assert output["status"] == "failed"
+    assert output["pytest_exit_code"] == 1
+    assert output["pytest_output"] == "assertion failed"
+    assert output["coverage_exit_code"] == 1
+    assert output["coverage_output"] == "No data to report."
+    assert output["error"] == "assertion failed"
 
 
 def test_worker_test_pause_hook_writes_durable_signal_before_execution(tmp_path, monkeypatch):
