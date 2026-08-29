@@ -100,3 +100,84 @@ def test_job_restores_checkpoint_before_resume(monkeypatch, tmp_path):
 
     assert run_job.main() == 0
     assert observed["source"] == "old-run"
+
+
+def test_dynamic_resume_keeps_remote_worker_prefix(monkeypatch, tmp_path):
+    observed = {}
+    sample_root = tmp_path / "samples"
+    (sample_root / "isort" / "isort").mkdir(parents=True)
+    (sample_root / "isort" / "tests").mkdir(parents=True)
+    (sample_root / "isort" / "isort" / "__init__.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (sample_root / "isort" / "tests" / "test_value.py").write_text(
+        "from isort import VALUE\n\n\ndef test_value():\n    assert VALUE == 1\n",
+        encoding="utf-8",
+    )
+    manifest = {
+        "schema_version": 3,
+        "projects": [
+            {
+                "kind": "sample",
+                "project": "isort",
+                "sample_slug": "isort",
+                "source_directory": "isort",
+                "test_directory": "tests",
+                "runtime_digest": "sample:isort",
+            }
+        ],
+    }
+
+    def download_object(_bucket, object_name, destination):
+        destination = Path(destination)
+        if object_name.endswith("dataset.jsonl"):
+            destination.write_text('{"project":"isort"}\n', encoding="utf-8")
+        elif object_name.endswith("prompt.json"):
+            destination.write_text("{}", encoding="utf-8")
+        elif object_name.endswith("projects.json"):
+            destination.write_text(json.dumps(manifest), encoding="utf-8")
+        else:
+            raise AssertionError(object_name)
+
+    def run(command):
+        observed["prefix"] = os.environ["PROMPTOPT_EVALUATION_PREFIX"]
+        artifacts = Path(command[command.index("--artifacts-dir") + 1])
+        for relative in (
+            "optimized_program.json",
+            "prompts/gepa_proposed.json",
+            "prompts/gepa_optimized.json",
+            "final_validation.json",
+        ):
+            path = artifacts / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("{}", encoding="utf-8")
+        return 0, None
+
+    monkeypatch.setattr(run_job, "_download_object", download_object)
+    monkeypatch.setattr(run_job, "_download_dir", lambda *_args: 0)
+    monkeypatch.setattr(run_job, "_upload_dir", lambda *_args: None)
+    monkeypatch.setattr(run_job, "_run_cli", run)
+    monkeypatch.setenv("PROMPTOPT_EVALUATION_JOB_SAMPLE", "projects/p/locations/r/jobs/eval-sample")
+    monkeypatch.setenv("PROMPTOPT_SAMPLE_RUNTIME_IMAGE", "image@sha256:one")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_job",
+            "--bucket",
+            "bucket",
+            "--artifacts-name",
+            "new-run",
+            "--resume-artifacts-name",
+            "old-run",
+            "--sample-repos-dir",
+            str(sample_root),
+            "--dataset-object",
+            "inputs/dataset.jsonl",
+            "--prompt-object",
+            "inputs/prompt.json",
+            "--project-manifest-object",
+            "inputs/projects.json",
+        ],
+    )
+
+    assert run_job.main() == 0
+    assert observed["prefix"] == "old-run"

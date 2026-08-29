@@ -365,7 +365,13 @@ def main() -> int:
                 )
                 os.environ["PROMPTOPT_EVALUATION_MANIFEST"] = str(manifest_path)
                 os.environ["PROMPTOPT_EVALUATION_BUCKET"] = args.bucket
-                os.environ["PROMPTOPT_EVALUATION_PREFIX"] = args.artifacts_name.strip("/")
+                # Worker requests/results and checkpoints belong to the
+                # original execution prefix.  A resumed coordinator writes a
+                # new output prefix, but must continue using the old remote
+                # prefix so an interrupted worker can restore its durable
+                # checkpoint instead of starting from scratch.
+                evaluation_prefix = args.resume_artifacts_name or args.artifacts_name
+                os.environ["PROMPTOPT_EVALUATION_PREFIX"] = evaluation_prefix.strip("/")
                 os.environ["PROMPTOPT_EVALUATION_JOBS"] = json.dumps(worker_jobs)
                 os.environ["PROMPTOPT_EVALUATION_TIMEOUT_SECONDS"] = str(
                     max(300, min(args.evaluation_worker_timeout_seconds, 7200))
