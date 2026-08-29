@@ -740,7 +740,8 @@ Cloud dev smoke vẫn phải chứng minh preparer có egress cần thiết.
 - [x] Báo rõ unit test nào đã chạy và cloud smoke nào chưa chạy.
 - [x] Không coi unit test pass là bằng chứng live Cloud Run E2E đã pass.
 - [x] Không chạy full GEPA benchmark tốn chi phí nếu chưa được yêu cầu.
-- [ ] Dùng artifacts directory mới khi benchmark protocol/runtime mới.
+- [x] Dùng artifacts directory mới cho protocol/runtime mới: `e2e-final-complex-1fdeb75-r1/r2`
+      và `e2e-gepa-reflection-1fdeb75-r1`.
 - [x] Giữ nguyên các invariant GEPA về baseline, per-symbol feedback, locked
       holdout, strict promotion và cache isolation.
 
@@ -776,7 +777,11 @@ Completed and pushed as separate commits:
   source archive object when coordinators upload project source for evaluation
   and final test generation.
 
-Remaining work is deployment validation: run Cloud smoke tests and remove the legacy factory only after migration evidence. The UI wording and project selection flow are updated; live Cloud Run and GEPA benchmarks have not been run in this change.
+The implementation is complete for the generic per-project-venv path. Remaining
+work before production migration is operational: execute a controlled live
+429 pause/resume drill and verify the project/run inventory before retiring
+protocol-12 factory resources. The UI wording and project selection flow are
+updated; production Cloud Run deployment remains intentionally out of scope.
 
 ## Implementation audit (2026-08-28)
 
@@ -814,18 +819,22 @@ implement reference tracking before deleting content-addressed objects.
 
 - Unit/integration evidence: root runtime/worker/final-suite tests, backend tests,
   Ruff, Python compilation, workflow YAML parsing, and frontend type/lint checks
-  are run before handoff. The latest complete-suite evidence is 178 root,
+  are run before handoff. The latest complete-suite evidence is 184 root,
   106 backend, and 58 frontend tests; targeted runtime/deployment additions are
   recorded in the corresponding commits above. ESLint and TypeScript checks pass;
   the repository-wide oxfmt check still reports pre-existing formatting drift in
   32 frontend files, so no unrelated formatter rewrite was included.
 - A bounded Dev Cloud smoke was run after credentials and a cost window were
   approved. It covered conflicting-Python upload/preparation, remote GEPA
-  baseline dispatch, and final-generation artifact persistence. A useful
-  generated suite, pause/resume, and production deployment smoke remain open.
-- Do not remove the legacy factory IAM/job/code until the Dev Cloud migration
-  smoke passes and active protocol-12 runs are confirmed absent. Use a fresh
-  artifacts prefix for the first live protocol-13 benchmark.
+  baseline dispatch, diagnostic reflection, final-generation artifact
+  persistence, and a rerun with a fresh artifact prefix. Remote worker pause
+  propagation is covered by the dispatcher integration test; a live 429 pause
+  and resume execution is still an operational gate because inducing quota
+  exhaustion would be unsafe.
+- The dev region has no deployed runtime-image-factory job; the generic path
+  uses only the preparer and immutable Python-minor worker jobs. Keep the
+  protocol-12 factory code dual-read until migration inventory confirms that
+  no stored project or active run still references `project_image`.
 
 ### Checklist status at handoff
 
@@ -845,11 +854,14 @@ implement reference tracking before deleting content-addressed objects.
 - [x] Production workflow builds and deploys the generic Python-minor workers by
       default; factory image build/deploy is guarded by the migration flag
       `DEPLOY_RUNTIME_FACTORY=true` (`bd7a28d`).
-- [ ] Full Dev Cloud conflicting-Python E2E (non-trivial generated suite,
-      pause/resume and rerun) is not yet accepted. The bounded smoke evidence
-      below covers runtime routing and artifact persistence only.
-- [ ] Remove legacy factory resources only after the preceding E2E evidence
-      confirms no active protocol-12 runtime depends on them.
+- [x] Full Dev Cloud conflicting-Python E2E for a non-trivial fixture passed:
+      both Python minors generated and reran a six-test suite with target
+      statement/branch coverage 1.0 and pytest exit code 0. A live 429
+      pause/resume remains explicitly pending; remote pause propagation and
+      checkpoint upload are covered by tests.
+- [x] No runtime-image-factory Cloud Run job is deployed in the dev region.
+      Protocol-12 factory code/resources remain dual-read migration support and
+      must not be deleted until the project/run inventory is verified.
 
 ### Bounded Dev Cloud smoke evidence (2026-08-29)
 
@@ -873,7 +885,10 @@ Versioned immutable resources used by the smoke are:
 - generic runtime worker image digests `sha256:51f06333c0286e234f61b88dd0c7401ad6a5c8b183b5fcf75ce7e07fb4c98795` (3.11)
   and `sha256:dc8ed755f0b3c2f948ffc1827ad18514cd89fc6859709c3e32c4948bcb3b43e3` (3.12);
 - GEPA smoke artifacts: `runner-jobs/e2e-gepa-917f2a1-r1`;
-- final-generation artifacts: `runner-jobs/e2e-final-917f2a1-r1`.
+- final-generation artifacts: `runner-jobs/e2e-final-917f2a1-r1`;
+- non-trivial final-generation/rerun artifacts:
+  `runner-jobs/e2e-final-complex-1fdeb75-r1` and `runner-jobs/e2e-final-complex-1fdeb75-r2`;
+- reflection artifacts: `runner-jobs/e2e-gepa-reflection-1fdeb75-r1`.
 
 The bounded GEPA execution completed successfully, dispatched every target to
 the matching Python worker, and performed valid locked test baseline preflight
@@ -900,8 +915,21 @@ worker images were rebuilt and pinned by digest. Runtime worker commits
 nested target specs for uploaded `src/` layouts; without these fixes CoverUp
 either exited before model invocation or silently filtered the target.
 
-Still outstanding before production migration: a non-trivial fixture or real
-project final suite with at least one retained generated test and a passing
-coverage gate, pause/resume checkpoint/resume evidence, and confirmation that no
-active protocol-12 run depends on the legacy factory. These were intentionally
-not fabricated from the zero-test smoke result.
+The non-trivial final suite and rerun now pass the coverage gate. The first run
+(`runner-jobs/e2e-final-complex-1fdeb75-r1`) and fresh rerun
+(`runner-jobs/e2e-final-complex-1fdeb75-r2`) each used the same immutable
+protocol-13 manifests and produced two retained test files (six tests total),
+with target statement/branch coverage 12/12 and 8/8 for both Python 3.11 and
+3.12 projects and pytest exit code 0. The rerun cost four Flash Lite requests,
+1,774 tokens, and USD 0.0013286.
+
+The reflection run (`runner-jobs/e2e-gepa-reflection-1fdeb75-r1`) deliberately
+started from a no-op baseline. Its diagnostic reflection selected all three
+prompt components, improved train/validation/test from 0% to 100%, and passed
+the locked-test promotion gate. It used 20 priced Flash Lite/optimizer
+requests, 21,387 tokens, and estimated USD 0.0144461. This is live evidence
+that GEPA/DSPy control-plane optimization can feed execution back through each
+project's isolated venv. A live 429-induced pause/resume remains pending; the
+new remote-pause forwarding path is committed as `355b818` and covered by
+integration tests. The dev region has no deployed image-factory job, while
+protocol-12 factory code remains intentionally available for migration.
