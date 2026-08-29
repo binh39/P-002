@@ -461,7 +461,9 @@ def test_final_replay_downloads_exact_artifact_and_runs_it_in_project_runtime(tm
     assert result["final_replay"]["status"] == "passed"
     assert result["final_replay"]["test_file_count"] == 1
     assert result["final_replay"]["artifact_sha256"] == hashlib.sha256(suite).hexdigest()
-    assert captured["env"]["TESTGEN_PYTHON"] == str(runtime_python.resolve())
+    # Preserve the venv entry point instead of resolving its POSIX symlink to
+    # the base interpreter, otherwise installed project dependencies vanish.
+    assert captured["env"]["TESTGEN_PYTHON"] == str(runtime_python.absolute())
     assert Path(captured["tests_dir"]).name == "generated_tests"
 
 
