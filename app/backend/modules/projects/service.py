@@ -82,12 +82,22 @@ class ProjectService:
         await self.repository.create(project)
         return self._response(project)
 
-    async def list(self, owner_id: str, workspace_id: str | None = None) -> ProjectListResponse:
+    async def list(
+        self, owner_id: str, workspace_id: str | None = None, include_legacy: bool = False
+    ) -> ProjectListResponse:
         projects = (
             await self.repository.list_for_workspace(workspace_id)
             if workspace_id
             else await self.repository.list_for_owner(owner_id)
         )
+        if include_legacy:
+            legacy = [
+                project
+                for project in await self.repository.list_for_owner(owner_id)
+                if project.workspace_id in {None, owner_id}
+            ]
+            projects = list({project.id: project for project in [*projects, *legacy]}.values())
+            projects.sort(key=lambda project: project.created_at, reverse=True)
         if self.runtime:
             projects = [await self.runtime.refresh(project) for project in projects]
         return ProjectListResponse(items=[self._response(project) for project in projects], total=len(projects))

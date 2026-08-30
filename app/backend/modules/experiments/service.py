@@ -582,12 +582,19 @@ class ExperimentService:
             raise AppError(404, "EXPERIMENT_NOT_FOUND", "Experiment was not found")
         return ExperimentResponse.model_validate(item)
 
-    async def list(self, owner_id: str, workspace_id: str | None = None) -> ExperimentListResponse:
+    async def list(
+        self, owner_id: str, workspace_id: str | None = None, include_legacy: bool = False
+    ) -> ExperimentListResponse:
         items = (
             await self.repository.list_for_workspace(workspace_id)
             if workspace_id
             else await self.repository.list_for_owner(owner_id)
         )
+        if include_legacy:
+            legacy = [
+                item for item in await self.repository.list_for_owner(owner_id) if item.workspace_id in {None, owner_id}
+            ]
+            items = list({item.id: item for item in [*items, *legacy]}.values())
         return ExperimentListResponse(
             items=[ExperimentResponse.model_validate(item) for item in items],
             total=len(items),
@@ -1379,15 +1386,22 @@ class ExperimentService:
         return await self._prompt_registry_entry(item)
 
     async def list_prompt_registry(
-        self, owner_id: str, offset: int = 0, limit: int = 50, workspace_id: str | None = None
+        self,
+        owner_id: str,
+        offset: int = 0,
+        limit: int = 50,
+        workspace_id: str | None = None,
+        include_legacy: bool = False,
     ) -> PromptRegistryListResponse:
         experiments = (
             await self.repository.list_for_workspace(workspace_id)
             if workspace_id
             else await self.repository.list_for_owner(owner_id)
         )
-        if workspace_id:
-            legacy = [item for item in await self.repository.list_for_owner(owner_id) if item.workspace_id is None]
+        if include_legacy:
+            legacy = [
+                item for item in await self.repository.list_for_owner(owner_id) if item.workspace_id in {None, owner_id}
+            ]
             experiments = list({item.id: item for item in [*experiments, *legacy]}.values())
         total = len(experiments)
         page = experiments[offset : offset + limit]
@@ -1740,13 +1754,26 @@ class ExperimentService:
         await self.repository.delete_test_generation_run(run.id)
 
     async def list_test_generation_runs(
-        self, owner_id: str, offset: int = 0, limit: int = 50, workspace_id: str | None = None
+        self,
+        owner_id: str,
+        offset: int = 0,
+        limit: int = 50,
+        workspace_id: str | None = None,
+        include_legacy: bool = False,
     ) -> TestGenerationRunListResponse:
         runs = (
             await self.repository.list_test_generation_runs_for_workspace(workspace_id)
             if workspace_id
             else await self.repository.list_test_generation_runs_for_owner(owner_id)
         )
+        if include_legacy:
+            legacy = [
+                run
+                for run in await self.repository.list_test_generation_runs_for_owner(owner_id)
+                if run.workspace_id in {None, owner_id}
+            ]
+            runs = list({run.id: run for run in [*runs, *legacy]}.values())
+            runs.sort(key=lambda run: run.created_at, reverse=True)
         return TestGenerationRunListResponse(
             items=[TestGenerationRunResponse.model_validate(run) for run in runs[offset : offset + limit]],
             total=len(runs),

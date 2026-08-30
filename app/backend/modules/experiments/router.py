@@ -45,7 +45,8 @@ async def create_experiment(payload: CreateExperimentRequest, user: EngineerUser
 
 @router.get("", response_model=ExperimentListResponse)
 async def list_experiments(user: CurrentUser, request: Request):
-    return await request.app.state.services.experiments.list(user.uid, user.workspace_id)
+    include_legacy = await request.app.state.services.workspaces.is_personal_workspace(user.uid, user.workspace_id)
+    return await request.app.state.services.experiments.list(user.uid, user.workspace_id, include_legacy)
 
 
 @router.delete("/{experiment_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -220,11 +221,13 @@ async def list_prompt_registry(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=100),
 ):
+    include_legacy = await request.app.state.services.workspaces.is_personal_workspace(user.uid, user.workspace_id)
     return await request.app.state.services.experiments.list_prompt_registry(
         user.uid,
         offset,
         limit,
         workspace_id=user.workspace_id,
+        include_legacy=include_legacy,
     )
 
 
@@ -261,8 +264,9 @@ async def list_test_generation_runs(
     limit: int = Query(default=50, ge=1, le=100),
 ):
     workspace_id = user.workspace_id
+    include_legacy = await request.app.state.services.workspaces.is_personal_workspace(user.uid, workspace_id)
     return await request.app.state.services.experiments.list_test_generation_runs(
-        user.uid, offset, limit, workspace_id=workspace_id
+        user.uid, offset, limit, workspace_id=workspace_id, include_legacy=include_legacy
     )
 
 
