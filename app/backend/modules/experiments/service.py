@@ -1722,9 +1722,7 @@ class ExperimentService:
             raise AppError(404, "ARTIFACT_NOT_FOUND", "Artifact was not found in this final test-generation run")
         return await self.storage.read(object_name)
 
-    async def get_test_generation_manifest(
-        self, run_id: str, owner_id: str, workspace_id: str | None = None
-    ) -> dict:
+    async def get_test_generation_manifest(self, run_id: str, owner_id: str, workspace_id: str | None = None) -> dict:
         """Return the small, redacted result manifest for the run detail viewer.
 
         This deliberately does not turn arbitrary storage paths into browser-viewable files.

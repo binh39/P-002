@@ -421,9 +421,7 @@ class FirestoreExperimentRepository:
     async def list_test_generation_runs_for_workspace(self, workspace_id):
         from google.cloud.firestore_v1.base_query import FieldFilter
 
-        snapshots = self._test_generation_runs().where(
-            filter=FieldFilter("workspace_id", "==", workspace_id)
-        ).stream()
+        snapshots = self._test_generation_runs().where(filter=FieldFilter("workspace_id", "==", workspace_id)).stream()
         return sorted(
             [TestGenerationRunRecord.model_validate(snapshot.to_dict()) async for snapshot in snapshots],
             key=lambda item: item.created_at,
