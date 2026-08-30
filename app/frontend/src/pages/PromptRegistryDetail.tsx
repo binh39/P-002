@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useLocation, useRoute } from "wouter";
 
 import { useRepositories } from "@/app/providers";
+import { useAuth } from "@/auth/AuthProvider";
 import { PageHeader } from "@/components/PlatformUI";
 import type { Experiment, PromptCoverageMetrics, PromptBundle } from "@/domain/experiments";
 
@@ -212,6 +213,8 @@ function PromptActions({
 }
 
 export default function PromptRegistryDetail() {
+  const { user } = useAuth();
+  const readOnly = user?.role === "prompt_reviewer";
   const [, params] = useRoute("/prompts/:experimentId");
   const [, navigate] = useLocation();
   const { promptRegistry, experiments } = useRepositories();
@@ -279,35 +282,43 @@ export default function PromptRegistryDetail() {
           title="Baseline prompt"
           prompt={entry.baseline.prompt}
           action={
-            <PromptActions
-              label="Generate Tests"
-              disabled={false}
-              onClick={() =>
-                navigate(
-                  `/test-suites/new?experiment=${encodeURIComponent(experimentId)}&prompt=baseline`,
-                )
-              }
-            />
+            readOnly ? (
+              <span className="status-badge status-info">Read-only</span>
+            ) : (
+              <PromptActions
+                label="Generate Tests"
+                disabled={false}
+                onClick={() =>
+                  navigate(
+                    `/test-suites/new?experiment=${encodeURIComponent(experimentId)}&prompt=baseline`,
+                  )
+                }
+              />
+            )
           }
         />
         <PromptCode
           title="Final Prompt"
           prompt={selectedPrompt}
           action={
-            <PromptActions
-              label="Generate Tests"
-              disabled={selected === null}
-              onClick={() =>
-                navigate(
-                  `/test-suites/new?experiment=${encodeURIComponent(experimentId)}&prompt=optimized`,
-                )
-              }
-              title={
-                selected === null
-                  ? "Complete the final comparison before generating final tests."
-                  : undefined
-              }
-            />
+            readOnly ? (
+              <span className="status-badge status-info">Read-only</span>
+            ) : (
+              <PromptActions
+                label="Generate Tests"
+                disabled={selected === null}
+                onClick={() =>
+                  navigate(
+                    `/test-suites/new?experiment=${encodeURIComponent(experimentId)}&prompt=optimized`,
+                  )
+                }
+                title={
+                  selected === null
+                    ? "Complete the final comparison before generating final tests."
+                    : undefined
+                }
+              />
+            )
           }
         />
       </div>

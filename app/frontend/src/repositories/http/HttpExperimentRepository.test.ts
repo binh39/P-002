@@ -334,7 +334,7 @@ describe("HttpExperimentRepository", () => {
     expect(reviewed.status).toBe("approved");
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "/api/v1/prompt-versions?limit=50&status=in_review",
+      "/api/v1/reviews?limit=50&status=in_review",
       expect.anything(),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(

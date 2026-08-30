@@ -2,9 +2,11 @@ import { LogOut, Settings } from "lucide-react";
 
 import { Brand } from "@/components/Brand";
 import { IC } from "@/components/Icons";
+import type { UserRole } from "@/auth/AuthService";
 
 export type NavigationId =
   | "dashboard"
+  | "reviews"
   | "projects"
   | "experiments"
   | "coverage"
@@ -15,15 +17,21 @@ export type NavigationId =
 interface SidebarProps {
   currentPage: NavigationId;
   onNavigate: (page: NavigationId) => void;
-  user: { name: string; role: string; photoUrl: string | null };
+  user: { name: string; role: UserRole; photoUrl: string | null };
   onSignOut: () => void;
   isOpen?: boolean;
 }
 
-const navItems = [
+const engineerNavItems = [
   { id: "dashboard" as NavigationId, label: "Dashboard", Icon: IC.Dashboard },
   { id: "projects" as NavigationId, label: "Projects", Icon: IC.Code },
   { id: "experiments" as NavigationId, label: "Experiments", Icon: IC.Flask },
+  { id: "registry" as NavigationId, label: "Prompt Registry", Icon: IC.CheckSquare },
+  { id: "testCases" as NavigationId, label: "Test Suites", Icon: IC.Database },
+];
+
+const reviewerNavItems = [
+  { id: "reviews" as NavigationId, label: "Review Queue", Icon: IC.CheckSquare },
   { id: "registry" as NavigationId, label: "Prompt Registry", Icon: IC.CheckSquare },
   { id: "testCases" as NavigationId, label: "Test Suites", Icon: IC.Database },
 ];
@@ -41,6 +49,7 @@ export default function Sidebar({
     .join("")
     .slice(0, 2)
     .toUpperCase();
+  const navItems = user.role === "prompt_reviewer" ? reviewerNavItems : engineerNavItems;
 
   return (
     <aside className={`sidebar ${isOpen ? "sidebar-open" : ""}`} aria-label="Main navigation">
@@ -96,7 +105,7 @@ export default function Sidebar({
         </span>
         <span className="sidebar-user-copy">
           <strong>{user.name}</strong>
-          <small>{user.role}</small>
+          <small>{user.role === "prompt_reviewer" ? "Prompt Reviewer" : "Prompt Engineer"}</small>
         </span>
         <button type="button" onClick={onSignOut} aria-label="Sign out" title="Sign out">
           <LogOut size={16} />

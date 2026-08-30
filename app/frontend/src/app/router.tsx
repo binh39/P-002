@@ -23,6 +23,8 @@ const Settings = lazy(() => import("@/pages/Settings"));
 const TestCases = lazy(() => import("@/pages/TestCases"));
 const CreateTestSuite = lazy(() => import("@/pages/CreateTestSuite"));
 const TestCaseDetail = lazy(() => import("@/pages/TestCaseDetail"));
+const ReviewQueue = lazy(() => import("@/pages/ReviewQueue"));
+const ReviewDetail = lazy(() => import("@/pages/ReviewDetail"));
 
 const legacyPagePaths = {
   dashboard: "/dashboard",
@@ -88,6 +90,15 @@ function RoutedApplication() {
   if (loading) return <RouteLoading />;
   if (location === "/login") return <LoginRoute />;
   if (!user) return <Redirect to="/login" replace />;
+  const reviewer = user.role === "prompt_reviewer";
+  const engineerOnly =
+    location === "/dashboard" ||
+    location.startsWith("/projects") ||
+    location.startsWith("/experiments") ||
+    location.startsWith("/optimization-runs") ||
+    location.startsWith("/test-suites/new");
+  if (reviewer && (location === "/" || engineerOnly)) return <Redirect to="/reviews" replace />;
+  if (!reviewer && location.startsWith("/reviews")) return <Redirect to="/dashboard" replace />;
 
   return (
     <AppLayout>
@@ -131,6 +142,12 @@ function RoutedApplication() {
           </Route>
           <Route path="/test-cases/:runId">
             <TestCaseDetail />
+          </Route>
+          <Route path="/reviews">
+            <ReviewQueue />
+          </Route>
+          <Route path="/reviews/:versionId">
+            <ReviewDetail />
           </Route>
           <Route path="/settings">
             <Settings />
