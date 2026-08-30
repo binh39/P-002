@@ -21,7 +21,12 @@ interface AuthContextValue {
   clearError: () => void;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
-  registerWithEmail: (name: string, email: string, password: string) => Promise<void>;
+  registerWithEmail: (
+    name: string,
+    email: string,
+    password: string,
+    role: AuthUser["role"],
+  ) => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -115,9 +120,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       async signInWithEmail(email, password) {
         await runAuthAction((resolvedService) => resolvedService.signInWithEmail(email, password));
       },
-      async registerWithEmail(name, email, password) {
+      async registerWithEmail(name, email, password, role) {
         await runAuthAction((resolvedService) =>
-          resolvedService.registerWithEmail(name, email, password),
+          resolvedService.registerWithEmail(name, email, password, role),
         );
       },
       async sendPasswordReset(email) {

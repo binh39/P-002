@@ -137,7 +137,7 @@ export default function Experiments() {
                   <tr key={item.id}>
                     <td>
                       <strong>{item.name}</strong>
-                      <small>{item.id}</small>
+                      <small>{item.creatorName ?? "Unknown user"}</small>
                     </td>
                     <td>{item.targetFunctionIds.length}</td>
                     <td>

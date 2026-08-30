@@ -54,8 +54,13 @@ export class DemoAuthService implements AuthService {
     this.activateSession(email.trim().toLowerCase() === reviewer.email ? reviewer : engineer);
   }
 
-  async registerWithEmail() {
-    this.activateSession(engineer);
+  async registerWithEmail(
+    _name: string,
+    _email: string,
+    _password: string,
+    role: AuthUser["role"],
+  ) {
+    this.activateSession(role === "prompt_reviewer" ? reviewer : engineer);
   }
 
   async sendPasswordReset() {

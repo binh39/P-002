@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { IC } from "@/components/Icons";
+import type { UserRole } from "@/auth/AuthService";
 
 type AuthMode = "login" | "register";
 type PendingAction = "email" | "google" | "reset" | null;
@@ -14,7 +15,7 @@ interface Props {
   onClearError: () => void;
   onGoogleSignIn: () => Promise<void>;
   onEmailSignIn: (email: string, password: string) => Promise<void>;
-  onRegister: (name: string, email: string, password: string) => Promise<void>;
+  onRegister: (name: string, email: string, password: string, role: UserRole) => Promise<void>;
   onPasswordReset: (email: string) => Promise<void>;
   connected: boolean;
   authError?: string | null;
@@ -34,6 +35,7 @@ export default function Login({
   const [email, setEmail] = useState<string>(DEMO_ACCOUNT.email);
   const [password, setPassword] = useState<string>(DEMO_ACCOUNT.password);
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [role, setRole] = useState<UserRole>("prompt_engineer");
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -90,7 +92,7 @@ export default function Login({
 
     await runAction("email", () =>
       isRegister
-        ? onRegister(normalizedName, normalizedEmail, password)
+        ? onRegister(normalizedName, normalizedEmail, password, role)
         : onEmailSignIn(normalizedEmail, password),
     );
   };
@@ -141,6 +143,21 @@ export default function Login({
           )}
 
           <form onSubmit={(event) => void handleSubmit(event)}>
+            {isRegister && (
+              <div className="auth-field">
+                <label htmlFor="auth-role">Role</label>
+                <select
+                  id="auth-role"
+                  value={role}
+                  onChange={(event) => setRole(event.target.value as UserRole)}
+                  disabled={isBusy}
+                >
+                  <option value="prompt_engineer">Prompt Engineer</option>
+                  <option value="prompt_reviewer">Reviewer</option>
+                </select>
+              </div>
+            )}
+
             {isRegister && (
               <div className="auth-field">
                 <label htmlFor="auth-name">Full name</label>

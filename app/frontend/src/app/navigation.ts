@@ -8,6 +8,7 @@ export const pathByNavigationId: Record<NavigationId, string> = {
   coverage: "/docs/coverage",
   registry: "/prompts",
   testCases: "/test-cases",
+  workspaceSettings: "/workspace-settings",
   settings: "/settings",
 };
 
@@ -24,6 +25,7 @@ export function currentNavigationId(pathname: string): NavigationId {
   if (pathname.startsWith("/docs/coverage")) return "coverage";
   if (pathname.startsWith("/prompts")) return "registry";
   if (pathname.startsWith("/test-cases") || pathname.startsWith("/test-suites")) return "testCases";
+  if (pathname.startsWith("/workspace-settings")) return "workspaceSettings";
   if (pathname.startsWith("/settings")) return "settings";
   return "dashboard";
 }

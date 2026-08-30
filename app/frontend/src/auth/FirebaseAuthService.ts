@@ -69,9 +69,20 @@ export class FirebaseAuthService implements AuthService {
   async signInWithEmail(email: string, password: string) {
     await signInWithEmailAndPassword(this.auth, email, password);
   }
-  async registerWithEmail(name: string, email: string, password: string) {
+  async registerWithEmail(name: string, email: string, password: string, role: AuthUser["role"]) {
     const credential = await createUserWithEmailAndPassword(this.auth, email, password);
     await updateProfile(credential.user, { displayName: name });
+    const token = await credential.user.getIdToken();
+    const response = await fetch(`${env.apiBaseUrl}/onboarding`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ name, role }),
+    });
+    if (!response.ok) throw new Error("Account role could not be saved");
     this.listener?.(await toAuthUser(credential.user));
   }
   async sendPasswordReset(email: string) {
