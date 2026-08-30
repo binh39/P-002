@@ -1,4 +1,8 @@
+from datetime import UTC, datetime
+
 import pytest
+
+from backend.modules.experiments import schemas as experiment_schemas
 
 
 @pytest.mark.asyncio
@@ -49,3 +53,50 @@ async def test_workspace_owner_can_add_and_remove_registered_member(client):
     )
     assert removed.status_code == 200
     assert all(member["user_id"] != "local-reviewer" for member in removed.json()["members"])
+
+
+@pytest.mark.asyncio
+async def test_legacy_records_only_appear_in_personal_workspace(client, app):
+    auth = {"Authorization": "Bearer dev-engineer-token"}
+    await client.get("/api/v1/me", headers=auth)
+    now = datetime.now(UTC)
+    repository = app.state.services.experiments.repository
+    await repository.create(
+        experiment_schemas.ExperimentRecord(
+            id="legacy-experiment",
+            owner_id="local-engineer",
+            name="Legacy experiment",
+            status=experiment_schemas.ExperimentStatus.DRAFT,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    await repository.create_test_generation_run(
+        experiment_schemas.TestGenerationRunRecord(
+            id="legacy-suite",
+            owner_id="local-engineer",
+            experiment_id="legacy-experiment",
+            name="Legacy suite",
+            prompt_snapshot_id="snapshot",
+            prompt_digest="digest",
+            prompt_role=experiment_schemas.PromptRole.BASELINE,
+            status=experiment_schemas.TestGenerationStatus.COMPLETED,
+            source_snapshot_digest="source",
+            dataset_digest="dataset",
+            scope=experiment_schemas.TestGenerationScope.PROJECT,
+            model="google/gemini-2.5-flash",
+            random_seed=115,
+            repeat_tests=1,
+            max_attempts=1,
+            max_concurrency=1,
+            runner_protocol_version=13,
+            created_at=now,
+        )
+    )
+
+    assert (await client.get("/api/v1/experiments", headers=auth)).json()["total"] == 1
+    assert (await client.get("/api/v1/test-generation-runs", headers=auth)).json()["total"] == 1
+
+    await client.post("/api/v1/workspaces", headers=auth, json={"name": "Empty workspace"})
+    assert (await client.get("/api/v1/experiments", headers=auth)).json()["total"] == 0
+    assert (await client.get("/api/v1/test-generation-runs", headers=auth)).json()["total"] == 0

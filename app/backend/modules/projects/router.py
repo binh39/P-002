@@ -18,7 +18,8 @@ async def create_project(payload: CreateProjectRequest, user: EngineerUser, requ
 
 @router.get("", response_model=ProjectListResponse)
 async def list_projects(user: CurrentUser, request: Request):
-    return await request.app.state.services.projects.list(user.uid, user.workspace_id)
+    include_legacy = await request.app.state.services.workspaces.is_personal_workspace(user.uid, user.workspace_id)
+    return await request.app.state.services.projects.list(user.uid, user.workspace_id, include_legacy)
 
 
 @router.get("/samples", response_model=ProjectListResponse)

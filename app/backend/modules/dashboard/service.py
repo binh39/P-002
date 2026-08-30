@@ -56,12 +56,22 @@ class DashboardService:
     def __init__(self, experiments: ExperimentRepository):
         self.experiments = experiments
 
-    async def snapshot(self, owner_id: str, workspace_id: str | None = None) -> DashboardResponse:
+    async def snapshot(
+        self, owner_id: str, workspace_id: str | None = None, include_legacy: bool = False
+    ) -> DashboardResponse:
         items = (
             await self.experiments.list_for_workspace(workspace_id)
             if workspace_id
             else await self.experiments.list_for_owner(owner_id)
         )
+        if include_legacy:
+            legacy = [
+                item
+                for item in await self.experiments.list_for_owner(owner_id)
+                if item.workspace_id in {None, owner_id}
+            ]
+            items = list({item.id: item for item in [*items, *legacy]}.values())
+            items.sort(key=lambda item: item.created_at, reverse=True)
         runs = await asyncio.gather(
             *(
                 self.experiments.get_optimization_run(item.optimization_run_id) if item.optimization_run_id else _none()

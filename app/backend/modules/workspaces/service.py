@@ -61,6 +61,12 @@ class WorkspaceService:
     async def list(self, user_id: str) -> list[WorkspaceResponse]:
         return await self.repository.list_for_member(user_id)
 
+    async def is_personal_workspace(self, user_id: str, workspace_id: str | None) -> bool:
+        if not workspace_id:
+            return False
+        workspace = await self.repository.get_workspace(workspace_id)
+        return bool(workspace and workspace.owner_id == user_id and workspace.name.strip().casefold() == "workspace 1")
+
     async def create(self, user: AuthenticatedUser, name: str) -> WorkspaceResponse:
         profile = await self._required_profile(user.uid)
         workspace = new_workspace(profile, name)
