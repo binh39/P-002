@@ -423,6 +423,7 @@ async def test_prompt_version_review_api_is_idempotent_and_cannot_be_reversed(cl
         ExperimentRecord(
             id="review-experiment",
             owner_id="local-user",
+            workspace_id="local-workspace",
             project_id="project-1",
             name="Review candidate",
             target_function_ids=["fn-1"],
@@ -441,33 +442,137 @@ async def test_prompt_version_review_api_is_idempotent_and_cannot_be_reversed(cl
             prompt_digest=prompt.digest(),
             prompt=prompt.as_candidate(),
             status=PromptVersionStatus.IN_REVIEW,
+            created_by="local-user",
+            workspace_id="local-workspace",
             created_at=now,
         )
     )
 
     approved = await client.post(
         "/api/v1/prompt-versions/version-1/approve",
-        headers=AUTH_HEADERS,
+        headers={"Authorization": "Bearer dev-reviewer-token"},
         json={"comment": "Ready for controlled rollout"},
     )
     retried = await client.post(
         "/api/v1/prompt-versions/version-1/approve",
-        headers=AUTH_HEADERS,
+        headers={"Authorization": "Bearer dev-reviewer-token"},
         json={"comment": "duplicate request"},
     )
     reversed_decision = await client.post(
         "/api/v1/prompt-versions/version-1/reject",
-        headers=AUTH_HEADERS,
+        headers={"Authorization": "Bearer dev-reviewer-token"},
         json={"comment": "reverse"},
     )
 
     assert approved.status_code == 200
     assert approved.json()["status"] == "approved"
-    assert approved.json()["reviewer_id"] == "local-user"
+    assert approved.json()["reviewer_id"] == "local-reviewer"
     assert retried.json()["reviewed_at"] == approved.json()["reviewed_at"]
     assert retried.json()["review_comment"] == "Ready for controlled rollout"
     assert reversed_decision.status_code == 409
     assert reversed_decision.json()["error"]["code"] == "PROMPT_VERSION_ALREADY_REVIEWED"
+
+
+@pytest.mark.asyncio
+async def test_review_queue_is_workspace_scoped_and_engineer_cannot_decide(client, app):
+    repository = app.state.services.experiments.repository
+    now = datetime.now(UTC)
+    prompt = baseline_prompt()
+    for suffix, workspace_id in (("shared", "local-workspace"), ("foreign", "other-workspace")):
+        await repository.create(
+            ExperimentRecord(
+                id=f"{suffix}-review-experiment",
+                owner_id=f"{suffix}-engineer",
+                workspace_id=workspace_id,
+                project_id="project-1",
+                name=f"{suffix} candidate",
+                status=ExperimentStatus.IN_REVIEW,
+                prompt_version_id=f"{suffix}-review-version",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        await repository.create_prompt_version(
+            PromptVersionRecord(
+                id=f"{suffix}-review-version",
+                experiment_id=f"{suffix}-review-experiment",
+                comparison_run_id=f"{suffix}-comparison",
+                parent_prompt_digest="parent",
+                prompt_digest=prompt.digest(),
+                prompt=prompt.as_candidate(),
+                status=PromptVersionStatus.IN_REVIEW,
+                created_by=f"{suffix}-engineer",
+                workspace_id=workspace_id,
+                created_at=now,
+            )
+        )
+
+    reviewer_headers = {"Authorization": "Bearer dev-reviewer-token"}
+    listed = await client.get("/api/v1/reviews?status=in_review", headers=reviewer_headers)
+    foreign = await client.get("/api/v1/reviews/foreign-review-version", headers=reviewer_headers)
+    engineer_decision = await client.post(
+        "/api/v1/prompt-versions/shared-review-version/approve",
+        headers=AUTH_HEADERS,
+        json={"comment": "not allowed"},
+    )
+
+    assert listed.status_code == 200
+    assert [item["id"] for item in listed.json()["items"]] == ["shared-review-version"]
+    assert foreign.status_code == 404
+    assert engineer_decision.status_code == 403
+    assert engineer_decision.json()["error"]["code"] == "ROLE_FORBIDDEN"
+
+
+@pytest.mark.asyncio
+async def test_review_reject_requires_comment_and_self_review_is_forbidden(client, app):
+    repository = app.state.services.experiments.repository
+    now = datetime.now(UTC)
+    prompt = baseline_prompt()
+    await repository.create(
+        ExperimentRecord(
+            id="self-review-experiment",
+            owner_id="local-reviewer",
+            workspace_id="local-workspace",
+            project_id="project-1",
+            name="Self review",
+            status=ExperimentStatus.IN_REVIEW,
+            prompt_version_id="self-review-version",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    await repository.create_prompt_version(
+        PromptVersionRecord(
+            id="self-review-version",
+            experiment_id="self-review-experiment",
+            comparison_run_id="comparison",
+            parent_prompt_digest="parent",
+            prompt_digest=prompt.digest(),
+            prompt=prompt.as_candidate(),
+            status=PromptVersionStatus.IN_REVIEW,
+            created_by="local-reviewer",
+            workspace_id="local-workspace",
+            created_at=now,
+        )
+    )
+    headers = {"Authorization": "Bearer dev-reviewer-token"}
+    self_review = await client.post(
+        "/api/v1/prompt-versions/self-review-version/approve", headers=headers, json={"comment": "mine"}
+    )
+    assert self_review.status_code == 403
+    assert self_review.json()["error"]["code"] == "SELF_REVIEW_FORBIDDEN"
+
+    version = await repository.get_prompt_version("self-review-version")
+    version.created_by = "another-engineer"
+    experiment = await repository.get("self-review-experiment")
+    experiment.owner_id = "another-engineer"
+    await repository.save_prompt_version(version)
+    await repository.save(experiment)
+    missing_comment = await client.post(
+        "/api/v1/prompt-versions/self-review-version/reject", headers=headers, json={"comment": "  "}
+    )
+    assert missing_comment.status_code == 422
+    assert missing_comment.json()["error"]["code"] == "REVIEW_COMMENT_REQUIRED"
 
 
 @pytest.mark.asyncio
@@ -595,6 +700,20 @@ async def test_final_test_generation_is_owner_scoped_and_idempotent(client, app)
     assert listed.status_code == 200
     assert listed.json()["total"] == 1
     assert listed.json()["items"][0]["id"] == run["id"]
+    reviewer_headers = {"Authorization": "Bearer dev-reviewer-token"}
+    reviewer_list = await client.get("/api/v1/test-generation-runs", headers=reviewer_headers)
+    reviewer_detail = await client.get(f"/api/v1/test-generation-runs/{run['id']}", headers=reviewer_headers)
+    reviewer_create = await client.post(
+        f"/api/v1/prompt-registry/{experiment['id']}/test-generation",
+        headers=reviewer_headers,
+        json={"prompt_role": "baseline"},
+    )
+    reviewer_delete = await client.delete(f"/api/v1/test-generation-runs/{run['id']}", headers=reviewer_headers)
+    assert reviewer_list.status_code == 200
+    assert reviewer_list.json()["total"] == 1
+    assert reviewer_detail.status_code == 200
+    assert reviewer_create.status_code == 403
+    assert reviewer_delete.status_code == 403
     foreign_record = FinalTestGenerationRunRecord.model_validate(
         {**run, "id": "foreign-final-suite", "owner_id": "another-user"}
     )

@@ -40,6 +40,7 @@ async def test_cloud_final_validation_creates_reviewable_version_and_review_is_i
     experiment = ExperimentRecord(
         id="experiment-1",
         owner_id="owner-1",
+        workspace_id="workspace-1",
         project_id="project-1",
         name="Locked comparison",
         target_function_ids=["train_fn", "validation_fn", "test_fn"],
@@ -87,16 +88,33 @@ async def test_cloud_final_validation_creates_reviewable_version_and_review_is_i
     assert optimized_snapshot.origin == PromptSnapshotOrigin.OPTIMIZED_CANDIDATE
     artifact = json.loads(storage.objects[comparison.artifact_objects["final_validation.json"]][0])
     assert artifact["promoted"] is True
+    review = await service.get_review(comparison.prompt_version_id, "workspace-1")
+    assert review.creator_id == "owner-1"
+    assert review.baseline_prompt == baseline.as_candidate()
+    assert review.candidate_prompt == candidate.as_candidate()
+    assert review.comparison.promotion_eligible is True
     approved = await service.review_prompt_version(
-        comparison.prompt_version_id, experiment.owner_id, PromptVersionStatus.APPROVED, "Coverage improved"
+        comparison.prompt_version_id,
+        "reviewer-1",
+        "workspace-1",
+        PromptVersionStatus.APPROVED,
+        "Coverage improved",
     )
     approved_again = await service.review_prompt_version(
-        comparison.prompt_version_id, experiment.owner_id, PromptVersionStatus.APPROVED, "ignored retry"
+        comparison.prompt_version_id,
+        "reviewer-1",
+        "workspace-1",
+        PromptVersionStatus.APPROVED,
+        "ignored retry",
     )
     assert approved_again.reviewed_at == approved.reviewed_at
     with pytest.raises(AppError):
         await service.review_prompt_version(
-            comparison.prompt_version_id, experiment.owner_id, PromptVersionStatus.REJECTED, "changed mind"
+            comparison.prompt_version_id,
+            "reviewer-1",
+            "workspace-1",
+            PromptVersionStatus.REJECTED,
+            "changed mind",
         )
 
 
