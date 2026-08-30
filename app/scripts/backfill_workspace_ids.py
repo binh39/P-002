@@ -7,6 +7,17 @@ from datetime import UTC, datetime
 COLLECTIONS = ("projects", "experiments", "prompt_versions", "test_generation_runs")
 
 
+def _collection_snapshots(database, collection: str) -> list:
+    """Read documents without Firestore's fragile server-streaming query path.
+
+    Cloud Shell can drop long-lived gRPC streams on a ping timeout. Listing
+    document references uses paginated unary RPCs; individual ``get`` calls
+    then retain the client's normal retry behavior.
+    """
+    references = database.collection(collection).list_documents(page_size=100)
+    return [snapshot for reference in references if (snapshot := reference.get()).exists]
+
+
 def _deduplicated_names(records: list[tuple[str, dict]]) -> dict[str, str]:
     updates = {}
     used: set[str] = set()
@@ -45,7 +56,7 @@ def main() -> int:
     args = parser.parse_args()
     initialize_app()
     database = firestore.client()
-    experiments = list(database.collection("experiments").stream())
+    experiments = _collection_snapshots(database, "experiments")
     experiment_owners = {
         snapshot.id: snapshot.to_dict().get("owner_id")
         for snapshot in experiments
@@ -54,7 +65,7 @@ def main() -> int:
     by_workspace = defaultdict(lambda: defaultdict(list))
     counts = Counter()
     for collection in COLLECTIONS:
-        snapshots = experiments if collection == "experiments" else database.collection(collection).stream()
+        snapshots = experiments if collection == "experiments" else _collection_snapshots(database, collection)
         for snapshot in snapshots:
             counts["read"] += 1
             try:

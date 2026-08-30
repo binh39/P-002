@@ -1,4 +1,29 @@
-from scripts.backfill_workspace_ids import _deduplicated_names, _workspace_update
+from scripts.backfill_workspace_ids import _collection_snapshots, _deduplicated_names, _workspace_update
+
+
+class _Snapshot:
+    exists = True
+
+
+class _Reference:
+    def get(self):
+        return _Snapshot()
+
+
+class _Collection:
+    def list_documents(self, page_size):
+        assert page_size == 100
+        return [_Reference(), _Reference()]
+
+
+class _Database:
+    def collection(self, name):
+        assert name == "experiments"
+        return _Collection()
+
+
+def test_collection_snapshots_avoid_streaming_queries():
+    assert len(_collection_snapshots(_Database(), "experiments")) == 2
 
 
 def test_workspace_backfill_uses_owner_and_never_a_shared_default():
