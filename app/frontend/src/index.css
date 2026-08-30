@@ -505,7 +505,7 @@ body {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding-bottom: 19px;
+  padding-bottom: 0;
 }
 .workspace-settings-icon {
   width: 42px;

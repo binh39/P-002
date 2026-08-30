@@ -25,7 +25,7 @@ export default function Settings() {
 
   return (
     <div className="platform-page settings-page">
-      <PageHeader eyebrow="Workspace defaults" title="Tool Settings" />
+      <PageHeader title="Settings" />
       <div className="settings-layout tool-settings-layout">
         <nav className="settings-nav">
           {tabs.map((item) => (
