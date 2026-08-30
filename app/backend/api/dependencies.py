@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from backend.core.authorization import require_engineer, require_reviewer
 from backend.core.errors import AppError
 from backend.core.security import AuthenticatedUser
 
@@ -19,6 +20,18 @@ async def get_current_user(
 
 
 CurrentUser = Annotated[AuthenticatedUser, Depends(get_current_user)]
+
+
+async def get_engineer(user: CurrentUser) -> AuthenticatedUser:
+    return require_engineer(user)
+
+
+async def get_reviewer(user: CurrentUser) -> AuthenticatedUser:
+    return require_reviewer(user)
+
+
+EngineerUser = Annotated[AuthenticatedUser, Depends(get_engineer)]
+ReviewerUser = Annotated[AuthenticatedUser, Depends(get_reviewer)]
 
 
 async def verify_internal_task(

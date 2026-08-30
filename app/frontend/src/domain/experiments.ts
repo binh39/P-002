@@ -169,7 +169,19 @@ export interface PromptVersion {
   reviewerId: string | null;
   reviewComment: string;
   reviewedAt: string | null;
+  createdBy: string | null;
+  workspaceId: string | null;
   createdAt: string;
+}
+
+export interface ReviewDetail {
+  version: PromptVersion;
+  experimentName: string;
+  creatorId: string;
+  baselinePrompt: PromptBundle;
+  candidatePrompt: PromptBundle;
+  comparison: ComparisonRun;
+  artifactNames: string[];
 }
 
 export interface PromptVersionList {

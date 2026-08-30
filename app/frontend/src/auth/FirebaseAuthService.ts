@@ -19,13 +19,32 @@ function createAuth() {
   return getAuth(app);
 }
 
-function toAuthUser(user: NonNullable<ReturnType<typeof getAuth>["currentUser"]>): AuthUser {
+interface IdentityResponse {
+  id: string;
+  name: string | null;
+  email: string | null;
+  role: "prompt_engineer" | "prompt_reviewer";
+  workspace_id: string;
+  permissions: string[];
+}
+
+async function toAuthUser(
+  user: NonNullable<ReturnType<typeof getAuth>["currentUser"]>,
+): Promise<AuthUser> {
+  const token = await user.getIdToken();
+  const response = await fetch(`${env.apiBaseUrl}/me`, {
+    headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error("Authenticated profile could not be loaded");
+  const identity = (await response.json()) as IdentityResponse;
   return {
-    id: user.uid,
-    name: user.displayName ?? user.email ?? "PromptOpt user",
-    email: user.email,
+    id: identity.id,
+    name: identity.name ?? identity.email ?? "PromptOpt user",
+    email: identity.email,
     photoUrl: user.photoURL,
-    role: "AI Engineer",
+    role: identity.role,
+    workspaceId: identity.workspace_id,
+    permissions: identity.permissions,
   };
 }
 
@@ -36,7 +55,12 @@ export class FirebaseAuthService implements AuthService {
 
   subscribe(listener: AuthStateListener) {
     this.listener = listener;
-    return onAuthStateChanged(this.auth, (user) => listener(user ? toAuthUser(user) : null));
+    return onAuthStateChanged(this.auth, (user) => {
+      if (!user) return listener(null);
+      void toAuthUser(user)
+        .then(listener)
+        .catch(() => listener(null));
+    });
   }
 
   async signInWithGoogle() {
@@ -48,7 +72,7 @@ export class FirebaseAuthService implements AuthService {
   async registerWithEmail(name: string, email: string, password: string) {
     const credential = await createUserWithEmailAndPassword(this.auth, email, password);
     await updateProfile(credential.user, { displayName: name });
-    this.listener?.(toAuthUser(credential.user));
+    this.listener?.(await toAuthUser(credential.user));
   }
   async sendPasswordReset(email: string) {
     await sendPasswordResetEmail(this.auth, email);

@@ -11,7 +11,7 @@ describe("Sidebar", () => {
       <Sidebar
         currentPage="coverage"
         onNavigate={onNavigate}
-        user={{ name: "Demo User", role: "Engineer", photoUrl: null }}
+        user={{ name: "Demo User", role: "prompt_engineer", photoUrl: null }}
         onSignOut={vi.fn()}
       />,
     );
@@ -32,5 +32,20 @@ describe("Sidebar", () => {
 
     fireEvent.click(settings);
     expect(onNavigate).toHaveBeenCalledWith("settings");
+  });
+
+  it("shows the review workspace and hides engineer navigation for reviewers", () => {
+    render(
+      <Sidebar
+        currentPage="reviews"
+        onNavigate={() => undefined}
+        user={{ name: "Reviewer", role: "prompt_reviewer", photoUrl: null }}
+        onSignOut={() => undefined}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Review Queue" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Projects" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Experiments" })).not.toBeInTheDocument();
+    expect(screen.getByText("Prompt Reviewer")).toBeInTheDocument();
   });
 });

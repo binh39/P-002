@@ -1,9 +1,13 @@
+export type UserRole = "prompt_engineer" | "prompt_reviewer";
+
 export interface AuthUser {
   id: string;
   name: string;
   email: string | null;
   photoUrl: string | null;
-  role: string;
+  role: UserRole;
+  workspaceId: string;
+  permissions: string[];
 }
 
 export type AuthStateListener = (user: AuthUser | null) => void;

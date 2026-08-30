@@ -202,6 +202,8 @@ class ExperimentResponse(StrictModel):
 
 class ExperimentRecord(ExperimentResponse):
     owner_id: str
+    # Missing on legacy records. Reviewer access fails closed until backfilled.
+    workspace_id: str | None = None
 
 
 class ExperimentListResponse(StrictModel):
@@ -527,6 +529,7 @@ class TestGenerationRunResponse(StrictModel):
 
 class TestGenerationRunRecord(TestGenerationRunResponse):
     owner_id: str
+    workspace_id: str | None = None
     idempotency_key: str | None = None
     provider_secret_refs: dict[str, dict[str, str]] = Field(default_factory=dict)
     target_snapshots: list[TargetReference] = Field(default_factory=list)
@@ -551,6 +554,11 @@ class PromptVersionResponse(StrictModel):
     reviewer_id: str | None = None
     review_comment: str = ""
     reviewed_at: datetime | None = None
+    created_by: str | None = None
+    workspace_id: str | None = None
+    decision: PromptVersionStatus | None = None
+    baseline_digest_at_review: str | None = None
+    candidate_digest_at_review: str | None = None
     created_at: datetime
 
 
@@ -567,6 +575,16 @@ class PromptVersionRecord(PromptVersionResponse):
 
 class ReviewPromptVersionRequest(StrictModel):
     comment: str = Field(default="", max_length=1000)
+
+
+class ReviewDetailResponse(StrictModel):
+    version: PromptVersionResponse
+    experiment_name: str
+    creator_id: str
+    baseline_prompt: dict[str, str]
+    candidate_prompt: dict[str, str]
+    comparison: ComparisonRunResponse
+    artifact_names: list[str] = Field(default_factory=list)
 
 
 def new_id() -> str:

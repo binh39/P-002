@@ -17,6 +17,7 @@ class ExperimentRepository(Protocol):
     async def create(self, item: ExperimentRecord) -> ExperimentRecord: ...
     async def get(self, experiment_id: str) -> ExperimentRecord | None: ...
     async def list_for_owner(self, owner_id: str) -> list[ExperimentRecord]: ...
+    async def list_for_workspace(self, workspace_id: str) -> list[ExperimentRecord]: ...
     async def save(self, item: ExperimentRecord) -> ExperimentRecord: ...
     async def delete(self, experiment_id: str) -> None: ...
     async def create_run(self, item: BaselineRunRecord) -> BaselineRunRecord: ...
@@ -31,6 +32,9 @@ class ExperimentRepository(Protocol):
     async def create_prompt_version(self, item: PromptVersionRecord) -> PromptVersionRecord: ...
     async def get_prompt_version(self, version_id: str) -> PromptVersionRecord | None: ...
     async def save_prompt_version(self, item: PromptVersionRecord) -> PromptVersionRecord: ...
+    async def list_prompt_versions_for_workspace(
+        self, workspace_id: str, status: str | None = None
+    ) -> list[PromptVersionRecord]: ...
     async def decide_prompt_version(
         self, version_id: str, decision: str, reviewer_id: str, comment: str, reviewed_at: datetime
     ) -> PromptVersionRecord | None: ...
@@ -42,6 +46,7 @@ class ExperimentRepository(Protocol):
     async def delete_test_generation_run(self, run_id: str) -> None: ...
     async def save_test_generation_run(self, item: TestGenerationRunRecord) -> TestGenerationRunRecord: ...
     async def list_test_generation_runs_for_owner(self, owner_id: str) -> list[TestGenerationRunRecord]: ...
+    async def list_test_generation_runs_for_workspace(self, workspace_id: str) -> list[TestGenerationRunRecord]: ...
 
 
 class InMemoryExperimentRepository:
@@ -64,6 +69,13 @@ class InMemoryExperimentRepository:
     async def list_for_owner(self, owner_id):
         return sorted(
             (item for item in self.experiments.values() if item.owner_id == owner_id),
+            key=lambda item: item.created_at,
+            reverse=True,
+        )
+
+    async def list_for_workspace(self, workspace_id):
+        return sorted(
+            (item for item in self.experiments.values() if item.workspace_id == workspace_id),
             key=lambda item: item.created_at,
             reverse=True,
         )
@@ -135,6 +147,17 @@ class InMemoryExperimentRepository:
         self.prompt_versions[item.id] = item
         return item
 
+    async def list_prompt_versions_for_workspace(self, workspace_id, status=None):
+        return sorted(
+            (
+                item
+                for item in self.prompt_versions.values()
+                if item.workspace_id == workspace_id and (status is None or item.status == status)
+            ),
+            key=lambda item: item.created_at,
+            reverse=True,
+        )
+
     async def decide_prompt_version(self, version_id, decision, reviewer_id, comment, reviewed_at):
         item = self.prompt_versions.get(version_id)
         if item is None or item.status != "in_review":
@@ -143,6 +166,9 @@ class InMemoryExperimentRepository:
         item.reviewer_id = reviewer_id
         item.review_comment = comment
         item.reviewed_at = reviewed_at
+        item.decision = decision
+        item.baseline_digest_at_review = item.parent_prompt_digest
+        item.candidate_digest_at_review = item.prompt_digest
         self.prompt_versions[item.id] = item
         return item
 
@@ -180,6 +206,13 @@ class InMemoryExperimentRepository:
     async def list_test_generation_runs_for_owner(self, owner_id):
         return sorted(
             (item for item in self.test_generation_runs.values() if item.owner_id == owner_id),
+            key=lambda item: item.created_at,
+            reverse=True,
+        )
+
+    async def list_test_generation_runs_for_workspace(self, workspace_id):
+        return sorted(
+            (item for item in self.test_generation_runs.values() if item.workspace_id == workspace_id),
             key=lambda item: item.created_at,
             reverse=True,
         )
@@ -222,6 +255,13 @@ class FirestoreExperimentRepository:
         from google.cloud.firestore_v1.base_query import FieldFilter
 
         snapshots = self._experiments().where(filter=FieldFilter("owner_id", "==", owner_id)).stream()
+        items = [ExperimentRecord.model_validate(snapshot.to_dict()) async for snapshot in snapshots]
+        return sorted(items, key=lambda item: item.created_at, reverse=True)
+
+    async def list_for_workspace(self, workspace_id):
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        snapshots = self._experiments().where(filter=FieldFilter("workspace_id", "==", workspace_id)).stream()
         items = [ExperimentRecord.model_validate(snapshot.to_dict()) async for snapshot in snapshots]
         return sorted(items, key=lambda item: item.created_at, reverse=True)
 
@@ -297,6 +337,19 @@ class FirestoreExperimentRepository:
         await self._prompt_versions().document(item.id).set(item.model_dump(mode="python"))
         return item
 
+    async def list_prompt_versions_for_workspace(self, workspace_id, status=None):
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        query = self._prompt_versions().where(filter=FieldFilter("workspace_id", "==", workspace_id))
+        if status is not None:
+            query = query.where(filter=FieldFilter("status", "==", status))
+        snapshots = query.stream()
+        return sorted(
+            [PromptVersionRecord.model_validate(snapshot.to_dict()) async for snapshot in snapshots],
+            key=lambda item: item.created_at,
+            reverse=True,
+        )
+
     async def decide_prompt_version(self, version_id, decision, reviewer_id, comment, reviewed_at):
         from google.cloud.firestore_v1.async_transaction import async_transactional
 
@@ -315,6 +368,9 @@ class FirestoreExperimentRepository:
             item.reviewer_id = reviewer_id
             item.review_comment = comment
             item.reviewed_at = reviewed_at
+            item.decision = decision
+            item.baseline_digest_at_review = item.parent_prompt_digest
+            item.candidate_digest_at_review = item.prompt_digest
             transaction.set(reference, item.model_dump(mode="python"))
             return item
 
@@ -356,6 +412,16 @@ class FirestoreExperimentRepository:
         from google.cloud.firestore_v1.base_query import FieldFilter
 
         snapshots = self._test_generation_runs().where(filter=FieldFilter("owner_id", "==", owner_id)).stream()
+        return sorted(
+            [TestGenerationRunRecord.model_validate(snapshot.to_dict()) async for snapshot in snapshots],
+            key=lambda item: item.created_at,
+            reverse=True,
+        )
+
+    async def list_test_generation_runs_for_workspace(self, workspace_id):
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        snapshots = self._test_generation_runs().where(filter=FieldFilter("workspace_id", "==", workspace_id)).stream()
         return sorted(
             [TestGenerationRunRecord.model_validate(snapshot.to_dict()) async for snapshot in snapshots],
             key=lambda item: item.created_at,

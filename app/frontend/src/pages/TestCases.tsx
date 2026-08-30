@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 
 import { useRepositories } from "@/app/providers";
+import { useAuth } from "@/auth/AuthProvider";
 import { IC } from "@/components/Icons";
 import { PageHeader, StatusBadge } from "@/components/PlatformUI";
 import type { TestGenerationRun, TestGenerationStatus } from "@/domain/experiments";
@@ -68,6 +69,8 @@ function runMatchesSearch(run: TestGenerationRun, value: string) {
 }
 
 export default function TestCases() {
+  const { user } = useAuth();
+  const readOnly = user?.role === "prompt_reviewer";
   const [, navigate] = useLocation();
   const { testGeneration } = useRepositories();
   const queryClient = useQueryClient();
@@ -124,9 +127,13 @@ export default function TestCases() {
         title="Test Suites"
         description="Standalone test suites generated from prompts saved in Prompt Registry."
         actions={
-          <button className="primary-button" onClick={() => navigate("/test-suites/new")}>
-            Create Test Suites
-          </button>
+          readOnly ? (
+            <span className="status-badge status-info">Read-only</span>
+          ) : (
+            <button className="primary-button" onClick={() => navigate("/test-suites/new")}>
+              Create Test Suites
+            </button>
+          )
         }
       />
       <section className="platform-card registry-filters">
@@ -251,16 +258,18 @@ export default function TestCases() {
                       <time dateTime={run.createdAt}>{timestamp(run.createdAt)}</time>
                     </td>
                     <td>
-                      <button
-                        className="table-action danger-action"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          deleteMutation.reset();
-                          setDeleteTarget(run);
-                        }}
-                      >
-                        Delete
-                      </button>
+                      {!readOnly && (
+                        <button
+                          className="table-action danger-action"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            deleteMutation.reset();
+                            setDeleteTarget(run);
+                          }}
+                        >
+                          Delete
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -269,7 +278,7 @@ export default function TestCases() {
           </div>
         )}
       </section>
-      {deleteTarget && (
+      {!readOnly && deleteTarget && (
         <div
           className="modal-backdrop"
           role="presentation"

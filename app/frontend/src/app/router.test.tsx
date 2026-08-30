@@ -24,4 +24,13 @@ describe("application routing", () => {
     expect(screen.queryByRole("button", { name: "Playground" })).not.toBeInTheDocument();
     expect(window.location.pathname).toBe("/dashboard");
   });
+
+  it("redirects a restored reviewer away from engineer-only routes", async () => {
+    sessionStorage.setItem("promptopt-demo-identity", "reviewer");
+    window.history.replaceState(null, "", "/projects");
+    render(<App />);
+    expect(await screen.findByRole("button", { name: "Review Queue" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/reviews");
+    expect(screen.queryByRole("button", { name: "Projects" })).not.toBeInTheDocument();
+  });
 });

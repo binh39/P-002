@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request, Response, status
 
-from backend.api.dependencies import CurrentUser, InternalTask
+from backend.api.dependencies import CurrentUser, EngineerUser, InternalTask
 from backend.modules.analysis.schemas import FunctionSourceResponse, ProjectFunctionListResponse
 from backend.modules.projects.schemas import ProjectResponse
 
@@ -9,7 +9,7 @@ internal_router = APIRouter(prefix="/internal/v1/projects", tags=["internal"])
 
 
 @router.post("/{project_id}/analyze", response_model=ProjectResponse, status_code=status.HTTP_202_ACCEPTED)
-async def analyze_project(project_id: str, user: CurrentUser, request: Request):
+async def analyze_project(project_id: str, user: EngineerUser, request: Request):
     return await request.app.state.services.analysis.request(project_id, user.uid)
 
 

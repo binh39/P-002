@@ -46,6 +46,7 @@ from .schemas import (
     PromptVersionRecord,
     PromptVersionResponse,
     PromptVersionStatus,
+    ReviewDetailResponse,
     SamplingMethod,
     TargetReference,
     TestGenerationMetrics,
@@ -389,6 +390,7 @@ class ExperimentService:
         payload: CreateExperimentRequest,
         *,
         full_access: bool = False,
+        workspace_id: str | None = None,
     ) -> ExperimentResponse:
         if not full_access and payload.settings.max_metric_calls > STANDARD_MAX_METRIC_CALLS:
             raise AppError(
@@ -536,6 +538,7 @@ class ExperimentService:
         item = ExperimentRecord(
             id=new_id(),
             owner_id=owner_id,
+            workspace_id=workspace_id or owner_id,
             project_id=projects[0].id,
             project_ids=[project.id for project in projects],
             project_snapshots=snapshots,
@@ -1276,6 +1279,8 @@ class ExperimentService:
                     prompt_digest=run.candidate_prompt_digest,
                     prompt=candidate.as_candidate(),
                     status=PromptVersionStatus.IN_REVIEW,
+                    created_by=item.owner_id,
+                    workspace_id=item.workspace_id,
                     created_at=run.finished_at,
                 )
                 await self.repository.create_prompt_version(version)
@@ -1338,12 +1343,22 @@ class ExperimentService:
             limit=limit,
         )
 
-    async def get_prompt_registry_entry(self, experiment_id: str, owner_id: str) -> PromptRegistryEntryResponse:
-        item = await self._owned(experiment_id, owner_id)
+    async def get_prompt_registry_entry(
+        self, experiment_id: str, owner_id: str, workspace_id: str | None = None
+    ) -> PromptRegistryEntryResponse:
+        item = await self.repository.get(experiment_id)
+        if item is None or (item.owner_id != owner_id and (not workspace_id or item.workspace_id != workspace_id)):
+            raise AppError(404, "EXPERIMENT_NOT_FOUND", "Experiment was not found")
         return await self._prompt_registry_entry(item)
 
-    async def list_prompt_registry(self, owner_id: str, offset: int = 0, limit: int = 50) -> PromptRegistryListResponse:
-        experiments = await self.repository.list_for_owner(owner_id)
+    async def list_prompt_registry(
+        self, owner_id: str, offset: int = 0, limit: int = 50, workspace_id: str | None = None
+    ) -> PromptRegistryListResponse:
+        experiments = (
+            await self.repository.list_for_workspace(workspace_id)
+            if workspace_id
+            else await self.repository.list_for_owner(owner_id)
+        )
         total = len(experiments)
         page = experiments[offset : offset + limit]
         return PromptRegistryListResponse(
@@ -1566,6 +1581,12 @@ class ExperimentService:
                 "OPTIMIZED_PROMPT_NOT_READY",
                 "An optimized prompt is available only after the experiment final comparison finishes",
             )
+        if payload.prompt_role == PromptRole.OPTIMIZED:
+            version = (
+                await self.repository.get_prompt_version(item.prompt_version_id) if item.prompt_version_id else None
+            )
+            if version is None or version.status != PromptVersionStatus.APPROVED:
+                raise AppError(409, "PROMPT_NOT_APPROVED", "The optimized prompt must be approved first")
         configured_selection = (
             bool(payload.project_ids)
             or payload.function_count is not None
@@ -1598,6 +1619,7 @@ class ExperimentService:
         run = TestGenerationRunRecord(
             id=new_id(),
             owner_id=owner_id,
+            workspace_id=item.workspace_id,
             experiment_id=item.id,
             name=payload.name.strip(),
             prompt_snapshot_id=snapshot.id,
@@ -1649,9 +1671,15 @@ class ExperimentService:
         stored = await self.repository.get_test_generation_run(run.id)
         return TestGenerationRunResponse.model_validate(stored or run)
 
-    async def get_test_generation_run(self, run_id: str, owner_id: str) -> TestGenerationRunResponse:
+    @staticmethod
+    def _can_read_test_generation_run(run: TestGenerationRunRecord, owner_id: str, workspace_id: str | None) -> bool:
+        return run.owner_id == owner_id or bool(workspace_id and run.workspace_id == workspace_id)
+
+    async def get_test_generation_run(
+        self, run_id: str, owner_id: str, workspace_id: str | None = None
+    ) -> TestGenerationRunResponse:
         run = await self.repository.get_test_generation_run(run_id)
-        if run is None or run.owner_id != owner_id:
+        if run is None or not self._can_read_test_generation_run(run, owner_id, workspace_id):
             raise AppError(404, "TEST_GENERATION_RUN_NOT_FOUND", "Test generation run was not found")
         return TestGenerationRunResponse.model_validate(run)
 
@@ -1669,9 +1697,13 @@ class ExperimentService:
         await self.repository.delete_test_generation_run(run.id)
 
     async def list_test_generation_runs(
-        self, owner_id: str, offset: int = 0, limit: int = 50
+        self, owner_id: str, offset: int = 0, limit: int = 50, workspace_id: str | None = None
     ) -> TestGenerationRunListResponse:
-        runs = await self.repository.list_test_generation_runs_for_owner(owner_id)
+        runs = (
+            await self.repository.list_test_generation_runs_for_workspace(workspace_id)
+            if workspace_id
+            else await self.repository.list_test_generation_runs_for_owner(owner_id)
+        )
         return TestGenerationRunListResponse(
             items=[TestGenerationRunResponse.model_validate(run) for run in runs[offset : offset + limit]],
             total=len(runs),
@@ -1679,22 +1711,24 @@ class ExperimentService:
             limit=limit,
         )
 
-    async def get_test_generation_artifact(self, run_id: str, artifact_name: str, owner_id: str) -> bytes:
+    async def get_test_generation_artifact(
+        self, run_id: str, artifact_name: str, owner_id: str, workspace_id: str | None = None
+    ) -> bytes:
         run = await self.repository.get_test_generation_run(run_id)
-        if run is None or run.owner_id != owner_id:
+        if run is None or not self._can_read_test_generation_run(run, owner_id, workspace_id):
             raise AppError(404, "TEST_GENERATION_RUN_NOT_FOUND", "Test generation run was not found")
         object_name = run.artifact_objects.get(artifact_name)
         if object_name is None:
             raise AppError(404, "ARTIFACT_NOT_FOUND", "Artifact was not found in this final test-generation run")
         return await self.storage.read(object_name)
 
-    async def get_test_generation_manifest(self, run_id: str, owner_id: str) -> dict:
+    async def get_test_generation_manifest(self, run_id: str, owner_id: str, workspace_id: str | None = None) -> dict:
         """Return the small, redacted result manifest for the run detail viewer.
 
         This deliberately does not turn arbitrary storage paths into browser-viewable files.
         Individual source and generated test files will require a validated artifact index.
         """
-        content = await self.get_test_generation_artifact(run_id, "manifest", owner_id)
+        content = await self.get_test_generation_artifact(run_id, "manifest", owner_id, workspace_id)
         if len(content) > MAX_TEST_GENERATION_MANIFEST_BYTES:
             raise AppError(413, "ARTIFACT_TOO_LARGE", "Test-generation manifest is too large to view")
         try:
@@ -1705,11 +1739,13 @@ class ExperimentService:
             raise AppError(422, "INVALID_ARTIFACT", "Test-generation manifest must be a JSON object")
         return _redact_artifact_value(manifest)
 
-    async def get_test_generation_text_artifact(self, run_id: str, artifact_name: str, owner_id: str) -> dict[str, str]:
+    async def get_test_generation_text_artifact(
+        self, run_id: str, artifact_name: str, owner_id: str, workspace_id: str | None = None
+    ) -> dict[str, str]:
         """Return an indexed generated test, source module, or coverage report as bounded UTF-8 text."""
         if not re.fullmatch(r"file-(generated-test|source|coverage)-[1-9][0-9]*", artifact_name):
             raise AppError(404, "ARTIFACT_NOT_FOUND", "Text artifact was not found in this final test-generation run")
-        content = await self.get_test_generation_artifact(run_id, artifact_name, owner_id)
+        content = await self.get_test_generation_artifact(run_id, artifact_name, owner_id, workspace_id)
         if len(content) > MAX_TEST_GENERATION_MANIFEST_BYTES:
             raise AppError(413, "ARTIFACT_TOO_LARGE", "Text artifact is too large to view")
         try:
@@ -1813,25 +1849,91 @@ class ExperimentService:
             run.finished_at = datetime.now(UTC)
         await self.repository.save_test_generation_run(run)
 
+    async def list_reviews(
+        self,
+        workspace_id: str,
+        status: PromptVersionStatus | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> PromptVersionListResponse:
+        versions = await self.repository.list_prompt_versions_for_workspace(workspace_id, status)
+        return PromptVersionListResponse(
+            items=[PromptVersionResponse.model_validate(item) for item in versions[offset : offset + limit]],
+            total=len(versions),
+            offset=offset,
+            limit=limit,
+        )
+
+    async def get_review(self, version_id: str, workspace_id: str) -> ReviewDetailResponse:
+        version = await self.repository.get_prompt_version(version_id)
+        if version is None or not version.workspace_id or version.workspace_id != workspace_id:
+            raise AppError(404, "PROMPT_VERSION_NOT_FOUND", "Prompt version was not found")
+        item = await self.repository.get(version.experiment_id)
+        if item is None or item.workspace_id != workspace_id:
+            raise AppError(404, "PROMPT_VERSION_NOT_FOUND", "Prompt version was not found")
+        comparison = await self.repository.get_comparison_run(version.comparison_run_id)
+        baseline = await self.repository.get_prompt_snapshot(item.id, PromptRole.BASELINE)
+        if comparison is None or baseline is None:
+            raise AppError(409, "REVIEW_EVIDENCE_UNAVAILABLE", "Review evidence is unavailable")
+        optimization = await self.repository.get_optimization_run(comparison.optimization_run_id)
+        artifact_names = set(comparison.artifact_objects)
+        if optimization is not None:
+            artifact_names.update(optimization.artifact_objects)
+        return ReviewDetailResponse(
+            version=PromptVersionResponse.model_validate(version),
+            experiment_name=item.name,
+            creator_id=version.created_by or item.owner_id,
+            baseline_prompt=baseline.prompt,
+            candidate_prompt=version.prompt,
+            comparison=ComparisonRunResponse.model_validate(comparison),
+            artifact_names=sorted(artifact_names),
+        )
+
+    async def get_review_artifact(self, version_id: str, artifact_name: str, workspace_id: str) -> bytes:
+        review = await self.get_review(version_id, workspace_id)
+        object_name = review.comparison.artifact_objects.get(artifact_name)
+        if object_name is None:
+            optimization = await self.repository.get_optimization_run(review.comparison.optimization_run_id)
+            object_name = optimization.artifact_objects.get(artifact_name) if optimization else None
+        if object_name is None:
+            raise AppError(404, "ARTIFACT_NOT_FOUND", "Review artifact was not found")
+        return await self.storage.read(object_name)
+
     async def review_prompt_version(
-        self, version_id: str, owner_id: str, decision: PromptVersionStatus, comment: str
+        self,
+        version_id: str,
+        reviewer_id: str,
+        workspace_id: str,
+        decision: PromptVersionStatus,
+        comment: str,
     ) -> PromptVersionResponse:
         if decision not in {PromptVersionStatus.APPROVED, PromptVersionStatus.REJECTED}:
             raise ValueError("Review decision must be approved or rejected")
         version = await self.repository.get_prompt_version(version_id)
-        if version is None:
+        if version is None or not version.workspace_id or version.workspace_id != workspace_id:
             raise AppError(404, "PROMPT_VERSION_NOT_FOUND", "Prompt version was not found")
-        item = await self._owned(version.experiment_id, owner_id)
+        item = await self.repository.get(version.experiment_id)
+        if item is None or item.workspace_id != workspace_id:
+            raise AppError(404, "PROMPT_VERSION_NOT_FOUND", "Prompt version was not found")
+        if reviewer_id in {item.owner_id, version.created_by}:
+            raise AppError(403, "SELF_REVIEW_FORBIDDEN", "Reviewers cannot review their own candidate")
+        comment = comment.strip()
+        if decision == PromptVersionStatus.REJECTED and not comment:
+            raise AppError(422, "REVIEW_COMMENT_REQUIRED", "A rejection comment is required")
         if version.status == decision:
+            if version.reviewer_id != reviewer_id:
+                raise AppError(409, "PROMPT_VERSION_ALREADY_REVIEWED", "Prompt version already has a review decision")
             return PromptVersionResponse.model_validate(version)
         if version.status != PromptVersionStatus.IN_REVIEW:
             raise AppError(409, "PROMPT_VERSION_ALREADY_REVIEWED", "Prompt version already has a review decision")
         version = await self.repository.decide_prompt_version(
-            version_id, decision, owner_id, comment, datetime.now(UTC)
+            version_id, decision, reviewer_id, comment, datetime.now(UTC)
         )
         if version is None:
             raise AppError(404, "PROMPT_VERSION_NOT_FOUND", "Prompt version was not found")
         if version.status != decision:
+            raise AppError(409, "PROMPT_VERSION_ALREADY_REVIEWED", "Prompt version already has a review decision")
+        if version.reviewer_id != reviewer_id:
             raise AppError(409, "PROMPT_VERSION_ALREADY_REVIEWED", "Prompt version already has a review decision")
         item.status = (
             ExperimentStatus.APPROVED if decision == PromptVersionStatus.APPROVED else ExperimentStatus.REJECTED

@@ -2,6 +2,7 @@ import type { NavigationId } from "@/components/Sidebar";
 
 export const pathByNavigationId: Record<NavigationId, string> = {
   dashboard: "/dashboard",
+  reviews: "/reviews",
   projects: "/projects",
   experiments: "/experiments",
   coverage: "/docs/coverage",
@@ -11,6 +12,7 @@ export const pathByNavigationId: Record<NavigationId, string> = {
 };
 
 export function currentNavigationId(pathname: string): NavigationId {
+  if (pathname.startsWith("/reviews")) return "reviews";
   if (pathname.startsWith("/projects")) return "projects";
   if (
     pathname.startsWith("/experiments") ||
