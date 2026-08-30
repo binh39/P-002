@@ -506,7 +506,6 @@ body {
   align-items: flex-start;
   gap: 12px;
   padding-bottom: 19px;
-  border-bottom: 1px solid var(--po-line);
 }
 .workspace-settings-icon {
   width: 42px;
@@ -514,7 +513,10 @@ body {
   border-radius: 12px;
 }
 .workspace-settings-heading h2 {
-  margin: 3px 0 4px;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  margin: 0;
   color: var(--po-ink);
   font-size: 17px;
 }
@@ -587,7 +589,16 @@ body {
   background: #fffbeb;
 }
 .workspace-name-field {
-  max-width: 760px;
+  max-width: none;
+}
+.workspace-name-field .workspace-inline-form,
+.workspace-add-member .workspace-inline-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+}
+.workspace-name-field .workspace-inline-form input {
+  min-width: 280px;
 }
 .workspace-name-field .primary-button,
 .workspace-add-member .secondary-button {

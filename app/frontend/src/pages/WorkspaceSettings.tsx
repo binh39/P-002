@@ -66,11 +66,7 @@ export default function WorkspaceSettings() {
 
   return (
     <section className="platform-page workspace-settings-page">
-      <PageHeader
-        eyebrow="Workspace administration"
-        title="Workspace Settings"
-        description="Manage your workspace identity and the people who can access its projects, experiments, prompts and test suites."
-      />
+      <PageHeader title="Workspace Settings" />
       {error && (
         <div className="platform-callout workspace-settings-error" role="alert">
           {error}
@@ -78,12 +74,7 @@ export default function WorkspaceSettings() {
       )}
       <div className="workspace-settings-grid">
         <div className="platform-card workspace-overview-card">
-          <SectionHeading
-            icon={<Building2 size={20} />}
-            kicker="General"
-            title="Workspace profile"
-            description="This name appears in the sidebar and across shared workspace views."
-          />
+          <SectionHeading icon={<Building2 size={20} />} title="Workspace profile" description="" />
           <div className="workspace-profile-summary">
             <span className="workspace-profile-mark">
               {workspace.name.slice(0, 1).toUpperCase()}
@@ -126,25 +117,15 @@ export default function WorkspaceSettings() {
                 </button>
               )}
             </div>
-            <small>
-              {isOwner
-                ? "Use a clear name your collaborators will recognize."
-                : "Only the workspace owner can rename this workspace."}
-            </small>
           </label>
         </div>
 
         <div className="platform-card workspace-members-card">
-          <SectionHeading
-            icon={<Users size={20} />}
-            kicker="Access"
-            title="Workspace members"
-            description="Members share all data stored inside this workspace."
-          />
+          <SectionHeading icon={<Users size={20} />} title="Workspace members" description="" />
           {isOwner && (
             <form className="workspace-add-member" onSubmit={(event) => void addMember(event)}>
               <label className="platform-field">
-                <span>Add member by email</span>
+                <span className="sr-only">Add member by email</span>
                 <div className="workspace-inline-form">
                   <span className="workspace-email-input">
                     <Mail size={16} />
@@ -219,7 +200,7 @@ function SectionHeading({
   description,
 }: {
   icon: ReactNode;
-  kicker: string;
+  kicker?: string;
   title: string;
   description: string;
 }) {
@@ -227,9 +208,9 @@ function SectionHeading({
     <div className="workspace-settings-heading">
       <span className="workspace-settings-icon">{icon}</span>
       <div>
-        <span className="card-kicker">{kicker}</span>
+        {kicker && <span className="card-kicker">{kicker}</span>}
         <h2>{title}</h2>
-        <p>{description}</p>
+        {description && <p>{description}</p>}
       </div>
     </div>
   );
