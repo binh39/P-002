@@ -51,6 +51,8 @@ from backend.modules.uploads.repository import (
     UploadRepository,
 )
 from backend.modules.uploads.service import UploadService
+from backend.modules.workspaces.repository import FirestoreWorkspaceRepository, InMemoryWorkspaceRepository
+from backend.modules.workspaces.service import WorkspaceService
 
 
 @dataclass(slots=True)
@@ -63,6 +65,7 @@ class ServiceContainer:
     experiments: ExperimentService
     dashboard: DashboardService
     provider_credentials: ProviderCredentialService
+    workspaces: WorkspaceService
 
 
 def build_services(settings: Settings) -> ServiceContainer:
@@ -87,6 +90,11 @@ def build_services(settings: Settings) -> ServiceContainer:
         project_repository = InMemoryProjectRepository()
         function_repository = InMemoryFunctionRepository()
 
+    workspace_repository = (
+        FirestoreWorkspaceRepository(firestore)
+        if settings.repository_backend == "firestore"
+        else InMemoryWorkspaceRepository()
+    )
     experiment_repository = (
         FirestoreExperimentRepository(firestore)
         if settings.repository_backend == "firestore"
@@ -274,4 +282,5 @@ def build_services(settings: Settings) -> ServiceContainer:
         experiments=experiments,
         dashboard=dashboard,
         provider_credentials=provider_credentials,
+        workspaces=WorkspaceService(workspace_repository),
     )

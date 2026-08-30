@@ -23,6 +23,7 @@ export interface Experiment {
   projectId: string;
   projectIds: string[];
   name: string;
+  creatorName?: string;
   targetFunctionIds: string[];
   datasetSplits: Record<string, string[]>;
   samplingMethod: import("@/domain/experimentConfiguration").SamplingMethod;

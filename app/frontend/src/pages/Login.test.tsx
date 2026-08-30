@@ -59,6 +59,7 @@ describe("Login", () => {
         "Alex Morgan",
         "alex@example.com",
         "password123",
+        "prompt_engineer",
       ),
     );
   });

@@ -10,6 +10,8 @@ class ProjectRepository(Protocol):
 
     async def list_for_owner(self, owner_id: str) -> list[ProjectRecord]: ...
 
+    async def list_for_workspace(self, workspace_id: str) -> list[ProjectRecord]: ...
+
     async def save(self, project: ProjectRecord) -> ProjectRecord: ...
 
     async def delete(self, project_id: str) -> None: ...
@@ -28,6 +30,12 @@ class InMemoryProjectRepository:
 
     async def list_for_owner(self, owner_id: str) -> list[ProjectRecord]:
         projects = [project for project in self.items.values() if project.owner_id == owner_id]
+        return sorted(projects, key=lambda project: project.created_at, reverse=True)
+
+    async def list_for_workspace(self, workspace_id: str) -> list[ProjectRecord]:
+        projects = [
+            project for project in self.items.values() if (project.workspace_id or project.owner_id) == workspace_id
+        ]
         return sorted(projects, key=lambda project: project.created_at, reverse=True)
 
     async def save(self, project: ProjectRecord) -> ProjectRecord:
@@ -52,6 +60,11 @@ class FirestoreProjectRepository:
 
     async def list_for_owner(self, owner_id: str) -> list[ProjectRecord]:
         query = self.collection.where("owner_id", "==", owner_id)
+        projects = [ProjectRecord.model_validate(snapshot.to_dict()) async for snapshot in query.stream()]
+        return sorted(projects, key=lambda project: project.created_at, reverse=True)
+
+    async def list_for_workspace(self, workspace_id: str) -> list[ProjectRecord]:
+        query = self.collection.where("workspace_id", "==", workspace_id)
         projects = [ProjectRecord.model_validate(snapshot.to_dict()) async for snapshot in query.stream()]
         return sorted(projects, key=lambda project: project.created_at, reverse=True)
 

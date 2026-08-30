@@ -75,7 +75,7 @@ class InMemoryExperimentRepository:
 
     async def list_for_workspace(self, workspace_id):
         return sorted(
-            (item for item in self.experiments.values() if item.workspace_id == workspace_id),
+            (item for item in self.experiments.values() if (item.workspace_id or item.owner_id) == workspace_id),
             key=lambda item: item.created_at,
             reverse=True,
         )
@@ -152,7 +152,7 @@ class InMemoryExperimentRepository:
             (
                 item
                 for item in self.prompt_versions.values()
-                if item.workspace_id == workspace_id and (status is None or item.status == status)
+                if (item.workspace_id or item.created_by) == workspace_id and (status is None or item.status == status)
             ),
             key=lambda item: item.created_at,
             reverse=True,
@@ -212,7 +212,11 @@ class InMemoryExperimentRepository:
 
     async def list_test_generation_runs_for_workspace(self, workspace_id):
         return sorted(
-            (item for item in self.test_generation_runs.values() if item.workspace_id == workspace_id),
+            (
+                item
+                for item in self.test_generation_runs.values()
+                if (item.workspace_id or item.owner_id) == workspace_id
+            ),
             key=lambda item: item.created_at,
             reverse=True,
         )

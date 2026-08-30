@@ -15,6 +15,7 @@ interface ApiExperiment {
   project_id: string;
   project_ids: string[];
   name: string;
+  creator_name?: string;
   target_function_ids: string[];
   dataset_splits: Record<string, string[]>;
   sampling_method: Experiment["samplingMethod"];
@@ -150,6 +151,7 @@ function mapExperiment(item: ApiExperiment): Experiment {
     projectId: item.project_id,
     projectIds: item.project_ids,
     name: item.name,
+    creatorName: item.creator_name ?? "Unknown user",
     targetFunctionIds: item.target_function_ids,
     datasetSplits: item.dataset_splits,
     samplingMethod: item.sampling_method,

@@ -36,7 +36,9 @@ class ProjectService:
     def set_runtime_service(self, runtime) -> None:
         self.runtime = runtime
 
-    async def create(self, owner_id: str, payload: CreateProjectRequest) -> ProjectResponse:
+    async def create(
+        self, owner_id: str, payload: CreateProjectRequest, workspace_id: str | None = None
+    ) -> ProjectResponse:
         upload = await self.uploads.require_ready(payload.upload_id, owner_id)
         environment_id = payload.runtime_environment_id or uuid4().hex
         if environment_id == "sample-runtime":
@@ -63,6 +65,7 @@ class ProjectService:
         project = ProjectRecord(
             id=str(uuid4()),
             owner_id=owner_id,
+            workspace_id=workspace_id or owner_id,
             name=payload.name,
             description=payload.description,
             upload_id=upload.id,
@@ -79,8 +82,12 @@ class ProjectService:
         await self.repository.create(project)
         return self._response(project)
 
-    async def list(self, owner_id: str) -> ProjectListResponse:
-        projects = await self.repository.list_for_owner(owner_id)
+    async def list(self, owner_id: str, workspace_id: str | None = None) -> ProjectListResponse:
+        projects = (
+            await self.repository.list_for_workspace(workspace_id)
+            if workspace_id
+            else await self.repository.list_for_owner(owner_id)
+        )
         if self.runtime:
             projects = [await self.runtime.refresh(project) for project in projects]
         return ProjectListResponse(items=[self._response(project) for project in projects], total=len(projects))
@@ -89,8 +96,8 @@ class ProjectService:
         projects = self.samples.list(owner_id) if self.samples else []
         return ProjectListResponse(items=[self._response(project) for project in projects], total=len(projects))
 
-    async def get(self, project_id: str, owner_id: str) -> ProjectResponse:
-        project = await self.require_owned(project_id, owner_id)
+    async def get(self, project_id: str, owner_id: str, workspace_id: str | None = None) -> ProjectResponse:
+        project = await self.require_owned(project_id, owner_id, workspace_id)
         if self.runtime and not self.is_sample(project_id):
             project = await self.runtime.refresh(project)
         return self._response(project)
@@ -147,11 +154,13 @@ class ProjectService:
             await self.uploads.delete(project.upload_id, owner_id)
         await self.repository.delete(project.id)
 
-    async def require_owned(self, project_id: str, owner_id: str) -> ProjectRecord:
+    async def require_owned(self, project_id: str, owner_id: str, workspace_id: str | None = None) -> ProjectRecord:
         if self.samples and (sample := self.samples.get(project_id, owner_id)):
             return sample
         project = await self.repository.get(project_id)
-        if project is None or project.owner_id != owner_id:
+        if project is None or (
+            project.owner_id != owner_id and (project.workspace_id or project.owner_id) != workspace_id
+        ):
             raise AppError(404, "PROJECT_NOT_FOUND", "Project was not found")
         return project
 
@@ -165,4 +174,4 @@ class ProjectService:
 
     @staticmethod
     def _response(project: ProjectRecord) -> ProjectResponse:
-        return ProjectResponse.model_validate(project.model_dump(exclude={"owner_id"}))
+        return ProjectResponse.model_validate(project.model_dump(exclude={"owner_id", "workspace_id"}))

@@ -3,6 +3,7 @@ import { LogOut, Settings } from "lucide-react";
 import { Brand } from "@/components/Brand";
 import { IC } from "@/components/Icons";
 import type { UserRole } from "@/auth/AuthService";
+import WorkspaceSwitcher from "@/components/WorkspaceSwitcher";
 
 export type NavigationId =
   | "dashboard"
@@ -12,12 +13,13 @@ export type NavigationId =
   | "coverage"
   | "registry"
   | "testCases"
+  | "workspaceSettings"
   | "settings";
 
 interface SidebarProps {
   currentPage: NavigationId;
   onNavigate: (page: NavigationId) => void;
-  user: { name: string; role: UserRole; photoUrl: string | null };
+  user: { name: string; role: UserRole; photoUrl: string | null; workspaceId?: string };
   onSignOut: () => void;
   isOpen?: boolean;
 }
@@ -28,12 +30,14 @@ const engineerNavItems = [
   { id: "experiments" as NavigationId, label: "Experiments", Icon: IC.Flask },
   { id: "registry" as NavigationId, label: "Prompt Registry", Icon: IC.CheckSquare },
   { id: "testCases" as NavigationId, label: "Test Suites", Icon: IC.Database },
+  { id: "workspaceSettings" as NavigationId, label: "Workspace Settings", Icon: Settings },
 ];
 
 const reviewerNavItems = [
   { id: "reviews" as NavigationId, label: "Review Queue", Icon: IC.CheckSquare },
   { id: "registry" as NavigationId, label: "Prompt Registry", Icon: IC.CheckSquare },
   { id: "testCases" as NavigationId, label: "Test Suites", Icon: IC.Database },
+  { id: "workspaceSettings" as NavigationId, label: "Workspace Settings", Icon: Settings },
 ];
 
 export default function Sidebar({
@@ -59,6 +63,7 @@ export default function Sidebar({
 
       <nav className="sidebar-navigation" aria-label="Workspace navigation">
         <p className="sidebar-label">Workspace</p>
+        <WorkspaceSwitcher activeId={user.workspaceId ?? ""} />
         {navItems.map(({ id, label, Icon }) => (
           <button
             key={id}

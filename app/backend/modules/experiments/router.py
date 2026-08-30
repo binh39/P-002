@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Query, Request, Response, status
 
 from backend.api.dependencies import CurrentUser, EngineerUser, InternalTask, ReviewerUser
-from backend.core.security import UserRole
 
 from .schemas import (
     ComparisonRunResponse,
@@ -40,12 +39,13 @@ async def create_experiment(payload: CreateExperimentRequest, user: EngineerUser
         payload,
         full_access=user.has_full_access,
         workspace_id=user.workspace_id,
+        creator_name=user.name,
     )
 
 
 @router.get("", response_model=ExperimentListResponse)
 async def list_experiments(user: CurrentUser, request: Request):
-    return await request.app.state.services.experiments.list(user.uid)
+    return await request.app.state.services.experiments.list(user.uid, user.workspace_id)
 
 
 @router.delete("/{experiment_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -131,7 +131,7 @@ async def get_comparison_artifact(run_id: str, artifact_name: str, user: Current
 
 @router.get("/{experiment_id}", response_model=ExperimentResponse)
 async def get_experiment(experiment_id: str, user: CurrentUser, request: Request):
-    return await request.app.state.services.experiments.get(experiment_id, user.uid)
+    return await request.app.state.services.experiments.get(experiment_id, user.uid, user.workspace_id)
 
 
 @optimization_internal_router.post("/{run_id}/execute", status_code=status.HTTP_204_NO_CONTENT)
@@ -159,7 +159,9 @@ async def list_prompt_versions(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=100),
 ):
-    return await request.app.state.services.experiments.list_prompt_versions(user.uid, status_filter, offset, limit)
+    return await request.app.state.services.experiments.list_prompt_versions(
+        user.uid, status_filter, offset, limit, user.workspace_id
+    )
 
 
 @prompt_router.post("/{version_id}/approve", response_model=PromptVersionResponse)
@@ -222,7 +224,7 @@ async def list_prompt_registry(
         user.uid,
         offset,
         limit,
-        workspace_id=user.workspace_id if user.role == UserRole.PROMPT_REVIEWER else None,
+        workspace_id=user.workspace_id,
     )
 
 
@@ -231,7 +233,7 @@ async def get_prompt_registry_entry(experiment_id: str, user: CurrentUser, reque
     return await request.app.state.services.experiments.get_prompt_registry_entry(
         experiment_id,
         user.uid,
-        workspace_id=user.workspace_id if user.role == UserRole.PROMPT_REVIEWER else None,
+        workspace_id=user.workspace_id,
     )
 
 
@@ -246,7 +248,9 @@ async def request_test_generation(
     user: EngineerUser,
     request: Request,
 ):
-    return await request.app.state.services.experiments.request_test_generation(experiment_id, user.uid, payload)
+    return await request.app.state.services.experiments.request_test_generation(
+        experiment_id, user.uid, payload, user.workspace_id, user.name
+    )
 
 
 @test_generation_router.get("", response_model=TestGenerationRunListResponse)
@@ -256,7 +260,7 @@ async def list_test_generation_runs(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=100),
 ):
-    workspace_id = user.workspace_id if user.role == UserRole.PROMPT_REVIEWER else None
+    workspace_id = user.workspace_id
     return await request.app.state.services.experiments.list_test_generation_runs(
         user.uid, offset, limit, workspace_id=workspace_id
     )
@@ -264,7 +268,7 @@ async def list_test_generation_runs(
 
 @test_generation_router.get("/{run_id}", response_model=TestGenerationRunResponse)
 async def get_test_generation_run(run_id: str, user: CurrentUser, request: Request):
-    workspace_id = user.workspace_id if user.role == UserRole.PROMPT_REVIEWER else None
+    workspace_id = user.workspace_id
     return await request.app.state.services.experiments.get_test_generation_run(run_id, user.uid, workspace_id)
 
 
@@ -276,7 +280,7 @@ async def delete_test_generation_run(run_id: str, user: EngineerUser, request: R
 
 @test_generation_router.get("/{run_id}/artifacts/manifest/content")
 async def get_test_generation_manifest(run_id: str, user: CurrentUser, request: Request):
-    workspace_id = user.workspace_id if user.role == UserRole.PROMPT_REVIEWER else None
+    workspace_id = user.workspace_id
     return await request.app.state.services.experiments.get_test_generation_manifest(run_id, user.uid, workspace_id)
 
 
@@ -286,7 +290,7 @@ async def get_test_generation_text_artifact(run_id: str, artifact_name: str, use
         run_id,
         artifact_name,
         user.uid,
-        user.workspace_id if user.role == UserRole.PROMPT_REVIEWER else None,
+        user.workspace_id,
     )
 
 
@@ -296,7 +300,7 @@ async def get_test_generation_artifact(run_id: str, artifact_name: str, user: Cu
         run_id,
         artifact_name,
         user.uid,
-        user.workspace_id if user.role == UserRole.PROMPT_REVIEWER else None,
+        user.workspace_id,
     )
     media_type = "application/zip" if artifact_name == "suite_zip" else "application/json"
     return Response(content=content, media_type=media_type)

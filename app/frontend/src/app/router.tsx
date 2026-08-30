@@ -25,6 +25,7 @@ const CreateTestSuite = lazy(() => import("@/pages/CreateTestSuite"));
 const TestCaseDetail = lazy(() => import("@/pages/TestCaseDetail"));
 const ReviewQueue = lazy(() => import("@/pages/ReviewQueue"));
 const ReviewDetail = lazy(() => import("@/pages/ReviewDetail"));
+const WorkspaceSettings = lazy(() => import("@/pages/WorkspaceSettings"));
 
 const legacyPagePaths = {
   dashboard: "/dashboard",
@@ -57,8 +58,8 @@ function LoginRoute() {
       onClearError={clearError}
       onGoogleSignIn={() => runAndNavigate(signInWithGoogle)}
       onEmailSignIn={(email, password) => runAndNavigate(() => signInWithEmail(email, password))}
-      onRegister={(name, email, password) =>
-        runAndNavigate(() => registerWithEmail(name, email, password))
+      onRegister={(name, email, password, role) =>
+        runAndNavigate(() => registerWithEmail(name, email, password, role))
       }
       onPasswordReset={sendPasswordReset}
       connected={env.authMode === "firebase"}
@@ -151,6 +152,9 @@ function RoutedApplication() {
           </Route>
           <Route path="/settings">
             <Settings />
+          </Route>
+          <Route path="/workspace-settings">
+            <WorkspaceSettings />
           </Route>
           <Route>
             <NotFound />

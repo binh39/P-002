@@ -1,4 +1,4 @@
-from scripts.backfill_workspace_ids import _workspace_update
+from scripts.backfill_workspace_ids import _deduplicated_names, _workspace_update
 
 
 def test_workspace_backfill_uses_owner_and_never_a_shared_default():
@@ -11,3 +11,15 @@ def test_workspace_backfill_uses_owner_and_never_a_shared_default():
     }
     assert _workspace_update("experiments", {}, owners) is None
     assert _workspace_update("experiments", {"workspace_id": "existing"}, owners) is None
+
+
+def test_duplicate_names_are_renamed_in_creation_order_and_case_insensitively():
+    records = [
+        ("second", {"name": "isort prompt optimization", "created_at": "2025-01-02"}),
+        ("first", {"name": "Isort Prompt Optimization", "created_at": "2025-01-01"}),
+        ("third", {"name": "isort prompt optimization", "created_at": "2025-01-03"}),
+    ]
+    assert _deduplicated_names(records) == {
+        "second": "isort prompt optimization 2",
+        "third": "isort prompt optimization 3",
+    }

@@ -56,8 +56,12 @@ class DashboardService:
     def __init__(self, experiments: ExperimentRepository):
         self.experiments = experiments
 
-    async def snapshot(self, owner_id: str) -> DashboardResponse:
-        items = await self.experiments.list_for_owner(owner_id)
+    async def snapshot(self, owner_id: str, workspace_id: str | None = None) -> DashboardResponse:
+        items = (
+            await self.experiments.list_for_workspace(workspace_id)
+            if workspace_id
+            else await self.experiments.list_for_owner(owner_id)
+        )
         runs = await asyncio.gather(
             *(
                 self.experiments.get_optimization_run(item.optimization_run_id) if item.optimization_run_id else _none()
@@ -133,7 +137,7 @@ class DashboardService:
                 DashboardKpi(
                     label="Total Experiments",
                     value=str(len(items)),
-                    delta="Owner-scoped records",
+                    delta="Current workspace",
                     trend="neutral",
                     icon="experiments",
                 ),

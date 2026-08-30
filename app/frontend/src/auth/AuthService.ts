@@ -16,7 +16,7 @@ export interface AuthService {
   subscribe(listener: AuthStateListener): () => void;
   signInWithGoogle(): Promise<void>;
   signInWithEmail(email: string, password: string): Promise<void>;
-  registerWithEmail(name: string, email: string, password: string): Promise<void>;
+  registerWithEmail(name: string, email: string, password: string, role: UserRole): Promise<void>;
   sendPasswordReset(email: string): Promise<void>;
   signOut(): Promise<void>;
   getIdToken(): Promise<string | null>;

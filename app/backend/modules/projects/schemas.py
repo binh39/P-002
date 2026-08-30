@@ -251,6 +251,7 @@ class ProjectResponse(StrictModel):
 
 class ProjectRecord(ProjectResponse):
     owner_id: str
+    workspace_id: str | None = None
 
 
 class ProjectListResponse(StrictModel):
