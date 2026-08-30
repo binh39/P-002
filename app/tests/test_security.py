@@ -4,6 +4,7 @@ from backend.core.errors import AppError
 from backend.core.security import (
     AuthenticatedUser,
     DevelopmentTokenVerifier,
+    FirebaseTokenVerifier,
     UserRole,
     _role_from_claim,
     _workspace_from_claim,
@@ -43,3 +44,22 @@ def test_verified_claim_parsing_fails_closed_for_invalid_values():
         _role_from_claim("admin")
     with pytest.raises(AppError, match="Account workspace"):
         _workspace_from_claim("  ", "uid-1")
+
+
+@pytest.mark.asyncio
+async def test_firebase_verifier_maps_verified_role_and_workspace_claims(monkeypatch):
+    verifier = FirebaseTokenVerifier("project-1")
+    monkeypatch.setattr(
+        verifier,
+        "_verify_sync",
+        lambda _token: {
+            "uid": "reviewer-1",
+            "email": "reviewer@example.com",
+            "name": "Reviewer",
+            "role": "prompt_reviewer",
+            "workspace_id": "workspace-1",
+        },
+    )
+    user = await verifier.verify("verified-token")
+    assert user.role == UserRole.PROMPT_REVIEWER
+    assert user.workspace_id == "workspace-1"
