@@ -436,6 +436,10 @@ class TestGenerationMetrics(StrictModel):
     target_statement_coverage: float | None = None
     target_branch_coverage: float | None = None
     target_score: float | None = None
+    target_covered_statements: int = 0
+    target_statement_count: int = 0
+    target_covered_branches: int = 0
+    target_branch_count: int = 0
     target_count: int = 0
     completed_target_count: int = 0
     failed_target_count: int = 0
