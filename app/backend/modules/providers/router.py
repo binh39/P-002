@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request, Response, status
 
-from backend.api.dependencies import CurrentUser
+from backend.api.dependencies import CurrentUser, EngineerUser
 
 from .schemas import AIProvider, ProviderCredentialInput, ProviderCredentialListResponse, ProviderCredentialResponse
 
@@ -17,7 +17,7 @@ async def list_provider_credentials(user: CurrentUser, request: Request):
 async def save_provider_credential(
     provider: AIProvider,
     payload: ProviderCredentialInput,
-    user: CurrentUser,
+    user: EngineerUser,
     request: Request,
 ):
     return await request.app.state.services.provider_credentials.save(
@@ -26,6 +26,6 @@ async def save_provider_credential(
 
 
 @router.delete("/{provider}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_provider_credential(provider: AIProvider, user: CurrentUser, request: Request):
+async def delete_provider_credential(provider: AIProvider, user: EngineerUser, request: Request):
     await request.app.state.services.provider_credentials.delete(user.uid, provider)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

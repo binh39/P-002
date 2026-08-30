@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query, Request, Response, status
 
-from backend.api.dependencies import CurrentUser, InternalTask
+from backend.api.dependencies import CurrentUser, EngineerUser, InternalTask
 
 from .schemas import (
     ComparisonRunResponse,
@@ -31,7 +31,7 @@ test_generation_router = APIRouter(prefix="/test-generation-runs", tags=["test-g
 
 
 @router.post("", response_model=ExperimentResponse, status_code=status.HTTP_201_CREATED)
-async def create_experiment(payload: CreateExperimentRequest, user: CurrentUser, request: Request):
+async def create_experiment(payload: CreateExperimentRequest, user: EngineerUser, request: Request):
     return await request.app.state.services.experiments.create(
         user.uid,
         payload,
@@ -45,13 +45,13 @@ async def list_experiments(user: CurrentUser, request: Request):
 
 
 @router.delete("/{experiment_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_experiment(experiment_id: str, user: CurrentUser, request: Request):
+async def delete_experiment(experiment_id: str, user: EngineerUser, request: Request):
     await request.app.state.services.experiments.delete(experiment_id, user.uid)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{experiment_id}/optimize", response_model=OptimizationRunResponse, status_code=status.HTTP_202_ACCEPTED)
-async def request_optimization(experiment_id: str, user: CurrentUser, request: Request):
+async def request_optimization(experiment_id: str, user: EngineerUser, request: Request):
     return await request.app.state.services.experiments.request_optimization(
         experiment_id,
         user.uid,
@@ -65,14 +65,14 @@ async def get_optimization_run(run_id: str, user: CurrentUser, request: Request)
 
 
 @router.post("/optimization-runs/{run_id}/cancel", response_model=OptimizationRunResponse)
-async def cancel_optimization(run_id: str, user: CurrentUser, request: Request):
+async def cancel_optimization(run_id: str, user: EngineerUser, request: Request):
     return await request.app.state.services.experiments.cancel_optimization(run_id, user.uid)
 
 
 @router.post("/optimization-runs/{run_id}/resume", response_model=OptimizationRunResponse)
 async def resume_optimization(
     run_id: str,
-    user: CurrentUser,
+    user: EngineerUser,
     request: Request,
     payload: ResumeOptimizationRequest | None = None,
 ):
@@ -101,7 +101,7 @@ async def get_optimization_artifact(run_id: str, artifact_name: str, user: Curre
 
 
 @router.post("/{experiment_id}/compare", response_model=ComparisonRunResponse, status_code=status.HTTP_202_ACCEPTED)
-async def request_comparison(experiment_id: str, user: CurrentUser, request: Request):
+async def request_comparison(experiment_id: str, user: EngineerUser, request: Request):
     return await request.app.state.services.experiments.request_comparison(
         experiment_id,
         user.uid,
@@ -199,7 +199,7 @@ async def get_prompt_registry_entry(experiment_id: str, user: CurrentUser, reque
 async def request_test_generation(
     experiment_id: str,
     payload: CreateTestGenerationRequest,
-    user: CurrentUser,
+    user: EngineerUser,
     request: Request,
 ):
     return await request.app.state.services.experiments.request_test_generation(experiment_id, user.uid, payload)
@@ -221,7 +221,7 @@ async def get_test_generation_run(run_id: str, user: CurrentUser, request: Reque
 
 
 @test_generation_router.delete("/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_test_generation_run(run_id: str, user: CurrentUser, request: Request):
+async def delete_test_generation_run(run_id: str, user: EngineerUser, request: Request):
     await request.app.state.services.experiments.delete_test_generation_run(run_id, user.uid)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
