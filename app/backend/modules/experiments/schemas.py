@@ -584,6 +584,7 @@ class ReviewDetailResponse(StrictModel):
     baseline_prompt: dict[str, str]
     candidate_prompt: dict[str, str]
     comparison: ComparisonRunResponse
+    artifact_names: list[str] = Field(default_factory=list)
 
 
 def new_id() -> str:

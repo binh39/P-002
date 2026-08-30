@@ -181,6 +181,7 @@ export interface ReviewDetail {
   baselinePrompt: PromptBundle;
   candidatePrompt: PromptBundle;
   comparison: ComparisonRun;
+  artifactNames: string[];
 }
 
 export interface PromptVersionList {

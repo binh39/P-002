@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useLocation, useRoute } from "wouter";
 
-import { ApiError } from "@/api/client";
+import { ApiError, apiDownload } from "@/api/client";
 import { useRepositories } from "@/app/providers";
 import { PageHeader, StatusBadge } from "@/components/PlatformUI";
 import type { PromptBundle } from "@/domain/experiments";
@@ -27,6 +27,18 @@ function PromptPanel({ title, prompt }: { title: string; prompt: PromptBundle })
       )}
     </section>
   );
+}
+
+async function downloadArtifact(versionId: string, artifactName: string) {
+  const blob = await apiDownload(
+    `/reviews/${versionId}/artifacts/${encodeURIComponent(artifactName)}`,
+  );
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = artifactName;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 export default function ReviewDetail() {
@@ -117,6 +129,24 @@ export default function ReviewDetail() {
         <PromptPanel title="Baseline" prompt={query.data.baselinePrompt} />
         <PromptPanel title="Candidate" prompt={query.data.candidatePrompt} />
       </div>
+      <section className="platform-card">
+        <h2>Review artifacts</h2>
+        {query.data.artifactNames.length === 0 ? (
+          <p>No downloadable artifacts.</p>
+        ) : (
+          <div className="delete-dialog-actions">
+            {query.data.artifactNames.map((name) => (
+              <button
+                className="secondary-button"
+                key={name}
+                onClick={() => void downloadArtifact(versionId, name)}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
       {version.status === "in_review" ? (
         <section className="platform-card">
           <h2>Decision</h2>

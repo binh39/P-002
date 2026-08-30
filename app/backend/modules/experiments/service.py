@@ -1877,6 +1877,10 @@ class ExperimentService:
         baseline = await self.repository.get_prompt_snapshot(item.id, PromptRole.BASELINE)
         if comparison is None or baseline is None:
             raise AppError(409, "REVIEW_EVIDENCE_UNAVAILABLE", "Review evidence is unavailable")
+        optimization = await self.repository.get_optimization_run(comparison.optimization_run_id)
+        artifact_names = set(comparison.artifact_objects)
+        if optimization is not None:
+            artifact_names.update(optimization.artifact_objects)
         return ReviewDetailResponse(
             version=PromptVersionResponse.model_validate(version),
             experiment_name=item.name,
@@ -1884,11 +1888,15 @@ class ExperimentService:
             baseline_prompt=baseline.prompt,
             candidate_prompt=version.prompt,
             comparison=ComparisonRunResponse.model_validate(comparison),
+            artifact_names=sorted(artifact_names),
         )
 
     async def get_review_artifact(self, version_id: str, artifact_name: str, workspace_id: str) -> bytes:
         review = await self.get_review(version_id, workspace_id)
         object_name = review.comparison.artifact_objects.get(artifact_name)
+        if object_name is None:
+            optimization = await self.repository.get_optimization_run(review.comparison.optimization_run_id)
+            object_name = optimization.artifact_objects.get(artifact_name) if optimization else None
         if object_name is None:
             raise AppError(404, "ARTIFACT_NOT_FOUND", "Review artifact was not found")
         return await self.storage.read(object_name)
@@ -1929,10 +1937,6 @@ class ExperimentService:
             raise AppError(409, "PROMPT_VERSION_ALREADY_REVIEWED", "Prompt version already has a review decision")
         if version.reviewer_id != reviewer_id:
             raise AppError(409, "PROMPT_VERSION_ALREADY_REVIEWED", "Prompt version already has a review decision")
-        version.decision = decision
-        version.baseline_digest_at_review = version.parent_prompt_digest
-        version.candidate_digest_at_review = version.prompt_digest
-        await self.repository.save_prompt_version(version)
         item.status = (
             ExperimentStatus.APPROVED if decision == PromptVersionStatus.APPROVED else ExperimentStatus.REJECTED
         )

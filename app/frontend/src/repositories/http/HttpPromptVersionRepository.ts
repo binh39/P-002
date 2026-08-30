@@ -146,6 +146,7 @@ export class HttpPromptVersionRepository implements PromptVersionRepository {
       baseline_prompt: Record<string, string>;
       candidate_prompt: Record<string, string>;
       comparison: ApiComparisonRun;
+      artifact_names: string[];
     }>(`/reviews/${versionId}`, { signal });
     return {
       version: mapPromptVersion(response.version),
@@ -154,6 +155,7 @@ export class HttpPromptVersionRepository implements PromptVersionRepository {
       baselinePrompt: mapPromptBundle(response.baseline_prompt),
       candidatePrompt: mapPromptBundle(response.candidate_prompt),
       comparison: mapComparison(response.comparison),
+      artifactNames: response.artifact_names,
     };
   }
 

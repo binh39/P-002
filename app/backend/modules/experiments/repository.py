@@ -166,6 +166,9 @@ class InMemoryExperimentRepository:
         item.reviewer_id = reviewer_id
         item.review_comment = comment
         item.reviewed_at = reviewed_at
+        item.decision = decision
+        item.baseline_digest_at_review = item.parent_prompt_digest
+        item.candidate_digest_at_review = item.prompt_digest
         self.prompt_versions[item.id] = item
         return item
 
@@ -365,6 +368,9 @@ class FirestoreExperimentRepository:
             item.reviewer_id = reviewer_id
             item.review_comment = comment
             item.reviewed_at = reviewed_at
+            item.decision = decision
+            item.baseline_digest_at_review = item.parent_prompt_digest
+            item.candidate_digest_at_review = item.prompt_digest
             transaction.set(reference, item.model_dump(mode="python"))
             return item
 
