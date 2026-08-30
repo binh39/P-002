@@ -295,7 +295,7 @@ class RuntimePreparationService:
         await self.repository.save(project)
         await self._try_start(project)
         refreshed = await self.repository.get(project.id)
-        return ProjectResponse.model_validate((refreshed or project).model_dump(exclude={"owner_id"}))
+        return ProjectResponse.model_validate((refreshed or project).model_dump(exclude={"owner_id", "workspace_id"}))
 
     async def _try_start(self, project: ProjectRecord) -> None:
         if project.runtime_status != RuntimeStatus.QUEUED:

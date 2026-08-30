@@ -173,6 +173,7 @@ class ExperimentResponse(StrictModel):
     project_ids: list[str] = Field(default_factory=list)
     project_snapshots: list[ProjectSnapshot] = Field(default_factory=list)
     name: str
+    creator_name: str = "Unknown user"
     target_function_ids: list[str] = Field(default_factory=list)
     targets: list[TargetReference] = Field(default_factory=list)
     sampling_method: SamplingMethod = SamplingMethod.RANDOM
@@ -493,6 +494,7 @@ class CreateTestGenerationRequest(StrictModel):
 class TestGenerationRunResponse(StrictModel):
     id: str
     experiment_id: str
+    creator_name: str = "Unknown user"
     name: str = "Test Suite"
     prompt_snapshot_id: str
     prompt_digest: str

@@ -13,12 +13,12 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_project(payload: CreateProjectRequest, user: EngineerUser, request: Request):
-    return await request.app.state.services.projects.create(user.uid, payload)
+    return await request.app.state.services.projects.create(user.uid, payload, user.workspace_id)
 
 
 @router.get("", response_model=ProjectListResponse)
 async def list_projects(user: CurrentUser, request: Request):
-    return await request.app.state.services.projects.list(user.uid)
+    return await request.app.state.services.projects.list(user.uid, user.workspace_id)
 
 
 @router.get("/samples", response_model=ProjectListResponse)
@@ -28,7 +28,7 @@ async def list_sample_projects(user: CurrentUser, request: Request):
 
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(project_id: str, user: CurrentUser, request: Request):
-    return await request.app.state.services.projects.get(project_id, user.uid)
+    return await request.app.state.services.projects.get(project_id, user.uid, user.workspace_id)
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)

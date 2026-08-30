@@ -13,9 +13,11 @@ from backend.modules.identity.router import router as identity_router
 from backend.modules.projects.router import router as projects_router
 from backend.modules.providers.router import router as provider_credentials_router
 from backend.modules.uploads.router import router as uploads_router
+from backend.modules.workspaces.router import router as workspaces_router
 
 api_router = APIRouter()
 api_router.include_router(identity_router)
+api_router.include_router(workspaces_router)
 api_router.include_router(uploads_router)
 api_router.include_router(projects_router)
 api_router.include_router(analysis_router)

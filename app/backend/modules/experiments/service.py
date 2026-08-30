@@ -391,6 +391,7 @@ class ExperimentService:
         *,
         full_access: bool = False,
         workspace_id: str | None = None,
+        creator_name: str | None = None,
     ) -> ExperimentResponse:
         if not full_access and payload.settings.max_metric_calls > STANDARD_MAX_METRIC_CALLS:
             raise AppError(
@@ -399,6 +400,13 @@ class ExperimentService:
                 f"Metric-call budget is limited to {STANDARD_MAX_METRIC_CALLS}",
             )
         await self._enforce_standard_account_concurrency(owner_id, full_access=full_access)
+        effective_workspace_id = workspace_id or owner_id
+        normalized_name = payload.name.strip()
+        existing_names = {
+            item.name.strip().casefold() for item in await self.repository.list_for_workspace(effective_workspace_id)
+        }
+        if normalized_name.casefold() in existing_names:
+            raise AppError(409, "EXPERIMENT_NAME_CONFLICT", "Experiment name already exists in this workspace")
         try:
             parent = (
                 PromptBundle(
@@ -412,7 +420,10 @@ class ExperimentService:
             parent.validate()
         except (KeyError, ValueError) as exc:
             raise AppError(422, "INVALID_BASELINE_PROMPT", str(exc)) from exc
-        projects = [await self.projects.require_owned(project_id, owner_id) for project_id in payload.project_ids]
+        projects = [
+            await self.projects.require_owned(project_id, owner_id, effective_workspace_id)
+            for project_id in payload.project_ids
+        ]
         if self.projects.runtime:
             projects = [
                 project if self.projects.is_sample(project.id) else await self.projects.runtime.refresh(project)
@@ -538,11 +549,12 @@ class ExperimentService:
         item = ExperimentRecord(
             id=new_id(),
             owner_id=owner_id,
-            workspace_id=workspace_id or owner_id,
+            workspace_id=effective_workspace_id,
             project_id=projects[0].id,
             project_ids=[project.id for project in projects],
             project_snapshots=snapshots,
-            name=payload.name,
+            name=normalized_name,
+            creator_name=creator_name or owner_id,
             target_function_ids=[target.key for target in selected],
             targets=selected,
             sampling_method=payload.sampling_method,
@@ -564,11 +576,18 @@ class ExperimentService:
         await self._ensure_baseline_prompt_snapshot(item)
         return ExperimentResponse.model_validate(item)
 
-    async def get(self, experiment_id: str, owner_id: str) -> ExperimentResponse:
-        return ExperimentResponse.model_validate(await self._owned(experiment_id, owner_id))
+    async def get(self, experiment_id: str, owner_id: str, workspace_id: str | None = None) -> ExperimentResponse:
+        item = await self.repository.get(experiment_id)
+        if item is None or (item.owner_id != owner_id and item.workspace_id != workspace_id):
+            raise AppError(404, "EXPERIMENT_NOT_FOUND", "Experiment was not found")
+        return ExperimentResponse.model_validate(item)
 
-    async def list(self, owner_id: str) -> ExperimentListResponse:
-        items = await self.repository.list_for_owner(owner_id)
+    async def list(self, owner_id: str, workspace_id: str | None = None) -> ExperimentListResponse:
+        items = (
+            await self.repository.list_for_workspace(workspace_id)
+            if workspace_id
+            else await self.repository.list_for_owner(owner_id)
+        )
         return ExperimentListResponse(
             items=[ExperimentResponse.model_validate(item) for item in items],
             total=len(items),
@@ -1318,6 +1337,7 @@ class ExperimentService:
         status: PromptVersionStatus | None = None,
         offset: int = 0,
         limit: int = 50,
+        workspace_id: str | None = None,
     ) -> PromptVersionListResponse:
         """List only versions belonging to the caller's experiments.
 
@@ -1325,7 +1345,14 @@ class ExperimentService:
         owner's experiment records first keeps this safe for both the in-memory and Firestore
         repositories, without exposing a cross-tenant collection query.
         """
-        experiments = await self.repository.list_for_owner(owner_id)
+        experiments = (
+            await self.repository.list_for_workspace(workspace_id)
+            if workspace_id
+            else await self.repository.list_for_owner(owner_id)
+        )
+        if workspace_id:
+            legacy = [item for item in await self.repository.list_for_owner(owner_id) if item.workspace_id is None]
+            experiments = list({item.id: item for item in [*experiments, *legacy]}.values())
         versions = []
         for experiment in experiments:
             if not experiment.prompt_version_id:
@@ -1359,6 +1386,9 @@ class ExperimentService:
             if workspace_id
             else await self.repository.list_for_owner(owner_id)
         )
+        if workspace_id:
+            legacy = [item for item in await self.repository.list_for_owner(owner_id) if item.workspace_id is None]
+            experiments = list({item.id: item for item in [*experiments, *legacy]}.values())
         total = len(experiments)
         page = experiments[offset : offset + limit]
         return PromptRegistryListResponse(
@@ -1566,8 +1596,14 @@ class ExperimentService:
         experiment_id: str,
         owner_id: str,
         payload: CreateTestGenerationRequest,
+        workspace_id: str | None = None,
+        creator_name: str | None = None,
     ) -> TestGenerationRunResponse:
-        item = await self._owned(experiment_id, owner_id)
+        item = await self.repository.get(experiment_id)
+        if item is None or (item.owner_id != owner_id and item.workspace_id != workspace_id):
+            raise AppError(404, "EXPERIMENT_NOT_FOUND", "Experiment was not found")
+        effective_workspace_id = item.workspace_id or owner_id
+        normalized_name = payload.name.strip()
         requested_project_ids = payload.project_ids or list(item.project_ids)
         snapshot = await self.repository.get_prompt_snapshot(item.id, payload.prompt_role)
         if snapshot is None:
@@ -1612,6 +1648,12 @@ class ExperimentService:
                     if existing.experiment_id != item.id or existing.prompt_digest != snapshot.prompt_digest:
                         raise AppError(409, "IDEMPOTENCY_KEY_REUSED", "Idempotency key belongs to a different request")
                     return TestGenerationRunResponse.model_validate(existing)
+        existing_names = {
+            run.name.strip().casefold()
+            for run in await self.repository.list_test_generation_runs_for_workspace(effective_workspace_id)
+        }
+        if normalized_name.casefold() in existing_names:
+            raise AppError(409, "TEST_SUITE_NAME_CONFLICT", "Test Suite name already exists in this workspace")
         provider_secret_refs = {}
         if self.provider_credentials is not None:
             provider_secret_refs = await self.provider_credentials.resolve_for_models(owner_id, [model])
@@ -1621,7 +1663,8 @@ class ExperimentService:
             owner_id=owner_id,
             workspace_id=item.workspace_id,
             experiment_id=item.id,
-            name=payload.name.strip(),
+            name=normalized_name,
+            creator_name=creator_name or owner_id,
             prompt_snapshot_id=snapshot.id,
             prompt_digest=snapshot.prompt_digest,
             prompt_role=snapshot.role,
