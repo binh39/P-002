@@ -18,7 +18,7 @@ export default function ReviewQueue() {
   if (query.isPending)
     return (
       <div className="page-state" role="status">
-        Loading review queueâ€¦
+        Loading review queue...
       </div>
     );
   if (query.isError) {
