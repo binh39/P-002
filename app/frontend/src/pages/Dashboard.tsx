@@ -98,8 +98,10 @@ export default function Dashboard({ onNavigate }: Props) {
           <span className="eyebrow">Optimization intelligence</span>
           <h1>Make every prompt earn its place.</h1>
           <p>
+            {data.asOf}
+            {/*
             {data.asOf} · Monitoring <strong>{data.projectName}</strong> with reproducible coverage
-            evidence.
+            */}
           </p>
         </div>
         <button className="primary-button" onClick={() => onNavigate("experiments")}>

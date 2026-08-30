@@ -112,11 +112,7 @@ export default function Registry() {
 
   return (
     <div className="platform-page registry-page">
-      <PageHeader
-        eyebrow="Experiment prompt snapshots"
-        title="Prompt Registry"
-        description={`${query.data.total} experiment${query.data.total === 1 ? "" : "s"} with immutable baseline and final prompt bundles.`}
-      />
+      <PageHeader title="Prompt Registry" />
 
       <section className="platform-card registry-filters">
         <label className="registry-search-field">
@@ -129,8 +125,12 @@ export default function Registry() {
           />
         </label>
         <label className="registry-model-filter">
-          <span>Generation model</span>
-          <select value={modelFilter} onChange={(event) => setModelFilter(event.target.value)}>
+          <span className="sr-only">Generation model</span>
+          <select
+            aria-label="Generation model"
+            value={modelFilter}
+            onChange={(event) => setModelFilter(event.target.value)}
+          >
             <option value="all">All models</option>
             {models.map((model) => (
               <option key={model} value={model}>

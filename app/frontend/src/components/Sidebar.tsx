@@ -1,4 +1,4 @@
-import { LogOut, Settings } from "lucide-react";
+import { BookOpen, LogOut, Settings } from "lucide-react";
 
 import { Brand } from "@/components/Brand";
 import { IC } from "@/components/Icons";
@@ -86,7 +86,7 @@ export default function Sidebar({
           onClick={() => onNavigate("coverage")}
           aria-current={currentPage === "coverage" ? "page" : undefined}
         >
-          <IC.Code />
+          <BookOpen size={18} strokeWidth={1.8} />
           <span>Docs</span>
         </button>
         <button

@@ -123,9 +123,7 @@ export default function TestCases() {
   return (
     <div className="platform-page test-cases-page">
       <PageHeader
-        eyebrow="Generated final suites"
         title="Test Suites"
-        description="Standalone test suites generated from prompts saved in Prompt Registry."
         actions={
           readOnly ? (
             <span className="status-badge status-info">Read-only</span>

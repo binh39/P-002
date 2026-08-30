@@ -202,9 +202,7 @@ export default function Projects() {
   return (
     <div className="platform-page projects-page">
       <PageHeader
-        eyebrow="Python source workspace"
         title="Projects"
-        description="Analyze a private ZIP archive or continue with a bundled sample."
         actions={
           <button
             className="primary-button"

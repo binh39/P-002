@@ -94,7 +94,6 @@ export default function Experiments() {
   return (
     <div className="platform-page experiments-page">
       <PageHeader
-        eyebrow="Evaluation workspace"
         title="Experiments"
         actions={
           <button className="primary-button" onClick={() => navigate("/experiments/new")}>
