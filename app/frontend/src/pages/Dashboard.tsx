@@ -101,8 +101,7 @@ export default function Dashboard({ onNavigate }: Props) {
             {data.asOf}
             {/*
             {data.asOf} · Monitoring <strong>{data.projectName}</strong> with reproducible coverage
-            {/* */}
-          */}
+            */}
           </p>
         </div>
         <button className="primary-button" onClick={() => onNavigate("experiments")}>
