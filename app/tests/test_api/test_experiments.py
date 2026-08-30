@@ -11,6 +11,8 @@ from backend.modules.experiments.schemas import (
     ExperimentRecord,
     ExperimentStatus,
     OptimizationRunRecord,
+    PromptRole,
+    PromptSnapshotOrigin,
     PromptVersionRecord,
     PromptVersionStatus,
 )
@@ -888,3 +890,57 @@ async def test_final_test_generation_rejects_optimized_prompt_before_comparison(
     )
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "OPTIMIZED_PROMPT_NOT_READY"
+
+
+@pytest.mark.asyncio
+async def test_optimized_test_suite_requires_reviewer_approval(client, app):
+    created = await client.post(
+        "/api/v1/experiments",
+        headers=AUTH_HEADERS,
+        json={"project_ids": ["sample:isort"], "name": "Approval gated suite", "max_targets": 3},
+    )
+    assert created.status_code == 201
+    experiment_id = created.json()["id"]
+    registry = await client.get(f"/api/v1/prompt-registry/{experiment_id}", headers=AUTH_HEADERS)
+    assert registry.status_code == 200
+    repository = app.state.services.experiments.repository
+    baseline = await repository.get_prompt_snapshot(experiment_id, PromptRole.BASELINE)
+    assert baseline is not None
+    optimized = baseline.model_copy(
+        update={
+            "id": f"{experiment_id}:optimized",
+            "role": PromptRole.OPTIMIZED,
+            "origin": PromptSnapshotOrigin.OPTIMIZED_CANDIDATE,
+            "prompt_digest": "optimized-digest",
+        }
+    )
+    await repository.create_prompt_snapshot(optimized)
+    item = await repository.get(experiment_id)
+    item.prompt_version_id = "approval-version"
+    item.status = ExperimentStatus.IN_REVIEW
+    await repository.save(item)
+    await repository.create_prompt_version(
+        PromptVersionRecord(
+            id="approval-version",
+            experiment_id=experiment_id,
+            comparison_run_id="approval-comparison",
+            parent_prompt_digest=baseline.prompt_digest,
+            prompt_digest=optimized.prompt_digest,
+            prompt=optimized.prompt,
+            status=PromptVersionStatus.IN_REVIEW,
+            created_by=item.owner_id,
+            workspace_id=item.workspace_id,
+            created_at=datetime.now(UTC),
+        )
+    )
+
+    endpoint = f"/api/v1/prompt-registry/{experiment_id}/test-generation"
+    blocked = await client.post(endpoint, headers=AUTH_HEADERS, json={"prompt_role": "optimized"})
+    assert blocked.status_code == 409
+    assert blocked.json()["error"]["code"] == "PROMPT_NOT_APPROVED"
+
+    version = await repository.get_prompt_version("approval-version")
+    version.status = PromptVersionStatus.APPROVED
+    await repository.save_prompt_version(version)
+    allowed = await client.post(endpoint, headers=AUTH_HEADERS, json={"prompt_role": "optimized"})
+    assert allowed.status_code == 202, allowed.text

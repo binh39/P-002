@@ -8,7 +8,7 @@ import { PageHeader, StatusBadge } from "@/components/PlatformUI";
 import type { PromptBundle } from "@/domain/experiments";
 
 function percentage(value: number | null) {
-  return value === null ? "â€”" : `${(value * 100).toFixed(1)}%`;
+  return value === null ? "--" : `${(value * 100).toFixed(1)}%`;
 }
 
 function PromptPanel({ title, prompt }: { title: string; prompt: PromptBundle }) {
@@ -75,7 +75,7 @@ export default function ReviewDetail() {
   if (query.isPending)
     return (
       <div className="page-state" role="status">
-        Loading review evidenceâ€¦
+        Loading review evidence...
       </div>
     );
   if (query.isError)
@@ -88,12 +88,12 @@ export default function ReviewDetail() {
   return (
     <div className="platform-page prompt-registry-detail-page">
       <button className="back-link" onClick={() => navigate("/reviews")}>
-        â† Review Queue
+        &lt;- Review Queue
       </button>
       <PageHeader
-        eyebrow={`Candidate Â· ${version.id}`}
+        eyebrow={`Candidate - ${version.id}`}
         title={query.data.experimentName}
-        description={`Created by ${query.data.creatorId} Â· locked comparison evidence`}
+        description={`Created by ${query.data.creatorId} - locked comparison evidence`}
       />
       <section className="platform-card prompt-registry-summary">
         <div className="card-heading">
