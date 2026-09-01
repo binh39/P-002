@@ -31,6 +31,38 @@ async def test_registration_role_and_workspace_lifecycle(client):
 
 
 @pytest.mark.asyncio
+async def test_registration_can_select_reviewer_after_early_identity_resolution(client):
+    auth = {"Authorization": "Bearer dev-token"}
+
+    # Firebase emits an auth-state event as soon as the account is created, so
+    # /me can arrive before the explicit onboarding request.
+    early_identity = await client.get("/api/v1/me", headers=auth)
+    assert early_identity.status_code == 200
+    assert early_identity.json()["role"] == "prompt_engineer"
+
+    onboarded = await client.post(
+        "/api/v1/onboarding",
+        headers=auth,
+        json={"name": "Registered Reviewer", "role": "prompt_reviewer"},
+    )
+    assert onboarded.status_code == 200
+    assert onboarded.json()["role"] == "prompt_reviewer"
+
+    restored = await client.get("/api/v1/me", headers=auth)
+    assert restored.status_code == 200
+    assert restored.json()["role"] == "prompt_reviewer"
+    assert restored.json()["permissions"] == ["reviews:read", "reviews:decide", "test_suites:read"]
+
+    role_change = await client.post(
+        "/api/v1/onboarding",
+        headers=auth,
+        json={"name": "Registered Reviewer", "role": "prompt_engineer"},
+    )
+    assert role_change.status_code == 409
+    assert role_change.json()["error"]["code"] == "ONBOARDING_ALREADY_COMPLETED"
+
+
+@pytest.mark.asyncio
 async def test_workspace_owner_can_add_and_remove_registered_member(client):
     engineer = {"Authorization": "Bearer dev-engineer-token"}
     reviewer = {"Authorization": "Bearer dev-reviewer-token"}

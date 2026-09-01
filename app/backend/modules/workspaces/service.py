@@ -128,7 +128,11 @@ class WorkspaceService:
             name=identity.name or identity.email or "PromptOpt User",
             role=identity.role,
             active_workspace_id=identity.workspace_id or identity.uid,
-            onboarding_completed=True,
+            # Resolving an identity can race the explicit onboarding request made
+            # immediately after Firebase creates an account. Keep an inferred
+            # profile open for that one-time role selection; profiles created by
+            # the migration script remain completed and cannot change roles.
+            onboarding_completed=False,
             created_at=now,
             updated_at=now,
         )
