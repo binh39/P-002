@@ -43,6 +43,7 @@ const models = [
   "vertex_ai/gemini-3.5-flash",
   "vertex_ai/gemini-3.5-flash-lite",
   "vertex_ai/gemini-3.6-flash",
+  "vertex_ai/gemini-3.7-flash",
   "openai/gpt-4.1-mini",
   "openai/gpt-4.1",
   "openai/gpt-5-mini",
