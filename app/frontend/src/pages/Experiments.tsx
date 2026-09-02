@@ -133,7 +133,25 @@ export default function Experiments() {
               </thead>
               <tbody>
                 {items.map((item) => (
-                  <tr key={item.id}>
+                  <tr
+                    key={item.id}
+                    className={item.optimizationRunId ? "registry-row" : undefined}
+                    tabIndex={item.optimizationRunId ? 0 : undefined}
+                    onClick={() => {
+                      if (item.optimizationRunId) {
+                        navigate(`/optimization-runs/${item.optimizationRunId}`);
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (
+                        item.optimizationRunId &&
+                        (event.key === "Enter" || event.key === " ")
+                      ) {
+                        event.preventDefault();
+                        navigate(`/optimization-runs/${item.optimizationRunId}`);
+                      }
+                    }}
+                  >
                     <td>
                       <strong>{item.name}</strong>
                       <small>{item.creatorName ?? "Unknown user"}</small>
@@ -158,18 +176,6 @@ export default function Experiments() {
                     </td>
                     <td>
                       <div className="experiment-row-actions">
-                        {item.optimizationRunId ? (
-                          <button
-                            className="table-action"
-                            onClick={() => navigate(`/optimization-runs/${item.optimizationRunId}`)}
-                          >
-                            Open experiment
-                          </button>
-                        ) : item.comparisonRunId ? (
-                          <span className="muted-cell">Completed</span>
-                        ) : (
-                          <span className="muted-cell">Draft</span>
-                        )}
                         <button
                           className="table-action danger-action"
                           onClick={() => {

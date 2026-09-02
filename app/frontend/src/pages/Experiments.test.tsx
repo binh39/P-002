@@ -51,9 +51,10 @@ describe("experiments list", () => {
   it("reopens a completed experiment at its evolution-rich optimization run", async () => {
     render(<Experiments />, { wrapper: Wrapper });
 
-    fireEvent.click(await screen.findByRole("button", { name: "Open experiment" }));
+    fireEvent.click((await screen.findByText("Completed optimization")).closest("tr")!);
 
     expect(mocks.navigate).toHaveBeenCalledWith("/optimization-runs/optimization-1");
+    expect(screen.queryByRole("button", { name: "Open experiment" })).not.toBeInTheDocument();
   });
 
   it("does not link comparison-only experiments to the removed results page", async () => {
@@ -66,7 +67,8 @@ describe("experiments list", () => {
 
     render(<Experiments />, { wrapper: Wrapper });
 
-    expect(await screen.findByText("Completed")).toBeInTheDocument();
+    await screen.findByText("Completed optimization");
+    expect(screen.queryByText("Completed", { exact: true })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open comparison" })).not.toBeInTheDocument();
   });
 });
