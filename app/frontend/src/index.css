@@ -65,7 +65,7 @@ body {
   margin: 0;
   background: #f5f7ff;
   cursor: default;
-  user-select: none;
+  caret-color: transparent;
 }
 
 button,
@@ -80,6 +80,12 @@ select,
 pre,
 code {
   user-select: text;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  caret-color: auto;
 }
 
 #root {
