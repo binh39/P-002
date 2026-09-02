@@ -41,11 +41,9 @@ function projectStatus(status: PythonProject["status"]) {
 
 function ProjectCard({
   project,
-  sample,
   open,
 }: {
   project: PythonProject;
-  sample: boolean;
   open: () => void;
 }) {
   return (
@@ -55,7 +53,6 @@ function ProjectCard({
         <StatusBadge tone={cardTone(project)}>{cardStatus(project)}</StatusBadge>
       </div>
       <h2>{project.name}</h2>
-      <p>{project.description || "Imported Python source archive"}</p>
       <div className="project-meta-grid">
         <div>
           <span>Python</span>
@@ -75,12 +72,7 @@ function ProjectCard({
         </div>
       </div>
       <div className="project-card-footer">
-        <span>
-          {sample
-            ? "Bundled sample environment"
-            : `${project.runtimeEnvironmentName || "Project runtime"} · private venv`}
-        </span>
-        <button onClick={open}>Open project →</button>
+        <button onClick={open}>Open project</button>
       </div>
     </article>
   );
@@ -252,7 +244,6 @@ export default function Projects() {
               <ProjectCard
                 key={project.id}
                 project={project}
-                sample={false}
                 open={() => navigate(`/projects/${project.id}`)}
               />
             ))}
@@ -276,7 +267,6 @@ export default function Projects() {
               <ProjectCard
                 key={project.id}
                 project={project}
-                sample
                 open={() => navigate(`/projects/${project.id}`)}
               />
             ))}

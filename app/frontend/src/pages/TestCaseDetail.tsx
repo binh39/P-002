@@ -95,6 +95,11 @@ function formatCost(value: number) {
 function fileName(path: string) {
   return path.split("/").at(-1) ?? path;
 }
+function displaySourcePath(path: string) {
+  const normalized = path.replace(/\\/g, "/").replace(/^source\//, "");
+  const duplicatedDirectory = normalized.match(/^([^/]+)\/\1\//);
+  return duplicatedDirectory ? normalized.slice(duplicatedDirectory[1].length + 1) : normalized;
+}
 
 function progressWidth(value: number | null) {
   return `${Math.round(Math.max(0, Math.min(1, value ?? 0)) * 100)}%`;
@@ -398,7 +403,7 @@ export default function TestCaseDetail() {
               >
                 {sourceFiles.map((artifact) => (
                   <option key={artifact.alias} value={artifact.alias}>
-                    {artifact.path}
+                    {displaySourcePath(artifact.path)}
                   </option>
                 ))}
               </select>

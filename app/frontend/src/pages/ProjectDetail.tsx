@@ -110,7 +110,6 @@ export default function ProjectDetail() {
         ← All projects
       </button>
       <PageHeader
-        eyebrow={`${project.branch} · ${project.commit}`}
         title={project.name}
         description={project.description}
         actions={
@@ -313,26 +312,6 @@ export default function ProjectDetail() {
                 <div>
                   <dt>Install</dt>
                   <dd>{project.runtimeReport?.installStrategy || "Pending"}</dd>
-                </div>
-                <div>
-                  <dt>Collected tests</dt>
-                  <dd>{project.runtimeReport?.collectedTests ?? "—"}</dd>
-                </div>
-                <div>
-                  <dt>Statement baseline</dt>
-                  <dd>
-                    {project.runtimeReport?.statementCoverage == null
-                      ? "—"
-                      : `${(project.runtimeReport.statementCoverage * 100).toFixed(1)}%`}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Branch baseline</dt>
-                  <dd>
-                    {project.runtimeReport?.branchCoverage == null
-                      ? "—"
-                      : `${(project.runtimeReport.branchCoverage * 100).toFixed(1)}%`}
-                  </dd>
                 </div>
               </dl>
             </section>
