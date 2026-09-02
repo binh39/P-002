@@ -53,7 +53,6 @@ function ProjectCard({
         <StatusBadge tone={cardTone(project)}>{cardStatus(project)}</StatusBadge>
       </div>
       <h2>{project.name}</h2>
-      <p>{project.description || "Imported Python source archive"}</p>
       <div className="project-meta-grid">
         <div>
           <span>Python</span>
@@ -73,7 +72,7 @@ function ProjectCard({
         </div>
       </div>
       <div className="project-card-footer">
-        <button onClick={open}>Open project →</button>
+        <button onClick={open}>Open project</button>
       </div>
     </article>
   );
