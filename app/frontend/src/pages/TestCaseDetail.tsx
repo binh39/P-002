@@ -1,5 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
-import { type ReactNode, useState } from "react";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import {
+  ChevronDown,
+  ChevronRight,
+  Download,
+  Maximize2,
+  Minimize2,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from "lucide-react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 
 import { useRepositories } from "@/app/providers";
@@ -193,13 +202,21 @@ const samplingLabels: Record<TestGenerationRun["samplingMethod"], string> = {
   manual: "Manual selection",
 };
 
-function TestSuiteSettings({ run }: { run: TestGenerationRun }) {
+function TestSuiteSettings({
+  run,
+  experimentName,
+  projectNames,
+}: {
+  run: TestGenerationRun;
+  experimentName: string;
+  projectNames: string[];
+}) {
   const prompt = run.promptRole === "baseline" ? "Baseline Prompt" : "Final Prompt";
   const values: Array<[string, string]> = [
     ["Test Suite", run.name],
-    ["Experiment", run.experimentId],
+    ["Experiment", experimentName],
     ["Prompt", prompt],
-    ["Projects", run.projectIds.join(", ") || "Prompt experiment projects"],
+    ["Projects", projectNames.join(", ") || "Prompt experiment projects"],
     ["Function selection", samplingLabels[run.samplingMethod]],
     ["Functions", String(run.targetIds.length)],
     ["Random seed", run.samplingMethod === "random" ? String(run.randomSeed) : "None Available"],
@@ -230,7 +247,98 @@ function TestSuiteSettings({ run }: { run: TestGenerationRun }) {
   );
 }
 
-function PythonCode({ content, label }: { content: string; label: string }) {
+type TestDefinition = {
+  key: string;
+  name: string;
+  label: string;
+  startLine: number;
+  endLine: number;
+  artifact: IndexedArtifact;
+};
+
+type SourceDefinition = {
+  name: string;
+  startLine: number;
+  endLine: number;
+  artifact: IndexedArtifact;
+};
+
+function readableTestName(name: string) {
+  return name
+    .replace(/^test_/, "")
+    .replace(/_/g, " ")
+    .replace(/\bstr\b/g, "string");
+}
+
+function testDefinitions(artifact: IndexedArtifact, content: string): TestDefinition[] {
+  const lines = content.split("\n");
+  const starts: Array<{ name: string; line: number; indent: number }> = [];
+  lines.forEach((line, index) => {
+    const match = line.match(/^(\s*)(?:async\s+)?def\s+(test_[A-Za-z0-9_]+)\s*\(/);
+    if (match) starts.push({ name: match[2], line: index + 1, indent: match[1].length });
+  });
+  return starts.map((item, index) => {
+    const next = starts.slice(index + 1).find((candidate) => candidate.indent <= item.indent);
+    return {
+      key: `${artifact.alias}:${item.name}:${item.line}`,
+      name: item.name,
+      label: readableTestName(item.name),
+      startLine: item.line,
+      endLine: next ? next.line - 1 : lines.length,
+      artifact,
+    };
+  });
+}
+
+function sourceDefinitions(artifact: IndexedArtifact, content: string): SourceDefinition[] {
+  const lines = content.split("\n");
+  const starts: Array<{ name: string; line: number; indent: number }> = [];
+  lines.forEach((line, index) => {
+    const match = line.match(/^(\s*)(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
+    if (match) starts.push({ name: match[2], line: index + 1, indent: match[1].length });
+  });
+  return starts.map((item, index) => {
+    const next = starts.slice(index + 1).find((candidate) => candidate.indent <= item.indent);
+    return {
+      name: item.name,
+      startLine: item.line,
+      endLine: next ? next.line - 1 : lines.length,
+      artifact,
+    };
+  });
+}
+
+function sourceDefinitionForTest(
+  test: TestDefinition | undefined,
+  testContent: string | undefined,
+  sources: Array<{ artifact: IndexedArtifact; content: string }>,
+) {
+  if (!test || !testContent) return undefined;
+  const testBody = testContent
+    .split("\n")
+    .slice(test.startLine - 1, test.endLine)
+    .join("\n");
+  const normalizedTestName = test.name.replace(/^test_/, "");
+  const candidates = sources
+    .flatMap(({ artifact, content }) => sourceDefinitions(artifact, content))
+    .filter((definition) => {
+      if (definition.name.startsWith("test_")) return false;
+      const namePattern = new RegExp(
+        `(^|_)${definition.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(_|$)`,
+      );
+      const bodyPattern = new RegExp(
+        `\\b${definition.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+      );
+      return namePattern.test(normalizedTestName) && bodyPattern.test(testBody);
+    })
+    .sort((left, right) => right.name.length - left.name.length);
+  if (candidates.length === 0) return undefined;
+  if (candidates.length > 1 && candidates[0].name.length === candidates[1].name.length)
+    return undefined;
+  return candidates[0];
+}
+
+function highlightedPython(content: string) {
   const pattern =
     /(#.*$)|((?:[rubf]|br|rf)?(?:"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'))|(\b[A-Za-z_][A-Za-z0-9_]*\b)|(\b\d+(?:\.\d+)?\b)/gim;
   const nodes: ReactNode[] = [];
@@ -260,9 +368,58 @@ function PythonCode({ content, label }: { content: string; label: string }) {
     cursor = index + token.length;
   }
   if (cursor < content.length) nodes.push(content.slice(cursor));
+  return nodes;
+}
+
+function PythonCode({
+  content,
+  label,
+  highlight,
+  scrollKey,
+}: {
+  content: string;
+  label: string;
+  highlight?: { start: number; end: number; preview?: boolean };
+  scrollKey?: string;
+}) {
+  const selectedLineRef = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const selectedLine = selectedLineRef.current;
+    const codeViewport = selectedLine?.closest(".test-case-code");
+    if (!selectedLine || !(codeViewport instanceof HTMLElement) || !scrollKey) return;
+    const selectedLineBounds = selectedLine.getBoundingClientRect();
+    const viewportBounds = codeViewport.getBoundingClientRect();
+    codeViewport.scrollTo({
+      top: Math.max(
+        0,
+        codeViewport.scrollTop +
+          selectedLineBounds.top -
+          viewportBounds.top -
+          codeViewport.clientHeight * 0.32 +
+          100,
+      ),
+      behavior: "smooth",
+    });
+  }, [scrollKey]);
   return (
     <pre className="test-case-code" aria-label={label}>
-      <code>{nodes}</code>
+      <code>
+        {content.split("\n").map((line, index) => {
+          const lineNumber = index + 1;
+          const isHighlighted =
+            highlight !== undefined && lineNumber >= highlight.start && lineNumber <= highlight.end;
+          return (
+            <span
+              className={`test-case-code-line${isHighlighted ? " is-highlighted" : ""}${isHighlighted && highlight.preview ? " is-preview" : ""}`}
+              key={lineNumber}
+              ref={lineNumber === highlight?.start ? selectedLineRef : undefined}
+            >
+              <span className="test-case-line-number">{lineNumber}</span>
+              <span className="test-case-line-content">{highlightedPython(line) || " "}</span>
+            </span>
+          );
+        })}
+      </code>
     </pre>
   );
 }
@@ -270,16 +427,47 @@ function PythonCode({ content, label }: { content: string; label: string }) {
 export default function TestCaseDetail() {
   const [, params] = useRoute("/test-cases/:runId");
   const [, navigate] = useLocation();
-  const { testGeneration } = useRepositories();
+  const { experiments, projects, testGeneration } = useRepositories();
   const runId = params?.runId ?? "";
   const [selectedTestAlias, setSelectedTestAlias] = useState<string | null>(null);
   const [selectedSourceAlias, setSelectedSourceAlias] = useState<string | null>(null);
+  const [selectedTestKey, setSelectedTestKey] = useState<string | null>(null);
+  const [testSearch, setTestSearch] = useState("");
+  const [explorerCollapsed, setExplorerCollapsed] = useState(false);
+  const [collapsedModules, setCollapsedModules] = useState<Set<string>>(() => new Set());
+  const [viewerExpanded, setViewerExpanded] = useState(false);
+  const [downloadPending, setDownloadPending] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!viewerExpanded) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setViewerExpanded(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [viewerExpanded]);
   const query = useQuery({
     queryKey: ["test-generation-runs", runId],
     queryFn: ({ signal }) => testGeneration.get(runId, signal),
     enabled: runId !== "",
     refetchInterval: (current) =>
       current.state.data && activeStatuses.includes(current.state.data.status) ? 3_000 : false,
+  });
+  const experimentQuery = useQuery({
+    queryKey: ["experiments", "test-generation", query.data?.experimentId],
+    queryFn: ({ signal }) => experiments.get(query.data?.experimentId ?? "", signal),
+    enabled: query.data?.experimentId !== undefined,
+  });
+  const projectQueries = useQuery({
+    queryKey: ["projects", "test-generation", runId],
+    queryFn: async ({ signal }) => {
+      const [imported, samples] = await Promise.all([
+        projects.list(signal),
+        projects.listSamples(signal),
+      ]);
+      return [...imported, ...samples];
+    },
+    enabled: query.data !== undefined,
   });
   const manifestQuery = useQuery({
     queryKey: ["test-generation-runs", runId, "manifest"],
@@ -293,22 +481,63 @@ export default function TestCaseDetail() {
   const sourceFiles = indexed.filter((artifact) => artifact.kind === "source");
   const selectedTest =
     generatedTests.find((artifact) => artifact.alias === selectedTestAlias) ?? generatedTests[0];
+  const testArtifactQueries = useQueries({
+    queries: generatedTests.map((artifact) => ({
+      queryKey: ["test-generation-runs", runId, "test", artifact.alias],
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        testGeneration.getTextArtifact(runId, artifact.alias, signal),
+      enabled: runId !== "",
+      retry: 1,
+    })),
+  });
+  const generatedDefinitions = generatedTests.flatMap((artifact, index) => {
+    const content = testArtifactQueries[index]?.data?.content;
+    return content ? testDefinitions(artifact, content) : [];
+  });
+  const visibleDefinitions = generatedDefinitions.filter((definition) => {
+    const term = testSearch.trim().toLowerCase();
+    return (
+      !term ||
+      definition.label.toLowerCase().includes(term) ||
+      definition.name.toLowerCase().includes(term) ||
+      definition.artifact.path.toLowerCase().includes(term)
+    );
+  });
+  const activeDefinition =
+    generatedDefinitions.find((definition) => definition.key === selectedTestKey) ??
+    generatedDefinitions[0];
+  const focusedTestIndex = activeDefinition
+    ? generatedTests.findIndex((artifact) => artifact.alias === activeDefinition.artifact.alias)
+    : generatedTests.findIndex((artifact) => artifact.alias === selectedTest?.alias);
+  const focusedTestArtifact = activeDefinition?.artifact ?? selectedTest;
+  const focusedTestQuery =
+    focusedTestIndex >= 0 ? testArtifactQueries[focusedTestIndex] : undefined;
+  const sourceArtifactQueries = useQueries({
+    queries: sourceFiles.map((artifact) => ({
+      queryKey: ["test-generation-runs", runId, "source", artifact.alias],
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        testGeneration.getTextArtifact(runId, artifact.alias, signal),
+      enabled: runId !== "",
+      retry: 1,
+    })),
+  });
+  const relatedSourceDefinition = sourceDefinitionForTest(
+    activeDefinition,
+    focusedTestQuery?.data?.content,
+    sourceFiles.flatMap((artifact, index) => {
+      const content = sourceArtifactQueries[index]?.data?.content;
+      return content ? [{ artifact, content }] : [];
+    }),
+  );
   const selectedSource =
-    sourceFiles.find((artifact) => artifact.alias === selectedSourceAlias) ?? sourceFiles[0];
-  const testQuery = useQuery({
-    queryKey: ["test-generation-runs", runId, "test", selectedTest?.alias],
-    queryFn: ({ signal }) =>
-      testGeneration.getTextArtifact(runId, selectedTest?.alias ?? "", signal),
-    enabled: selectedTest !== undefined && runId !== "",
-    retry: 1,
-  });
-  const sourceQuery = useQuery({
-    queryKey: ["test-generation-runs", runId, "source", selectedSource?.alias],
-    queryFn: ({ signal }) =>
-      testGeneration.getTextArtifact(runId, selectedSource?.alias ?? "", signal),
-    enabled: selectedSource !== undefined && runId !== "",
-    retry: 1,
-  });
+    relatedSourceDefinition?.artifact ??
+    sourceFiles.find((artifact) => artifact.alias === selectedSourceAlias) ??
+    sourceFiles[0];
+  const selectedSourceIndex = sourceFiles.findIndex(
+    (artifact) => artifact.alias === selectedSource?.alias,
+  );
+  const sourceQuery =
+    selectedSourceIndex >= 0 ? sourceArtifactQueries[selectedSourceIndex] : undefined;
 
   if (query.isPending)
     return (
@@ -331,15 +560,38 @@ export default function TestCaseDetail() {
   }
 
   const run = query.data;
+  const experimentName = experimentQuery.data?.name ?? run.experimentId;
+  const projectNames = run.projectIds.map(
+    (projectId) =>
+      projectQueries.data?.find((project) => project.id === projectId)?.name ?? projectId,
+  );
+  const downloadTestSuite = async () => {
+    setDownloadPending(true);
+    setDownloadError(null);
+    try {
+      const blob = await testGeneration.downloadArtifact(run.id, "suite_zip");
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${run.name.replace(/[^a-zA-Z0-9._-]+/g, "-") || "test-suite"}.zip`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setDownloadError(
+        error instanceof Error ? error.message : "Test suite could not be downloaded.",
+      );
+    } finally {
+      setDownloadPending(false);
+    }
+  };
   return (
     <div className="platform-page test-case-detail-page">
       <button className="back-link" onClick={() => navigate("/test-cases")}>
         ← Test Suites
       </button>
       <PageHeader
-        eyebrow={`Experiment · ${run.experimentId}`}
         title={run.name}
-        description={`${run.promptRole === "baseline" ? "Baseline" : "Final"} prompt · Experiment ${run.experimentId}`}
+        description={`${run.promptRole === "baseline" ? "Baseline" : "Final"} prompt · Experiment ${experimentName} · projects ${projectNames.join(", ")}`}
         actions={
           <StatusBadge tone={statusTone(run.status)}>{formatStatus(run.status)}</StatusBadge>
         }
@@ -366,78 +618,235 @@ export default function TestCaseDetail() {
         <StatCard label="Failed" value={run.metrics.failed ?? "—"} tone="violet" />
         <StatCard label="Cost" value={formatCost(run.estimatedCostUsd)} tone="green" />
       </div>
-      <section className="platform-card test-case-explorer">
-        <aside className="test-case-file-list">
-          <div className="card-heading">
-            <h2>Test cases</h2>
-          </div>
-          {manifestQuery.isPending && <p role="status">Loading generated tests…</p>}
-          {manifestQuery.isError && (
-            <p className="inline-validation-error">Generated tests are unavailable for this run.</p>
-          )}
-          {!manifestQuery.isPending && !manifestQuery.isError && generatedTests.length === 0 && (
-            <p className="muted-cell">No generated Python test files were recorded.</p>
-          )}
-          <div className="test-case-file-buttons">
-            {generatedTests.map((artifact) => (
+      <div className={`test-case-viewer-shell${viewerExpanded ? " is-expanded" : ""}`}>
+        <section
+          className={`test-case-explorer${explorerCollapsed ? " is-explorer-collapsed" : ""}`}
+        >
+          <aside className="test-case-file-list" aria-label="Test Explorer">
+            <div className="test-explorer-heading">
+              {!explorerCollapsed && <h2>Test Explorer</h2>}
               <button
                 type="button"
-                key={artifact.alias}
-                className={selectedTest?.alias === artifact.alias ? "is-selected" : ""}
-                title={artifact.path}
-                onClick={() => setSelectedTestAlias(artifact.alias)}
+                aria-label={explorerCollapsed ? "Expand Test Explorer" : "Collapse Test Explorer"}
+                title={explorerCollapsed ? "Expand Test Explorer" : "Collapse Test Explorer"}
+                onClick={() => setExplorerCollapsed((collapsed) => !collapsed)}
               >
-                {fileName(artifact.path)}
+                {explorerCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
               </button>
-            ))}
-          </div>
-        </aside>
-        <section className="test-case-code-panel">
-          <div className="card-heading">
-            <h2>Source code</h2>
-            {sourceFiles.length > 1 && (
-              <select
-                aria-label="Select source file"
-                value={selectedSource?.alias ?? ""}
-                onChange={(event) => setSelectedSourceAlias(event.target.value)}
-              >
-                {sourceFiles.map((artifact) => (
-                  <option key={artifact.alias} value={artifact.alias}>
-                    {displaySourcePath(artifact.path)}
-                  </option>
-                ))}
-              </select>
+            </div>
+            {!explorerCollapsed && (
+              <input
+                className="test-explorer-search"
+                type="search"
+                placeholder="Search tests..."
+                aria-label="Search generated tests"
+                value={testSearch}
+                onChange={(event) => setTestSearch(event.target.value)}
+              />
             )}
-          </div>
-          {sourceFiles.length === 0 ? (
-            <p className="muted-cell">
-              Source code was not stored for this historical run. Generate a new suite after
-              deployment to view it here.
-            </p>
-          ) : sourceQuery.isPending ? (
-            <p role="status">Loading source…</p>
-          ) : sourceQuery.isError ? (
-            <p className="inline-validation-error">Source code could not be loaded.</p>
-          ) : sourceQuery.data ? (
-            <PythonCode content={sourceQuery.data.content} label="Source code" />
-          ) : null}
+            {manifestQuery.isPending && <p role="status">Loading generated tests…</p>}
+            {manifestQuery.isError && (
+              <p className="inline-validation-error">
+                Generated tests are unavailable for this run.
+              </p>
+            )}
+            {!manifestQuery.isPending && !manifestQuery.isError && generatedTests.length === 0 && (
+              <p className="muted-cell">No generated Python test files were recorded.</p>
+            )}
+            {!explorerCollapsed && (
+              <div className="test-case-file-buttons">
+                {visibleDefinitions.length > 0
+                  ? generatedTests.map((artifact, artifactIndex) => {
+                      const definitions = visibleDefinitions.filter(
+                        (definition) => definition.artifact.alias === artifact.alias,
+                      );
+                      if (definitions.length === 0) return null;
+                      const moduleCollapsed = collapsedModules.has(artifact.alias);
+                      return (
+                        <div className="test-explorer-group" key={artifact.alias}>
+                          <button
+                            type="button"
+                            className="test-explorer-group-label"
+                            title={artifact.path}
+                            aria-expanded={!moduleCollapsed}
+                            onClick={() =>
+                              setCollapsedModules((current) => {
+                                const next = new Set(current);
+                                if (next.has(artifact.alias)) next.delete(artifact.alias);
+                                else next.add(artifact.alias);
+                                return next;
+                              })
+                            }
+                          >
+                            {moduleCollapsed ? (
+                              <ChevronRight aria-hidden="true" size={14} />
+                            ) : (
+                              <ChevronDown aria-hidden="true" size={14} />
+                            )}
+                            <strong>Test module {artifactIndex + 1}</strong>
+                            <small>{definitions.length}</small>
+                          </button>
+                          {!moduleCollapsed &&
+                            definitions.map((definition) => (
+                              <button
+                                type="button"
+                                key={definition.key}
+                                className={
+                                  activeDefinition?.key === definition.key ? "is-selected" : ""
+                                }
+                                title={`${definition.name} · ${artifact.path}`}
+                                onClick={() => {
+                                  setSelectedTestAlias(artifact.alias);
+                                  setSelectedTestKey(definition.key);
+                                }}
+                              >
+                                <span>{definition.label}</span>
+                                <small>{definition.name}</small>
+                              </button>
+                            ))}
+                        </div>
+                      );
+                    })
+                  : !manifestQuery.isPending && (
+                      <p className="muted-cell">No generated tests match this search.</p>
+                    )}
+              </div>
+            )}
+          </aside>
+          <section className="test-case-code-panel">
+            <div className="card-heading">
+              <div>
+                <span className="code-panel-kicker">Source</span>
+                <h2>{selectedSource ? displaySourcePath(selectedSource.path) : "Source code"}</h2>
+              </div>
+              {sourceFiles.length > 1 && (
+                <select
+                  aria-label="Select source file"
+                  value={selectedSource?.alias ?? ""}
+                  onChange={(event) => setSelectedSourceAlias(event.target.value)}
+                >
+                  {sourceFiles.map((artifact) => (
+                    <option key={artifact.alias} value={artifact.alias}>
+                      {displaySourcePath(artifact.path)}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <div className="code-context-bar">
+              {relatedSourceDefinition ? (
+                <>
+                  <strong>{relatedSourceDefinition.name}()</strong>
+                  <span>
+                    Lines {relatedSourceDefinition.startLine}–{relatedSourceDefinition.endLine}
+                  </span>
+                  <small>Matched to selected test</small>
+                </>
+              ) : (
+                <>
+                  <span>Read-only source</span>
+                  <small>No unambiguous function match for this test</small>
+                </>
+              )}
+            </div>
+            {sourceFiles.length === 0 ? (
+              <p className="muted-cell">
+                Source code was not stored for this historical run. Generate a new suite after
+                deployment to view it here.
+              </p>
+            ) : sourceQuery?.isPending ? (
+              <p role="status">Loading source…</p>
+            ) : sourceQuery?.isError ? (
+              <p className="inline-validation-error">Source code could not be loaded.</p>
+            ) : sourceQuery?.data ? (
+              <PythonCode
+                content={sourceQuery.data.content}
+                label="Source code"
+                highlight={
+                  relatedSourceDefinition
+                    ? {
+                        start: relatedSourceDefinition.startLine,
+                        end: relatedSourceDefinition.endLine,
+                      }
+                    : undefined
+                }
+                scrollKey={
+                  relatedSourceDefinition
+                    ? `${activeDefinition?.key}:${relatedSourceDefinition.artifact.alias}:${relatedSourceDefinition.startLine}`
+                    : undefined
+                }
+              />
+            ) : null}
+          </section>
+          <section className="test-case-code-panel">
+            <div className="card-heading">
+              <div>
+                <span className="code-panel-kicker">Generated Test</span>
+                <h2>
+                  {focusedTestArtifact ? fileName(focusedTestArtifact.path) : "Generated test"}
+                </h2>
+              </div>
+            </div>
+            {activeDefinition && (
+              <div className="code-context-bar is-related">
+                <strong>{activeDefinition.name}()</strong>
+                <span>
+                  Lines {activeDefinition.startLine}–{activeDefinition.endLine}
+                </span>
+                <small>Selected test</small>
+              </div>
+            )}
+            {!focusedTestArtifact ? (
+              <p className="muted-cell">Select a generated test file.</p>
+            ) : focusedTestQuery?.isPending ? (
+              <p role="status">Loading test…</p>
+            ) : focusedTestQuery?.isError ? (
+              <p className="inline-validation-error">Generated test could not be loaded.</p>
+            ) : focusedTestQuery?.data ? (
+              <PythonCode
+                content={focusedTestQuery.data.content}
+                label="Generated test code"
+                highlight={
+                  activeDefinition
+                    ? {
+                        start: activeDefinition.startLine,
+                        end: activeDefinition.endLine,
+                      }
+                    : undefined
+                }
+                scrollKey={activeDefinition?.key}
+              />
+            ) : null}
+          </section>
         </section>
-        <section className="test-case-code-panel">
-          <div className="card-heading">
-            <h2>Generated test</h2>
+        <div className="test-case-viewer-toolbar">
+          {downloadError && <span role="alert">{downloadError}</span>}
+          <div className="test-case-viewer-actions">
+            <button
+              type="button"
+              aria-label="Download all generated tests"
+              title="Download all generated tests"
+              disabled={downloadPending || !run.artifactObjects.suite_zip}
+              onClick={() => void downloadTestSuite()}
+            >
+              <Download aria-hidden="true" size={17} />
+            </button>
+            <button
+              type="button"
+              aria-label={viewerExpanded ? "Exit expanded viewer" : "Expand test viewer"}
+              title={viewerExpanded ? "Exit expanded viewer (Esc)" : "Expand test viewer"}
+              onClick={() => setViewerExpanded((expanded) => !expanded)}
+            >
+              {viewerExpanded ? (
+                <Minimize2 aria-hidden="true" size={17} />
+              ) : (
+                <Maximize2 aria-hidden="true" size={17} />
+              )}
+            </button>
           </div>
-          {!selectedTest ? (
-            <p className="muted-cell">Select a generated test file.</p>
-          ) : testQuery.isPending ? (
-            <p role="status">Loading test…</p>
-          ) : testQuery.isError ? (
-            <p className="inline-validation-error">Generated test could not be loaded.</p>
-          ) : testQuery.data ? (
-            <PythonCode content={testQuery.data.content} label="Generated test code" />
-          ) : null}
-        </section>
-      </section>
-      <TestSuiteSettings run={run} />
+        </div>
+      </div>
+      <TestSuiteSettings run={run} experimentName={experimentName} projectNames={projectNames} />
     </div>
   );
 }
