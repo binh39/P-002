@@ -39,13 +39,7 @@ function projectStatus(status: PythonProject["status"]) {
   return "Ready with warnings";
 }
 
-function ProjectCard({
-  project,
-  open,
-}: {
-  project: PythonProject;
-  open: () => void;
-}) {
+function ProjectCard({ project, open }: { project: PythonProject; open: () => void }) {
   return (
     <article className="project-card">
       <div className="project-card-top">

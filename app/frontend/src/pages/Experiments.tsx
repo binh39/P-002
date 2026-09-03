@@ -143,10 +143,7 @@ export default function Experiments() {
                       }
                     }}
                     onKeyDown={(event) => {
-                      if (
-                        item.optimizationRunId &&
-                        (event.key === "Enter" || event.key === " ")
-                      ) {
+                      if (item.optimizationRunId && (event.key === "Enter" || event.key === " ")) {
                         event.preventDefault();
                         navigate(`/optimization-runs/${item.optimizationRunId}`);
                       }
