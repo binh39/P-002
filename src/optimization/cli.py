@@ -21,7 +21,7 @@ from .gepa import (
     validate_reference_evaluation,
 )
 from .metrics import aggregate_coverage_score
-from .models import ExperimentConfig, ProjectLayout, SymbolTarget
+from .models import ExperimentConfig, ProjectLayout, SandboxEnvironment, SymbolTarget
 from .prompts import PromptBundle, baseline_bundle
 from .runner import CoverUpExperimentRunner
 
@@ -55,6 +55,14 @@ def parser() -> argparse.ArgumentParser:
             "Optional JSON map of dataset project names to explicit package_dir/tests_dir paths. "
             "Cloud runs use this for uploaded repositories whose import package name differs "
             "from the PromptOpt project slug."
+        ),
+    )
+    result.add_argument(
+        "--sandbox-environments-file",
+        type=Path,
+        help=(
+            "Optional JSON map of project names to immutable sandbox image/artifact inputs. "
+            "When supplied, optimizer-generated tests are scored only through RunSpec in Docker."
         ),
     )
     result.add_argument("--artifacts-dir", type=Path, default=Path("eval/prompt_optimization"))
@@ -269,6 +277,59 @@ def _project_layouts_file(args: argparse.Namespace) -> Path | None:
     return getattr(args, "project_layouts_file", None)
 
 
+def _resolve_sandbox_environments(
+    root: Path,
+    projects: dict[str, ProjectLayout] | None,
+    path: Path | None,
+) -> dict[str, SandboxEnvironment] | None:
+    if path is None:
+        return None
+    manifest_path = _resolve(root, path).resolve()
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or not payload:
+        raise ValueError("Sandbox environments file must contain a non-empty project map")
+    expected = set(projects or ())
+    if expected and set(payload) != expected:
+        raise ValueError(
+            "Sandbox environments must match dataset projects exactly; "
+            f"missing={sorted(expected - set(payload))}, extra={sorted(set(payload) - expected)}"
+        )
+    environments: dict[str, SandboxEnvironment] = {}
+    required = {
+        "image_digest",
+        "artifact_archive",
+        "artifact_manifest",
+        "source_root",
+        "source_directory",
+        "requested_python",
+        "runner_profile",
+    }
+    for project, item in payload.items():
+        if not isinstance(item, dict) or set(item) != required:
+            raise ValueError(
+                f"Sandbox environment for {project!r} must contain exactly {sorted(required)}"
+            )
+        resolve_value = lambda name: _resolve(manifest_path.parent, Path(item[name])).resolve()  # noqa: E731
+        environment = SandboxEnvironment(
+            image_digest=str(item["image_digest"]),
+            artifact_archive=resolve_value("artifact_archive"),
+            artifact_manifest=resolve_value("artifact_manifest"),
+            source_root=resolve_value("source_root"),
+            source_directory=str(item["source_directory"]),
+            requested_python=str(item["requested_python"]),
+            runner_profile=str(item["runner_profile"]),
+        )
+        for candidate in (
+            environment.artifact_archive,
+            environment.artifact_manifest,
+            environment.source_root,
+        ):
+            if not candidate.exists():
+                raise FileNotFoundError(f"Sandbox input does not exist: {candidate}")
+        environments[str(project)] = environment
+    return environments
+
+
 def make_runner(
     args: argparse.Namespace,
     projects: dict[str, ProjectLayout] | None = None,
@@ -294,6 +355,11 @@ def make_runner(
         rate_limit=args.rate_limit,
         pytest_args=args.pytest_args,
         projects=projects,
+        sandbox_environments=_resolve_sandbox_environments(
+            root,
+            projects,
+            getattr(args, "sandbox_environments_file", None),
+        ),
     )
     # ``package_dir`` is only the single-project fallback. Dynamic and
     # multi-project runs have already validated every entry in ``projects``.
@@ -477,6 +543,10 @@ def tune(args: argparse.Namespace) -> None:
             "baseline_prompt": str(args.prompt.resolve()),
             "baseline_tests_workspaces": baseline_evaluation["tests_workspaces"],
             "baseline_run_ids": baseline_evaluation["run_ids"],
+            "baseline_environment_fingerprints": baseline_evaluation.get(
+                "environment_fingerprints", {}
+            ),
+            "environment_fingerprints": {},
             "run_ids": [],
             "tests_workspaces": [],
             "baseline_results": baseline_results,
@@ -534,6 +604,12 @@ def tune(args: argparse.Namespace) -> None:
         "baseline_prompt": str(args.prompt.resolve()),
         "baseline_tests_workspaces": baseline_evaluation["tests_workspaces"],
         "baseline_run_ids": baseline_evaluation["run_ids"],
+        "baseline_environment_fingerprints": baseline_evaluation.get(
+            "environment_fingerprints", {}
+        ),
+        "environment_fingerprints": proposed_evaluation.get(
+            "environment_fingerprints", {}
+        ),
         "run_ids": proposed_evaluation["run_ids"],
         "tests_workspaces": proposed_evaluation["tests_workspaces"],
         "baseline_results": baseline_results,
@@ -644,8 +720,17 @@ def finalize(args: argparse.Namespace) -> None:
     invalid_keys = {
         _target_key(row["target"]) for row in rows if not _reference_row_is_valid(row)
     }
+    active_fingerprints = runner.environment_fingerprints(final_targets)
+    if active_fingerprints:
+        invalid_keys.update(
+            _target_key(row["target"])
+            for row in rows
+            if row.get("environment_fingerprint")
+            != active_fingerprints.get(str(row.get("target", {}).get("project", "")))
+        )
     repaired_run_ids: list[str] = []
     repaired_workspaces: list[str] = []
+    repaired_fingerprints: dict[str, str] = {}
     if invalid_keys:
         invalid_targets = [
             target for target in final_targets if _target_key(target) in invalid_keys
@@ -665,6 +750,7 @@ def finalize(args: argparse.Namespace) -> None:
         rows = [replacements.get(_target_key(row["target"]), row) for row in rows]
         repaired_run_ids = repaired["run_ids"]
         repaired_workspaces = repaired["tests_workspaces"]
+        repaired_fingerprints = repaired.get("environment_fingerprints", {})
 
     validate_reference_evaluation(
         rows, split=args.holdout_split, expected_targets=final_targets,
@@ -713,6 +799,12 @@ def finalize(args: argparse.Namespace) -> None:
         "baseline_run_ids": [
             *reference.get("run_ids", []), *repaired_run_ids,
         ],
+        "baseline_environment_fingerprints": reference.get(
+            "environment_fingerprints", {}
+        ) | repaired_fingerprints,
+        "environment_fingerprints": proposed_evaluation.get(
+            "environment_fingerprints", {}
+        ),
         "run_ids": proposed_evaluation["run_ids"],
         "tests_workspaces": proposed_evaluation["tests_workspaces"],
         "baseline_results": rows,

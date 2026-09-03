@@ -6,13 +6,18 @@ from backend.modules.analysis.repository import FunctionRepository
 from backend.modules.projects.repository import ProjectRepository
 from backend.modules.projects.schemas import (
     CreateProjectRequest,
+    FailureStage,
     ProjectListResponse,
     ProjectRecord,
     ProjectResponse,
     ProjectSettings,
     ProjectSettingsPatch,
     ProjectStatus,
+    RuntimeCapabilitiesResponse,
+    RuntimeCapability,
+    RuntimeRolloutStatusResponse,
     RuntimeStatus,
+    ValidateProjectSettingsResponse,
 )
 from backend.modules.uploads.service import UploadService
 
@@ -38,6 +43,12 @@ class ProjectService:
 
     async def create(self, owner_id: str, payload: CreateProjectRequest) -> ProjectResponse:
         upload = await self.uploads.require_ready(payload.upload_id, owner_id)
+        if upload.requested_python_version != payload.settings.runtime.python_version:
+            raise AppError(
+                409,
+                "UPLOAD_SETTINGS_MISMATCH",
+                "The project Python version differs from the validated upload settings",
+            )
         environment_id = payload.runtime_environment_id or uuid4().hex
         if environment_id == "sample-runtime":
             raise AppError(
@@ -80,6 +91,7 @@ class ProjectService:
             runtime_environment_name=environment_name,
             status=ProjectStatus.UPLOADED,
             settings=payload.settings,
+            requested_python_version=payload.settings.runtime.python_version,
             created_at=now,
             updated_at=now,
         )
@@ -112,6 +124,96 @@ class ProjectService:
             raise AppError(503, "RUNTIME_PREPARER_UNAVAILABLE", "Runtime preparation is not configured")
         return await self.runtime.request(project)
 
+    async def retry_runtime_build(self, project_id: str, owner_id: str) -> ProjectResponse:
+        project = await self.require_owned(project_id, owner_id)
+        report = project.runtime_report
+        if (
+            project.runtime_status != RuntimeStatus.FAILED
+            or report is None
+            or not report.retryable
+            or report.failure_stage
+            not in {
+                FailureStage.METADATA,
+                FailureStage.RESOLVE,
+                FailureStage.BUILD,
+                FailureStage.INTERNAL,
+            }
+        ):
+            raise AppError(
+                409, "RUNTIME_BUILD_NOT_RETRYABLE", "Fix the project settings or dependencies before rebuilding"
+            )
+        if self.runtime is None:
+            raise AppError(503, "RUNTIME_PREPARER_UNAVAILABLE", "Runtime preparation is not configured")
+        return await self.runtime.request(project)
+
+    async def retry_runtime_execution(self, project_id: str, owner_id: str) -> ProjectResponse:
+        project = await self.require_owned(project_id, owner_id)
+        report = project.runtime_report
+        if (
+            project.runtime_status != RuntimeStatus.FAILED
+            or report is None
+            or not report.retryable
+            or report.failure_stage not in {FailureStage.COLLECT, FailureStage.TEST, FailureStage.COVERAGE}
+        ):
+            raise AppError(409, "RUNTIME_EXECUTION_NOT_RETRYABLE", "This runtime failure cannot be retried")
+        if self.runtime is None:
+            raise AppError(503, "RUNTIME_PREPARER_UNAVAILABLE", "Runtime preparation is not configured")
+        # The active bundle is deliberately left untouched. Runners that expose
+        # an execution-only retry may reuse it; the legacy runner safely creates
+        # a candidate and only activates it after admission succeeds.
+        retry_execution = getattr(self.runtime, "retry_execution", None)
+        if retry_execution is not None:
+            return await retry_execution(project)
+        return await self.runtime.request(project)
+
+    def runtime_capabilities(self) -> RuntimeCapabilitiesResponse:
+        runner = self.runtime.runner if self.runtime is not None else None
+        health_check = getattr(runner, "is_healthy", None)
+        healthy = bool(runner is not None and (health_check() if health_check is not None else True))
+        image = getattr(runner, "image", "promptopt-sandbox:py3.12")
+        versions = sorted(getattr(runner, "advertised_python_versions", ()) or {"3.12"})
+        return RuntimeCapabilitiesResponse(
+            items=[
+                RuntimeCapability(
+                    python_version=version,
+                    image=image,
+                    job=getattr(runner, "job_name", "promptopt-runtime-preparer"),
+                    healthy=healthy,
+                )
+                for version in versions
+            ]
+        )
+
+    def runtime_rollout_status(self) -> RuntimeRolloutStatusResponse:
+        runner = self.runtime.runner if self.runtime is not None else None
+        policy = getattr(runner, "policy", None)
+        metrics = getattr(runner, "metrics", None)
+        return RuntimeRolloutStatusResponse(
+            enabled=bool(policy and policy.enabled),
+            mode=policy.mode.value if policy else "disabled",
+            canary_percent=policy.canary_percent if policy else 0,
+            canary_python_versions=sorted(policy.canary_python_versions) if policy else [],
+            advertised_python_versions=sorted(getattr(runner, "advertised_python_versions", ())),
+            metrics=metrics.snapshot() if metrics else {},
+        )
+
+    async def validate_settings(
+        self,
+        project_id: str,
+        owner_id: str,
+        patch: ProjectSettingsPatch,
+    ) -> ValidateProjectSettingsResponse:
+        project = await self.require_owned(project_id, owner_id)
+        settings = self._merged_settings(project.settings, patch)
+        capabilities = self.runtime_capabilities().items
+        if not any(item.healthy and item.python_version == settings.runtime.python_version for item in capabilities):
+            raise AppError(
+                422,
+                "PYTHON_RUNTIME_UNAVAILABLE",
+                f"Python {settings.runtime.python_version} does not have a healthy sandbox image/job",
+            )
+        return ValidateProjectSettingsResponse(settings=settings)
+
     async def update_settings(
         self,
         project_id: str,
@@ -124,10 +226,8 @@ class ProjectService:
         updates = patch.model_dump(exclude_none=True)
         if not updates:
             raise AppError(400, "EMPTY_SETTINGS_PATCH", "Provide at least one settings section")
-        current = project.settings.model_dump()
-        for section, values in updates.items():
-            current[section].update(values)
-        project.settings = ProjectSettings.model_validate(current)
+        project.settings = self._merged_settings(project.settings, patch)
+        project.requested_python_version = project.settings.runtime.python_version
         project.updated_at = datetime.now(UTC)
         await self.repository.save(project)
         if (
@@ -173,3 +273,10 @@ class ProjectService:
     @staticmethod
     def _response(project: ProjectRecord) -> ProjectResponse:
         return ProjectResponse.model_validate(project.model_dump(exclude={"owner_id"}))
+
+    @staticmethod
+    def _merged_settings(settings: ProjectSettings, patch: ProjectSettingsPatch) -> ProjectSettings:
+        current = settings.model_dump()
+        for section, values in patch.model_dump(exclude_none=True).items():
+            current[section].update(values)
+        return ProjectSettings.model_validate(current)

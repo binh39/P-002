@@ -9,10 +9,19 @@ class UploadStatus(StrEnum):
     UPLOADED = "uploaded"
 
 
+class UploadRuntimeSettings(BaseModel):
+    python_version: str = Field(default="3.12", pattern=r"^3\.(10|11|12|13)$")
+
+
+class UploadProjectSettings(BaseModel):
+    runtime: UploadRuntimeSettings = Field(default_factory=UploadRuntimeSettings)
+
+
 class CreateUploadRequest(BaseModel):
     filename: str = Field(min_length=1, max_length=255)
     content_type: str = Field(default="application/zip", max_length=100)
     size_bytes: int = Field(gt=0)
+    settings: UploadProjectSettings = Field(default_factory=UploadProjectSettings)
 
     @field_validator("filename")
     @classmethod
@@ -36,6 +45,7 @@ class UploadResponse(BaseModel):
     object_name: str
     status: UploadStatus
     size_bytes: int
+    settings: UploadProjectSettings = Field(default_factory=UploadProjectSettings)
     upload_url: str | None = None
     method: str | None = None
     headers: dict[str, str] = Field(default_factory=dict)

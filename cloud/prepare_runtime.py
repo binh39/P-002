@@ -47,6 +47,10 @@ def _prepare(args, bucket, root: Path) -> RuntimeResult:
         )
     runtime_root = Path(os.environ.get("PROMPTOPT_RUNTIME_ROOT", "/tmp/promptopt-runtime"))
     persistent_venv = runtime_root / ".venv"
+    reuse_bundle = None
+    if args.reuse_bundle_object:
+        reuse_bundle = root / "reused-runtime.tar.gz"
+        bucket.blob(args.reuse_bundle_object).download_to_filename(str(reuse_bundle))
     result, python = prepare_environment(
         specs,
         root / "workspace",
@@ -54,15 +58,20 @@ def _prepare(args, bucket, root: Path) -> RuntimeResult:
         maximum_output_bytes=args.maximum_output_bytes,
         expected_python=args.python_version,
         persistent_venv=persistent_venv,
+        reuse_bundle=reuse_bundle,
+        expected_dependency_fingerprint=args.expected_dependency_fingerprint,
     )
     if result.status == "runtime_ready" and python is not None:
-        bundle = root / "runtime.tar.gz"
-        create_runtime_bundle(persistent_venv, bundle)
-        bucket.blob(args.bundle_object).upload_from_filename(
-            str(bundle),
-            content_type="application/gzip",
-        )
-        result.bundle_object = args.bundle_object
+        if reuse_bundle is not None:
+            result.bundle_object = args.reuse_bundle_object
+        else:
+            bundle = root / "runtime.tar.gz"
+            create_runtime_bundle(persistent_venv, bundle)
+            bucket.blob(args.bundle_object).upload_from_filename(
+                str(bundle),
+                content_type="application/gzip",
+            )
+            result.bundle_object = args.bundle_object
     return result
 
 
@@ -78,6 +87,8 @@ def main() -> int:
     parser.add_argument("--timeout-seconds", type=int, default=900)
     parser.add_argument("--python-version", default="3.12")
     parser.add_argument("--maximum-output-bytes", type=int, default=10 * 1024 * 1024)
+    parser.add_argument("--reuse-bundle-object")
+    parser.add_argument("--expected-dependency-fingerprint")
     args = parser.parse_args()
     if not args.manifest_object and not args.archive_object:
         parser.error("one of --manifest-object or --archive-object is required")

@@ -98,11 +98,16 @@ export default function Projects() {
   const [file, setFile] = useState<File | null>(null);
   const [environmentChoice, setEnvironmentChoice] = useState("new");
   const [environmentName, setEnvironmentName] = useState("");
+  const [pythonVersion, setPythonVersion] = useState("3.12");
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const samplesQuery = useQuery({
     queryKey: ["sample-projects"],
     queryFn: ({ signal }) => projects.listSamples(signal),
+  });
+  const capabilitiesQuery = useQuery({
+    queryKey: ["runtime-capabilities"],
+    queryFn: ({ signal }) => projects.runtimeCapabilities(signal),
   });
   const projectsQuery = useQuery({
     queryKey: ["projects"],
@@ -145,6 +150,12 @@ export default function Projects() {
       setValidationError("Enter a branch or source label.");
       return;
     }
+    if (environmentChoice === "new" && !healthyPythonVersions.includes(pythonVersion)) {
+      setValidationError(
+        "No healthy sandbox image/job is available for the selected Python version.",
+      );
+      return;
+    }
     if (!file) {
       setValidationError("Choose a ZIP archive.");
       return;
@@ -173,18 +184,23 @@ export default function Projects() {
         environmentChoice === "new"
           ? environmentName.trim() || `${normalizedName} environment`
           : undefined,
+      pythonVersion:
+        environmentChoice === "new"
+          ? pythonVersion
+          : (importedProjects.find((project) => project.runtimeEnvironmentId === environmentChoice)
+              ?.resolvedPython ?? pythonVersion),
     });
   };
 
-  if (samplesQuery.isPending || projectsQuery.isPending) {
+  if (samplesQuery.isPending || projectsQuery.isPending || capabilitiesQuery.isPending) {
     return (
       <div className="page-state" role="status">
         Loading projects…
       </div>
     );
   }
-  if (samplesQuery.isError || projectsQuery.isError) {
-    const error = samplesQuery.error ?? projectsQuery.error;
+  if (samplesQuery.isError || projectsQuery.isError || capabilitiesQuery.isError) {
+    const error = samplesQuery.error ?? projectsQuery.error ?? capabilitiesQuery.error;
     return (
       <div className="page-state page-state-error" role="alert">
         <h2>Projects are unavailable</h2>
@@ -193,6 +209,7 @@ export default function Projects() {
           onClick={() => {
             void samplesQuery.refetch();
             void projectsQuery.refetch();
+            void capabilitiesQuery.refetch();
           }}
         >
           Try again
@@ -203,6 +220,9 @@ export default function Projects() {
 
   const sampleProjects = samplesQuery.data;
   const importedProjects = projectsQuery.data;
+  const healthyPythonVersions = capabilitiesQuery.data
+    .filter((capability) => capability.healthy)
+    .map((capability) => capability.pythonVersion);
   const environments = Array.from(
     new Map(
       importedProjects
@@ -371,17 +391,34 @@ export default function Projects() {
                 </select>
               </Field>
               {environmentChoice === "new" && (
-                <Field label="Environment name">
-                  <input
-                    maxLength={100}
-                    value={environmentName}
-                    onChange={(event) => setEnvironmentName(event.target.value)}
-                    placeholder={
-                      name.trim() ? `${name.trim()} environment` : "Python 3.12 environment"
-                    }
-                    disabled={createProject.isPending}
-                  />
-                </Field>
+                <>
+                  <Field label="Python version" hint="Only healthy sandbox images are available.">
+                    <select
+                      value={pythonVersion}
+                      onChange={(event) => setPythonVersion(event.target.value)}
+                      disabled={createProject.isPending}
+                    >
+                      {healthyPythonVersions.map((version) => (
+                        <option key={version} value={version}>
+                          Python {version}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Environment name">
+                    <input
+                      maxLength={100}
+                      value={environmentName}
+                      onChange={(event) => setEnvironmentName(event.target.value)}
+                      placeholder={
+                        name.trim()
+                          ? `${name.trim()} environment`
+                          : `Python ${pythonVersion} environment`
+                      }
+                      disabled={createProject.isPending}
+                    />
+                  </Field>
+                </>
               )}
               <details className="project-advanced-details">
                 <summary>
@@ -455,7 +492,14 @@ export default function Projects() {
                 >
                   Cancel
                 </button>
-                <button className="primary-button" type="submit" disabled={createProject.isPending}>
+                <button
+                  className="primary-button"
+                  type="submit"
+                  disabled={
+                    createProject.isPending ||
+                    (environmentChoice === "new" && healthyPythonVersions.length === 0)
+                  }
+                >
                   {createProject.isPending
                     ? "Uploading and preparing environment…"
                     : "Upload and prepare"}

@@ -1,0 +1,22 @@
+{
+  "coverage": {
+    "covered_branches": 1,
+    "covered_statements": 3,
+    "total_branches": 2,
+    "total_statements": 4
+  },
+  "coverage_version": "7.10.7",
+  "environment_fingerprint": "9d9b577a9fd6dcc991c7039e1f53b8f3f42c7bf5836c3e96ed2c4a0d8c953f95",
+  "network_and_credentials_denied": true,
+  "optimizer_packages_absent": true,
+  "pytest_version": "9.1.1",
+  "runner_profile": "project_native",
+  "source_file": "src/demo/__init__.py",
+  "symbol": "classify",
+  "test_counts": {
+    "collected": 2,
+    "failed": 0,
+    "passed": 2,
+    "skipped": 0
+  }
+}

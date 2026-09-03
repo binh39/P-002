@@ -26,6 +26,38 @@ class RuntimeStatus(StrEnum):
     FAILED = "runtime_failed"
 
 
+class BuildStatus(StrEnum):
+    NOT_STARTED = "not_started"
+    QUEUED = "queued"
+    BUILDING = "building"
+    READY = "ready"
+    FAILED = "failed"
+
+
+class ExecutionStatus(StrEnum):
+    NOT_STARTED = "not_started"
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class FailureStage(StrEnum):
+    METADATA = "metadata"
+    RESOLVE = "resolve"
+    BUILD = "build"
+    COLLECT = "collect"
+    TEST = "test"
+    COVERAGE = "coverage"
+    INTERNAL = "internal"
+
+
+class DependencyConflict(StrictModel):
+    package: str
+    requested_versions: list[str] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=list)
+
+
 class RuntimeProjectReport(StrictModel):
     source_directory: str = ""
     test_directory: str = ""
@@ -49,6 +81,17 @@ class RuntimeReport(StrictModel):
     dependency_fingerprint: str | None = None
     bundle_object: str | None = None
     error: str | None = None
+    failure_stage: FailureStage | None = None
+    error_code: str | None = None
+    retryable: bool = False
+    environment_fingerprint: str | None = None
+    requested_python_version: str | None = None
+    detected_python_version: str | None = None
+    resolved_python_version: str | None = None
+    runner_profile: str | None = None
+    pytest_version: str | None = None
+    coverage_version: str | None = None
+    conflicts: list[DependencyConflict] = Field(default_factory=list)
     protocol_version: int = 1
 
 
@@ -187,7 +230,12 @@ class ProjectResponse(StrictModel):
     runtime_environment_name: str | None = None
     runtime_bundle_object: str | None = None
     runtime_dependency_fingerprint: str | None = None
+    requested_python_version: str = "3.12"
+    detected_python_version: str | None = None
+    resolved_python_version: str | None = None
     runtime_status: RuntimeStatus = RuntimeStatus.NOT_REQUESTED
+    runtime_build_status: BuildStatus = BuildStatus.NOT_STARTED
+    runtime_execution_status: ExecutionStatus = ExecutionStatus.NOT_STARTED
     runtime_report: RuntimeReport | None = None
     runtime_artifact_prefix: str | None = None
     runtime_started_at: datetime | None = None
@@ -203,3 +251,28 @@ class ProjectRecord(ProjectResponse):
 class ProjectListResponse(StrictModel):
     items: list[ProjectResponse]
     total: int
+
+
+class RuntimeCapability(StrictModel):
+    python_version: str
+    image: str
+    job: str
+    healthy: bool
+
+
+class RuntimeCapabilitiesResponse(StrictModel):
+    items: list[RuntimeCapability]
+
+
+class RuntimeRolloutStatusResponse(StrictModel):
+    enabled: bool
+    mode: str
+    canary_percent: int
+    canary_python_versions: list[str]
+    advertised_python_versions: list[str]
+    metrics: dict[str, object] = Field(default_factory=dict)
+
+
+class ValidateProjectSettingsResponse(StrictModel):
+    valid: bool = True
+    settings: ProjectSettings

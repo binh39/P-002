@@ -33,6 +33,7 @@ from backend.modules.projects.repository import (
     InMemoryProjectRepository,
     ProjectRepository,
 )
+from backend.modules.projects.rollout import RolloutMode, RolloutPolicy, RuntimeRolloutPreparer
 from backend.modules.projects.runtime import CloudRunRuntimePreparer, RuntimePreparationService
 from backend.modules.projects.samples import SampleProjectCatalog
 from backend.modules.projects.service import ProjectService
@@ -129,6 +130,52 @@ def build_services(settings: Settings) -> ServiceContainer:
                 f"{settings.cloud_run_runtime_job}"
             ),
             timeout_seconds=settings.cloud_run_runtime_timeout_seconds,
+        )
+    elif settings.runtime_execution_backend == "local_docker":
+        from backend.modules.projects.local_docker_runtime import LocalDockerRuntimePreparer
+
+        runtime_runner = LocalDockerRuntimePreparer(
+            storage=storage,
+            image=settings.local_sandbox_image,
+            root=settings.local_runtime_path,
+            docker=settings.local_docker_executable,
+        )
+    sandbox_runtime_runner = None
+    if settings.sandbox_runtime_execution_backend == "cloud_run_job":
+        from google.cloud import run_v2
+
+        sandbox_runtime_runner = CloudRunRuntimePreparer(
+            client=run_v2.JobsClient(),
+            storage=storage,
+            bucket=settings.gcs_bucket,
+            job_name=(
+                f"projects/{settings.gcp_project_id}/locations/{settings.cloud_tasks_location}/jobs/"
+                f"{settings.sandbox_cloud_run_runtime_job}"
+            ),
+            timeout_seconds=settings.cloud_run_runtime_timeout_seconds,
+        )
+    elif settings.sandbox_runtime_execution_backend == "local_docker":
+        from backend.modules.projects.local_docker_runtime import LocalDockerRuntimePreparer
+
+        sandbox_runtime_runner = LocalDockerRuntimePreparer(
+            storage=storage,
+            image=settings.local_sandbox_image,
+            root=settings.local_runtime_path / "sandbox-v2",
+            docker=settings.local_docker_executable,
+        )
+    if settings.project_sandbox_v2:
+        if runtime_runner is None:
+            raise ValueError("Legacy runtime runner is required while project_sandbox_v2 is enabled")
+        runtime_runner = RuntimeRolloutPreparer(
+            runtime_runner,
+            sandbox_runtime_runner,
+            RolloutPolicy(
+                enabled=True,
+                mode=RolloutMode(settings.project_sandbox_rollout_mode),
+                canary_percent=settings.sandbox_canary_percent,
+                canary_python_versions=frozenset(settings.sandbox_canary_python_version_values),
+            ),
+            advertised_python_versions=frozenset(settings.sandbox_advertised_python_version_values),
         )
     runtime = RuntimePreparationService(project_repository, runtime_runner)
     projects.set_runtime_service(runtime)

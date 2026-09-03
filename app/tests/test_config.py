@@ -67,3 +67,34 @@ def test_local_paths_are_resolved_from_app_directory(monkeypatch, tmp_path):
 
     assert settings.local_upload_path == APP_DIRECTORY / "data" / "uploads"
     assert settings.sample_repos_path == APP_DIRECTORY.parent / "src" / "sample_repo"
+
+
+def test_rollout_requires_feature_flag_and_two_runners(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "development")
+    with pytest.raises(ValidationError, match="PROJECT_SANDBOX_V2=true"):
+        Settings(_env_file=None, project_sandbox_rollout_mode="shadow")
+
+    with pytest.raises(ValidationError, match="legacy executor"):
+        Settings(
+            _env_file=None,
+            project_sandbox_v2=True,
+            project_sandbox_rollout_mode="shadow",
+            sandbox_runtime_execution_backend="local_docker",
+        )
+
+
+def test_python_versions_are_advertised_only_after_full_enablement(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "development")
+    with pytest.raises(ValidationError, match="advertised only after rollout mode is enabled"):
+        Settings(_env_file=None, sandbox_advertised_python_versions="3.12")
+
+    settings = Settings(
+        _env_file=None,
+        project_sandbox_v2=True,
+        project_sandbox_rollout_mode="enabled",
+        runtime_execution_backend="local_docker",
+        sandbox_runtime_execution_backend="local_docker",
+        sandbox_advertised_python_versions="3.12",
+    )
+
+    assert settings.sandbox_advertised_python_version_values == {"3.12"}

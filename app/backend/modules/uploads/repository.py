@@ -16,6 +16,7 @@ class UploadRecord:
     status: UploadStatus
     expires_at: datetime
     created_at: datetime
+    requested_python_version: str = "3.12"
 
 
 class UploadRepository(Protocol):
@@ -77,4 +78,5 @@ class FirestoreUploadRepository:
     @staticmethod
     def _deserialize(payload: dict) -> UploadRecord:
         payload["status"] = UploadStatus(payload["status"])
+        payload.setdefault("requested_python_version", "3.12")
         return UploadRecord(**payload)

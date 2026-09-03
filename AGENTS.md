@@ -46,7 +46,7 @@ Tối ưu hai thành phần `initial` và `error` của CoverUp bằng GEPA và 
   failure output as GEPA feedback. Collection/internal/usage errors remain
   unmeasurable and invalid.
 - A baseline with zero covered units may enter GEPA as long as every target has valid non-zero statement denominators. Candidate failures are then scored as zero against those fixed reference units.
-- Evaluation cache schema `14` invalidates older caches that discarded zero-test denominators, omitted structured traces, scored a target with another target's tests, stored generated workspaces outside the artifacts tree, ran CoverUp and coverage with different randomized hash ordering, or used the slower project-wide CoverUp process and redundant final-suite coverage pass.
+- Evaluation cache schema `15` invalidates older caches that discarded zero-test denominators, omitted structured traces, scored a target with another target's tests, stored generated workspaces outside the artifacts tree, ran CoverUp and coverage with different randomized hash ordering, used the slower project-wide CoverUp process and redundant final-suite coverage pass, or did not bind evaluation cache entries to the immutable per-project sandbox environment fingerprint.
 - When reporting repeated evaluation failures, skip wrapper lines such as `Replicate 0:` and show the first substantive feedback line.
 
 ## Cấu hình khuyến nghị

@@ -73,7 +73,7 @@ async def test_sample_catalog_creates_experiment_without_persisting_projects(cli
 
 
 @pytest.mark.asyncio
-async def test_upload_and_project_lifecycle(client):
+async def test_upload_and_project_lifecycle(client, app):
     archive = b"PK\x03\x04mock-zip-content"
     upload_response = await client.post(
         "/api/v1/uploads",
@@ -88,6 +88,7 @@ async def test_upload_and_project_lifecycle(client):
     upload = upload_response.json()
     assert upload["status"] == "pending"
     assert upload["method"] == "PUT"
+    assert upload["settings"]["runtime"]["python_version"] == "3.12"
 
     content_response = await client.put(upload["upload_url"], headers=AUTH_HEADERS, content=archive)
     assert content_response.status_code == 204
@@ -114,6 +115,11 @@ async def test_upload_and_project_lifecycle(client):
     project = create_response.json()
     assert project["status"] == "uploaded"
     assert project["settings"]["runtime"]["python_version"] == "3.12"
+    assert project["requested_python_version"] == "3.12"
+    assert project["detected_python_version"] is None
+    assert project["resolved_python_version"] is None
+    assert project["runtime_build_status"] == "not_started"
+    assert project["runtime_execution_status"] == "not_started"
 
     list_response = await client.get("/api/v1/projects", headers=AUTH_HEADERS)
     assert list_response.status_code == 200
@@ -129,6 +135,51 @@ async def test_upload_and_project_lifecycle(client):
     assert settings["runtime"]["python_version"] == "3.12"
     assert settings["runtime"]["memory_mb"] == 4096
     assert settings["runtime"]["cpu"] == 1
+
+    capabilities = await client.get("/api/v1/projects/runtime-capabilities", headers=AUTH_HEADERS)
+    assert capabilities.status_code == 200
+    assert capabilities.json()["items"] == [
+        {
+            "python_version": "3.12",
+            "image": "promptopt-sandbox:py3.12",
+            "job": "promptopt-runtime-preparer",
+            "healthy": False,
+        }
+    ]
+    rollout = await client.get("/api/v1/projects/runtime-rollout", headers=AUTH_HEADERS)
+    assert rollout.status_code == 200
+    assert rollout.json() == {
+        "enabled": False,
+        "mode": "disabled",
+        "canary_percent": 0,
+        "canary_python_versions": [],
+        "advertised_python_versions": [],
+        "metrics": {},
+    }
+
+    validated = await client.post(
+        f"/api/v1/projects/{project['id']}/settings/validate",
+        headers=AUTH_HEADERS,
+        json={"runtime": {"python_version": "3.12", "source_directory": "package"}},
+    )
+    assert validated.status_code == 422
+    assert validated.json()["error"]["code"] == "PYTHON_RUNTIME_UNAVAILABLE"
+
+    class AvailableRuntime:
+        runner = object()
+
+    app.state.services.projects.set_runtime_service(AvailableRuntime())
+    validated = await client.post(
+        f"/api/v1/projects/{project['id']}/settings/validate",
+        headers=AUTH_HEADERS,
+        json={"runtime": {"python_version": "3.12", "source_directory": "package"}},
+    )
+    assert validated.status_code == 200
+    assert validated.json()["settings"]["runtime"]["source_directory"] == "package"
+    app.state.services.projects.set_runtime_service(None)
+
+    refreshed = await client.get(f"/api/v1/projects/{project['id']}", headers=AUTH_HEADERS)
+    assert refreshed.json()["settings"]["runtime"]["source_directory"] == "src"
 
 
 @pytest.mark.asyncio

@@ -27,6 +27,19 @@ class ProjectLayout:
     import_root: Path | None = None
 
 
+@dataclass(frozen=True)
+class SandboxEnvironment:
+    """Immutable execution inputs for one uploaded project."""
+
+    image_digest: str
+    artifact_archive: Path
+    artifact_manifest: Path
+    source_root: Path
+    source_directory: str
+    requested_python: str
+    runner_profile: str
+
+
 @dataclass
 class ExperimentConfig:
     project_root: Path
@@ -41,6 +54,8 @@ class ExperimentConfig:
     rate_limit: int | None = None
     pytest_args: str = ""
     projects: dict[str, ProjectLayout] | None = None
+    sandbox_environments: dict[str, SandboxEnvironment] | None = None
+    sandbox_executor: Any | None = None
 
     def package_dir_for(self, project: str) -> Path:
         """Resolve the package directory for ``project``.
@@ -99,6 +114,7 @@ class BatchTargetResult:
     score: dict[str, Any] | None = None
     feedback: str = ""
     attempt_traces: list[dict[str, Any]] = field(default_factory=list)
+    environment_fingerprint: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -121,6 +137,7 @@ class BatchRunRecord:
     stdout_file: str = ""
     coverup_log_file: str = ""
     attempt_trace_file: str = ""
+    environment_fingerprints: dict[str, str] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)

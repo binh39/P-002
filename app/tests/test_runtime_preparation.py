@@ -1,9 +1,17 @@
 from datetime import UTC, datetime, timedelta
+from zipfile import ZipFile
 
 import pytest
+from cloud.runtime_workspace import RuntimeProjectSpec, prepare_environment
 
+from backend.core.errors import AppError
 from backend.modules.projects.repository import InMemoryProjectRepository
-from backend.modules.projects.runtime import CloudRunRuntimePreparer, RuntimePreparationService
+from backend.modules.projects.runtime import (
+    CloudRunRuntimePreparer,
+    RuntimePreparationService,
+    _audit_runtime,
+    _diagnose_failure,
+)
 from backend.modules.projects.schemas import (
     ProjectRecord,
     ProjectSettings,
@@ -12,6 +20,7 @@ from backend.modules.projects.schemas import (
     RuntimeReport,
     RuntimeStatus,
 )
+from backend.modules.projects.service import ProjectService
 
 
 def project(project_id: str, *, status: RuntimeStatus, bundle: str | None = None) -> ProjectRecord:
@@ -41,15 +50,31 @@ class FakeRunner:
         self.report = report
         self.started_with: list[str] = []
         self.start_calls: list[list[str]] = []
+        self.start_options: list[dict] = []
 
-    async def start(self, projects):
+    async def start(self, projects, **options):
         self.started_with = [item.id for item in projects]
         self.start_calls.append(self.started_with)
+        self.start_options.append(options)
         return "runner-jobs/runtime/candidate"
 
     async def collect(self, prefix):
         assert prefix == "runner-jobs/runtime/candidate"
         return self.report
+
+
+def test_runtime_diagnostics_and_audit_logs_do_not_leak_secrets(caplog):
+    caplog.set_level("INFO", logger="promptopt.runtime.audit")
+    candidate = project("candidate", status=RuntimeStatus.FAILED)
+    candidate.owner_id = "private-owner"
+
+    report = _diagnose_failure("API_TOKEN=do-not-log dependency conflict")
+    _audit_runtime("runtime_rejected", candidate, error_code=report.error_code)
+
+    assert "do-not-log" not in (report.error or "")
+    assert "private-owner" not in caplog.text
+    assert "candidate" in caplog.text
+    assert "runtime_rejected" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -62,7 +87,10 @@ async def test_conflicting_candidate_is_rejected_without_replacing_active_bundle
     runner = FakeRunner(
         RuntimeReport(
             status=RuntimeStatus.FAILED,
-            error="Dependency conflict prevented this project from joining the environment",
+            error=(
+                "Dependency conflict: Because you require coverage==7.15.2 and "
+                "coverage==7.10.7, your requirements are unsatisfiable"
+            ),
         )
     )
     service = RuntimePreparationService(repository, runner)
@@ -74,6 +102,13 @@ async def test_conflicting_candidate_is_rejected_without_replacing_active_bundle
 
     assert rejected.runtime_status == RuntimeStatus.FAILED
     assert "Dependency conflict" in (rejected.runtime_report.error or "")
+    assert rejected.runtime_report.failure_stage == "resolve"
+    assert rejected.runtime_report.error_code == "DEPENDENCY_CONFLICT"
+    assert rejected.runtime_report.retryable is False
+    assert rejected.runtime_report.conflicts[0].package == "coverage"
+    assert rejected.runtime_report.conflicts[0].requested_versions == ["7.15.2", "7.10.7"]
+    assert rejected.runtime_build_status == "failed"
+    assert rejected.runtime_execution_status == "not_started"
     unchanged = await repository.get("existing")
     assert unchanged.runtime_status == RuntimeStatus.READY
     assert unchanged.runtime_bundle_object == "runtime/active.tar.gz"
@@ -117,6 +152,9 @@ async def test_compatible_candidate_atomically_replaces_bundle_for_all_members()
         assert member.runtime_bundle_object == "runtime/candidate.tar.gz"
         assert member.runtime_dependency_fingerprint == "digest-2"
         assert member.runtime_status == RuntimeStatus.READY
+        assert member.runtime_build_status == "ready"
+        assert member.runtime_execution_status == "succeeded"
+        assert member.resolved_python_version == "3.12"
 
 
 @pytest.mark.asyncio
@@ -189,6 +227,61 @@ async def test_runtime_retry_resets_the_attempt_deadline():
 
 
 @pytest.mark.asyncio
+async def test_deterministic_dependency_conflict_cannot_use_retry_endpoint():
+    repository = InMemoryProjectRepository()
+    candidate = project("candidate", status=RuntimeStatus.FAILED)
+    candidate.runtime_report = RuntimeReport(
+        status=RuntimeStatus.FAILED,
+        failure_stage="resolve",
+        error_code="DEPENDENCY_CONFLICT",
+        retryable=False,
+        error="requirements are unsatisfiable",
+    )
+    await repository.create(candidate)
+    projects = ProjectService(repository, uploads=None)  # type: ignore[arg-type]
+    projects.set_runtime_service(RuntimePreparationService(repository, FakeRunner(candidate.runtime_report)))
+
+    with pytest.raises(AppError) as caught:
+        await projects.retry_runtime_build(candidate.id, candidate.owner_id)
+
+    assert caught.value.code == "RUNTIME_BUILD_NOT_RETRYABLE"
+
+
+@pytest.mark.asyncio
+async def test_transient_execution_retry_keeps_active_artifact_until_admission():
+    repository = InMemoryProjectRepository()
+    candidate = project("candidate", status=RuntimeStatus.FAILED, bundle="runtime/active.tar.gz")
+    candidate.runtime_dependency_fingerprint = "active-fingerprint"
+    candidate.resolved_python_version = "3.12"
+    candidate.runtime_report = RuntimeReport(
+        status=RuntimeStatus.FAILED,
+        failure_stage="coverage",
+        error_code="COVERAGE_TIMEOUT",
+        retryable=True,
+        error="coverage timed out",
+    )
+    await repository.create(candidate)
+    runner = FakeRunner(candidate.runtime_report)
+    projects = ProjectService(repository, uploads=None)  # type: ignore[arg-type]
+    projects.set_runtime_service(RuntimePreparationService(repository, runner))
+
+    retried = await projects.retry_runtime_execution(candidate.id, candidate.owner_id)
+
+    assert retried.runtime_status == RuntimeStatus.PREPARING
+    assert retried.runtime_build_status == "ready"
+    assert retried.runtime_execution_status == "running"
+    assert retried.runtime_bundle_object == "runtime/active.tar.gz"
+    assert retried.runtime_dependency_fingerprint == "active-fingerprint"
+    assert retried.resolved_python_version == "3.12"
+    assert runner.start_options == [
+        {
+            "reuse_bundle_object": "runtime/active.tar.gz",
+            "expected_dependency_fingerprint": "active-fingerprint",
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_cloud_runtime_result_hides_worker_paths_before_validation():
     class Storage:
         async def read(self, object_name):
@@ -212,3 +305,20 @@ async def test_cloud_runtime_result_hides_worker_paths_before_validation():
 
     assert report is not None
     assert report.projects["project-1"].source_directory == "pkg"
+
+
+def test_execution_retry_rejects_artifact_when_fingerprint_changed(tmp_path):
+    archive = tmp_path / "project.zip"
+    with ZipFile(archive, "w") as bundle:
+        bundle.writestr("src/demo.py", "VALUE = 1\n")
+
+    result, python = prepare_environment(
+        [RuntimeProjectSpec("project", archive, "src", "tests")],
+        tmp_path / "workspace",
+        reuse_bundle=tmp_path / "runtime.tar.gz",
+        expected_dependency_fingerprint="stale-fingerprint",
+    )
+
+    assert python is None
+    assert result.status == "runtime_failed"
+    assert "fingerprint does not match" in (result.error or "")

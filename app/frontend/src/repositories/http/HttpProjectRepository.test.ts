@@ -69,6 +69,7 @@ describe("HttpProjectRepository", () => {
       name: "payments",
       description: "",
       branch: "main",
+      pythonVersion: "3.12",
       file,
     });
 
@@ -77,6 +78,7 @@ describe("HttpProjectRepository", () => {
       filename: "payments.zip",
       content_type: "application/zip",
       size_bytes: file.size,
+      settings: { runtime: { python_version: "3.12" } },
     });
     expect(fetchMock.mock.calls[1]).toEqual([
       "https://storage.example/upload",
@@ -87,6 +89,9 @@ describe("HttpProjectRepository", () => {
       }),
     ]);
     expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(JSON.parse(fetchMock.mock.calls[3][1].body as string)).toMatchObject({
+      settings: { runtime: { python_version: "3.12" } },
+    });
   });
 
   it("deletes an imported project through the project endpoint", async () => {

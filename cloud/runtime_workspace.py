@@ -26,6 +26,14 @@ from src.optimization.project_setup import prepare_project
 MAX_ARCHIVE_ENTRIES = 20_000
 MAX_UNCOMPRESSED_BYTES = 250 * 1024 * 1024
 MAX_FILE_BYTES = 25 * 1024 * 1024
+_WINDOWS_RESERVED_NAMES = {
+    "aux",
+    "con",
+    "nul",
+    "prn",
+    *(f"com{number}" for number in range(1, 10)),
+    *(f"lpt{number}" for number in range(1, 10)),
+}
 RUNTIME_PROTOCOL_VERSION = 8
 RUNTIME_TOOL_PACKAGES = (
     "pytest==9.1.1",
@@ -117,18 +125,26 @@ class RuntimeResult:
 def safe_extract_zip(archive: Path, destination: Path) -> None:
     """Extract a ZIP without following links or accepting path traversal."""
     destination.mkdir(parents=True, exist_ok=True)
+    root = destination.resolve()
     seen: set[str] = set()
     total = 0
     with zipfile.ZipFile(archive) as bundle:
         infos = bundle.infolist()
         if len(infos) > MAX_ARCHIVE_ENTRIES:
             raise ValueError(f"ZIP contains more than {MAX_ARCHIVE_ENTRIES} entries")
+        validated: list[tuple[zipfile.ZipInfo, str, bool]] = []
         for info in infos:
             raw = info.filename.replace("\\", "/")
             path = PurePosixPath(raw)
-            if not raw or path.is_absolute() or ".." in path.parts:
+            if not raw or "\x00" in raw or path.is_absolute() or ".." in path.parts:
                 raise ValueError(f"Unsafe ZIP path: {raw!r}")
             normalized = "/".join(part for part in path.parts if part not in {"", "."})
+            if not normalized:
+                raise ValueError(f"Unsafe ZIP path: {raw!r}")
+            for part in PurePosixPath(normalized).parts:
+                basename = part.rstrip(" .").split(".", 1)[0].casefold()
+                if ":" in part or part.rstrip(" .") != part or basename in _WINDOWS_RESERVED_NAMES:
+                    raise ValueError(f"Unsafe ZIP path: {raw!r}")
             key = normalized.casefold()
             if key in seen:
                 raise ValueError(f"Duplicate ZIP path: {normalized}")
@@ -140,19 +156,39 @@ def safe_extract_zip(archive: Path, destination: Path) -> None:
                 # Git-generated ZIP files may contain repository symlinks.
                 # Ignoring them is safe because no link is materialized or
                 # followed inside the runtime workspace.
+                validated.append((info, normalized, True))
                 continue
+            file_type = stat.S_IFMT(mode)
+            if file_type not in {0, stat.S_IFREG, stat.S_IFDIR}:
+                raise ValueError(f"Unsupported ZIP entry type: {normalized}")
             if info.file_size > MAX_FILE_BYTES:
                 raise ValueError(f"ZIP entry exceeds {MAX_FILE_BYTES} bytes: {normalized}")
             total += info.file_size
             if total > MAX_UNCOMPRESSED_BYTES:
                 raise ValueError("ZIP uncompressed size exceeds the runtime limit")
-            target = destination.joinpath(*PurePosixPath(normalized).parts)
+            target = root.joinpath(*PurePosixPath(normalized).parts)
+            resolved = target.resolve()
+            if resolved != root and root not in resolved.parents:
+                raise ValueError(f"ZIP path escapes destination: {normalized}")
+            validated.append((info, normalized, False))
+
+        extracted_total = 0
+        for info, normalized, ignored_link in validated:
+            if ignored_link:
+                continue
+            target = root.joinpath(*PurePosixPath(normalized).parts)
             if info.is_dir():
                 target.mkdir(parents=True, exist_ok=True)
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
             with bundle.open(info) as source, target.open("wb") as output:
-                shutil.copyfileobj(source, output, length=1024 * 1024)
+                extracted_file = 0
+                while chunk := source.read(1024 * 1024):
+                    extracted_file += len(chunk)
+                    extracted_total += len(chunk)
+                    if extracted_file > MAX_FILE_BYTES or extracted_total > MAX_UNCOMPRESSED_BYTES:
+                        raise ValueError("ZIP expanded data exceeds the runtime limit")
+                    output.write(chunk)
 
 
 def safe_extract_runtime_bundle(bundle: Path, destination: Path) -> Path:
@@ -342,6 +378,8 @@ def prepare_environment(
     maximum_output_bytes: int = 10 * 1024 * 1024,
     expected_python: str | None = None,
     persistent_venv: Path | None = None,
+    reuse_bundle: Path | None = None,
+    expected_dependency_fingerprint: str | None = None,
 ) -> tuple[RuntimeResult, Path | None]:
     """Resolve all projects together and accept the environment atomically."""
     result = RuntimeResult(status="runtime_failed")
@@ -388,13 +426,20 @@ def prepare_environment(
                 dependency_files=dependency_files,
             )
         result.dependency_fingerprint = digest.hexdigest()
+        if expected_dependency_fingerprint and result.dependency_fingerprint != expected_dependency_fingerprint:
+            raise RuntimeError(
+                "Runtime artifact fingerprint does not match the current project source and settings"
+            )
 
         venv_dir = (persistent_venv or workspace / ".venv").resolve()
         if venv_dir.exists():
             shutil.rmtree(venv_dir)
         deadline = time.monotonic() + timeout_seconds
         uv = shutil.which("uv")
-        if uv:
+        if reuse_bundle is not None:
+            python = safe_extract_runtime_bundle(reuse_bundle, venv_dir.parent)
+            result.install_strategy = "reused immutable runtime artifact"
+        elif uv:
             _run(
                 result,
                 "create shared environment",
@@ -407,69 +452,78 @@ def prepare_environment(
             venv.EnvBuilder(with_pip=True, system_site_packages=True).create(venv_dir)
         python = venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
-        requirements: list[Path] = []
-        dependency_groups: list[str] = []
-        pyproject_requirements = False
-        for project_id, root in roots.items():
-            if (root / "pyproject.toml").is_file() and uv:
-                if (root / "uv.lock").is_file():
-                    exported = workspace / "resolved" / f"{project_id}.txt"
-                    exported.parent.mkdir(parents=True, exist_ok=True)
-                    _run(
-                        result,
-                        f"export {project_id} lock",
-                        [
-                            uv,
-                            "export",
-                            "--frozen",
-                            "--all-groups",
-                            "--no-emit-project",
-                            "--format",
-                            "requirements-txt",
-                            "--output-file",
-                            str(exported),
-                        ],
-                        root,
-                        deadline,
-                        maximum_output_bytes,
-                    )
-                    requirements.append(exported)
+        if reuse_bundle is None:
+            requirements: list[Path] = []
+            dependency_groups: list[str] = []
+            pyproject_requirements = False
+            for project_id, root in roots.items():
+                if (root / "pyproject.toml").is_file() and uv:
+                    if (root / "uv.lock").is_file():
+                        exported = workspace / "resolved" / f"{project_id}.txt"
+                        exported.parent.mkdir(parents=True, exist_ok=True)
+                        _run(
+                            result,
+                            f"export {project_id} lock",
+                            [
+                                uv,
+                                "export",
+                                "--frozen",
+                                "--all-groups",
+                                "--no-emit-project",
+                                "--format",
+                                "requirements-txt",
+                                "--output-file",
+                                str(exported),
+                            ],
+                            root,
+                            deadline,
+                            maximum_output_bytes,
+                        )
+                        requirements.append(exported)
+                    else:
+                        pyproject = root / "pyproject.toml"
+                        requirements.append(pyproject)
+                        pyproject_requirements = True
+                        dependency_groups.extend(
+                            f"{pyproject}:{name}" for name in _dependency_group_names(pyproject)
+                        )
                 else:
-                    pyproject = root / "pyproject.toml"
-                    requirements.append(pyproject)
-                    pyproject_requirements = True
-                    dependency_groups.extend(f"{pyproject}:{name}" for name in _dependency_group_names(pyproject))
-            else:
-                requirements.extend(root / name for name in LEGACY_REQUIREMENT_FILES if (root / name).is_file())
-            requirements.extend(test_requirements[project_id])
+                    requirements.extend(
+                        root / name for name in LEGACY_REQUIREMENT_FILES if (root / name).is_file()
+                    )
+                requirements.extend(test_requirements[project_id])
 
-        if requirements or uv:
-            command = (
-                [uv, "pip", "install", "--python", str(python)]
-                if uv
-                else [str(python), "-m", "pip", "install", "--disable-pip-version-check"]
-            )
-            for requirement in requirements:
-                command.extend(["-r", str(requirement)])
-            if uv:
-                if pyproject_requirements:
-                    command.append("--all-extras")
-                for group in dependency_groups:
-                    command.extend(["--group", group])
-                command.extend(RUNTIME_TOOL_PACKAGES)
-            _run(
-                result,
-                "resolve shared dependencies",
-                command,
-                workspace,
-                deadline,
-                maximum_output_bytes,
-            )
-            check = [uv, "pip", "check", "--python", str(python)] if uv else [str(python), "-m", "pip", "check"]
-            _run(result, "verify dependency compatibility", check, workspace, deadline, maximum_output_bytes)
-            result.install_strategy = "uv dependency-only shared resolution" if uv else "pip shared resolution"
-        else:
-            result.install_strategy = "PYTHONPATH (no dependency manifest)"
+            if requirements or uv:
+                command = (
+                    [uv, "pip", "install", "--python", str(python)]
+                    if uv
+                    else [str(python), "-m", "pip", "install", "--disable-pip-version-check"]
+                )
+                for requirement in requirements:
+                    command.extend(["-r", str(requirement)])
+                if uv:
+                    if pyproject_requirements:
+                        command.append("--all-extras")
+                    for group in dependency_groups:
+                        command.extend(["--group", group])
+                    command.extend(RUNTIME_TOOL_PACKAGES)
+                _run(
+                    result,
+                    "resolve shared dependencies",
+                    command,
+                    workspace,
+                    deadline,
+                    maximum_output_bytes,
+                )
+                check = (
+                    [uv, "pip", "check", "--python", str(python)]
+                    if uv
+                    else [str(python), "-m", "pip", "check"]
+                )
+                _run(result, "verify dependency compatibility", check, workspace, deadline, maximum_output_bytes)
+                result.install_strategy = "uv dependency-only shared resolution" if uv else "pip shared resolution"
+            else:
+                result.install_strategy = "PYTHONPATH (no dependency manifest)"
 
         site_packages = (
             venv_dir / "Lib" / "site-packages"

@@ -1,0 +1,40 @@
+ARG PYTHON_VERSION=3.12
+FROM ghcr.io/astral-sh/uv:0.9.13 AS uv
+FROM python:${PYTHON_VERSION}-slim-bookworm
+
+ARG POETRY_VERSION=2.2.1
+ARG POETRY_PLUGIN_EXPORT_VERSION=1.9.0
+ARG SANDBOX_PYTEST_VERSION=9.1.1
+ARG SANDBOX_COVERAGE_VERSION=7.15.3
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    UV_NO_PROGRESS=1 \
+    PATH=/opt/sandbox-agent/bin:/root/.local/bin:${PATH} \
+    PYTHONPATH=/opt/sandbox-agent
+
+COPY --from=uv /uv /uvx /usr/local/bin/
+RUN python -m venv /opt/sandbox-agent \
+    && /opt/sandbox-agent/bin/python -m pip install --no-cache-dir --timeout 60 --retries 8 \
+       "poetry==${POETRY_VERSION}" "poetry-plugin-export==${POETRY_PLUGIN_EXPORT_VERSION}" \
+       "pytest==${SANDBOX_PYTEST_VERSION}" "coverage==${SANDBOX_COVERAGE_VERSION}" \
+    && useradd --create-home --uid 10001 sandbox \
+    && mkdir -p /workspace /cache \
+    && chown -R sandbox:sandbox /workspace /cache
+
+COPY cloud/__init__.py /opt/sandbox-agent/cloud/__init__.py
+COPY cloud/sandbox_agent.py /opt/sandbox-agent/cloud/sandbox_agent.py
+COPY cloud/sandbox_builder.py /opt/sandbox-agent/cloud/sandbox_builder.py
+COPY cloud/sandbox_contract.py /opt/sandbox-agent/cloud/sandbox_contract.py
+COPY cloud/sandbox_dependency_plan.py /opt/sandbox-agent/cloud/sandbox_dependency_plan.py
+COPY cloud/sandbox_errors.py /opt/sandbox-agent/cloud/sandbox_errors.py
+COPY cloud/sandbox_metadata.py /opt/sandbox-agent/cloud/sandbox_metadata.py
+COPY cloud/sandbox_execution.py /opt/sandbox-agent/cloud/sandbox_execution.py
+COPY cloud/sandbox_pytest_plugin.py /opt/sandbox-agent/cloud/sandbox_pytest_plugin.py
+COPY cloud/sandbox_runner_profiles.py /opt/sandbox-agent/cloud/sandbox_runner_profiles.py
+COPY cloud/sandbox_security.py /opt/sandbox-agent/cloud/sandbox_security.py
+
+USER sandbox
+WORKDIR /workspace
+ENTRYPOINT ["/opt/sandbox-agent/bin/python", "-m", "cloud.sandbox_agent"]
+CMD ["contract"]

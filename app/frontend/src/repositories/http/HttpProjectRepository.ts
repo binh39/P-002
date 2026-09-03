@@ -6,6 +6,7 @@ import type {
   ProjectFunction,
   PythonProject,
   ProjectStatus,
+  ProjectSettingsInput,
 } from "@/domain/projects";
 import type { ProjectRepository } from "@/repositories/contracts/ProjectRepository";
 
@@ -30,6 +31,11 @@ interface ApiProject {
   runtime_environment_name: string | null;
   runtime_bundle_object: string | null;
   runtime_dependency_fingerprint: string | null;
+  requested_python_version?: string;
+  detected_python_version?: string | null;
+  resolved_python_version?: string | null;
+  runtime_build_status?: "not_started" | "queued" | "building" | "ready" | "failed";
+  runtime_execution_status?: "not_started" | "queued" | "running" | "succeeded" | "failed";
   runtime_status:
     | "not_requested"
     | "runtime_queued"
@@ -44,6 +50,22 @@ interface ApiProject {
     branch_coverage: number | null;
     error: string | null;
     dependency_fingerprint: string | null;
+    environment_fingerprint?: string | null;
+    failure_stage?:
+      | "metadata"
+      | "resolve"
+      | "build"
+      | "collect"
+      | "test"
+      | "coverage"
+      | "internal"
+      | null;
+    error_code?: string | null;
+    retryable?: boolean;
+    runner_profile?: string | null;
+    pytest_version?: string | null;
+    coverage_version?: string | null;
+    conflicts?: Array<{ package: string; requested_versions: string[]; sources: string[] }>;
   } | null;
 }
 
@@ -78,6 +100,10 @@ interface ApiProjectFunctionList {
   total: number;
 }
 
+interface ApiRuntimeCapabilities {
+  items: Array<{ python_version: string; image: string; job: string; healthy: boolean }>;
+}
+
 function mapStatus(status: ApiProject["status"]): ProjectStatus {
   if (status === "ready") return "ready";
   if (status === "uploaded" || status === "analyzing") return "analyzing";
@@ -106,6 +132,9 @@ function mapProject(project: ApiProject): PythonProject {
     name: project.name,
     description: project.description,
     python: project.settings.runtime.python_version,
+    requestedPython: project.requested_python_version ?? project.settings.runtime.python_version,
+    detectedPython: project.detected_python_version,
+    resolvedPython: project.resolved_python_version,
     commit: project.commit ?? "Not recorded",
     branch: project.branch,
     files: project.python_file_count,
@@ -123,6 +152,8 @@ function mapProject(project: ApiProject): PythonProject {
     sourceDir: project.settings.runtime.source_directory,
     testDir: project.settings.tests.test_directory,
     runtimeStatus: project.runtime_status,
+    runtimeBuildStatus: project.runtime_build_status,
+    runtimeExecutionStatus: project.runtime_execution_status,
     runtimeEnvironmentId: project.runtime_environment_id,
     runtimeEnvironmentName: project.runtime_environment_name,
     runtimeBundleObject: project.runtime_bundle_object,
@@ -136,6 +167,22 @@ function mapProject(project: ApiProject): PythonProject {
           branchCoverage: project.runtime_report.branch_coverage,
           error: project.runtime_report.error,
           dependencyFingerprint: project.runtime_report.dependency_fingerprint,
+          environmentFingerprint: project.runtime_report.environment_fingerprint,
+          failureStage: project.runtime_report.failure_stage,
+          errorCode: project.runtime_report.error_code,
+          retryable: project.runtime_report.retryable ?? false,
+          runnerProfile: project.runtime_report.runner_profile
+            ? {
+                name: project.runtime_report.runner_profile,
+                pytestVersion: project.runtime_report.pytest_version ?? null,
+                coverageVersion: project.runtime_report.coverage_version ?? null,
+              }
+            : null,
+          conflicts: (project.runtime_report.conflicts ?? []).map((conflict) => ({
+            package: conflict.package,
+            requestedVersions: conflict.requested_versions,
+            sources: conflict.sources,
+          })),
         }
       : null,
   };
@@ -191,6 +238,48 @@ export class HttpProjectRepository implements ProjectRepository {
     );
   }
 
+  async retryBuild(projectId: string) {
+    return mapProject(
+      await apiRequest<ApiProject>(`/projects/${projectId}/retry-build`, { method: "POST" }),
+    );
+  }
+
+  async retryExecution(projectId: string) {
+    return mapProject(
+      await apiRequest<ApiProject>(`/projects/${projectId}/retry-execution`, { method: "POST" }),
+    );
+  }
+
+  async runtimeCapabilities(signal?: AbortSignal) {
+    const response = await apiRequest<ApiRuntimeCapabilities>("/projects/runtime-capabilities", {
+      signal,
+    });
+    return response.items.map((item) => ({
+      pythonVersion: item.python_version,
+      image: item.image,
+      job: item.job,
+      healthy: item.healthy,
+    }));
+  }
+
+  async validateSettings(projectId: string, settings: ProjectSettingsInput) {
+    await apiRequest(`/projects/${projectId}/settings/validate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(settings),
+    });
+  }
+
+  async updateSettings(projectId: string, settings: ProjectSettingsInput) {
+    return mapProject(
+      await apiRequest<ApiProject>(`/projects/${projectId}/settings`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      }),
+    );
+  }
+
   async create(input: CreateProjectInput) {
     const contentType = ["application/zip", "application/x-zip-compressed"].includes(
       input.file.type.toLowerCase(),
@@ -204,6 +293,7 @@ export class HttpProjectRepository implements ProjectRepository {
         filename: input.file.name,
         content_type: contentType,
         size_bytes: input.file.size,
+        settings: { runtime: { python_version: input.pythonVersion } },
       }),
     });
     const localUpload = !/^https?:\/\//i.test(upload.upload_url);
@@ -232,6 +322,7 @@ export class HttpProjectRepository implements ProjectRepository {
           commit: input.commit || null,
           runtime_environment_id: input.runtimeEnvironmentId || null,
           runtime_environment_name: input.runtimeEnvironmentName || null,
+          settings: { runtime: { python_version: input.pythonVersion } },
         }),
       }),
     );

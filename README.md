@@ -80,6 +80,56 @@ npm run dev
 
 Mở <http://127.0.0.1:5173>. Profile mặc định dùng demo login, gửi `dev-token`, và Vite proxy `/api` tới backend local ở port 8000. Firebase values chỉ cần cho connected/production mode.
 
+### 4. Visual upload test với Docker Desktop
+
+Chế độ development `local_docker` nối upload thật từ UI vào isolated
+`promptopt-sandbox:py3.12`. Backend chạy trên host và gọi Docker CLI; không
+mount Docker socket vào API container và production không chấp nhận backend
+này.
+
+Điều kiện:
+
+- Docker Desktop đang dùng Linux daemon;
+- có kết nối mạng trong lần build sandbox image đầu tiên;
+- `.venv` và frontend dependencies đã được cài như các bước trên.
+
+Khởi động backend + frontend bằng một lệnh từ repository root:
+
+```powershell
+.\scripts\start_local_visual_test.ps1
+```
+
+Script tự build `promptopt-sandbox:py3.12` nếu image chưa tồn tại. Khi vừa sửa
+Dockerfile hoặc sandbox agent, ép build lại bằng:
+
+```powershell
+.\scripts\start_local_visual_test.ps1 -RebuildSandbox
+```
+
+Script kiểm tra image contract, tạo fixture tại
+`app/data/coverage-conflict-project.zip`, chạy FastAPI ở port 8000 và Vite ở
+port 5173. Mở <http://127.0.0.1:5173>, đăng nhập demo, chọn **Projects → Create
+project**, rồi upload fixture. UI sẽ polling qua các trạng thái analysis,
+environment build, test và coverage cho tới `Ready`. Runtime report phải hiển
+thị runner `project_native` và coverage `7.10.7`; optimizer `.venv` vẫn giữ
+coverage riêng.
+
+Log nằm dưới `app/data/local-visual-test/`. Dừng đúng hai process do script tạo:
+
+```powershell
+.\scripts\stop_local_visual_test.ps1
+```
+
+Có thể kiểm tra adapter trực tiếp mà không mở UI và không gọi LLM:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_local_docker_runtime_integration.py
+```
+
+Giới hạn development hiện tại: mỗi environment local chỉ nhận một uploaded
+project. Việc chọn một environment đã có để ghép project thứ hai sẽ fail-closed;
+Cloud Run production vẫn dùng runner riêng.
+
 ## Environment variables
 
 Ba file có phạm vi khác nhau; không gộp chúng thành một `.env`:

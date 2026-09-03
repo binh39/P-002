@@ -4,7 +4,7 @@ import { useLocation, useParams } from "wouter";
 
 import { useRepositories } from "@/app/providers";
 import { Field, PageHeader, StatCard, StatusBadge } from "@/components/PlatformUI";
-import type { PythonProject } from "@/domain/projects";
+import type { ProjectSettingsInput, PythonProject } from "@/domain/projects";
 
 type ProjectTab = "overview" | "functions" | "settings" | "versions";
 
@@ -53,6 +53,18 @@ export default function ProjectDetail() {
   });
   const prepareRuntimeMutation = useMutation({
     mutationFn: () => projects.prepareRuntime(projectId),
+    onSuccess: async (project) => {
+      queryClient.setQueryData(["projects", projectId], project);
+      await queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+  const retryRuntimeMutation = useMutation({
+    mutationFn: () => {
+      const stage = projectQuery.data?.runtimeReport?.failureStage;
+      return ["collect", "test", "coverage"].includes(stage ?? "")
+        ? projects.retryExecution(projectId)
+        : projects.retryBuild(projectId);
+    },
     onSuccess: async (project) => {
       queryClient.setQueryData(["projects", projectId], project);
       await queryClient.invalidateQueries({ queryKey: ["projects"] });
@@ -143,17 +155,16 @@ export default function ProjectDetail() {
                   prepareRuntimeMutation.isPending ||
                   project.status === "analyzing" ||
                   project.status === "failed" ||
+                  runtimeStatus === "runtime_failed" ||
                   ["runtime_queued", "runtime_preparing"].includes(runtimeStatus)
                 }
                 onClick={() => prepareRuntimeMutation.mutate()}
               >
                 {prepareRuntimeMutation.isPending
                   ? "Queueing runtime..."
-                  : runtimeStatus === "runtime_failed"
-                    ? "Retry runtime"
-                    : runtimeStatus === "runtime_ready"
-                      ? "Rebuild runtime"
-                      : "Prepare runtime"}
+                  : runtimeStatus === "runtime_ready"
+                    ? "Rebuild runtime"
+                    : "Prepare runtime"}
               </button>
               <button
                 className="primary-button"
@@ -210,10 +221,32 @@ export default function ProjectDetail() {
               {project.runtimeReport?.error ?? "Runtime validation failed."} The environment's
               active bundle and its existing projects were left unchanged.
             </p>
+            <p>
+              Stage: <strong>{project.runtimeReport?.failureStage ?? "build"}</strong>
+              {project.runtimeReport?.errorCode ? ` · ${project.runtimeReport.errorCode}` : ""}
+            </p>
+            {project.runtimeReport?.conflicts.map((conflict) => (
+              <p key={`${conflict.package}-${conflict.requestedVersions.join("-")}`}>
+                <strong>{conflict.package}</strong>: {conflict.requestedVersions.join(" versus ")}
+                {conflict.sources.length ? ` (${conflict.sources.join(", ")})` : ""}
+              </p>
+            ))}
           </div>
-          <button className="secondary-button" onClick={() => navigate("/projects")}>
-            Upload revised ZIP
-          </button>
+          <div>
+            {project.runtimeReport?.retryable ? (
+              <button
+                className="secondary-button"
+                disabled={retryRuntimeMutation.isPending}
+                onClick={() => retryRuntimeMutation.mutate()}
+              >
+                {retryRuntimeMutation.isPending ? "Retrying…" : "Retry transient failure"}
+              </button>
+            ) : (
+              <button className="secondary-button" onClick={() => setTab("settings")}>
+                Fix configuration
+              </button>
+            )}
+          </div>
         </div>
       )}
       {analyzeMutation.isError && (
@@ -230,6 +263,13 @@ export default function ProjectDetail() {
             : "Runtime preparation could not be started."}
         </div>
       )}
+      {retryRuntimeMutation.isError && (
+        <div className="page-state page-state-error" role="alert">
+          {retryRuntimeMutation.error instanceof Error
+            ? retryRuntimeMutation.error.message
+            : "Runtime retry could not be started."}
+        </div>
+      )}
 
       <div className="platform-tabs" role="tablist">
         {(["overview", "functions", "settings", "versions"] as ProjectTab[]).map((item) => (
@@ -241,6 +281,7 @@ export default function ProjectDetail() {
 
       {tab === "overview" && (
         <>
+          {!isSample && <RuntimeProgress project={project} />}
           <div className="platform-stats-grid">
             <StatCard label="Python files" value={project.files} />
             <StatCard label="Functions" value={project.functions} tone="violet" />
@@ -508,176 +549,189 @@ export default function ProjectDetail() {
   );
 }
 
-function ProjectSettings({ project, readOnly }: { project: PythonProject; readOnly: boolean }) {
-  const [section, setSection] = useState("runtime");
-  const sections = ["runtime", "dependencies", "tests", "coverage", "security"];
+function RuntimeProgress({ project }: { project: PythonProject }) {
+  const failureStage = project.runtimeReport?.failureStage;
+  const buildStarted = project.runtimeBuildStatus && project.runtimeBuildStatus !== "not_started";
+  const executionStarted =
+    project.runtimeExecutionStatus && project.runtimeExecutionStatus !== "not_started";
+  const stages = [
+    {
+      name: "Detect",
+      done: project.status === "ready" || project.status === "warning",
+      failed: failureStage === "metadata",
+    },
+    {
+      name: "Resolve",
+      done: Boolean(buildStarted) && failureStage !== "metadata",
+      failed: failureStage === "resolve",
+    },
+    {
+      name: "Build",
+      done: project.runtimeBuildStatus === "ready",
+      failed: failureStage === "build",
+    },
+    {
+      name: "Test",
+      done: project.runtimeExecutionStatus === "succeeded",
+      failed: ["collect", "test"].includes(failureStage ?? ""),
+    },
+    {
+      name: "Coverage",
+      done: project.runtimeExecutionStatus === "succeeded",
+      failed: failureStage === "coverage",
+    },
+    {
+      name: "Admitted",
+      done: project.runtimeStatus === "runtime_ready",
+      failed: project.runtimeStatus === "runtime_failed",
+    },
+  ];
   return (
-    <div className="settings-layout">
-      <nav className="settings-nav">
-        {sections.map((item) => (
-          <button
-            key={item}
-            className={section === item ? "active" : ""}
-            onClick={() => setSection(item)}
+    <section className="platform-card" aria-label="Runtime admission progress">
+      <div className="card-heading">
+        <div>
+          <h2>Environment admission</h2>
+          <p>Build and execution are tracked independently.</p>
+        </div>
+      </div>
+      {stages.map((stage) => (
+        <div className="validation-row" key={stage.name}>
+          <span className="validation-check">{stage.failed ? "!" : stage.done ? "✓" : "·"}</span>
+          <span>{stage.name}</span>
+          <small>
+            {stage.failed
+              ? "Failed"
+              : stage.done
+                ? "Complete"
+                : executionStarted || buildStarted
+                  ? "Pending"
+                  : "Not started"}
+          </small>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function ProjectSettings({ project, readOnly }: { project: PythonProject; readOnly: boolean }) {
+  const { projects } = useRepositories();
+  const queryClient = useQueryClient();
+  const [pythonVersion, setPythonVersion] = useState(project.requestedPython ?? project.python);
+  const [sourceDirectory, setSourceDirectory] = useState(project.sourceDir);
+  const [testDirectory, setTestDirectory] = useState(project.testDir);
+  const [framework, setFramework] = useState<"pytest" | "unittest">("pytest");
+  const [message, setMessage] = useState<string | null>(null);
+  const settings: ProjectSettingsInput = {
+    runtime: { python_version: pythonVersion, source_directory: sourceDirectory },
+    tests: { framework, test_directory: testDirectory },
+  };
+  const capabilities = useQuery({
+    queryKey: ["runtime-capabilities"],
+    queryFn: ({ signal }) => projects.runtimeCapabilities(signal),
+  });
+  const validate = useMutation({
+    mutationFn: () => projects.validateSettings(project.id, settings),
+    onSuccess: () => setMessage("Configuration is valid for an available sandbox image."),
+  });
+  const save = useMutation({
+    mutationFn: () => projects.updateSettings(project.id, settings),
+    onSuccess: async (updated) => {
+      setMessage("Settings saved. Runtime validation has been queued.");
+      queryClient.setQueryData(["projects", project.id], updated);
+      await queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+  const error = validate.error ?? save.error;
+  return (
+    <section className="platform-card settings-panel">
+      <div className="card-heading">
+        <div>
+          <h2>Sandbox settings</h2>
+          <p>Only validated settings are sent to the project sandbox.</p>
+        </div>
+        <StatusBadge tone="info">
+          {readOnly ? "Bundled configuration" : "Project override"}
+        </StatusBadge>
+      </div>
+      <div className="form-grid">
+        <Field label="Python version" hint="Only healthy image/job pairs are shown.">
+          <select
+            value={pythonVersion}
+            disabled={readOnly}
+            onChange={(event) => setPythonVersion(event.target.value)}
           >
-            {item}
-          </button>
-        ))}
-      </nav>
-      <section className="platform-card settings-panel">
-        <div className="card-heading">
-          <div>
-            <h2>{section[0].toUpperCase() + section.slice(1)} settings</h2>
-            <p>Project overrides are versioned with every analysis.</p>
-          </div>
-          <StatusBadge tone="info">
-            {readOnly ? "Bundled configuration" : "Overrides workspace defaults"}
-          </StatusBadge>
-        </div>
-        {section === "runtime" && (
-          <div className="form-grid">
-            <Field label="Python version">
-              <select defaultValue={project.python}>
-                <option>3.10</option>
-                <option>3.11</option>
-                <option>3.12</option>
-              </select>
-            </Field>
-            <Field label="Runtime image">
-              <input defaultValue="python:3.11-slim" />
-            </Field>
-            <Field label="Working directory">
-              <input defaultValue="./" />
-            </Field>
-            <Field label="Source directory">
-              <input defaultValue={project.sourceDir} />
-            </Field>
-            <Field label="CPU">
-              <select>
-                <option>1 vCPU</option>
-                <option>2 vCPU</option>
-              </select>
-            </Field>
-            <Field label="Memory">
-              <select>
-                <option>2 GiB</option>
-                <option>4 GiB</option>
-              </select>
-            </Field>
-          </div>
+            {(capabilities.data ?? [])
+              .filter((item) => item.healthy)
+              .map((item) => (
+                <option key={item.pythonVersion} value={item.pythonVersion}>
+                  Python {item.pythonVersion}
+                </option>
+              ))}
+          </select>
+        </Field>
+        <Field label="Source directory">
+          <input
+            value={sourceDirectory}
+            disabled={readOnly}
+            onChange={(event) => setSourceDirectory(event.target.value)}
+          />
+        </Field>
+        <Field label="Test framework">
+          <select
+            value={framework}
+            disabled={readOnly}
+            onChange={(event) => setFramework(event.target.value as "pytest" | "unittest")}
+          >
+            <option value="pytest">pytest</option>
+            <option value="unittest">unittest</option>
+          </select>
+        </Field>
+        <Field label="Test directory">
+          <input
+            value={testDirectory}
+            disabled={readOnly}
+            onChange={(event) => setTestDirectory(event.target.value)}
+          />
+        </Field>
+      </div>
+      <p className="muted-copy">
+        Runtime images and dependency shell commands are selected by the sandbox policy and cannot
+        be overridden here.
+      </p>
+      {message ? <p role="status">{message}</p> : null}
+      {error ? (
+        <p className="form-error" role="alert">
+          {error instanceof Error ? error.message : "Settings could not be validated."}
+        </p>
+      ) : null}
+      <div className="settings-actions">
+        {readOnly ? (
+          <span className="muted-copy">Sample settings are immutable.</span>
+        ) : (
+          <>
+            <button
+              className="secondary-button"
+              disabled={validate.isPending || save.isPending}
+              onClick={() => {
+                setMessage(null);
+                validate.mutate();
+              }}
+            >
+              {validate.isPending ? "Validating…" : "Validate configuration"}
+            </button>
+            <button
+              className="primary-button"
+              disabled={validate.isPending || save.isPending}
+              onClick={() => {
+                setMessage(null);
+                save.mutate();
+              }}
+            >
+              {save.isPending ? "Saving…" : "Save settings"}
+            </button>
+          </>
         )}
-        {section === "dependencies" && (
-          <div className="form-grid">
-            <Field label="Install command">
-              <input defaultValue="pip install -r requirements.txt" />
-            </Field>
-            <Field label="Requirements file">
-              <input defaultValue="requirements.txt" />
-            </Field>
-            <Field label="Lock file">
-              <input placeholder="uv.lock / poetry.lock" />
-            </Field>
-            <Field label="Dependency cache">
-              <select>
-                <option>Enabled</option>
-                <option>Disabled</option>
-              </select>
-            </Field>
-          </div>
-        )}
-        {section === "tests" && (
-          <div className="form-grid">
-            <Field label="Framework">
-              <select>
-                <option>pytest</option>
-                <option>unittest</option>
-              </select>
-            </Field>
-            <Field label="Test directory">
-              <input defaultValue={project.testDir} />
-            </Field>
-            <Field label="Test command">
-              <input defaultValue={project.testCommand} />
-            </Field>
-            <Field label="Per-test timeout">
-              <input defaultValue="30 seconds" />
-            </Field>
-            <Field label="Retry count">
-              <input defaultValue="1" />
-            </Field>
-            <Field label="Test pattern">
-              <input defaultValue="test_*.py" />
-            </Field>
-          </div>
-        )}
-        {section === "coverage" && (
-          <div className="form-grid">
-            <Field label="Statement coverage">
-              <select>
-                <option>Enabled</option>
-              </select>
-            </Field>
-            <Field label="Branch coverage">
-              <select>
-                <option>Enabled</option>
-                <option>Disabled</option>
-              </select>
-            </Field>
-            <Field label="Coverage config">
-              <input defaultValue=".coveragerc" />
-            </Field>
-            <Field label="Include pattern">
-              <input defaultValue={`${project.sourceDir}**/*.py`} />
-            </Field>
-            <Field label="Omit pattern">
-              <input defaultValue="*/tests/*, */migrations/*" />
-            </Field>
-            <Field label="Function extraction">
-              <select>
-                <option>Functions + methods + async</option>
-              </select>
-            </Field>
-          </div>
-        )}
-        {section === "security" && (
-          <div className="form-grid">
-            <Field label="Network access">
-              <select>
-                <option>Disabled during tests</option>
-                <option>Allow listed hosts</option>
-              </select>
-            </Field>
-            <Field label="Filesystem">
-              <select>
-                <option>Read-only source</option>
-              </select>
-            </Field>
-            <Field label="Maximum output">
-              <input defaultValue="10 MB" />
-            </Field>
-            <Field label="Run timeout">
-              <input defaultValue="15 minutes" />
-            </Field>
-            <Field label="Environment variables" hint="Values are resolved from Secret Manager">
-              <input defaultValue="PYTHONHASHSEED, TZ" />
-            </Field>
-            <Field label="Maximum workers">
-              <input defaultValue="4" />
-            </Field>
-          </div>
-        )}
-        <div className="settings-actions">
-          {readOnly ? (
-            <span className="muted-copy">Sample settings are immutable.</span>
-          ) : (
-            <>
-              <button className="secondary-button">Reset to workspace defaults</button>
-              <button className="secondary-button">Validate configuration</button>
-              <button className="primary-button">Save settings</button>
-            </>
-          )}
-        </div>
-      </section>
-    </div>
+      </div>
+    </section>
   );
 }

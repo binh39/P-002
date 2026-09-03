@@ -54,10 +54,21 @@ class Settings(BaseSettings):
     cloud_run_gepa_timeout_seconds: int = Field(default=86400, ge=300, le=86400)
     cloud_run_test_generation_job: str = "promptopt-gepa-runner"
     cloud_run_test_generation_timeout_seconds: int = Field(default=7200, ge=300, le=86400)
-    runtime_execution_backend: Literal["disabled", "cloud_run_job"] = "disabled"
+    runtime_execution_backend: Literal["disabled", "cloud_run_job", "local_docker"] = "disabled"
     cloud_run_runtime_job: str = "promptopt-runtime-preparer"
     cloud_run_runtime_timeout_seconds: int = Field(default=1800, ge=60, le=7200)
+    local_sandbox_image: str = "promptopt-sandbox:py3.12"
+    local_runtime_dir: str = "./data/local-runtime"
+    local_docker_executable: str = "docker"
     runtime_bundle_protocol_version: int = Field(default=MINIMUM_RUNTIME_PROTOCOL_VERSION, ge=1)
+    project_sandbox_v2: bool = False
+    project_sandbox_rollout_mode: Literal["disabled", "shadow", "canary", "enabled"] = "disabled"
+    sandbox_runtime_execution_backend: Literal["disabled", "cloud_run_job", "local_docker"] = "disabled"
+    sandbox_cloud_run_runtime_job: str = "promptopt-project-sandbox-v2"
+    sandbox_canary_percent: int = Field(default=0, ge=0, le=100)
+    sandbox_canary_python_versions: str = "3.12"
+    sandbox_advertised_python_versions: str = ""
+    sandbox_rollback_window_days: int = Field(default=14, ge=1, le=90)
     gepa_max_concurrency: int = Field(default=10, ge=1, le=32)
     gepa_repeat_tests: int = Field(default=5, ge=0, le=20)
     gepa_evaluation_replicates: int = Field(default=1, ge=1, le=10)
@@ -77,6 +88,14 @@ class Settings(BaseSettings):
     def optimize_model_allowlist_values(self) -> set[str]:
         return {model.strip() for model in self.optimize_model_allowlist.split(",") if model.strip()}
 
+    @property
+    def sandbox_canary_python_version_values(self) -> set[str]:
+        return {version.strip() for version in self.sandbox_canary_python_versions.split(",") if version.strip()}
+
+    @property
+    def sandbox_advertised_python_version_values(self) -> set[str]:
+        return {version.strip() for version in self.sandbox_advertised_python_versions.split(",") if version.strip()}
+
     def resolve_app_path(self, value: str) -> Path:
         """Resolve local app paths independently of the process working directory."""
         path = Path(value).expanduser()
@@ -90,8 +109,36 @@ class Settings(BaseSettings):
     def sample_repos_path(self) -> Path:
         return self.resolve_app_path(self.sample_repos_dir)
 
+    @property
+    def local_runtime_path(self) -> Path:
+        return self.resolve_app_path(self.local_runtime_dir)
+
     @model_validator(mode="after")
     def validate_production_backends(self):
+        if self.runtime_execution_backend == "local_docker" and self.app_env != "development":
+            raise ValueError("RUNTIME_EXECUTION_BACKEND=local_docker is development-only")
+        if self.runtime_execution_backend == "local_docker" and self.storage_backend != "local":
+            raise ValueError("RUNTIME_EXECUTION_BACKEND=local_docker requires STORAGE_BACKEND=local")
+        if self.sandbox_runtime_execution_backend == "local_docker" and self.app_env != "development":
+            raise ValueError("SANDBOX_RUNTIME_EXECUTION_BACKEND=local_docker is development-only")
+        if self.sandbox_runtime_execution_backend == "local_docker" and self.storage_backend != "local":
+            raise ValueError("SANDBOX_RUNTIME_EXECUTION_BACKEND=local_docker requires STORAGE_BACKEND=local")
+        if self.project_sandbox_rollout_mode != "disabled" and not self.project_sandbox_v2:
+            raise ValueError("PROJECT_SANDBOX_V2=true is required for sandbox rollout")
+        if self.project_sandbox_v2 and self.project_sandbox_rollout_mode != "disabled":
+            if self.runtime_execution_backend == "disabled":
+                raise ValueError("RUNTIME_EXECUTION_BACKEND must keep the legacy executor during rollout")
+            if self.sandbox_runtime_execution_backend == "disabled":
+                raise ValueError("SANDBOX_RUNTIME_EXECUTION_BACKEND is required for sandbox rollout")
+            if self.project_sandbox_rollout_mode == "canary" and self.sandbox_canary_percent == 0:
+                raise ValueError("SANDBOX_CANARY_PERCENT must be positive in canary mode")
+        supported_versions = {"3.10", "3.11", "3.12", "3.13"}
+        if not self.sandbox_canary_python_version_values <= supported_versions:
+            raise ValueError("SANDBOX_CANARY_PYTHON_VERSIONS contains an unsupported Python minor")
+        if not self.sandbox_advertised_python_version_values <= supported_versions:
+            raise ValueError("SANDBOX_ADVERTISED_PYTHON_VERSIONS contains an unsupported Python minor")
+        if self.sandbox_advertised_python_version_values and self.project_sandbox_rollout_mode != "enabled":
+            raise ValueError("Sandbox Python versions may be advertised only after rollout mode is enabled")
         if self.app_env == "production":
             if self.auth_mode != "firebase":
                 raise ValueError("AUTH_MODE=firebase is required in production")
@@ -115,6 +162,11 @@ class Settings(BaseSettings):
                 raise ValueError("CLOUD_RUN_TEST_GENERATION_JOB is required")
             if self.runtime_execution_backend != "cloud_run_job" or not self.cloud_run_runtime_job:
                 raise ValueError("RUNTIME_EXECUTION_BACKEND=cloud_run_job and CLOUD_RUN_RUNTIME_JOB are required")
+            if self.project_sandbox_v2 and self.project_sandbox_rollout_mode != "disabled":
+                if self.sandbox_runtime_execution_backend != "cloud_run_job" or not self.sandbox_cloud_run_runtime_job:
+                    raise ValueError(
+                        "SANDBOX_RUNTIME_EXECUTION_BACKEND=cloud_run_job and SANDBOX_CLOUD_RUN_RUNTIME_JOB are required"
+                    )
             if not self.admin_vertexai_project.strip():
                 raise ValueError("ADMIN_VERTEXAI_PROJECT is required in production")
             if not self.admin_vertexai_project.strip():

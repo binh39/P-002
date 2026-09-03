@@ -1,0 +1,30 @@
+{
+  "artifact_sha256": "c74ddd23f54db24ffeb5f9693dbb67b330ad74a4bf9549caae128d71053abde6",
+  "cache_hit_with_network_disabled": true,
+  "environment_fingerprint": "4a503254ebd3213e62e92e2dda526d5f9c9d8bab604190fa31bb376d5886b740",
+  "image_contracts": {
+    "3.10": {
+      "image_id": "sha256:7bfe7a0e539cc2cba01610ef649cf2446ce16dfe4f3785594ecdc9e77b991727",
+      "python_full_version": "3.10.21"
+    },
+    "3.11": {
+      "image_id": "sha256:437e6b99566312e54ab17c133a27a01178950df4e62d9359d040e0f8180ea591",
+      "python_full_version": "3.11.16"
+    },
+    "3.12": {
+      "image_id": "sha256:3d649015adcb8eb94f5c535db66d5683fb4223e75c58ee1205a0b4e347cd4195",
+      "python_full_version": "3.12.14"
+    },
+    "3.13": {
+      "image_id": "sha256:20b38cb74537934a52e11b87ccd158cc0e8ad6ddcd31b6d427d2ebde572328c4",
+      "python_full_version": "3.13.15"
+    }
+  },
+  "inventory_assertions": {
+    "archive_only_contains_venv": true,
+    "project_coverage_version": "7.10.7",
+    "runner_coverage_version": "7.15.2"
+  },
+  "project": "src/sample_repo/isort",
+  "python_minor": "3.12"
+}

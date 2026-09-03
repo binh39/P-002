@@ -4,7 +4,13 @@ from uuid import uuid4
 from backend.core.errors import AppError
 from backend.infrastructure.storage import ObjectStorage
 from backend.modules.uploads.repository import UploadRecord, UploadRepository
-from backend.modules.uploads.schemas import CreateUploadRequest, UploadResponse, UploadStatus
+from backend.modules.uploads.schemas import (
+    CreateUploadRequest,
+    UploadProjectSettings,
+    UploadResponse,
+    UploadRuntimeSettings,
+    UploadStatus,
+)
 
 
 class UploadService:
@@ -40,6 +46,7 @@ class UploadService:
             status=UploadStatus.PENDING,
             expires_at=now + timedelta(seconds=self.signed_url_ttl_seconds),
             created_at=now,
+            requested_python_version=request.settings.runtime.python_version,
         )
         await self.repository.create(record)
         target = await self.storage.create_upload_target(
@@ -100,6 +107,9 @@ class UploadService:
             object_name=record.object_name,
             status=record.status,
             size_bytes=record.size_bytes,
+            settings=UploadProjectSettings(
+                runtime=UploadRuntimeSettings(python_version=record.requested_python_version)
+            ),
             upload_url=upload_url,
             method=method,
             headers=headers or {},

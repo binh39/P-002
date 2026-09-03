@@ -277,6 +277,7 @@ def _evaluation_digest(
         )
     }
     source_hashes = {}
+    environment_fingerprints = {}
     if config is not None:
         project_root = Path(getattr(config, "project_root", ".")).resolve()
         resolve_package = getattr(config, "package_dir_for", None)
@@ -295,6 +296,9 @@ def _evaluation_digest(
             path = next((value for value in candidates if value.is_file()), None)
             if path is not None:
                 source_hashes[target.source_file] = hashlib.sha256(path.read_bytes()).hexdigest()
+    fingerprint_resolver = getattr(runner, "environment_fingerprints", None)
+    if callable(fingerprint_resolver):
+        environment_fingerprints = fingerprint_resolver(targets)
     payload = {
         # Schema 10 fixed PYTHONHASHSEED across CoverUp and coverage subprocesses.
         # Schema 11 makes repeat_tests effective during generation and final
@@ -303,10 +307,13 @@ def _evaluation_digest(
         # batches CoverUp generation and scores only each target's traced tests.
         # Schema 14 restores isolated per-target CoverUp processes in one bounded
         # pool, consolidates traced tests, and skips redundant final-suite coverage.
-        "cache_schema": 14,
+        # Schema 15 binds every cached evaluation to immutable per-project
+        # sandbox environment fingerprints.
+        "cache_schema": 15,
         "config": config_values,
         "targets": [_target_identity(target) for target in targets],
         "sources": source_hashes,
+        "environment_fingerprints": environment_fingerprints,
     }
     serialized = json.dumps(payload, sort_keys=True, ensure_ascii=True)
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:12]
@@ -401,6 +408,16 @@ def evaluate_bundle_batch_cached(
                     f"Cached batch target set differs for candidate {digest} split {split!r}. "
                     "Use a fresh artifacts directory."
                 )
+            current_fingerprints = (
+                runner.environment_fingerprints(targets)
+                if hasattr(runner, "environment_fingerprints")
+                else {}
+            )
+            if cached.get("environment_fingerprints", {}) != current_fingerprints:
+                raise RuntimeError(
+                    "Cached batch environment fingerprint differs from the active sandbox. "
+                    "The baseline must be evaluated again under the new environment."
+                )
             cached["aggregate"] = aggregate_coverage_score(cached.get("results", []))
             return cached
 
@@ -441,6 +458,9 @@ def evaluate_bundle_batch_cached(
                         "coverage": target_result.score,
                         "feedback": target_result.feedback,
                         "attempt_traces": getattr(target_result, "attempt_traces", []),
+                        "environment_fingerprint": getattr(
+                            target_result, "environment_fingerprint", None
+                        ),
                     }
                 )
         batch = {
@@ -452,6 +472,11 @@ def evaluate_bundle_batch_cached(
             "run_ids": [record.run_id for record in records],
             "generator_exit_codes": [int(getattr(record, "exit_code", 0) or 0) for record in records],
             "tests_workspaces": [record.tests_workspace for record in records],
+            "environment_fingerprints": (
+                runner.environment_fingerprints(targets)
+                if hasattr(runner, "environment_fingerprints")
+                else {}
+            ),
             "results": results,
         }
         batch["aggregate"] = aggregate_coverage_score(results)
@@ -632,6 +657,29 @@ def _representative_test(attempts: Sequence[Mapping[str, Any]]) -> str:
     return ""
 
 
+def require_paired_environment_fingerprints(
+    results: Sequence[Mapping[str, Any]],
+    reference_results: Sequence[Mapping[str, Any]],
+) -> None:
+    """Reject paired scoring across different immutable project environments."""
+
+    references = {_result_identity(dict(item)): item for item in reference_results}
+    for result in results:
+        identity = _result_identity(dict(result))
+        reference = references.get(identity)
+        if reference is None:
+            continue
+        current = result.get("environment_fingerprint")
+        baseline = reference.get("environment_fingerprint")
+        if current != baseline and (current is not None or baseline is not None):
+            raise RuntimeError(
+                "Environment fingerprint mismatch for paired baseline/candidate scoring: "
+                f"{identity[0]}:{identity[1]}::{identity[2]} "
+                f"baseline={baseline!r}, candidate={current!r}. "
+                "Regenerate the baseline under the active project sandbox."
+            )
+
+
 def _comparison_outcome(score_delta: float, *, tolerance: float = 1e-9) -> str:
     if score_delta > tolerance:
         return "improved"
@@ -712,9 +760,16 @@ def evaluate_bundle_repeated(
         for replicate in range(replicates)
     ]
     aggregate_rows = [
-        aggregate_coverage_score(
-            batch["results"],
-            reference_results=reference_results,
+        (
+            (
+                require_paired_environment_fingerprints(batch["results"], reference_results)
+                if reference_results is not None
+                else None
+            )
+            or aggregate_coverage_score(
+                batch["results"],
+                reference_results=reference_results,
+            )
         )
         for batch in batches
     ]
@@ -760,6 +815,11 @@ def evaluate_bundle_repeated(
         "replicates": replicates,
         "run_ids": [run_id for batch in batches for run_id in batch.get("run_ids", [])],
         "tests_workspaces": [workspace for batch in batches for workspace in batch.get("tests_workspaces", [])],
+        "environment_fingerprints": {
+            project: fingerprint
+            for batch in batches
+            for project, fingerprint in batch.get("environment_fingerprints", {}).items()
+        },
         "results": merged_results,
         "aggregate": aggregate,
         "batches": batches,
@@ -829,6 +889,9 @@ def build_coverage_report(
         splits[split] = {
             "baseline": _bundle_split_summary(baseline_batch),
             "optimized": _bundle_split_summary(optimized_batch),
+            "environment_fingerprints": baseline_batch.get(
+                "environment_fingerprints", {}
+            ),
         }
     return {
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
@@ -1940,7 +2003,7 @@ def _optimization_run_digest(
     evaluation_replicates: int,
 ) -> str:
     payload = {
-        "optimizer_schema": 14,
+        "optimizer_schema": 15,
         "baseline": baseline.as_candidate(),
         "train": [_target_identity(target) for target in train_targets],
         "validation": [_target_identity(target) for target in validation_targets],

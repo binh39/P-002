@@ -86,6 +86,7 @@ jobs:
         run: python -m pytest tests/ -v --tb=short
         env:
           APP_ENV: test
+          PYTHONPATH: ${{ github.workspace }}
 
       - name: Build API image
         run: |
@@ -115,3 +116,65 @@ jobs:
           uv run pytest -p no:pytest_isolate tests -q
       - name: Build GEPA runner image
         run: docker build --file cloud/Dockerfile.web --tag promptopt-gepa-runner:ci .
+
+  sandbox-image-contract:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build isolated project sandbox image
+        run: >-
+          docker build
+          --file cloud/Dockerfile.sandbox
+          --build-arg PYTHON_VERSION=${{ matrix.python-version }}
+          --tag promptopt-sandbox:py${{ matrix.python-version }} .
+      - name: Verify sandbox image contract
+        run: |
+          docker run --rm promptopt-sandbox:py${{ matrix.python-version }} contract > sandbox-contract.json
+          python -c 'import json; p=json.load(open("sandbox-contract.json")); assert p["python_minor"] == "${{ matrix.python-version }}"; assert p["uv_available"] and p["poetry_available"]; assert p["managed_pytest_version"] == "9.1.1"; assert p["managed_coverage_version"] == "7.15.3"; assert not p["forbidden_modules_present"]'
+      - name: Upload image contract evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sandbox-contract-py${{ matrix.python-version }}
+          path: sandbox-contract.json
+          if-no-files-found: warn
+
+  sandbox-docker-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.9.13"
+          enable-cache: true
+      - name: Install locked test environment
+        run: uv sync --frozen --group dev
+      - name: Build Python 3.12 sandbox image
+        run: >-
+          docker build
+          --file cloud/Dockerfile.sandbox
+          --build-arg PYTHON_VERSION=3.12
+          --tag promptopt-sandbox:py3.12 .
+      - name: Run upload, artifact, execution and cache recovery acceptance
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p ci-artifacts/sandbox-docker
+          uv run python scripts/run_local_docker_runtime_integration.py \
+            --image promptopt-sandbox:py3.12 \
+            --exercise-cache-recovery \
+            --output ci-artifacts/sandbox-docker/acceptance-summary.json \
+            2>&1 | tee ci-artifacts/sandbox-docker/integration.log
+      - name: Upload Docker integration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sandbox-docker-integration-py3.12
+          path: ci-artifacts/sandbox-docker
+          if-no-files-found: warn
+          retention-days: 14

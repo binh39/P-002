@@ -58,6 +58,35 @@ def test_safe_extract_ignores_symbolic_links(tmp_path):
     assert (output / "project" / "target.py").is_file()
 
 
+def test_safe_extract_rejects_windows_device_and_ads_paths(tmp_path):
+    for name in ("project/NUL.txt", "project/module.py:stream"):
+        archive = tmp_path / f"unsafe-{len(name)}.zip"
+        write_zip(archive, {name: "unsafe"})
+
+        try:
+            safe_extract_zip(archive, tmp_path / f"output-{len(name)}")
+        except ValueError as error:
+            assert "Unsafe ZIP path" in str(error)
+        else:
+            raise AssertionError(f"Windows-unsafe path must be rejected: {name}")
+
+
+def test_safe_extract_rejects_special_unix_entry(tmp_path):
+    archive = tmp_path / "special.zip"
+    with zipfile.ZipFile(archive, "w") as bundle:
+        special = zipfile.ZipInfo("project/device")
+        special.create_system = 3
+        special.external_attr = (stat.S_IFCHR | 0o600) << 16
+        bundle.writestr(special, "not-a-device")
+
+    try:
+        safe_extract_zip(archive, tmp_path / "special-output")
+    except ValueError as error:
+        assert "Unsupported ZIP entry type" in str(error)
+    else:
+        raise AssertionError("special archive entries must be rejected")
+
+
 def test_runtime_bundle_contains_every_pytest_plugin_used_by_gepa():
     assert RUNTIME_PROTOCOL_VERSION == 8
     assert "pytest-asyncio==1.4.0" in RUNTIME_TOOL_PACKAGES

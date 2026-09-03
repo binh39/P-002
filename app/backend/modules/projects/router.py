@@ -6,6 +6,9 @@ from backend.modules.projects.schemas import (
     ProjectListResponse,
     ProjectResponse,
     ProjectSettingsPatch,
+    RuntimeCapabilitiesResponse,
+    RuntimeRolloutStatusResponse,
+    ValidateProjectSettingsResponse,
 )
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -26,6 +29,17 @@ async def list_sample_projects(user: CurrentUser, request: Request):
     return await request.app.state.services.projects.list_samples(user.uid)
 
 
+@router.get("/runtime-capabilities", response_model=RuntimeCapabilitiesResponse)
+async def get_runtime_capabilities(user: CurrentUser, request: Request):
+    return request.app.state.services.projects.runtime_capabilities()
+
+
+@router.get("/runtime-rollout", response_model=RuntimeRolloutStatusResponse)
+async def get_runtime_rollout_status(user: CurrentUser, request: Request):
+    del user
+    return request.app.state.services.projects.runtime_rollout_status()
+
+
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(project_id: str, user: CurrentUser, request: Request):
     return await request.app.state.services.projects.get(project_id, user.uid)
@@ -41,6 +55,16 @@ async def prepare_project_runtime(project_id: str, user: CurrentUser, request: R
     return await request.app.state.services.projects.prepare_runtime(project_id, user.uid)
 
 
+@router.post("/{project_id}/retry-build", response_model=ProjectResponse, status_code=status.HTTP_202_ACCEPTED)
+async def retry_project_runtime_build(project_id: str, user: CurrentUser, request: Request):
+    return await request.app.state.services.projects.retry_runtime_build(project_id, user.uid)
+
+
+@router.post("/{project_id}/retry-execution", response_model=ProjectResponse, status_code=status.HTTP_202_ACCEPTED)
+async def retry_project_runtime_execution(project_id: str, user: CurrentUser, request: Request):
+    return await request.app.state.services.projects.retry_runtime_execution(project_id, user.uid)
+
+
 @router.patch("/{project_id}/settings", response_model=ProjectResponse)
 async def update_project_settings(
     project_id: str,
@@ -49,3 +73,13 @@ async def update_project_settings(
     request: Request,
 ):
     return await request.app.state.services.projects.update_settings(project_id, user.uid, payload)
+
+
+@router.post("/{project_id}/settings/validate", response_model=ValidateProjectSettingsResponse)
+async def validate_project_settings(
+    project_id: str,
+    payload: ProjectSettingsPatch,
+    user: CurrentUser,
+    request: Request,
+):
+    return await request.app.state.services.projects.validate_settings(project_id, user.uid, payload)

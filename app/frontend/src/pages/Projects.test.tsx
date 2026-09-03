@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   list: vi.fn(),
   listSamples: vi.fn(),
   create: vi.fn(),
+  runtimeCapabilities: vi.fn(),
 }));
 
 vi.mock("@/app/providers", () => ({
@@ -18,6 +19,7 @@ vi.mock("@/app/providers", () => ({
       list: state.list,
       listSamples: state.listSamples,
       create: state.create,
+      runtimeCapabilities: state.runtimeCapabilities,
     },
   }),
 }));
@@ -28,6 +30,7 @@ const importedProject: PythonProject = {
   name: "payments",
   description: "Payment service",
   python: "3.11",
+  requestedPython: "3.11",
   commit: "Not recorded",
   branch: "main",
   files: 0,
@@ -57,6 +60,11 @@ describe("Projects", () => {
     state.list.mockReset().mockResolvedValue([]);
     state.listSamples.mockReset().mockResolvedValue([]);
     state.create.mockReset().mockResolvedValue(importedProject);
+    state.runtimeCapabilities
+      .mockReset()
+      .mockResolvedValue([
+        { pythonVersion: "3.12", image: "promptopt-sandbox:py3.12", job: "runtime", healthy: true },
+      ]);
   });
 
   it("keeps samples separate and opens the private ZIP import flow", async () => {
@@ -120,7 +128,7 @@ describe("Projects", () => {
 
     await waitFor(() =>
       expect(state.create).toHaveBeenCalledWith(
-        expect.objectContaining({ name: "payments", branch: "main" }),
+        expect.objectContaining({ name: "payments", branch: "main", pythonVersion: "3.12" }),
       ),
     );
     await waitFor(() => expect(state.navigate).toHaveBeenCalledWith("/projects/project-1"));

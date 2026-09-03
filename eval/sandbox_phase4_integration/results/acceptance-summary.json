@@ -1,0 +1,92 @@
+{
+  "managed": {
+    "coverage": {
+      "covered_branches": 0,
+      "covered_statements": 2,
+      "total_branches": 0,
+      "total_statements": 2
+    },
+    "coverage_artifact": "coverage/normalized.json",
+    "coverage_version": "7.15.3",
+    "duration_seconds": 4.796011401000214,
+    "environment_fingerprint": "d700fc87a91d54b5b6184ce3413ab956cf9922741cddc9a3a72d3742bab81665",
+    "error_code": null,
+    "exit_code": 0,
+    "failure_stage": null,
+    "peak_memory_mb": null,
+    "protocol_version": 1,
+    "pytest_version": "9.1.1",
+    "retryable": false,
+    "run_id": "phase4-managed",
+    "runner_profile": "sandbox_managed",
+    "status": "succeeded",
+    "stderr": "",
+    "stdout": "============================= test session starts ==============================\nplatform linux -- Python 3.12.14, pytest-9.1.1, pluggy-1.6.0\nrootdir: /project\nconfigfile: ../tests/pyproject.toml\ncollected 1 item\n\n. .\n\n============================== 1 passed in 0.27s ===============================\n",
+    "test_counts": {
+      "collected": 1,
+      "failed": 0,
+      "passed": 1,
+      "skipped": 0
+    }
+  },
+  "native": {
+    "coverage": {
+      "covered_branches": 1,
+      "covered_statements": 3,
+      "total_branches": 2,
+      "total_statements": 4
+    },
+    "coverage_artifact": "coverage/normalized.json",
+    "coverage_version": "7.10.7",
+    "duration_seconds": 4.5791010809998625,
+    "environment_fingerprint": "9d9b577a9fd6dcc991c7039e1f53b8f3f42c7bf5836c3e96ed2c4a0d8c953f95",
+    "error_code": null,
+    "exit_code": 0,
+    "failure_stage": null,
+    "peak_memory_mb": null,
+    "protocol_version": 1,
+    "pytest_version": "9.1.1",
+    "retryable": false,
+    "run_id": "phase4-native",
+    "runner_profile": "project_native",
+    "status": "succeeded",
+    "stderr": "",
+    "stdout": "============================= test session starts ==============================\nplatform linux -- Python 3.12.14, pytest-9.1.1, pluggy-1.6.0\nrootdir: /project\nconfigfile: ../tests/pyproject.toml\ncollected 1 item\n\n. .\n\n============================== 1 passed in 0.20s ===============================\n",
+    "test_counts": {
+      "collected": 1,
+      "failed": 0,
+      "passed": 1,
+      "skipped": 0
+    }
+  },
+  "native_repeat": {
+    "coverage": {
+      "covered_branches": 1,
+      "covered_statements": 3,
+      "total_branches": 2,
+      "total_statements": 4
+    },
+    "coverage_artifact": "coverage/normalized.json",
+    "coverage_version": "7.10.7",
+    "duration_seconds": 5.592942103000496,
+    "environment_fingerprint": "9d9b577a9fd6dcc991c7039e1f53b8f3f42c7bf5836c3e96ed2c4a0d8c953f95",
+    "error_code": null,
+    "exit_code": 0,
+    "failure_stage": null,
+    "peak_memory_mb": null,
+    "protocol_version": 1,
+    "pytest_version": "9.1.1",
+    "retryable": false,
+    "run_id": "phase4-native-repeat",
+    "runner_profile": "project_native",
+    "status": "succeeded",
+    "stderr": "",
+    "stdout": "============================= test session starts ==============================\nplatform linux -- Python 3.12.14, pytest-9.1.1, pluggy-1.6.0\nrootdir: /project\nconfigfile: ../tests/pyproject.toml\ncollected 1 item\n\n. .\n\n============================== 1 passed in 0.29s ===============================\n",
+    "test_counts": {
+      "collected": 1,
+      "failed": 0,
+      "passed": 1,
+      "skipped": 0
+    }
+  }
+}

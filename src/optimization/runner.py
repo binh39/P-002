@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import time
 import uuid
@@ -14,9 +15,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from cloud.sandbox_contract import FailureStage, RunKind, SandboxStatus
+
 from .coveragepy import SymbolCoverage, load_report, run_coverage, symbol_coverage
 from .metrics import build_feedback, score_symbol
 from .models import BatchRunRecord, BatchTargetResult, ExperimentConfig, RunRecord, SymbolTarget
+from .sandbox import OptimizerSandboxClient, SandboxEvaluation
 from .subprocesses import run_streamed
 
 
@@ -228,6 +232,55 @@ class CoverUpExperimentRunner:
 
     def __init__(self, config: ExperimentConfig) -> None:
         self.config = config
+        self.sandbox_client = (
+            OptimizerSandboxClient(
+                config.sandbox_environments,
+                executor=config.sandbox_executor,
+            )
+            if config.sandbox_environments
+            else None
+        )
+
+    def environment_fingerprints(self, targets: list[SymbolTarget]) -> dict[str, str]:
+        if self.sandbox_client is None:
+            return {}
+        return self.sandbox_client.fingerprints_for({target.project for target in targets})
+
+    @staticmethod
+    def _score_sandbox_evaluation(
+        target: SymbolTarget,
+        evaluation: SandboxEvaluation,
+        *,
+        generator_exit_code: int,
+    ) -> tuple[dict | None, str]:
+        result = evaluation.result
+        measured = evaluation.coverage
+        if measured is None:
+            detail = result.stderr or result.stdout or result.error_code or "No coverage data"
+            return None, f"Score: 0. Sandbox {result.failure_stage or 'execution'} failed: {detail[-4000:]}"
+        metric = score_symbol(_zero_coverage_like(measured), measured)
+        score_data = metric.as_dict()
+        score_data.update(
+            {
+                "valid": True,
+                "tests_passed": result.status == SandboxStatus.SUCCEEDED,
+                "pytest_exit_code": result.exit_code,
+                "generator_exit_code": generator_exit_code,
+                "environment_fingerprint": result.environment_fingerprint,
+                "runner_profile": result.runner_profile.value if result.runner_profile else None,
+                "pytest_version": result.pytest_version,
+                "coverage_version": result.coverage_version,
+            }
+        )
+        if result.status == SandboxStatus.SUCCEEDED:
+            return score_data, build_feedback(metric, coverup_exit_code=generator_exit_code)
+        if result.failure_stage == FailureStage.TEST:
+            return score_data, f"Score: 0. Generated tests failed in the project sandbox:\n{result.stderr[-4000:]}"
+        score_data["valid"] = False
+        return score_data, (
+            f"Score: 0. Sandbox {result.failure_stage.value if result.failure_stage else 'execution'} "
+            f"failed with {result.error_code}:\n{(result.stderr or result.stdout)[-4000:]}"
+        )
 
     def evaluate(
         self,
@@ -325,21 +378,43 @@ class CoverUpExperimentRunner:
             self.config.project_root,
             (self.config.import_root_for(target.project),),
         )
-        completed = run_coverage(
-            project_root=self.config.project_root.resolve(),
-            package_dir=package_dir,
-            tests_dir=run_dir,
-            test_paths=[test_path],
-            pytest_basetemp=run_dir / "pytest_tmp",
-            output=coverage_path,
-            pytest_args=self.config.pytest_args,
-            repeat_tests=self.config.repeat_tests,
-            env=environment,
-        )
+        sandbox_evaluation = None
+        if self.sandbox_client is not None:
+            sandbox_evaluation = self.sandbox_client.evaluate(
+                target,
+                [test_path],
+                project_tests=self.config.tests_dir_for(target.project),
+                run_root=run_dir / "sandbox",
+                run_id=f"optimizer-{safe_id}",
+                kind=RunKind.CANDIDATE,
+                repeat_tests=max(1, self.config.repeat_tests),
+            )
+            completed = subprocess.CompletedProcess(
+                args=["sandbox", "RunSpec"],
+                returncode=sandbox_evaluation.result.exit_code or 0,
+                stdout=sandbox_evaluation.result.stdout,
+                stderr=sandbox_evaluation.result.stderr,
+            )
+        else:
+            completed = run_coverage(
+                project_root=self.config.project_root.resolve(),
+                package_dir=package_dir,
+                tests_dir=run_dir,
+                test_paths=[test_path],
+                pytest_basetemp=run_dir / "pytest_tmp",
+                output=coverage_path,
+                pytest_args=self.config.pytest_args,
+                repeat_tests=self.config.repeat_tests,
+                env=environment,
+            )
         result = {
             "experiment_id": experiment_id,
             "target": target.__dict__,
-            "pytest_passed": completed.returncode == 0,
+            "pytest_passed": (
+                sandbox_evaluation.result.status == SandboxStatus.SUCCEEDED
+                if sandbox_evaluation is not None
+                else completed.returncode == 0
+            ),
             "pytest_exit_code": completed.returncode,
             "score": 0.0,
             "stdout": (
@@ -351,7 +426,27 @@ class CoverUpExperimentRunner:
             ),
             "test_file": str(test_path),
         }
-        if coverage_path.is_file():
+        if sandbox_evaluation is not None and sandbox_evaluation.coverage is not None:
+            measured = sandbox_evaluation.coverage
+            metric = score_symbol(_zero_coverage_like(measured), measured)
+            result.update({
+                "score": (
+                    metric.score
+                    if sandbox_evaluation.result.status == SandboxStatus.SUCCEEDED
+                    else 0.0
+                ),
+                "measured_score": metric.score,
+                "covered_statements": metric.covered_statements,
+                "num_statements": metric.num_statements,
+                "covered_branches": metric.covered_branches,
+                "num_branches": metric.num_branches,
+                "gained_lines": list(metric.gained_lines),
+                "gained_branches": [list(branch) for branch in metric.gained_branches],
+                "remaining_lines": list(metric.remaining_lines),
+                "remaining_branches": [list(branch) for branch in metric.remaining_branches],
+                "environment_fingerprint": sandbox_evaluation.result.environment_fingerprint,
+            })
+        elif coverage_path.is_file():
             try:
                 measured = symbol_coverage(
                     load_report(coverage_path), target.source_file, target.symbol
@@ -588,18 +683,51 @@ class CoverUpExperimentRunner:
                 )
                 selected_tests = [empty_test]
             after_json = run_dir / f"coverage_after_{job.artifact_token}.json"
-            after = run_coverage(
-                project_root=self.config.project_root.resolve(),
-                package_dir=job.package_dir,
-                tests_dir=job.final_workspace,
-                test_paths=selected_tests,
-                pytest_basetemp=pytest_temp_root / job.artifact_token,
-                output=after_json,
-                pytest_args=self.config.pytest_args,
-                repeat_tests=self.config.repeat_tests,
-                env=environment,
-            )
-            if after.returncode:
+            sandbox_evaluation = None
+            if self.sandbox_client is not None:
+                sandbox_evaluation = self.sandbox_client.evaluate(
+                    job.target,
+                    selected_tests,
+                    project_tests=self.config.tests_dir_for(job.target.project),
+                    run_root=run_dir / "sandbox" / job.artifact_token,
+                    run_id=f"{run_id}-{job.artifact_token}",
+                    kind=RunKind.BASELINE if workspace_kind == "baseline" else RunKind.CANDIDATE,
+                    repeat_tests=max(1, self.config.repeat_tests),
+                )
+                score_data, feedback = self._score_sandbox_evaluation(
+                    job.target,
+                    sandbox_evaluation,
+                    generator_exit_code=completed.returncode,
+                )
+                target_result = BatchTargetResult(
+                    target=job.target,
+                    score=score_data,
+                    feedback=feedback,
+                    attempt_traces=target_traces,
+                    environment_fingerprint=sandbox_evaluation.result.environment_fingerprint,
+                )
+                after_json = (
+                    run_dir
+                    / "sandbox"
+                    / job.artifact_token
+                    / "output"
+                    / (sandbox_evaluation.result.coverage_artifact or "coverage/normalized.json")
+                )
+            else:
+                after = run_coverage(
+                    project_root=self.config.project_root.resolve(),
+                    package_dir=job.package_dir,
+                    tests_dir=job.final_workspace,
+                    test_paths=selected_tests,
+                    pytest_basetemp=pytest_temp_root / job.artifact_token,
+                    output=after_json,
+                    pytest_args=self.config.pytest_args,
+                    repeat_tests=self.config.repeat_tests,
+                    env=environment,
+                )
+            if sandbox_evaluation is not None:
+                pass
+            elif after.returncode:
                 feedback = (
                     "Score: 0. The generated tests for this target failed under "
                     "coverage.py:\n"
@@ -753,6 +881,7 @@ class CoverUpExperimentRunner:
             attempt_trace_file=(
                 str(attempt_trace.relative_to(run_dir)) if attempt_trace.exists() else ""
             ),
+            environment_fingerprints=self.environment_fingerprints(targets),
         )
         (run_dir / "record.json").write_text(
             json.dumps(record.as_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
@@ -817,6 +946,46 @@ class CoverUpExperimentRunner:
             safe_project = re.sub(r"[^A-Za-z0-9_.-]+", "_", project).strip("._-")
             suffix = "" if not multi_project else f"_{safe_project}"
             after_json = run_dir / f"coverage_after{suffix}.json"
+            if self.sandbox_client is not None:
+                project_test_paths = sorted(per_project_tests[project].rglob("test_*.py"))
+                if not project_test_paths:
+                    raise FileNotFoundError(
+                        f"Existing baseline tests contain no test_*.py files for project {project!r}"
+                    )
+                for index, target in enumerate(group):
+                    sandbox_evaluation = self.sandbox_client.evaluate(
+                        target,
+                        project_test_paths,
+                        project_tests=per_project_tests[project],
+                        run_root=run_dir / "sandbox" / safe_project / f"target-{index:04d}",
+                        run_id=f"{run_id}-{safe_project}-{index:04d}",
+                        kind=RunKind.BASELINE,
+                        repeat_tests=max(1, self.config.repeat_tests),
+                    )
+                    score_data, feedback = self._score_sandbox_evaluation(
+                        target,
+                        sandbox_evaluation,
+                        generator_exit_code=0,
+                    )
+                    results.append(
+                        BatchTargetResult(
+                            target=target,
+                            score=score_data,
+                            feedback=feedback,
+                            environment_fingerprint=sandbox_evaluation.result.environment_fingerprint,
+                        )
+                    )
+                    final_exit_code = sandbox_evaluation.result.exit_code or final_exit_code
+                    if sandbox_evaluation.result.coverage_artifact:
+                        after_jsons.append(
+                            run_dir
+                            / "sandbox"
+                            / safe_project
+                            / f"target-{index:04d}"
+                            / "output"
+                            / sandbox_evaluation.result.coverage_artifact
+                        )
+                continue
             completed = run_coverage(
                 project_root=self.config.project_root.resolve(),
                 package_dir=package_dir,
@@ -870,6 +1039,7 @@ class CoverUpExperimentRunner:
             coverage_after=(
                 str(after_jsons[0].relative_to(run_dir)) if after_jsons else None
             ),
+            environment_fingerprints=self.environment_fingerprints(targets),
         )
         (run_dir / "record.json").write_text(
             json.dumps(record.as_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
